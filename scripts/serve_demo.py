@@ -12,6 +12,9 @@ Architecture (single-file, stdlib http.server only):
                            (background thread starts the pipeline)
   GET   /status/<run_id>   JSON {state, done, total, message}
   GET   /results/<run_id>  rendered HTML grid of decisions for that run
+  POST  /export/<run_id>   write XMP sidecars next to uploaded images
+                           → JSON {written, paths_zip_url} (V1.2)
+  GET   /xmp_zip/<run_id>  download all sidecars as a single .zip
   GET   /thumb/<run_id>/<filename>  thumbnail (lazy-built, cached on disk)
   GET   /full/<run_id>/<filename>   full-size preview
 
@@ -23,15 +26,17 @@ Why a separate file from serve_review.py:
   - Keeping the review viewer untouched preserves its label-collection role
 
 Reuses from the project: pixcull.pipeline.orchestrator.run_pipeline (with
-its progress_cb hook), pixcull.io.loader.load_image (for thumbnail decode).
+its progress_cb hook), pixcull.io.loader.load_image (for thumbnail decode),
+pixcull.io.xmp.write_xmp + decision_to_xmp (for the LR/C1 export).
 
-Default mode: ``rescorer_mode="off"`` so the demo runs even on machines
-without a trained rescorer. Pass --rescorer-mode shadow if you've trained
-one and want to see its predictions alongside.
+Defaults:
+  --host 127.0.0.1   localhost only (safe; LAN exposure must be opt-in)
+  --rescorer-mode off  works on machines without a trained rescorer.
 
-Run:
-    python scripts/serve_demo.py
-    # then open http://127.0.0.1:8770/
+LAN sharing: ``--host 0.0.0.0`` opens the port to your LAN. The CLI
+prints both ``127.0.0.1`` and the machine's first non-loopback v4 IP
+so you (or someone on your wifi) can hit it from a phone or laptop.
+File uploads up to 200 MB; no auth — only run on networks you trust.
 """
 
 from __future__ import annotations
@@ -73,19 +78,37 @@ _FULL_SIZE = 1600
 _MAX_UPLOAD_BYTES = 200 * 1024 * 1024  # 200 MB safety cap per request
 
 
-def _pick_port(preferred: int) -> int:
-    """Return the preferred port if free, else first free fallback."""
+def _pick_port(preferred: int, host: str) -> int:
+    """Return the preferred port if free on ``host``, else first free fallback."""
     candidates = (preferred, *_FALLBACK_PORTS)
     for p in candidates:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             try:
-                s.bind(("127.0.0.1", p))
+                s.bind((host, p))
                 return p
             except OSError:
                 continue
     raise RuntimeError(
         f"All preferred ports busy: {candidates}. Pass --port to choose."
     )
+
+
+def _local_ipv4() -> str | None:
+    """Best-effort guess at the LAN-visible IPv4. Returns None if offline.
+
+    Tries the "connect-to-public-IP-then-read-our-source-IP" trick that
+    works on every macOS/Linux without parsing ifconfig output. We never
+    actually send any packets — UDP socket connect just sets the kernel's
+    routing table, no traffic leaves the machine.
+    """
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.settimeout(0.2)
+            # Cloudflare 1.1.1.1 — any reachable v4 address works
+            s.connect(("1.1.1.1", 80))
+            return s.getsockname()[0]
+    except OSError:
+        return None
 
 
 def _new_run_id() -> str:
@@ -208,11 +231,19 @@ def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
                               -(x["score_final"] or 0)))
 
     counts = Counter(r["decision"] for r in rows)
+    # V1.2 rescorer summary: "the model agrees with the rule on N out of M
+    # non-cull rows; disagrees on D." Shown in the header so the user sees
+    # immediately whether the learned head is contributing signal.
+    rescored = [r for r in rows if r["rescorer_pred"] is not None]
+    disagrees = [r for r in rescored if r["rescorer_pred"] != r["decision"]]
     summary = {
         "n_total": len(rows),
         "n_keep": counts.get("keep", 0),
         "n_maybe": counts.get("maybe", 0),
         "n_cull": counts.get("cull", 0),
+        "rescorer_active": len(rescored) > 0,
+        "rescorer_n_scored": len(rescored),
+        "rescorer_n_disagrees": len(disagrees),
         "started_at": run.get("started_at"),
         "finished_at": run.get("finished_at"),
         "elapsed_s": (
@@ -256,12 +287,16 @@ class _Handler(BaseHTTPRequestHandler):
             return self._serve_image(path[len("/thumb/"):], _THUMB_SIZE)
         if path.startswith("/full/"):
             return self._serve_image(path[len("/full/"):], _FULL_SIZE)
+        if path.startswith("/xmp_zip/"):
+            return self._serve_xmp_zip(path[len("/xmp_zip/"):])
         self.send_error(404, "not found")
 
     def do_POST(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
         if path == "/analyze":
             return self._handle_analyze_post()
+        if path.startswith("/export/"):
+            return self._handle_export(path[len("/export/"):])
         self.send_error(404, "not found")
 
     # --- handlers ----------------------------------------------------------
@@ -422,6 +457,97 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def _handle_export(self, run_id: str) -> None:
+        """Write XMP sidecars for every analyzed image in the run.
+
+        Output sits in ``<run_id>/xmp/<filename>.xmp`` (alongside the
+        thumbnail cache, never overwriting the original uploads). The
+        response includes a count + the URL of a zip bundle so the
+        browser can download all sidecars at once.
+        """
+        run = _get_run(run_id)
+        if run is None:
+            self.send_error(404, "no such run")
+            return
+        if run.get("state") != "done":
+            self.send_error(409, "run not finished yet")
+            return
+
+        result = _build_results(run_id)
+        if result is None:
+            self.send_error(500, "no results to export")
+            return
+        rows, _ = result
+
+        from pixcull.io.xmp import write_xmp, decision_to_xmp
+
+        input_dir = Path(run["input_dir"])
+        output_dir = Path(run["output_dir"])
+        xmp_dir = output_dir / "xmp"
+        xmp_dir.mkdir(parents=True, exist_ok=True)
+
+        written = 0
+        per_decision: Counter[str] = Counter()
+        for r in rows:
+            fn = r["filename"]
+            decision = r["decision"]
+            stars, label = decision_to_xmp(decision)
+            # Use a "virtual" image_path inside xmp_dir so write_xmp's
+            # with_suffix(.xmp) lands the file there rather than next to
+            # the upload (we never modify the user's original uploads —
+            # that's a privacy/safety boundary).
+            virtual = xmp_dir / Path(fn).name
+            write_xmp(virtual, stars, label)
+            written += 1
+            per_decision[decision] += 1
+
+        body = json.dumps({
+            "written": written,
+            "per_decision": dict(per_decision),
+            "zip_url": f"/xmp_zip/{run_id}",
+            "xmp_dir": str(xmp_dir),
+        }, ensure_ascii=False).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _serve_xmp_zip(self, run_id: str) -> None:
+        """Stream all sidecars + a README into a single zip download."""
+        import zipfile
+
+        run = _get_run(run_id)
+        if run is None:
+            self.send_error(404, "no such run")
+            return
+        xmp_dir = Path(run["output_dir"]) / "xmp"
+        if not xmp_dir.exists():
+            self.send_error(404, "no xmp exported yet — POST /export first")
+            return
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            for sidecar in sorted(xmp_dir.glob("*.xmp")):
+                zf.write(sidecar, arcname=sidecar.name)
+            zf.writestr(
+                "README.txt",
+                _XMP_README.format(
+                    run_id=run_id,
+                    n=len(list(xmp_dir.glob("*.xmp"))),
+                ),
+            )
+        data = buf.getvalue()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/zip")
+        self.send_header(
+            "Content-Disposition",
+            f'attachment; filename="pixcull_{run_id}_xmp.zip"',
+        )
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
     # --- utilities ---------------------------------------------------------
     def _send_html(self, status: int, body: bytes) -> None:
         self.send_response(status)
@@ -444,13 +570,23 @@ def main() -> None:
         help=f"Preferred port (default {_DEFAULT_PORT}; auto-fallback if busy)"
     )
     parser.add_argument(
+        "--host", default="127.0.0.1",
+        help="Bind address (default 127.0.0.1 — localhost only). "
+             "Use 0.0.0.0 to expose to LAN. WARNING: no auth, only do this "
+             "on networks you trust.",
+    )
+    parser.add_argument(
         "--no-open", action="store_true",
         help="Don't open a browser tab on startup",
     )
     parser.add_argument(
-        "--rescorer-mode", default="off", choices=("off", "shadow", "adjudicate"),
-        help="V1.2 rescorer mode (default: off — works on machines without a "
-             "trained model)",
+        "--rescorer-mode", default="auto",
+        choices=("auto", "off", "shadow", "adjudicate"),
+        help="V1.2 rescorer mode. 'auto' (default) uses 'shadow' if "
+             "models/rescorer_v1.joblib exists, else 'off'. 'shadow' shows "
+             "the model's keep/maybe prediction next to each card without "
+             "changing decisions; 'adjudicate' lets the model promote "
+             "rule-maybe rows to keep when confident.",
     )
     parser.add_argument(
         "--rescorer-path", default=None,
@@ -460,23 +596,71 @@ def main() -> None:
 
     _DEMO_ROOT.mkdir(parents=True, exist_ok=True)
 
-    port = _pick_port(args.port)
-    server = ThreadingHTTPServer(("127.0.0.1", port), _Handler)
-    server.rescorer_mode = args.rescorer_mode  # type: ignore[attr-defined]
-    server.rescorer_path = args.rescorer_path  # type: ignore[attr-defined]
+    # Resolve rescorer 'auto': use shadow if a model file is present at the
+    # default (or user-specified) location, else fall through to off. This
+    # makes the demo "self-tuning" — fresh checkouts work, trained
+    # checkouts get the V1.1 head turned on for free.
+    rescorer_path = args.rescorer_path or "models/rescorer_v1.joblib"
+    rescorer_mode = args.rescorer_mode
+    if rescorer_mode == "auto":
+        rescorer_mode = "shadow" if Path(rescorer_path).exists() else "off"
 
-    url = f"http://127.0.0.1:{port}/"
-    print(f"PixCull demo serving at {url}")
-    print(f"  uploads/output go to {_DEMO_ROOT}/<run_id>/")
-    print(f"  rescorer mode: {args.rescorer_mode}")
-    if not args.no_open:
-        threading.Timer(0.4, lambda: webbrowser.open(url)).start()
+    port = _pick_port(args.port, args.host)
+    server = ThreadingHTTPServer((args.host, port), _Handler)
+    server.rescorer_mode = rescorer_mode  # type: ignore[attr-defined]
+    server.rescorer_path = rescorer_path  # type: ignore[attr-defined]
+
+    # Print URLs the user can paste into a browser. On 0.0.0.0 we also
+    # show the LAN IP so the operator knows the address to share rather
+    # than running ifconfig themselves.
+    local_url = f"http://127.0.0.1:{port}/"
+    print(f"PixCull demo serving on {args.host}:{port}")
+    print(f"  local:   {local_url}")
+    if args.host == "0.0.0.0":
+        ip = _local_ipv4()
+        if ip:
+            print(f"  LAN:     http://{ip}:{port}/  (share this with phones / other laptops)")
+        else:
+            print("  LAN:     <couldn't detect IP — run `ipconfig getifaddr en0`>")
+        print("  ⚠  exposed to LAN with no auth — only run on trusted networks")
+    print(f"  output:  {_DEMO_ROOT}/<run_id>/")
+    if args.rescorer_mode == "auto":
+        print(f"  rescorer: {rescorer_mode} (auto-resolved; model at {rescorer_path})")
+    else:
+        print(f"  rescorer: {rescorer_mode} (forced; model at {rescorer_path})")
+    if not args.no_open and args.host in ("127.0.0.1", "localhost"):
+        threading.Timer(0.4, lambda: webbrowser.open(local_url)).start()
 
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         print("\nShutting down.")
         server.server_close()
+
+
+# README that ships inside the XMP zip download. Tells the user what to
+# do with the sidecars on the Lightroom / Capture One side.
+_XMP_README = """PixCull XMP sidecar export — run {run_id}
+
+This zip contains {n} XMP sidecar files, one per analyzed image.
+Each <filename>.xmp encodes the pipeline's decision as:
+
+  keep   →  5 stars + Green label
+  maybe  →  3 stars + Yellow label
+  cull   →  1 star  + Red label
+
+How to apply (Lightroom Classic):
+  1. Place each .xmp next to its image (same stem, same folder)
+  2. In LR Library → Metadata → Read Metadata from File
+  3. Or set Edit → Catalog Settings → "Automatically write changes into XMP"
+
+How to apply (Capture One):
+  1. Place each .xmp next to its image
+  2. C1 reads on import; if already imported, right-click → Sync Metadata
+
+The sidecar files only carry rating + label. Develop adjustments, keywords,
+and other Lightroom metadata are untouched.
+"""
 
 
 # ---------------------------------------------------------------------------
@@ -795,6 +979,16 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
       font-size: 11px; user-select: none;
     }
     .filters .pill.active { color: var(--fg); border-color: var(--fg); background: var(--bg-card-hi); }
+    .filters button.export-btn {
+      padding: 4px 10px; border: 1px solid var(--border); border-radius: 4px;
+      background: var(--bg-card); color: var(--fg); cursor: pointer;
+      font-size: 11px; font-weight: 500;
+    }
+    .filters button.export-btn:hover { border-color: var(--fg); }
+    .filters button.export-btn:disabled { opacity: 0.5; cursor: wait; }
+    .filters .export-status { font-size: 11px; color: var(--muted); }
+    .filters .export-status a { color: #4b9aff; text-decoration: none; }
+    .filters .export-status a:hover { text-decoration: underline; }
 
     .grid {
       display: grid;
@@ -827,6 +1021,12 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
     .badge.keep { background: var(--keep); color: white; }
     .badge.maybe { background: var(--maybe); color: white; }
     .badge.cull { background: var(--cull); color: white; }
+    .row1 .rs {
+      font-size: 9px; padding: 1px 5px; border-radius: 2px;
+      background: rgba(255,255,255,0.07); color: var(--muted);
+      font-family: ui-monospace, monospace;
+    }
+    .row1 .rs.dis { background: var(--maybe); color: white; }
     .row2 { display: flex; align-items: center; justify-content: space-between;
             margin-top: 4px; font-size: 11px; color: var(--muted); }
     .row2 .scene { color: var(--fg); }
@@ -857,6 +1057,9 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
       <span class="pill" data-d="keep">keep</span>
       <span class="pill" data-d="maybe">maybe</span>
       <span class="pill" data-d="cull">cull</span>
+      <span style="flex:1"></span>
+      <button class="export-btn" id="exportBtn" title="导出 XMP 评级 (Lightroom / Capture One)">导出 XMP ▾</button>
+      <span class="export-status" id="exportStatus"></span>
     </div>
   </header>
   <div class="grid" id="grid"></div>
@@ -870,13 +1073,17 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
   // Header stats
   const statsEl = document.getElementById("stats");
   const ela = summary.elapsed_s != null ? summary.elapsed_s + "s" : "--";
-  statsEl.innerHTML = [
+  const stats = [
     `<span>共 <b>${summary.n_total}</b> 张</span>`,
     `<span class="keep">keep <b>${summary.n_keep}</b></span>`,
     `<span class="maybe">maybe <b>${summary.n_maybe}</b></span>`,
     `<span class="cull">cull <b>${summary.n_cull}</b></span>`,
     `<span>耗时 <b>${ela}</b></span>`,
-  ].join("");
+  ];
+  if (summary.rescorer_active) {
+    stats.push(`<span title="V1.1 学习重打分器:在 ${summary.rescorer_n_scored} 张非 cull 图上给出 keep/maybe 预测">rescorer <b>${summary.rescorer_n_scored}</b> 评分 / <b>${summary.rescorer_n_disagrees}</b> 与规则不一致</span>`);
+  }
+  statsEl.innerHTML = stats.join("");
 
   // Grid
   const grid = document.getElementById("grid");
@@ -890,6 +1097,15 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
         : `<div class="dim"><span class="k">${k}</span><span class="v">${v.toFixed(2)}</span></div>`;
       const reasonShort = r.reason && r.reason.length > 60
         ? r.reason.slice(0, 60) + "…" : r.reason;
+      // V1.2 shadow-mode badge: shows the rescorer's verdict + P(keep) when
+      // present. Disagrees-with-rule cases get a yellow ring so they pop.
+      let rescorerBadge = "";
+      if (r.rescorer_pred) {
+        const dis = r.rescorer_pred !== r.decision;
+        const probTxt = r.rescorer_prob_keep == null ? "--" :
+          r.rescorer_prob_keep.toFixed(2);
+        rescorerBadge = `<span class="rs ${dis ? 'dis' : ''}" title="V1.1 rescorer: ${r.rescorer_pred} (P=${probTxt})">${r.rescorer_pred==='keep'?'✓':'?'} ${probTxt}</span>`;
+      }
       return `
         <div class="card ${r.decision}">
           <img class="thumb" src="${thumb}" data-full="${full}" loading="lazy" alt="${r.filename}">
@@ -897,6 +1113,7 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
             <div class="row1">
               <span class="badge ${r.decision}">${r.decision}</span>
               <span class="fn" title="${r.filename}">${r.filename}</span>
+              ${rescorerBadge}
             </div>
             <div class="row2">
               <span class="scene">${r.scene || "?"}</span>
@@ -938,6 +1155,25 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
   lb.addEventListener("click", () => lb.classList.remove("show"));
   document.addEventListener("keydown", e => {
     if (e.key === "Escape") lb.classList.remove("show");
+  });
+
+  // XMP export — POST /export/<run_id>, then offer the zip URL.
+  const exportBtn = document.getElementById("exportBtn");
+  const exportStatus = document.getElementById("exportStatus");
+  exportBtn.addEventListener("click", async () => {
+    exportBtn.disabled = true;
+    exportStatus.textContent = "生成 XMP …";
+    try {
+      const res = await fetch(`/export/${run_id}`, { method: "POST" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      exportStatus.innerHTML = `已生成 <b>${data.written}</b> 个 sidecar &nbsp;`
+        + `<a href="${data.zip_url}" download>下载 zip ↓</a>`;
+    } catch (err) {
+      exportStatus.textContent = "导出失败: " + err;
+    } finally {
+      exportBtn.disabled = false;
+    }
   });
 })();
 </script>
