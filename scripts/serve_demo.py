@@ -7,16 +7,21 @@ pipeline's keep / maybe / cull verdict in their browser.
 
 Architecture (single-file, stdlib http.server only):
 
-  GET   /                  upload page (HTML + drag-drop input)
-  POST  /analyze           multipart upload of N images → returns {run_id}
-                           (background thread starts the pipeline)
-  GET   /status/<run_id>   JSON {state, done, total, message}
-  GET   /results/<run_id>  rendered HTML grid of decisions for that run
-  POST  /export/<run_id>   write XMP sidecars next to uploaded images
-                           → JSON {written, paths_zip_url} (V1.2)
-  GET   /xmp_zip/<run_id>  download all sidecars as a single .zip
-  GET   /thumb/<run_id>/<filename>  thumbnail (lazy-built, cached on disk)
-  GET   /full/<run_id>/<filename>   full-size preview
+  GET    /                  upload page (HTML + drag-drop input)
+  POST   /analyze           multipart upload of N images → returns {run_id}
+                            (background thread starts the pipeline)
+  GET    /status/<run_id>   JSON {state, done, total, message}
+  GET    /results/<run_id>  rendered HTML grid of decisions for that run
+  POST   /export/<run_id>   write XMP sidecars next to uploaded images
+                            → JSON {written, paths_zip_url} (V1.2)
+  GET    /xmp_zip/<run_id>  download all sidecars as a single .zip
+  GET    /thumb/<run_id>/<filename>  thumbnail (lazy-built, cached on disk)
+  GET    /full/<run_id>/<filename>   full-size preview
+  GET    /runs              admin: list every run with size + age + decisions
+  GET    /storage_info      admin: total disk usage + model cache breakdown
+  DELETE /runs/<run_id>     admin: remove one run's input + output dir
+  POST   /runs/cleanup      admin: bulk delete by policy
+                            JSON body: {older_than_hours?: int, keep_last?: int}
 
 Why a separate file from serve_review.py:
 
@@ -45,6 +50,7 @@ import argparse
 import cgi  # noqa: DEP002 — deprecated but present in 3.12; we control runtime
 import io
 import json
+import shutil
 import socket
 import sys
 import threading
@@ -266,6 +272,152 @@ def _f(v: object) -> float | None:
 
 
 # ---------------------------------------------------------------------------
+# Storage admin: enumerate runs on disk, compute sizes, delete safely.
+#
+# We always derive the run list from the filesystem (not _RUNS) so that
+# runs from a previous server session — which never made it into the
+# in-memory dict — are still listed and prunable. The dict's metadata
+# (started/finished_at, decisions) is layered in when present.
+# ---------------------------------------------------------------------------
+def _dir_size_bytes(p: Path) -> int:
+    total = 0
+    try:
+        for f in p.rglob("*"):
+            try:
+                if f.is_file() and not f.is_symlink():
+                    total += f.stat().st_size
+            except OSError:
+                continue
+    except OSError:
+        pass
+    return total
+
+
+def _enumerate_runs() -> list[dict]:
+    """List every directory under ``_DEMO_ROOT`` that looks like a run.
+
+    A "run" is any first-level subdir whose name is a 10-char hex string
+    (matches our ``_new_run_id()`` format). Anything else under
+    ``_DEMO_ROOT`` is left alone — we never delete what we didn't create.
+    """
+    out: list[dict] = []
+    if not _DEMO_ROOT.exists():
+        return out
+    for child in sorted(_DEMO_ROOT.iterdir(), key=lambda x: x.name):
+        if not child.is_dir():
+            continue
+        # Heuristic: 10-char hex matches our run_id pattern.
+        if not (len(child.name) == 10 and all(c in "0123456789abcdef" for c in child.name)):
+            continue
+
+        run_id = child.name
+        input_dir = child / "input"
+        output_dir = child / "output"
+        scores_csv = output_dir / "scores.csv"
+
+        n_input = 0
+        if input_dir.exists():
+            n_input = sum(1 for f in input_dir.iterdir() if f.is_file())
+
+        # Pull decision counts from scores.csv (cheap CSV parse, no pandas)
+        decisions = {"keep": 0, "maybe": 0, "cull": 0}
+        if scores_csv.exists():
+            try:
+                import csv
+                with open(scores_csv, encoding="utf-8") as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        d = row.get("decision", "")
+                        if d in decisions:
+                            decisions[d] += 1
+            except (OSError, csv.Error):
+                pass
+
+        # Modification time of the run dir = "last touched"; useful for
+        # the older-than-N-hours policy.
+        try:
+            mtime = child.stat().st_mtime
+        except OSError:
+            mtime = 0
+
+        # Pick up live state from the in-memory dict if this run is from
+        # the current server session.
+        live = _get_run(run_id) or {}
+
+        out.append({
+            "run_id": run_id,
+            "size_bytes": _dir_size_bytes(child),
+            "n_input": n_input,
+            "decisions": decisions,
+            "state": live.get("state", "stale" if not scores_csv.exists() else "done"),
+            "mtime": mtime,
+            "age_seconds": max(0, int(time.time() - mtime)) if mtime else None,
+            "started_at": live.get("started_at"),
+            "finished_at": live.get("finished_at"),
+        })
+    # Newest first — that's what the user will scan visually.
+    out.sort(key=lambda r: -(r["mtime"] or 0))
+    return out
+
+
+def _delete_run(run_id: str) -> tuple[bool, str]:
+    """Best-effort delete of a single run dir. Returns (ok, message).
+
+    Refuses to touch anything outside ``_DEMO_ROOT`` — defense in depth
+    against a maliciously crafted run_id like ``../etc``. Also drops the
+    in-memory state so a subsequent ``/status/<id>`` reports 404.
+    """
+    if not run_id or not run_id.replace("_", "").replace("-", "").isalnum():
+        return False, "invalid run_id"
+    target = (_DEMO_ROOT / run_id).resolve()
+    try:
+        # Refuse if resolution escaped _DEMO_ROOT (symlink trickery, etc.)
+        target.relative_to(_DEMO_ROOT.resolve())
+    except ValueError:
+        return False, "run_id resolves outside demo root"
+    if not target.exists():
+        return False, "no such run"
+
+    try:
+        shutil.rmtree(target)
+    except OSError as exc:
+        return False, f"rmtree failed: {exc}"
+
+    with _RUNS_LOCK:
+        _RUNS.pop(run_id, None)
+    return True, "deleted"
+
+
+# Global model cache directories the user might want to know about — these
+# are *machine-wide* and not deleted by run cleanup, but listing them on
+# the storage page makes the "where's my disk going" question answerable.
+_GLOBAL_CACHES = [
+    ("torch hub", Path.home() / ".cache" / "torch"),
+    ("HuggingFace", Path.home() / ".cache" / "huggingface"),
+]
+
+
+def _storage_info() -> dict:
+    runs = _enumerate_runs()
+    runs_total = sum(r["size_bytes"] for r in runs)
+    caches = []
+    for label, path in _GLOBAL_CACHES:
+        if path.exists():
+            caches.append({
+                "label": label,
+                "path": str(path),
+                "size_bytes": _dir_size_bytes(path),
+            })
+    return {
+        "demo_root": str(_DEMO_ROOT),
+        "runs_total_bytes": runs_total,
+        "n_runs": len(runs),
+        "runs": runs,
+        "global_caches": caches,
+    }
+
+
+# ---------------------------------------------------------------------------
 # HTTP handler.
 # ---------------------------------------------------------------------------
 class _Handler(BaseHTTPRequestHandler):
@@ -279,6 +431,12 @@ class _Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         if path == "/":
             return self._serve_upload_page()
+        if path == "/admin":
+            return self._serve_admin_page()
+        if path == "/runs":
+            return self._serve_runs_list()
+        if path == "/storage_info":
+            return self._serve_storage_info()
         if path.startswith("/status/"):
             return self._serve_status(path[len("/status/"):])
         if path.startswith("/results/"):
@@ -297,6 +455,14 @@ class _Handler(BaseHTTPRequestHandler):
             return self._handle_analyze_post()
         if path.startswith("/export/"):
             return self._handle_export(path[len("/export/"):])
+        if path == "/runs/cleanup":
+            return self._handle_runs_cleanup()
+        self.send_error(404, "not found")
+
+    def do_DELETE(self) -> None:  # noqa: N802
+        path = urlparse(self.path).path
+        if path.startswith("/runs/"):
+            return self._handle_run_delete(path[len("/runs/"):])
         self.send_error(404, "not found")
 
     # --- handlers ----------------------------------------------------------
@@ -548,10 +714,97 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    # --- storage admin -----------------------------------------------------
+    def _serve_admin_page(self) -> None:
+        body = _ADMIN_HTML.encode("utf-8")
+        self._send_html(200, body)
+
+    def _serve_runs_list(self) -> None:
+        body = json.dumps({"runs": _enumerate_runs()},
+                          ensure_ascii=False).encode("utf-8")
+        self._send_json(200, body)
+
+    def _serve_storage_info(self) -> None:
+        body = json.dumps(_storage_info(),
+                          ensure_ascii=False).encode("utf-8")
+        self._send_json(200, body)
+
+    def _handle_run_delete(self, run_id: str) -> None:
+        ok, msg = _delete_run(unquote(run_id))
+        status = 200 if ok else 404 if msg == "no such run" else 400
+        body = json.dumps({"ok": ok, "message": msg, "run_id": run_id},
+                          ensure_ascii=False).encode("utf-8")
+        self._send_json(status, body)
+
+    def _handle_runs_cleanup(self) -> None:
+        """Bulk delete by policy. Body: {older_than_hours?, keep_last?}.
+
+        Both filters are optional; if both are provided we apply them as
+        an intersection ("older than X AND not in newest K").
+
+        Per-run busy state: a run still marked ``running`` is never
+        deleted (would corrupt the analyzing thread). The user can wait
+        or kill the server and retry.
+        """
+        clen = int(self.headers.get("Content-Length", "0") or "0")
+        body_bytes = self.rfile.read(clen) if clen > 0 else b"{}"
+        try:
+            params = json.loads(body_bytes.decode("utf-8") or "{}")
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            self.send_error(400, "expected JSON body")
+            return
+
+        older = params.get("older_than_hours")
+        keep_last = params.get("keep_last")
+
+        runs = _enumerate_runs()  # newest first
+        candidates: list[dict] = list(runs)
+
+        # Skip in-progress runs unconditionally; they own files we'd corrupt.
+        candidates = [r for r in candidates if r.get("state") != "running"]
+
+        # "Keep last K" — preserve the K newest, mark the rest as candidates.
+        if isinstance(keep_last, int) and keep_last >= 0:
+            candidates = candidates[keep_last:]
+
+        # "Older than N hours" — must be older than the cutoff.
+        if isinstance(older, (int, float)) and older >= 0:
+            cutoff = time.time() - float(older) * 3600
+            candidates = [r for r in candidates if (r["mtime"] or 0) < cutoff]
+
+        results = []
+        freed_bytes = 0
+        for r in candidates:
+            ok, msg = _delete_run(r["run_id"])
+            results.append({
+                "run_id": r["run_id"],
+                "ok": ok,
+                "message": msg,
+                "size_bytes": r["size_bytes"],
+            })
+            if ok:
+                freed_bytes += r["size_bytes"]
+
+        body = json.dumps({
+            "candidates_considered": len(candidates),
+            "deleted": sum(1 for r in results if r["ok"]),
+            "freed_bytes": freed_bytes,
+            "results": results,
+        }, ensure_ascii=False).encode("utf-8")
+        self._send_json(200, body)
+
     # --- utilities ---------------------------------------------------------
     def _send_html(self, status: int, body: bytes) -> None:
         self.send_response(status)
         self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _send_json(self, status: int, body: bytes) -> None:
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
@@ -592,9 +845,29 @@ def main() -> None:
         "--rescorer-path", default=None,
         help="Path to rescorer joblib (default: models/rescorer_v1.joblib)",
     )
+    parser.add_argument(
+        "--auto-prune-hours", type=float, default=None,
+        help="On startup, delete every existing run dir older than N hours. "
+             "Off by default — admin panel does the same job interactively.",
+    )
     args = parser.parse_args()
 
     _DEMO_ROOT.mkdir(parents=True, exist_ok=True)
+
+    if args.auto_prune_hours is not None and args.auto_prune_hours >= 0:
+        cutoff = time.time() - args.auto_prune_hours * 3600
+        pruned = 0
+        freed = 0
+        for r in _enumerate_runs():
+            if (r["mtime"] or 0) < cutoff and r.get("state") != "running":
+                ok, _ = _delete_run(r["run_id"])
+                if ok:
+                    pruned += 1
+                    freed += r["size_bytes"]
+        if pruned:
+            mb = freed / 1024 / 1024
+            print(f"  auto-prune: deleted {pruned} run(s) older than "
+                  f"{args.auto_prune_hours}h, freed {mb:.1f} MB")
 
     # Resolve rescorer 'auto': use shadow if a model file is present at the
     # default (or user-specified) location, else fall through to off. This
@@ -790,9 +1063,33 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
   </div>
 
   <div class="footer">
-    本地服务,所有数据存在 <code>/tmp/pixcull_demo/&lt;run_id&gt;/</code>,
-    页面关掉就没了。第一次跑某种照片时模型加载需 ~10 秒,后续每张约 2-10 秒。
+    本地服务,所有数据存在 <code>/tmp/pixcull_demo/&lt;run_id&gt;/</code>。
+    第一次跑某种照片时模型加载需 ~10 秒,后续每张约 2-10 秒。
+    <span id="storageHint" style="display:none">
+      已积累 <b id="storageBytes">--</b> 本地缓存 ·
+      <a href="/admin">查看 / 清理 →</a>
+    </span>
+    <span id="storageHintEmpty">
+      · <a href="/admin" style="color:var(--muted)">存储管理</a>
+    </span>
   </div>
+
+<script>
+  // Background poll for storage size — only visible when there's
+  // actually data to clean. Cheap, hits stdlib http.server which
+  // doesn't care about an extra request every page load.
+  fetch("/storage_info").then(r => r.json()).then(s => {
+    if (s.runs_total_bytes > 0) {
+      const mb = s.runs_total_bytes >= 1e9
+        ? (s.runs_total_bytes / 1e9).toFixed(1) + " GB"
+        : (s.runs_total_bytes / 1024 / 1024).toFixed(0) + " MB";
+      document.getElementById("storageBytes").textContent =
+        `${mb} · ${s.n_runs} 次记录`;
+      document.getElementById("storageHint").style.display = "inline";
+      document.getElementById("storageHintEmpty").style.display = "none";
+    }
+  }).catch(() => {});
+</script>
 
 <script>
 (() => {
@@ -1175,6 +1472,265 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
       exportBtn.disabled = false;
     }
   });
+})();
+</script>
+</body>
+</html>
+"""
+
+
+_ADMIN_HTML = r"""<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <title>PixCull — 存储管理</title>
+  <style>
+    :root {
+      --bg: #111418;
+      --bg-card: #1a1e24;
+      --bg-card-hi: #232830;
+      --fg: #e5e7eb;
+      --muted: #8892a0;
+      --border: #2a2f38;
+      --accent: #3b82f6;
+      --keep: #2ea84a;
+      --maybe: #d9a30c;
+      --cull: #d95050;
+      --danger: #ef4444;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; background: var(--bg); color: var(--fg);
+      font: 13px/1.5 -apple-system, "PingFang SC", "Helvetica Neue", sans-serif;
+    }
+    header {
+      padding: 18px 24px 12px; border-bottom: 1px solid var(--border);
+    }
+    header h1 { margin: 0 0 4px; font-size: 16px; font-weight: 600; }
+    header h1 a { color: var(--muted); text-decoration: none; font-weight: 400; margin-left: 12px; font-size: 13px; }
+    header h1 a:hover { color: var(--fg); }
+    main { padding: 16px 24px 40px; max-width: 1100px; }
+    .card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 8px; padding: 16px; margin-bottom: 18px;
+    }
+    .card h2 { margin: 0 0 10px; font-size: 13px; font-weight: 600;
+               color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+    .summary-row { display: flex; gap: 24px; flex-wrap: wrap; }
+    .summary-row .stat { min-width: 100px; }
+    .summary-row .stat .v { font-size: 22px; font-weight: 600; }
+    .summary-row .stat .k { color: var(--muted); font-size: 11px; }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+    button {
+      background: var(--bg-card-hi); color: var(--fg); border: 1px solid var(--border);
+      padding: 6px 12px; font-size: 12px; border-radius: 4px; cursor: pointer;
+    }
+    button:hover { border-color: var(--fg); }
+    button.danger { color: var(--danger); border-color: var(--danger); }
+    button.danger:hover { background: rgba(239, 68, 68, 0.1); }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 12px; }
+    th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-weight: 500; font-size: 11px; text-transform: uppercase; }
+    tr:hover td { background: rgba(255,255,255,0.025); }
+    td.size { font-family: ui-monospace, monospace; }
+    .pill { display: inline-block; padding: 1px 6px; font-size: 10px; border-radius: 2px; margin-right: 3px; }
+    .pill.keep { background: var(--keep); color: white; }
+    .pill.maybe { background: var(--maybe); color: white; }
+    .pill.cull { background: var(--cull); color: white; }
+    .pill.stale { background: rgba(255,255,255,0.08); color: var(--muted); }
+    .pill.running { background: var(--accent); color: white; }
+    a.btn { display: inline-block; padding: 4px 10px; font-size: 11px;
+            color: var(--accent); text-decoration: none;
+            border: 1px solid var(--border); border-radius: 3px; }
+    a.btn:hover { border-color: var(--accent); }
+    .muted { color: var(--muted); font-size: 11px; }
+    .global-cache td { font-family: ui-monospace, monospace; font-size: 11px; }
+    .toast {
+      position: fixed; bottom: 20px; right: 20px;
+      background: var(--bg-card-hi); border: 1px solid var(--border);
+      border-radius: 6px; padding: 10px 14px; font-size: 12px;
+      max-width: 360px; box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+      transform: translateX(120%); transition: transform 0.2s;
+    }
+    .toast.show { transform: translateX(0); }
+    .toast.error { border-color: var(--danger); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>存储管理 <a href="/">← 返回上传</a></h1>
+    <div class="muted" id="rootHint">--</div>
+  </header>
+  <main>
+    <div class="card">
+      <h2>本 demo 占用</h2>
+      <div class="summary-row">
+        <div class="stat"><div class="v" id="totalSize">--</div><div class="k">总占用</div></div>
+        <div class="stat"><div class="v" id="totalRuns">--</div><div class="k">分析记录数</div></div>
+        <div class="stat"><div class="v" id="totalImages">--</div><div class="k">累计图片</div></div>
+      </div>
+      <div class="actions">
+        <button id="cleanupOlder">清理 1 小时前的</button>
+        <button id="cleanupKeepLast">仅保留最近 3 次</button>
+        <button id="cleanupAll" class="danger">全部清空</button>
+        <button id="refresh">刷新</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>每次分析记录</h2>
+      <table id="runsTable">
+        <thead><tr>
+          <th>run_id</th>
+          <th>大小</th>
+          <th>图片</th>
+          <th>分类</th>
+          <th>状态</th>
+          <th>距今</th>
+          <th></th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+      <div class="muted" id="emptyHint" style="display:none; padding: 12px 0">没有记录。回到主页上传一批就有了。</div>
+    </div>
+
+    <div class="card">
+      <h2>机器全局模型缓存</h2>
+      <div class="muted" style="margin-bottom: 8px">这些是 PyTorch / HuggingFace 等下载的预训练模型。删除后<b>第一次重新分析</b>会下载,之后照旧。本面板<b>不会</b>动它们,需要清的话执行下方命令。</div>
+      <table class="global-cache" id="cachesTable">
+        <thead><tr><th>缓存</th><th>路径</th><th>大小</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </main>
+  <div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  const fmt = b => {
+    if (b == null) return "--";
+    if (b >= 1e9) return (b / 1e9).toFixed(2) + " GB";
+    if (b >= 1e6) return (b / 1e6).toFixed(1) + " MB";
+    if (b >= 1e3) return (b / 1e3).toFixed(0) + " KB";
+    return b + " B";
+  };
+  const fmtAge = s => {
+    if (s == null) return "--";
+    if (s < 60) return s + "秒前";
+    if (s < 3600) return Math.round(s/60) + "分钟前";
+    if (s < 86400) return (s/3600).toFixed(1) + "小时前";
+    return (s/86400).toFixed(1) + "天前";
+  };
+  const toast = (msg, isErr = false) => {
+    const el = document.getElementById("toast");
+    el.textContent = msg;
+    el.classList.toggle("error", isErr);
+    el.classList.add("show");
+    setTimeout(() => el.classList.remove("show"), 3000);
+  };
+
+  async function refresh() {
+    let info;
+    try {
+      const res = await fetch("/storage_info");
+      info = await res.json();
+    } catch (e) {
+      toast("加载失败: " + e, true); return;
+    }
+    document.getElementById("rootHint").textContent =
+      `数据目录: ${info.demo_root}`;
+    document.getElementById("totalSize").textContent = fmt(info.runs_total_bytes);
+    document.getElementById("totalRuns").textContent = info.n_runs;
+    document.getElementById("totalImages").textContent =
+      info.runs.reduce((s, r) => s + r.n_input, 0);
+
+    const tbody = document.querySelector("#runsTable tbody");
+    if (!info.runs.length) {
+      tbody.innerHTML = "";
+      document.getElementById("emptyHint").style.display = "block";
+    } else {
+      document.getElementById("emptyHint").style.display = "none";
+      tbody.innerHTML = info.runs.map(r => {
+        const pills = ["keep","maybe","cull"]
+          .filter(d => r.decisions[d])
+          .map(d => `<span class="pill ${d}">${d} ${r.decisions[d]}</span>`)
+          .join("");
+        const stateP = r.state === "running"
+          ? `<span class="pill running">running</span>`
+          : r.state === "stale" ? `<span class="pill stale">stale</span>` : "";
+        const isRunning = r.state === "running";
+        return `<tr data-id="${r.run_id}">
+          <td><code>${r.run_id}</code></td>
+          <td class="size">${fmt(r.size_bytes)}</td>
+          <td>${r.n_input}</td>
+          <td>${pills || '<span class="muted">--</span>'}</td>
+          <td>${stateP}</td>
+          <td class="muted">${fmtAge(r.age_seconds)}</td>
+          <td>
+            <a class="btn" href="/results/${r.run_id}">查看</a>
+            <button class="danger del" ${isRunning ? "disabled title='running 中,等完成再删'" : ""}>删除</button>
+          </td>
+        </tr>`;
+      }).join("");
+      tbody.querySelectorAll("button.del").forEach(btn => {
+        btn.addEventListener("click", async e => {
+          const tr = btn.closest("tr");
+          const id = tr.dataset.id;
+          if (!confirm(`删除 run ${id}?这会移除该次的上传图片、缩略图、scores.csv 和 XMP 输出。`)) return;
+          btn.disabled = true;
+          try {
+            const res = await fetch(`/runs/${id}`, { method: "DELETE" });
+            const data = await res.json();
+            if (data.ok) {
+              toast(`已删除 ${id}`);
+              refresh();
+            } else {
+              toast("删除失败: " + data.message, true);
+              btn.disabled = false;
+            }
+          } catch (e) {
+            toast("删除失败: " + e, true);
+            btn.disabled = false;
+          }
+        });
+      });
+    }
+
+    const cBody = document.querySelector("#cachesTable tbody");
+    cBody.innerHTML = (info.global_caches || []).map(c =>
+      `<tr><td>${c.label}</td><td>${c.path}</td><td class="size">${fmt(c.size_bytes)}</td></tr>`
+    ).join("") || `<tr><td colspan="3" class="muted">没有发现已知模型缓存</td></tr>`;
+  }
+
+  async function cleanup(params, label) {
+    if (!confirm(`确认 ${label}?`)) return;
+    try {
+      const res = await fetch("/runs/cleanup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(params),
+      });
+      const data = await res.json();
+      const mb = data.freed_bytes >= 1e9
+        ? (data.freed_bytes/1e9).toFixed(2) + " GB"
+        : (data.freed_bytes/1024/1024).toFixed(1) + " MB";
+      toast(`已清理 ${data.deleted} 项,释放 ${mb}`);
+      refresh();
+    } catch (e) {
+      toast("清理失败: " + e, true);
+    }
+  }
+
+  document.getElementById("refresh").addEventListener("click", refresh);
+  document.getElementById("cleanupOlder").addEventListener("click",
+    () => cleanup({ older_than_hours: 1 }, "清理 1 小时前的全部 run"));
+  document.getElementById("cleanupKeepLast").addEventListener("click",
+    () => cleanup({ keep_last: 3 }, "保留最近 3 次,删除其余"));
+  document.getElementById("cleanupAll").addEventListener("click",
+    () => cleanup({ keep_last: 0 }, "全部清空(不含正在运行)"));
+
+  refresh();
 })();
 </script>
 </body>
