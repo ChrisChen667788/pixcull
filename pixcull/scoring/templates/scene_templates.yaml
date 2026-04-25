@@ -1,0 +1,191 @@
+# PixCull 场景权重模板 — V0.1 起使用
+# 手工调参(无需训练),后续可按用户反馈迭代。
+# 所有权重每个 scene 内部总和应为 1.0,bonuses/penalties 是相对总分的加减系数。
+
+version: "0.1"
+
+# ---------- 默认值(未识别场景或未覆盖字段时回退) ----------
+# 注:阈值以 max_side=2048 下采样图为基准;全分辨率一般 4-6x 之内。
+defaults:
+  blur:
+    laplacian_subject_min: 15       # 主体区域 Laplacian 方差低于此 → "主体虚焦"
+    laplacian_global_min: 10        # 无主体时全图低于此 → "全局虚焦"
+    subject_fraction_min: 0.02      # 主体 mask 占比低于此 → "主体不明"
+  duplicate:
+    burst_time_gap_s: 2.0           # EXIF 时间间隔内视为连拍
+    embedding_sim_threshold: 0.93   # DINOv2 余弦相似度,高于此算同组
+  exposure:
+    highlight_clip_max_pct: 5.0     # 高光溢出占比上限
+    shadow_clip_max_pct:    5.0     # 暗部溢出占比上限
+  aesthetic:
+    cull_threshold: 4.0             # laion_aes 低于此进入淘汰候选
+    keep_threshold: 6.0             # 高于此且无问题直接保留
+  weights:                          # 五维美学权重,总和 1.0
+    sharpness:   0.25
+    composition: 0.20
+    exposure:    0.20
+    aesthetic:   0.25
+    moment:      0.10
+
+
+# ==================== 场景专属模板 ====================
+
+scenes:
+
+  # -------------------------------------------------- 人像 / 婚礼
+  portrait:
+    description: "婚礼、活动人像、写真、合影"
+    detectors:
+      face:              true       # MediaPipe Face Mesh
+      eye_blink:         true       # EAR (Eye Aspect Ratio)
+      facial_expression: true       # 表情(微笑/中性/闭眼)
+      bird_body:         false
+      pose_peak:         false
+      focus_stack:       false
+    blur:
+      face_region_priority: true    # 检测到人脸时以脸部区域锐度为准
+      laplacian_subject_min: 15
+    duplicate:
+      burst_time_gap_s: 2.0
+      embedding_sim_threshold: 0.93
+    weights:
+      sharpness:   0.25
+      composition: 0.20
+      exposure:    0.20
+      aesthetic:   0.10
+      moment:      0.25             # 情绪/表情权重偏高
+    bonuses:
+      open_eyes:    +0.10
+      smile:        +0.05
+      eye_contact:  +0.05
+    penalties:
+      closed_eyes:         -0.30
+      motion_blur_on_face: -0.50
+      # face_occluded penalty removed V0.5: MediaPipe Landmarker failure on
+      # low-confidence FaceDetector bboxes is noisy (24 false positives, 0 true
+      # culls on golden set). Flag is still emitted for downstream visibility
+      # but doesn't affect score until we have a better "face really occluded"
+      # signal (e.g. gated on face-confidence AND partial-landmark-success).
+
+  # -------------------------------------------------- 鸟类 / 野生
+  wildlife:
+    description: "鸟类、野生动物、自然生态"
+    detectors:
+      face:              false
+      eye_blink:         false
+      facial_expression: false
+      bird_body:         true       # V0.7 起:YOLOv8 COCO 'bird' + SAM 分割
+      pose_peak:         true       # 展翅/起飞/捕食姿态
+      focus_stack:       false
+    blur:
+      head_region_priority: true    # V0.7 起以头部区域为主(V0.1-V0.5 回退到 subject mask)
+      laplacian_subject_min: 25     # 更严格:野生题材对锐度要求高
+    duplicate:
+      burst_time_gap_s: 1.0         # 连拍更快(20-30fps),时间窗更短
+      embedding_sim_threshold: 0.96 # 相似阈值更严,保留更多姿态变化
+    weights:
+      sharpness:   0.40             # 锐度是硬指标
+      composition: 0.25
+      exposure:    0.15
+      aesthetic:   0.10
+      moment:      0.10
+    bonuses:
+      look_space_correct: +0.10     # 朝向画面内而非外
+      wings_spread:       +0.15     # 展翅瞬间
+      eye_contact:        +0.10     # 与镜头对视
+      rare_species:       +0.05     # 可选,需物种识别 API
+    penalties:
+      cropped_subject: -0.15
+      rear_view:       -0.05
+      small_in_frame:  -0.10        # 主体占比 < 5% 扣分
+
+  # -------------------------------------------------- 活动 / 体育
+  event:
+    description: "体育、活动、会议、演出、路演"
+    detectors:
+      face:              true
+      eye_blink:         true
+      facial_expression: true
+      bird_body:         false
+      pose_peak:         true       # 动作峰值(跳跃顶点、传球瞬间等)
+      focus_stack:       false
+    blur:
+      face_region_priority: true
+      laplacian_subject_min: 12     # 略放松,现场光环境复杂
+      allow_directional_blur: true  # 肢体方向性运动模糊不视为废片
+    duplicate:
+      burst_time_gap_s: 1.0
+      embedding_sim_threshold: 0.94
+    weights:
+      sharpness:   0.20
+      composition: 0.15
+      exposure:    0.15
+      aesthetic:   0.10
+      moment:      0.40             # 决定性瞬间压倒一切
+    bonuses:
+      peak_pose:      +0.20         # 姿态序列的速度峰值帧
+      eye_contact:    +0.05
+      crowd_reaction: +0.05
+    penalties:
+      motion_blur_on_face: -0.40
+      back_to_camera:      -0.05
+      obstructed_subject:  -0.15
+
+  # -------------------------------------------------- 室内静物 / 产品
+  stilllife:
+    description: "产品、静物、美食、室内陈设 — 三脚架可控光"
+    detectors:
+      face:              false
+      eye_blink:         false
+      facial_expression: false
+      bird_body:         false
+      pose_peak:         false
+      focus_stack:       true       # V0.9 起:识别景深堆栈组,不参与去重淘汰
+    blur:
+      global_priority: true         # 整体锐度优先,不依赖主体
+      laplacian_subject_min: 20     # 最严:三脚架拍摄应当极锐
+      laplacian_global_min: 15
+    duplicate:
+      burst_time_gap_s: 10.0        # 同场景多次尝试间隔可能更长
+      embedding_sim_threshold: 0.95
+      skip_focus_stack_groups: true # 堆栈组整组保留
+    weights:
+      sharpness:   0.35
+      composition: 0.30             # 对称/居中/干净背景
+      exposure:    0.25
+      aesthetic:   0.05
+      moment:      0.05
+    bonuses:
+      symmetry:       +0.10
+      clean_bg:       +0.10
+      color_accuracy: +0.05
+    penalties:
+      distracting_bg:  -0.15
+      wb_inconsistent: -0.10
+      subject_tilted:  -0.05
+
+  # -------------------------------------------------- 风光 / 街拍(占位,V0.9+ 独立调参)
+  landscape:
+    description: "风光、旅行、自然 — 暂用默认模板"
+    use_defaults: true
+
+  street:
+    description: "街拍 — 暂用默认模板"
+    use_defaults: true
+
+
+# ==================== 融合规则 ====================
+fusion:
+  # 最终分数 = Σ(维度得分 × 权重) + Σ bonuses − Σ penalties,限 clip 到 [0, 10]
+  aggregation: weighted_sum
+  clip_range: [0.0, 10.0]
+  # 分级阈值(可被 UI 全局调节:严格/标准/宽松)
+  decision:
+    keep_min_score: 6.5
+    cull_max_score: 4.0
+    # 其余进入 maybe
+  # "严格/标准/宽松"预设:整体阈值偏移
+  strictness_presets:
+    strict:   { keep_min_score: 7.0, cull_max_score: 5.0 }
+    standard: { keep_min_score: 6.5, cull_max_score: 4.0 }
+    lenient:  { keep_min_score: 5.5, cull_max_score: 3.0 }

@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "pixcull-review",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["scripts/serve_review.py", "tests/fixtures/", "--no-open", "--port", "8765"],
+      "port": 8765,
+      "env": { "PYTHONPATH": "." }
+    }
+  ]
+}

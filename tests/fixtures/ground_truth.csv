@@ -1,0 +1,134 @@
+filename,scene,manual_label,notes
+# manual_label: keep | maybe | cull
+# scene 列仅是文件夹分组
+# notes 可选;例 'closed eyes'
+3J0A1701.JPG,portrait,maybe,普通人像
+3J0A1836.JPG,portrait,cull,闭眼、曝光不足
+3J0A1968.JPG,portrait,cull,过曝光
+3J0A2099.JPG,portrait,keep,轻微曝光不足
+3J0A2230.JPG,portrait,keep,"人像写真,不错'peak pose"
+3J0A2361.JPG,portrait,cull,面部轻微欠曝
+3J0A2491.JPG,portrait,keep,"人像写真,不错'peak pose"
+3J0A2621.JPG,portrait,keep,标签应该是活动摄影
+3J0A2751.JPG,event,maybe,"标签应该是活动摄影,环境稍微有点杂乱"
+3J0A3240.JPG,landscape,keep,"风光摄影,不错"
+3J0A3370.JPG,portrait,keep,"人像写真,不错'peak pose"
+3J0A3500.JPG,portrait,maybe,普通人像
+3J0A3630.JPG,portrait,keep,"人像写真,不错,闭眼"
+3J0A3760.JPG,portrait,keep,"人像写真,不错,"
+3J0A3890.JPG,portrait,maybe,普通人像
+3J0A4020.JPG,portrait,maybe,普通街拍
+3J0A4150.JPG,portrait,keep,"人像写真,不错'peak pose"
+3J0A4281.JPG,portrait,maybe,"建筑摄影,不算出彩"
+3J0A4411.JPG,portrait,keep,"人像写真,轻微过曝"
+3J0A4546.JPG,portrait,keep,"人像写真,不错'peak pose"
+3J0A4676.JPG,portrait,keep,面部轻微欠曝'motion blur
+3J0A4806.JPG,portrait,keep,面部轻微欠曝
+3J0A4936.JPG,portrait,keep,"人像写真,不错,"
+3J0A5066.JPG,architecture,keep,
+3J0A5196.JPG,portrait,maybe,普通人像
+3J0A5328.JPG,event,maybe,构图还可以继续提升
+3J0A5458.JPG,event,cull,整体欠曝
+3J0A5588.JPG,portrait,keep,"人像写真,不错,闭眼'peak pose"
+3J0A5718.JPG,portrait,maybe,面部轻微欠曝
+3J0A5848.JPG,architecture,keep,
+3J0A5978.JPG,landscape,cull,"没有突出主题,构图没有保持水平有倾斜"
+3J0A6108.JPG,portrait,cull,过曝光
+3J0A6238.JPG,portrait,maybe,构图没有保持水平有倾斜
+3J0A6368.JPG,portrait,cull,
+3J0A6498.JPG,landscape,keep,"风光摄影,不错"
+3J0A6628.JPG,bird,keep,羽毛高光稍微有点溢出
+3J0A8330.JPG,landscape,keep,'burst best'
+3J0A8530.JPG,portrait,cull,motion blur
+3J0A8732.JPG,portrait,keep,
+3J0A8932.JPG,portrait,cull,"没有突出主题,"
+3J0A9135.JPG,stilllife,maybe,主题相对单调
+3J0A9336.JPG,portrait,keep,'burst best'
+3J0A9539.JPG,portrait,keep,
+3J0A9742.JPG,landscape,maybe,轻微欠曝
+3J0A1767-已增强-降噪.jpg,event,keep,
+3J0A1777-已增强-降噪.jpg,event,keep,
+3J0A1785.jpg,event,cull,"补光不均匀,环境过暗"
+3J0A1798-已增强-降噪.jpg,event,keep,
+3J0A1925-已增强-RD.jpg,architecture,keep,'burst best'
+3J0A1977-已增强-SR.jpg,event,keep,
+3J0A2177-已增强-SR.jpg,event,keep,
+3J0A2206-已增强-SR.jpg,event,keep,
+3J0A2208-已增强-降噪.jpg,event,keep,
+3J0A2248-已增强-SR.jpg,event,keep,"'burst best',突出了活动的精彩瞬间"
+3J0A2287.jpg,event,maybe,
+3J0A2426-已增强-降噪.jpg,event,keep,
+3J0A2508-已增强-降噪.jpg,event,keep,
+3J0A2705-已增强-降噪.jpg,event,keep,
+3J0A2854.jpg,event,keep,
+3J0A2899-已增强-SR.jpg,event,keep,
+3J0A3009-已增强-降噪.jpg,event,keep,
+3J0A6356.jpg,stilllife,cull,motion blur
+3J0A6359.jpg,stilllife,cull,审美一般
+3J0A6363.jpg,stilllife,cull,审美一般
+3J0A6364.jpg,stilllife,cull,审美一般
+3J0A6365.jpg,stilllife,cull,审美一般
+3J0A6366.jpg,stilllife,cull,审美一般
+3J0A6367.jpg,stilllife,cull,审美一般
+AB4A4544.JPG,stilllife,keep,'burst best'
+AB4A4546.JPG,stilllife,keep,'burst best'
+AB4A4562.JPG,stilllife,keep,'burst best'
+AB4A4574.JPG,stilllife,keep,'burst best'
+AB4A4581.JPG,stilllife,keep,'burst best'
+AB4A4600.JPG,stilllife,keep,'burst best'
+AB4A4606.JPG,stilllife,keep,'burst best'
+AB4A4609.JPG,stilllife,keep,'burst best'
+AB4A4629.JPG,stilllife,keep,'burst best'
+AB4A4641.JPG,stilllife,keep,'burst best'
+AB4A4644.JPG,stilllife,keep,'burst best'
+AB4A4672.JPG,stilllife,keep,'burst best'
+AB4A4723.JPG,stilllife,keep,'burst best'
+AB4A4725.JPG,stilllife,keep,'burst best'
+AB4A4738.JPG,stilllife,keep,'burst best'
+AB4A4747.JPG,stilllife,keep,'burst best'
+AB4A4750.JPG,stilllife,keep,'burst best'
+AB4A4769.JPG,stilllife,keep,'burst best'
+AB4A4782.JPG,stilllife,keep,'burst best'
+AB4A4816.JPG,stilllife,keep,'burst best'
+AB4A4829.JPG,stilllife,keep,'burst best'
+AB4A4831.JPG,stilllife,keep,'burst best'
+AB4A4846.JPG,stilllife,keep,'burst best'
+20210801-3J0A8098.JPG,architecture,keep,
+20210801-3J0A8241 2.JPG,architecture,keep,
+20210801-3J0A8241.JPG,architecture,keep,
+3J0A2874.CR3,街拍,keep,
+3J0A2908.CR3,街拍,keep,
+3J0A2942.CR3,街拍,keep,
+3J0A2976.CR3,街拍,keep,
+3J0A3010.CR3,街拍,keep,
+3J0A3044.CR3,街拍,cull,整体欠曝
+3J0A3078.CR3,街拍,cull,轻微过曝
+3J0A3112.CR3,architecture,cull,整体欠曝
+3J0A3146.JPG,architecture,,
+3J0A3180.CR3,portrait,keep,
+3J0A3214.JPG,architecture,,
+3J0A3248.CR3,portrait,keep,
+3J0A3282.CR3,landscape,keep,
+3J0A3316.CR3,landscape,keep,
+3J0A3350.CR3,portrait,keep,
+3J0A3384.CR3,portrait,keep,
+3J0A3418.CR3,landscape,keep,
+3J0A3452.CR3,landscape,keep,
+3J0A3486.CR3,portrait,keep,'burst best'
+3J0A3520.CR3,portrait,keep,'burst best'
+3J0A3555.CR3,portrait,keep,
+3J0A3589.CR3,portrait,cull,人像美姿一般
+3J0A3623.CR3,portrait,keep,
+3J0A3657.CR3,portrait,keep,
+3J0A3691.CR3,architecture,cull,没有突出主题
+3J0A3725.CR3,architecture,cull,没有突出主题
+3J0A3759.CR3,architecture,cull,没有突出主题
+3J0A3793.CR3,architecture,maybe,普通建筑
+3J0A3827.CR3,architecture,maybe,普通建筑
+3J0A3861.CR3,architecture,maybe,普通建筑
+3J0A5457.JPG,architecture,maybe,
+9aba0bac8774495b84151b81a427dd5c.JPG,stilllife,maybe,
+c1690c4dacd441a78f4a0155f24aaf83.JPG,stilllife,keep,色调和光影还可以提升
+c7dec69d2d2e4acfaa6cd4943f252b93.JPG,stilllife,keep,
+dca6c999bf1e4945bd7d6a9cbb50157f.JPG,stilllife,maybe,色调和光影还可以提升
+e581f34b4e624649a71de13394fa8dcd.JPG,stilllife,maybe,色调和光影还可以提升

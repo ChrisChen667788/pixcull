@@ -1,0 +1,30 @@
+{# PixCull HTML report template — V0.3+ #}
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <title>PixCull Report — {{ project_name }}</title>
+  <style>
+    body { font-family: -apple-system, sans-serif; font-size: 13px; }
+    td { padding: 8px; vertical-align: top; border-bottom: 1px solid #eee; }
+    .keep  { background: #2b9e2b22; }
+    .maybe { background: #d0a00022; }
+    .cull  { background: #c94c4c22; }
+  </style>
+</head>
+<body>
+<h2>PixCull — {{ df | length }} images</h2>
+<table>
+{% for row in df %}
+  <tr class="{{ row.decision }}">
+    <td><img src="thumbs/{{ row.filename }}.jpg" width="{{ thumb_px }}"></td>
+    <td><b>{{ row.filename }}</b><br>scene: {{ row.scene }}</td>
+    <td>sharp={{ "%.2f" | format(row.score_sharpness) }}
+        expo={{ "%.2f" | format(row.score_exposure) }}
+        aes={{ "%.2f" | format(row.score_aesthetic) }}</td>
+    <td><b>{{ row.decision | upper }}</b><br>{{ row.reason }}</td>
+  </tr>
+{% endfor %}
+</table>
+</body>
+</html>
