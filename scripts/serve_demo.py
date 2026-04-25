@@ -241,9 +241,50 @@ def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
 
     df = pd.read_csv(scores_path)
 
+    # V2.0: pull human annotations off disk (latest line wins per fn).
+    # Cheap I/O — only one read per results render, and most runs will
+    # have an empty file the first time.
+    output_dir = Path(run["output_dir"])
+    ann_path = output_dir / "annotations.jsonl"
+    human_by_fn: dict[str, dict] = {}
+    if ann_path.exists():
+        with open(ann_path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                fn = rec.get("filename")
+                if fn:
+                    human_by_fn[fn] = rec
+
+    from pixcull.scoring.rubric import RUBRIC_AXES
+    rubric_axis_names = [a.name for a in RUBRIC_AXES]
+
     rows: list[dict] = []
     for _, r in df.iterrows():
         fn = str(r["filename"])
+        # Auto rubric stars from CSV columns ('rubric_<axis>_stars')
+        auto_stars = {
+            name: _f(r.get(f"rubric_{name}_stars"))
+            for name in rubric_axis_names
+        }
+        # Human override if present — last save per filename wins.
+        human_rec = human_by_fn.get(fn)
+        human_stars: dict[str, float | None] = {}
+        if human_rec:
+            for name in rubric_axis_names:
+                axis_data = (human_rec.get("axes") or {}).get(name) or {}
+                human_stars[name] = axis_data.get("stars")
+        # Final stars per axis: human if present, else auto.
+        final_stars = {
+            name: (human_stars.get(name) if human_stars.get(name) is not None
+                   else auto_stars.get(name))
+            for name in rubric_axis_names
+        }
         rows.append({
             "filename": fn,
             "scene": str(r.get("scene", "") or ""),
@@ -264,6 +305,13 @@ def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
             ),
             "rescorer_prob_keep": _f(r.get("rescorer_prob_keep"))
             if "rescorer_prob_keep" in df.columns else None,
+            # Rubric: per-axis stars (the visible 1-5) plus the human
+            # override marker so the UI can show a 'human-graded' badge.
+            "rubric_stars": final_stars,
+            "rubric_human_labeled": human_rec is not None,
+            "rubric_overall_rationale": (
+                human_rec.get("overall_rationale") if human_rec else ""
+            ),
         })
 
     # Sort: keep first, then maybe, then cull, by score within group.
@@ -277,6 +325,15 @@ def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
     # immediately whether the learned head is contributing signal.
     rescored = [r for r in rows if r["rescorer_pred"] is not None]
     disagrees = [r for r in rescored if r["rescorer_pred"] != r["decision"]]
+    # V2.0 rubric summary: how many images have any human label, mean
+    # stars per axis (auto+human pooled). Surfaces "did the human
+    # contribute signal yet" at a glance.
+    n_human_labeled = sum(1 for r in rows if r["rubric_human_labeled"])
+    axis_means: dict[str, float | None] = {}
+    for name in rubric_axis_names:
+        vals = [r["rubric_stars"][name] for r in rows
+                if r["rubric_stars"].get(name) is not None]
+        axis_means[name] = round(sum(vals) / len(vals), 2) if vals else None
     summary = {
         "n_total": len(rows),
         "n_keep": counts.get("keep", 0),
@@ -285,6 +342,8 @@ def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
         "rescorer_active": len(rescored) > 0,
         "rescorer_n_scored": len(rescored),
         "rescorer_n_disagrees": len(disagrees),
+        "n_human_labeled": n_human_labeled,
+        "rubric_axis_means": axis_means,
         "mode": run.get("mode", "upload"),
         "origin_folder": run.get("origin_folder"),
         "started_at": run.get("started_at"),
@@ -562,6 +621,8 @@ class _Handler(BaseHTTPRequestHandler):
             return self._serve_runs_list()
         if path == "/storage_info":
             return self._serve_storage_info()
+        if path == "/rubric_meta":
+            return self._serve_rubric_meta()
         if path.startswith("/status/"):
             return self._serve_status(path[len("/status/"):])
         if path.startswith("/results/"):
@@ -572,6 +633,12 @@ class _Handler(BaseHTTPRequestHandler):
             return self._serve_image(path[len("/full/"):], _FULL_SIZE)
         if path.startswith("/xmp_zip/"):
             return self._serve_xmp_zip(path[len("/xmp_zip/"):])
+        if path.startswith("/rubric/"):
+            return self._serve_rubric(path[len("/rubric/"):])
+        if path.startswith("/annotation/"):
+            return self._serve_annotation(path[len("/annotation/"):])
+        if path.startswith("/next_to_label/"):
+            return self._serve_next_to_label(path[len("/next_to_label/"):])
         self.send_error(404, "not found")
 
     def do_POST(self) -> None:  # noqa: N802
@@ -586,6 +653,8 @@ class _Handler(BaseHTTPRequestHandler):
             return self._handle_export(path[len("/export/"):])
         if path == "/runs/cleanup":
             return self._handle_runs_cleanup()
+        if path.startswith("/annotation/"):
+            return self._handle_save_annotation(path[len("/annotation/"):])
         self.send_error(404, "not found")
 
     def do_DELETE(self) -> None:  # noqa: N802
@@ -1129,6 +1198,294 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
+
+    # --- rubric / annotation (V2.0) ---------------------------------------
+    def _serve_rubric_meta(self) -> None:
+        """Static rubric definition: axis names + descriptors + checklist.
+
+        Sent once on results-page load so the client can render the
+        annotation form locally without re-requesting on every image.
+        """
+        from pixcull.scoring.rubric import RUBRIC_AXES
+        meta = [
+            {
+                "name": a.name,
+                "label_zh": a.label_zh,
+                "label_en": a.label_en,
+                "description_zh": a.description_zh,
+                "rubric_descriptors": list(a.rubric_descriptors),
+                "checklist": [{"key": k, "weight": w} for k, w in a.checklist],
+            }
+            for a in RUBRIC_AXES
+        ]
+        self._send_json(200, json.dumps(
+            {"axes": meta}, ensure_ascii=False
+        ).encode("utf-8"))
+
+    def _serve_rubric(self, rel: str) -> None:
+        """GET /rubric/<run_id> → all auto-decomposed rubric scores
+        for this run. Read straight off rubric.jsonl on disk so the
+        client can sort/filter without holding everything in memory.
+        """
+        run_id = unquote(rel)
+        run = _get_run(run_id) or _reload_run_from_disk(run_id)
+        if run is None:
+            self.send_error(404, "no such run")
+            return
+        rubric_path = Path(run["output_dir"]) / "rubric.jsonl"
+        if not rubric_path.exists():
+            self.send_error(404, "rubric.jsonl missing — pre-V2 run?")
+            return
+        rows = []
+        with open(rubric_path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    rows.append(json.loads(line))
+        # Layer in human annotations (latest per filename wins) so the
+        # response reflects the current best-known rubric for each row.
+        ann_path = Path(run["output_dir"]) / "annotations.jsonl"
+        human_by_fn: dict[str, dict] = {}
+        if ann_path.exists():
+            with open(ann_path, encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        rec = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    fn = rec.get("filename")
+                    if fn:
+                        human_by_fn[fn] = rec  # later lines overwrite
+        for r in rows:
+            fn = r.get("filename")
+            if fn in human_by_fn:
+                r["human"] = human_by_fn[fn]
+        self._send_json(200, json.dumps(
+            {"run_id": run_id, "rows": rows}, ensure_ascii=False
+        ).encode("utf-8"))
+
+    def _serve_annotation(self, rel: str) -> None:
+        """GET /annotation/<run_id>/<filename> → the latest human
+        rubric for that one image, or the auto-decomposed one if no
+        human label exists yet. Used by the annotation modal to
+        pre-fill the form.
+        """
+        rel = unquote(rel)
+        if "/" not in rel:
+            self.send_error(400, "expected run_id/filename")
+            return
+        run_id, fn = rel.split("/", 1)
+        run = _get_run(run_id) or _reload_run_from_disk(run_id)
+        if run is None:
+            self.send_error(404, "no such run")
+            return
+        # Read latest human entry; fall back to auto.
+        ann_path = Path(run["output_dir"]) / "annotations.jsonl"
+        latest_human = None
+        if ann_path.exists():
+            with open(ann_path, encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        rec = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if rec.get("filename") == fn:
+                        latest_human = rec  # keep overwriting; last wins
+        if latest_human is not None:
+            self._send_json(200, json.dumps(
+                {"source": "human", "data": latest_human},
+                ensure_ascii=False,
+            ).encode("utf-8"))
+            return
+        # Fall back to auto from rubric.jsonl
+        rubric_path = Path(run["output_dir"]) / "rubric.jsonl"
+        if rubric_path.exists():
+            with open(rubric_path, encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        rec = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if rec.get("filename") == fn:
+                        self._send_json(200, json.dumps(
+                            {"source": "auto", "data": rec},
+                            ensure_ascii=False,
+                        ).encode("utf-8"))
+                        return
+        self.send_error(404, f"no rubric for {fn}")
+
+    def _handle_save_annotation(self, rel: str) -> None:
+        """POST /annotation/<run_id>/<filename> with body
+        {axes: {name: {stars, rationale}}, overall_label, overall_rationale}.
+
+        Append-only: every save creates a new line. Latest wins on read.
+        This makes the annotation file replayable, audit-friendly, and
+        merge-safe across multiple annotators on a LAN deploy.
+        """
+        rel = unquote(rel)
+        if "/" not in rel:
+            self._reject_upload(400, "expected run_id/filename")
+            return
+        run_id, fn = rel.split("/", 1)
+        run = _get_run(run_id) or _reload_run_from_disk(run_id)
+        if run is None:
+            self._reject_upload(404, "no such run")
+            return
+        clen = int(self.headers.get("Content-Length", "0") or "0")
+        if clen <= 0 or clen > 65536:
+            self._reject_upload(400, "expected JSON body")
+            return
+        try:
+            params = json.loads(self.rfile.read(clen).decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            self._reject_upload(400, f"JSON parse failed: {exc}")
+            return
+
+        from pixcull.scoring.rubric import RUBRIC_AXES, get_axis
+        valid_axes = {a.name for a in RUBRIC_AXES}
+
+        axes_in = params.get("axes") or {}
+        clean_axes: dict[str, dict] = {}
+        for name, axis_data in axes_in.items():
+            if name not in valid_axes:
+                continue  # silently drop typos
+            try:
+                _ = get_axis(name)
+            except KeyError:
+                continue
+            stars = axis_data.get("stars")
+            if stars is not None:
+                try:
+                    stars_f = float(stars)
+                    if not 1.0 <= stars_f <= 5.0:
+                        stars_f = max(1.0, min(5.0, stars_f))
+                except (TypeError, ValueError):
+                    stars_f = None
+            else:
+                stars_f = None
+            clean_axes[name] = {
+                "stars": stars_f,
+                "checklist_pass": None,  # human override; recompute on display
+                "rationale": str(axis_data.get("rationale", ""))[:1000],
+                "source": "human",
+            }
+
+        record = {
+            "filename": fn,
+            "axes": clean_axes,
+            "overall_label": str(params.get("overall_label", ""))[:32],
+            "overall_rationale": str(params.get("overall_rationale", ""))[:1000],
+            "source": "human",
+            "timestamp": time.time(),
+        }
+        ann_path = Path(run["output_dir"]) / "annotations.jsonl"
+        ann_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(ann_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        self._send_json(200, json.dumps(
+            {"ok": True, "filename": fn}, ensure_ascii=False
+        ).encode("utf-8"))
+
+    def _serve_next_to_label(self, rel: str) -> None:
+        """Active-learning queue: pick the next most-informative image
+        for this run that hasn't been human-labeled yet.
+
+        Priority (decreasing):
+          1. rule decision and rescorer disagree (the article's
+             "where is the model wrong?" — highest signal)
+          2. rescorer prob_keep in [0.4, 0.7] (uncertain region)
+          3. burst clusters where decisions split (peer-comparable)
+          4. rubric axes near the median (a 3★ that could go either
+             way is a strong train-time signal)
+          5. fallback: lowest score_final among unlabeled
+        """
+        run_id = unquote(rel)
+        run = _get_run(run_id) or _reload_run_from_disk(run_id)
+        if run is None:
+            self.send_error(404, "no such run")
+            return
+
+        result = _build_results(run_id)
+        if result is None:
+            self.send_error(404, "no results yet")
+            return
+        rows, _ = result
+
+        # Filter out images already human-labeled
+        ann_path = Path(run["output_dir"]) / "annotations.jsonl"
+        labeled: set[str] = set()
+        if ann_path.exists():
+            with open(ann_path, encoding="utf-8") as f:
+                for line in f:
+                    try:
+                        rec = json.loads(line)
+                        labeled.add(rec.get("filename", ""))
+                    except json.JSONDecodeError:
+                        continue
+        candidates = [r for r in rows if r["filename"] not in labeled]
+        if not candidates:
+            self._send_json(200, json.dumps(
+                {"done": True, "n_labeled": len(labeled),
+                 "message": "已标完本批所有图片"},
+                ensure_ascii=False,
+            ).encode("utf-8"))
+            return
+
+        def priority(r: dict) -> tuple:
+            # Lower tuple = higher priority. -bool flips True→0 (top).
+            rescorer_disagrees = (
+                r.get("rescorer_pred") is not None
+                and r["rescorer_pred"] != r["decision"]
+            )
+            prob = r.get("rescorer_prob_keep")
+            uncertainty = (
+                abs(0.55 - prob)
+                if prob is not None else 1.0
+            )
+            score = r.get("score_final") or 0.5
+            return (
+                -int(rescorer_disagrees),  # disagreement first
+                uncertainty,                # then most uncertain
+                abs(score - 0.5),           # then score near 0.5
+            )
+
+        candidates.sort(key=priority)
+        chosen = candidates[0]
+        # Why we picked this one — surface for the UI tooltip.
+        reasons = []
+        if (chosen.get("rescorer_pred") is not None
+                and chosen["rescorer_pred"] != chosen["decision"]):
+            reasons.append(
+                f"规则=={chosen['decision']} 但 rescorer=={chosen['rescorer_pred']} (P={chosen.get('rescorer_prob_keep'):.2f})"
+            )
+        if (chosen.get("rescorer_prob_keep") is not None
+                and 0.40 <= chosen["rescorer_prob_keep"] <= 0.70):
+            reasons.append(
+                f"rescorer 不确定区 (P={chosen['rescorer_prob_keep']:.2f})"
+            )
+        score = chosen.get("score_final")
+        if score is not None and 0.35 <= score <= 0.65:
+            reasons.append(f"score_final={score:.2f} 临界")
+        if not reasons:
+            reasons.append("queue 中未标注的下一张")
+
+        self._send_json(200, json.dumps({
+            "filename": chosen["filename"],
+            "n_total": len(rows),
+            "n_labeled": len(labeled),
+            "n_remaining": len(candidates),
+            "why": "; ".join(reasons),
+            "row": chosen,
+        }, ensure_ascii=False).encode("utf-8"))
 
     # --- storage admin -----------------------------------------------------
     def _serve_admin_page(self) -> None:
@@ -2045,14 +2402,90 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
             margin-top: 4px; font-size: 11px; color: var(--muted); }
     .row2 .scene { color: var(--fg); }
     .row3 {
-      display: grid; grid-template-columns: repeat(4, 1fr);
-      gap: 4px; margin-top: 6px; font-size: 10px;
+      display: grid; grid-template-columns: repeat(6, 1fr);
+      gap: 3px; margin-top: 6px; font-size: 10px;
     }
-    .row3 .dim { background: rgba(255,255,255,0.04); padding: 2px 4px; border-radius: 2px; }
-    .row3 .dim .k { color: var(--muted); }
-    .row3 .dim .v { color: var(--fg); font-weight: 600; margin-left: 2px; }
+    .row3 .ax {
+      background: rgba(255,255,255,0.04); padding: 3px 5px;
+      border-radius: 2px; text-align: center; cursor: help;
+    }
+    .row3 .ax .k { color: var(--muted); display: block; font-size: 9px; }
+    .row3 .ax .v { color: var(--fg); font-weight: 600; }
+    .row3 .ax.human { background: rgba(74, 222, 128, 0.18); }
+    .row3 .ax.s1 { color: var(--cull); }
+    .row3 .ax.s2 { color: #ee8888; }
+    .row3 .ax.s3 { color: var(--muted); }
+    .row3 .ax.s4 { color: #88cc88; }
+    .row3 .ax.s5 { color: var(--keep); }
     .row4 { font-size: 10px; color: var(--muted); margin-top: 6px;
             text-overflow: ellipsis; overflow: hidden; white-space: nowrap; }
+    .annotate-btn {
+      position: absolute; top: 6px; right: 6px;
+      background: rgba(0,0,0,0.65); color: white; border: 0;
+      border-radius: 3px; padding: 3px 7px; font-size: 10px;
+      cursor: pointer; opacity: 0; transition: opacity 0.15s;
+    }
+    .card { position: relative; }
+    .card:hover .annotate-btn { opacity: 1; }
+    .annotate-btn:hover { background: var(--accent); }
+    .card.has-human .annotate-btn { opacity: 1; background: rgba(74,222,128,0.5); }
+    /* Annotation modal */
+    .ann-modal {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.85);
+      display: none; align-items: flex-start; justify-content: center; z-index: 11;
+      overflow-y: auto; padding: 20px;
+    }
+    .ann-modal.show { display: flex; }
+    .ann-card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 8px; max-width: 920px; width: 100%; padding: 18px;
+      display: grid; grid-template-columns: 280px 1fr; gap: 18px;
+    }
+    .ann-thumb {
+      width: 100%; aspect-ratio: 4/3; object-fit: contain;
+      background: #000; border-radius: 4px;
+    }
+    .ann-side h3 { margin: 0 0 4px; font-size: 14px; font-weight: 600; }
+    .ann-side .why {
+      background: rgba(217, 163, 12, 0.15); border-left: 3px solid var(--maybe);
+      padding: 6px 10px; border-radius: 3px; font-size: 11px; margin-bottom: 12px;
+    }
+    .axis-row { margin-bottom: 14px; }
+    .axis-row .axis-name {
+      font-size: 12px; font-weight: 600; color: var(--fg); margin-bottom: 2px;
+    }
+    .axis-row .axis-desc { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+    .stars {
+      display: flex; gap: 4px; margin-bottom: 4px;
+      font-size: 18px; color: var(--muted); cursor: pointer; user-select: none;
+    }
+    .stars .star { transition: color 0.1s; }
+    .stars .star:hover, .stars .star.on { color: var(--maybe); }
+    .stars .star.locked { color: var(--keep); }
+    .axis-row textarea {
+      width: 100%; min-height: 32px; resize: vertical;
+      background: rgba(0,0,0,0.3); border: 1px solid var(--border);
+      color: var(--fg); padding: 5px 8px; border-radius: 3px;
+      font: inherit; font-size: 11px;
+    }
+    .axis-row .descriptor {
+      font-size: 11px; color: var(--keep); margin-top: 2px; min-height: 14px;
+    }
+    .ann-foot {
+      grid-column: 1 / -1; display: flex; gap: 10px; align-items: center;
+      border-top: 1px solid var(--border); padding-top: 12px; margin-top: 6px;
+    }
+    .ann-foot select, .ann-foot input {
+      background: rgba(0,0,0,0.3); border: 1px solid var(--border);
+      color: var(--fg); padding: 6px 10px; border-radius: 3px;
+    }
+    .ann-foot input { flex: 1; }
+    .ann-foot button { padding: 7px 14px; font-size: 12px; }
+    .ann-foot button.primary { background: var(--accent); color: white; border: 0; }
+    .ann-foot button.primary:hover { opacity: 0.9; }
+    .ann-foot button.skip {
+      background: transparent; color: var(--muted); border: 1px solid var(--border);
+    }
     .lightbox {
       position: fixed; inset: 0; background: rgba(0,0,0,0.92);
       display: none; align-items: center; justify-content: center; z-index: 9;
@@ -2072,6 +2505,7 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
       <span class="pill" data-d="maybe">maybe</span>
       <span class="pill" data-d="cull">cull</span>
       <span style="flex:1"></span>
+      <button class="export-btn" id="annNextBtn" title="按 active learning 优先级标注 — 优先暴露规则与 rescorer 不一致、概率临界、聚类分裂的图">▸ 标注下一张 (active learning)</button>
       <button class="export-btn" id="exportZipBtn" title="导出 XMP 评级到 zip 包(Lightroom / Capture One)">下载 XMP zip</button>
       <button class="export-btn" id="exportAlongsideBtn" style="display:none" title="把 XMP sidecar 写到原图旁边(Lightroom 直接读到)">写到原图旁边</button>
       <span class="export-status" id="exportStatus"></span>
@@ -2079,6 +2513,36 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
   </header>
   <div class="grid" id="grid"></div>
   <div class="lightbox" id="lightbox"><img id="lbImg" alt=""></div>
+
+  <!-- V2.0 annotation modal: rubric form + active-learning queue -->
+  <div class="ann-modal" id="annModal">
+    <div class="ann-card">
+      <div>
+        <img class="ann-thumb" id="annThumb" alt="">
+        <div style="margin-top:10px;font-size:11px;color:var(--muted)" id="annMeta"></div>
+        <div class="why" id="annWhy" style="display:none;margin-top:10px"></div>
+      </div>
+      <div class="ann-side">
+        <h3 id="annTitle">标注</h3>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:12px">
+          每个轴 1-5★ + 一句"为什么"。这种 rubric 风格的标注比单一的 keep/maybe/cull 给 rescorer 提供 ~6× 的训练信号。
+        </div>
+        <div id="axesContainer"></div>
+        <div class="ann-foot">
+          <select id="annOverall">
+            <option value="">总体决策…</option>
+            <option value="keep">keep</option>
+            <option value="maybe">maybe</option>
+            <option value="cull">cull</option>
+          </select>
+          <input id="annOverallRationale" type="text" placeholder="一句话总结(可选)" maxlength="200">
+          <button class="skip" id="annClose">关闭</button>
+          <button class="skip" id="annNext">跳过 →</button>
+          <button class="primary" id="annSave">保存 + 下一张</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
 <script>
 (() => {
@@ -2097,6 +2561,10 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
   ];
   if (summary.rescorer_active) {
     stats.push(`<span title="V1.1 学习重打分器:在 ${summary.rescorer_n_scored} 张非 cull 图上给出 keep/maybe 预测">rescorer <b>${summary.rescorer_n_scored}</b> 评分 / <b>${summary.rescorer_n_disagrees}</b> 与规则不一致</span>`);
+  }
+  // V2.0 rubric annotation progress
+  if (summary.n_human_labeled != null) {
+    stats.push(`<span title="人工 rubric 标注进度,这些标注会喂入下一轮 rescorer 训练">人工标注 <b>${summary.n_human_labeled}</b>/${summary.n_total}</span>`);
   }
   statsEl.innerHTML = stats.join("");
 
@@ -2121,9 +2589,24 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
           r.rescorer_prob_keep.toFixed(2);
         rescorerBadge = `<span class="rs ${dis ? 'dis' : ''}" title="V1.1 rescorer: ${r.rescorer_pred} (P=${probTxt})">${r.rescorer_pred==='keep'?'✓':'?'} ${probTxt}</span>`;
       }
+      // V2.0 rubric stars per axis. Only show shorter labels on each
+      // card (full descriptors live in the annotation modal).
+      const axisAbbr = {
+        technical: "技", subject: "主", composition: "构",
+        light: "光", moment: "瞬", aesthetic: "美"
+      };
+      const ax = (name) => {
+        const stars = r.rubric_stars && r.rubric_stars[name];
+        if (stars == null) return `<div class="ax"><span class="k">${axisAbbr[name]}</span><span class="v">--</span></div>`;
+        const s = Math.round(stars);
+        const cls = `s${s}` + (r.rubric_human_labeled ? " human" : "");
+        return `<div class="ax ${cls}" title="${name}: ${stars.toFixed(1)}★${r.rubric_human_labeled?' (human)':''}"><span class="k">${axisAbbr[name]}</span><span class="v">${stars.toFixed(1)}</span></div>`;
+      };
+      const cardCls = r.decision + (r.rubric_human_labeled ? " has-human" : "");
       return `
-        <div class="card ${r.decision}">
+        <div class="card ${cardCls}" data-fn="${r.filename}">
           <img class="thumb" src="${thumb}" data-full="${full}" loading="lazy" alt="${r.filename}">
+          <button class="annotate-btn" data-fn="${r.filename}" title="人工标注 (rubric)">${r.rubric_human_labeled ? "✓ 已标" : "标注"}</button>
           <div class="body">
             <div class="row1">
               <span class="badge ${r.decision}">${r.decision}</span>
@@ -2135,10 +2618,8 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
               <span>final ${r.score_final == null ? "--" : r.score_final.toFixed(2)}</span>
             </div>
             <div class="row3">
-              ${dim("锐度", r.score_sharpness)}
-              ${dim("曝光", r.score_exposure)}
-              ${dim("构图", r.score_composition)}
-              ${dim("美感", r.score_aesthetic)}
+              ${ax("technical")}${ax("subject")}${ax("composition")}
+              ${ax("light")}${ax("moment")}${ax("aesthetic")}
             </div>
             <div class="row4" title="${(r.reason || '').replace(/"/g,'&quot;')}">${reasonShort || ""}</div>
           </div>
@@ -2171,6 +2652,226 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
   document.addEventListener("keydown", e => {
     if (e.key === "Escape") lb.classList.remove("show");
   });
+
+  // ==================================================================
+  // V2.0 rubric annotation flow.
+  //   1. fetch /rubric_meta once → build the form skeleton
+  //   2. clicking 标注 on a card opens the modal pre-filled with the
+  //      auto-decomposed rubric for that image (or the existing human
+  //      labels if it's already been rated)
+  //   3. saving POSTs /annotation/<run_id>/<filename> and immediately
+  //      navigates to the next active-learning candidate
+  // ==================================================================
+  const annModal = document.getElementById("annModal");
+  const annThumb = document.getElementById("annThumb");
+  const annMeta = document.getElementById("annMeta");
+  const annWhy = document.getElementById("annWhy");
+  const annTitle = document.getElementById("annTitle");
+  const annOverall = document.getElementById("annOverall");
+  const annOverallRationale = document.getElementById("annOverallRationale");
+  const annClose = document.getElementById("annClose");
+  const annNext = document.getElementById("annNext");
+  const annSave = document.getElementById("annSave");
+  const axesContainer = document.getElementById("axesContainer");
+
+  let rubricMeta = null;
+  let currentFn = null;
+
+  async function loadRubricMeta() {
+    if (rubricMeta) return rubricMeta;
+    const res = await fetch("/rubric_meta");
+    const data = await res.json();
+    rubricMeta = data.axes;
+    // Build static form skeleton once
+    axesContainer.innerHTML = rubricMeta.map(ax => `
+      <div class="axis-row" data-axis="${ax.name}">
+        <div class="axis-name">${ax.label_zh} <span style="opacity:0.5;font-weight:400;font-size:10px">(${ax.label_en})</span></div>
+        <div class="axis-desc">${ax.description_zh}</div>
+        <div class="stars" data-stars data-axis="${ax.name}">
+          ${[1,2,3,4,5].map(i => `<span class="star" data-v="${i}">★</span>`).join("")}
+        </div>
+        <div class="descriptor" data-descriptor></div>
+        <textarea data-rationale rows="1" placeholder="为什么是这个分?(可选,但越多越有用)"></textarea>
+      </div>
+    `).join("");
+    // Wire up star click handlers
+    axesContainer.querySelectorAll(".stars").forEach(starsEl => {
+      const axisName = starsEl.dataset.axis;
+      starsEl.querySelectorAll(".star").forEach(starEl => {
+        starEl.addEventListener("click", () => {
+          const v = parseInt(starEl.dataset.v);
+          setStars(axisName, v);
+          // Show descriptor for the chosen level
+          const ax = rubricMeta.find(a => a.name === axisName);
+          starsEl.parentElement.querySelector("[data-descriptor]").textContent =
+            v + "★: " + ax.rubric_descriptors[v - 1];
+        });
+        starEl.addEventListener("mouseenter", () => {
+          const v = parseInt(starEl.dataset.v);
+          starsEl.querySelectorAll(".star").forEach((s, i) => {
+            s.classList.toggle("on", i < v);
+          });
+        });
+      });
+      starsEl.addEventListener("mouseleave", () => {
+        const locked = parseInt(starsEl.dataset.locked || "0");
+        starsEl.querySelectorAll(".star").forEach((s, i) => {
+          s.classList.remove("on");
+          s.classList.toggle("locked", i < locked);
+        });
+      });
+    });
+    return rubricMeta;
+  }
+
+  function setStars(axisName, v) {
+    const starsEl = axesContainer.querySelector(`.stars[data-axis="${axisName}"]`);
+    starsEl.dataset.locked = String(v);
+    starsEl.querySelectorAll(".star").forEach((s, i) => {
+      s.classList.toggle("locked", i < v);
+    });
+  }
+
+  function clearForm() {
+    axesContainer.querySelectorAll(".stars").forEach(s => {
+      s.dataset.locked = "0";
+      s.querySelectorAll(".star").forEach(x => x.classList.remove("locked", "on"));
+    });
+    axesContainer.querySelectorAll("textarea").forEach(t => t.value = "");
+    axesContainer.querySelectorAll("[data-descriptor]").forEach(d => d.textContent = "");
+    annOverall.value = "";
+    annOverallRationale.value = "";
+    annWhy.style.display = "none";
+  }
+
+  async function openAnnotation(fn, why) {
+    await loadRubricMeta();
+    currentFn = fn;
+    clearForm();
+    annThumb.src = `/full/${run_id}/${encodeURIComponent(fn)}`;
+    const r = rows.find(x => x.filename === fn);
+    annTitle.textContent = `${fn}`;
+    annMeta.innerHTML = r
+      ? `场景:<b>${r.scene || "?"}</b> · 规则:<b>${r.decision}</b> · final ${r.score_final?.toFixed(2) || "--"}`
+      : "";
+    if (why) {
+      annWhy.style.display = "block";
+      annWhy.innerHTML = `<b>为什么挑这张?</b> ${why}`;
+    }
+    // Pre-fill from /annotation endpoint (auto or human)
+    try {
+      const res = await fetch(`/annotation/${run_id}/${encodeURIComponent(fn)}`);
+      const data = await res.json();
+      const rec = data.data || {};
+      const axes = rec.axes || {};
+      Object.keys(axes).forEach(axisName => {
+        const ax = axes[axisName];
+        if (ax.stars != null) {
+          setStars(axisName, Math.round(ax.stars));
+          const meta = rubricMeta.find(a => a.name === axisName);
+          const starsEl = axesContainer.querySelector(`.stars[data-axis="${axisName}"]`);
+          if (starsEl && meta) {
+            starsEl.parentElement.querySelector("[data-descriptor]").textContent =
+              Math.round(ax.stars) + "★: " + meta.rubric_descriptors[Math.round(ax.stars) - 1];
+          }
+        }
+        if (ax.rationale) {
+          const ta = axesContainer.querySelector(`.axis-row[data-axis="${axisName}"] textarea`);
+          if (ta) ta.value = ax.rationale;
+        }
+      });
+      if (rec.overall_label) annOverall.value = rec.overall_label;
+      if (rec.overall_rationale) annOverallRationale.value = rec.overall_rationale;
+    } catch (e) { /* no prior — leave blank */ }
+    annModal.classList.add("show");
+  }
+
+  async function saveAnnotation(thenAdvance) {
+    if (!currentFn) return;
+    const axes = {};
+    rubricMeta.forEach(ax => {
+      const starsEl = axesContainer.querySelector(`.stars[data-axis="${ax.name}"]`);
+      const stars = parseInt(starsEl.dataset.locked || "0");
+      const ta = axesContainer.querySelector(`.axis-row[data-axis="${ax.name}"] textarea`);
+      const rationale = ta ? ta.value.trim() : "";
+      if (stars > 0 || rationale) {
+        axes[ax.name] = { stars: stars || null, rationale };
+      }
+    });
+    if (Object.keys(axes).length === 0 && !annOverall.value) {
+      alert("至少打 1 颗星 或 选 keep/maybe/cull");
+      return;
+    }
+    const body = {
+      axes,
+      overall_label: annOverall.value,
+      overall_rationale: annOverallRationale.value,
+    };
+    annSave.disabled = true;
+    try {
+      const res = await fetch(`/annotation/${run_id}/${encodeURIComponent(currentFn)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        alert("保存失败:" + (e.error || res.status));
+        return;
+      }
+      // Update local rows so the card re-render reflects the save
+      const r = rows.find(x => x.filename === currentFn);
+      if (r) {
+        r.rubric_human_labeled = true;
+        Object.keys(axes).forEach(k => {
+          if (axes[k].stars) r.rubric_stars[k] = axes[k].stars;
+        });
+        if (annOverall.value) r.decision = annOverall.value;
+      }
+      const activeFilter = document.querySelector("#filters .pill.active").dataset.d;
+      render(activeFilter);
+      summary.n_human_labeled = (summary.n_human_labeled || 0) + (r && !rows._wasLabeled ? 1 : 0);
+      if (thenAdvance) {
+        await openNextToLabel();
+      } else {
+        annModal.classList.remove("show");
+      }
+    } finally {
+      annSave.disabled = false;
+    }
+  }
+
+  async function openNextToLabel() {
+    try {
+      const res = await fetch(`/next_to_label/${run_id}`);
+      const data = await res.json();
+      if (data.done) {
+        annModal.classList.remove("show");
+        alert(data.message || "已标完");
+        return;
+      }
+      openAnnotation(data.filename, data.why);
+    } catch (e) {
+      annModal.classList.remove("show");
+      alert("active learning 队列失败:" + e);
+    }
+  }
+
+  // Wire up
+  grid.addEventListener("click", e => {
+    const btn = e.target.closest(".annotate-btn");
+    if (btn) {
+      e.stopPropagation();
+      openAnnotation(btn.dataset.fn);
+    }
+  });
+  annClose.addEventListener("click", () => annModal.classList.remove("show"));
+  annNext.addEventListener("click", () => openNextToLabel());
+  annSave.addEventListener("click", () => saveAnnotation(true));
+  annModal.addEventListener("click", e => {
+    if (e.target === annModal) annModal.classList.remove("show");
+  });
+  document.getElementById("annNextBtn").addEventListener("click", () => openNextToLabel());
 
   // XMP export — POST /export/<run_id>.
   // Two buttons:

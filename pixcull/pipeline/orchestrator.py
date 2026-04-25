@@ -19,6 +19,8 @@ from pixcull.pipeline.worker import analyze_one
 from pixcull.scoring.decision import Decision, decide
 from pixcull.scoring.fusion import fuse_score
 from pixcull.scoring.rescorer import load_rescorer, score_row
+from pixcull.scoring.rubric import RUBRIC_AXES
+from pixcull.scoring.rubric_decompose import decompose_row
 
 console = Console()
 
@@ -173,6 +175,34 @@ def run_pipeline(
                 rescorer_probs[i] = None
         df["rescorer_pred"] = rescorer_preds
         df["rescorer_prob_keep"] = rescorer_probs
+
+    # V2.0 rubric pass: auto-decompose every row into 6-axis stars +
+    # rationale BEFORE we drop the rich row dict for CSV export. The
+    # rubric file is a sibling JSONL so the demo UI can render
+    # per-image stars without re-deriving them from CSV columns each
+    # request, and the human-annotation flow can append new lines as
+    # the user grades images. See pixcull.scoring.rubric for design.
+    if progress_cb is not None:
+        progress_cb(total, total, "rubric 多维评分…")
+    import json as _json
+    rubric_scores: list = []
+    for _, row in df.iterrows():
+        rubric_scores.append(decompose_row(row.to_dict()))
+    rubric_path = output / "rubric.jsonl"
+    with open(rubric_path, "w", encoding="utf-8") as f:
+        for rs in rubric_scores:
+            f.write(_json.dumps(rs.to_dict(), ensure_ascii=False) + "\n")
+    # Mirror the per-axis stars onto df so they end up in scores.csv
+    # as ``rubric_<axis>_stars`` columns. Keeps every consumer
+    # (training script, future eval script, the review viewer)
+    # working without parsing the JSONL.
+    for axis in RUBRIC_AXES:
+        df[f"rubric_{axis.name}_stars"] = [
+            rs.axes[axis.name].stars for rs in rubric_scores
+        ]
+        df[f"rubric_{axis.name}_pass"] = [
+            rs.axes[axis.name].checklist_pass for rs in rubric_scores
+        ]
 
     # Export CSV (drop embedding to keep file small)
     df_export = df.drop(columns=["embedding"]).copy()
