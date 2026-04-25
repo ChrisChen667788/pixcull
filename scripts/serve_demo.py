@@ -81,7 +81,23 @@ _FALLBACK_PORTS = (8770, 8771, 8772, 9322, 7799)
 _DEMO_ROOT = Path("/tmp/pixcull_demo")  # base dir for upload + output trees
 _THUMB_SIZE = 420
 _FULL_SIZE = 1600
-_MAX_UPLOAD_BYTES = 200 * 1024 * 1024  # 200 MB safety cap per request
+
+# Upload limits. The byte cap is a real safety boundary (multipart parsing
+# spools to disk above ~1 KB per field anyway, but unbounded uploads still
+# let an attacker fill /tmp). The file-count cap mostly protects the
+# multipart parser from pathological tiny-file storms. Both can be
+# overridden at startup via --max-upload-mb / --max-upload-files.
+#
+# 8 GB default is sized for typical pro photo workflows: a Canon R5 / R6
+# burst is ~30-60 MB per CR3, so 8 GB ≈ 130-260 RAW shots in one upload.
+# If you need bigger, raise --max-upload-mb. Pipeline throughput then
+# becomes the user-visible bottleneck (1-10 s per image) — not this cap.
+_MAX_UPLOAD_BYTES_DEFAULT = 8 * 1024 * 1024 * 1024  # 8 GB
+_MAX_UPLOAD_FILES_DEFAULT = 500
+# Refuse the upload if it would push /tmp below this much free space after
+# landing on disk. Keeps the system usable even if the user hands us a
+# batch that exactly fills the disk.
+_MIN_FREE_SPACE_AFTER_BYTES = 1 * 1024 * 1024 * 1024  # 1 GB
 
 
 def _pick_port(preferred: int, host: str) -> int:
@@ -471,14 +487,46 @@ class _Handler(BaseHTTPRequestHandler):
         self._send_html(200, body)
 
     def _handle_analyze_post(self) -> None:
-        # Read multipart payload
+        # Read multipart payload. Limits live on the server instance so the
+        # operator can tune them at startup without editing the source.
+        max_bytes = self.server.max_upload_bytes  # type: ignore[attr-defined]
+        max_files = self.server.max_upload_files  # type: ignore[attr-defined]
+
         clen = int(self.headers.get("Content-Length", "0") or "0")
-        if clen <= 0 or clen > _MAX_UPLOAD_BYTES:
-            self.send_error(413, f"upload too large or empty: {clen} bytes")
+        if clen <= 0:
+            self._reject_upload(400, "upload is empty (no Content-Length)")
             return
+        if clen > max_bytes:
+            mb = clen / 1024 / 1024
+            cap_mb = max_bytes / 1024 / 1024
+            self._reject_upload(
+                413,
+                f"上传 {mb:.0f} MB 超过单次上限 {cap_mb:.0f} MB。"
+                f"分批上传,或启动时加 --max-upload-mb {int(mb*1.2)} 提升上限。",
+            )
+            return
+
+        # Disk-space pre-check: refuse if landing this upload would push
+        # /tmp under the safety threshold. shutil.disk_usage queries the
+        # filesystem of the path's mount; tmpfs / APFS both return real
+        # numbers here.
+        try:
+            disk = shutil.disk_usage(_DEMO_ROOT)
+            if disk.free - clen < _MIN_FREE_SPACE_AFTER_BYTES:
+                free_mb = disk.free / 1024 / 1024
+                need_mb = (clen + _MIN_FREE_SPACE_AFTER_BYTES) / 1024 / 1024
+                self._reject_upload(
+                    507,
+                    f"磁盘空间不足: {_DEMO_ROOT.parent} 当前剩 {free_mb:.0f} MB,"
+                    f"这次上传需要 ~{need_mb:.0f} MB。先去 /admin 清理或腾盘。",
+                )
+                return
+        except OSError:
+            pass  # disk_usage failure is non-fatal; let the upload try
+
         ctype = self.headers.get("Content-Type", "")
         if not ctype.startswith("multipart/form-data"):
-            self.send_error(400, "expected multipart/form-data")
+            self._reject_upload(400, "expected multipart/form-data")
             return
 
         try:
@@ -492,7 +540,7 @@ class _Handler(BaseHTTPRequestHandler):
                 },
             )
         except Exception as exc:  # noqa: BLE001
-            self.send_error(400, f"multipart parse failed: {exc}")
+            self._reject_upload(400, f"multipart parse failed: {exc}")
             return
 
         run_id = _new_run_id()
@@ -506,9 +554,20 @@ class _Handler(BaseHTTPRequestHandler):
         # extensions silently — keep upload UX permissive but pipeline strict.
         ok_exts = {".jpg", ".jpeg", ".png", ".cr3", ".cr2", ".nef", ".arw", ".dng", ".tif", ".tiff"}
         n_saved = 0
+        n_skipped_ext = 0
         if "files" in form:
             files = form["files"]
             items = files if isinstance(files, list) else [files]
+            if len(items) > max_files:
+                self._reject_upload(
+                    413,
+                    f"一次上传 {len(items)} 个文件超过上限 {max_files}。"
+                    f"分批上传,或启动时加 --max-upload-files {len(items)+50}。",
+                )
+                # Note: we already drained the request body via FieldStorage;
+                # nothing to clean up. Run dirs were created above but are
+                # empty — leave them for /admin to sweep.
+                return
             for item in items:
                 fn = getattr(item, "filename", None) or ""
                 if not fn:
@@ -516,6 +575,7 @@ class _Handler(BaseHTTPRequestHandler):
                 # Strip any path components from the upload filename
                 safe_name = Path(fn).name
                 if Path(safe_name).suffix.lower() not in ok_exts:
+                    n_skipped_ext += 1
                     continue
                 dst = input_dir / safe_name
                 with open(dst, "wb") as f:
@@ -523,7 +583,12 @@ class _Handler(BaseHTTPRequestHandler):
                 n_saved += 1
 
         if n_saved == 0:
-            self.send_error(400, "no usable images in upload")
+            hint = (
+                f" {n_skipped_ext} 个文件因后缀不受支持被跳过(只接受 "
+                f"{', '.join(sorted(e[1:] for e in ok_exts))})"
+                if n_skipped_ext else ""
+            )
+            self._reject_upload(400, f"上传里没有可用图片。{hint}")
             return
 
         rescorer_mode = self.server.rescorer_mode  # type: ignore[attr-defined]
@@ -810,6 +875,16 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _reject_upload(self, status: int, message: str) -> None:
+        """Send a JSON error reply for an /analyze failure.
+
+        Replaces the default ``send_error`` HTML stub — the upload page's
+        JS surfaces ``data.error`` directly, so a clean string beats a
+        BaseHTTPRequestHandler error page being scraped into a textbox.
+        """
+        body = json.dumps({"error": message}, ensure_ascii=False).encode("utf-8")
+        self._send_json(status, body)
+
 
 # ---------------------------------------------------------------------------
 # Server bootstrap.
@@ -850,6 +925,17 @@ def main() -> None:
         help="On startup, delete every existing run dir older than N hours. "
              "Off by default — admin panel does the same job interactively.",
     )
+    parser.add_argument(
+        "--max-upload-mb", type=int,
+        default=_MAX_UPLOAD_BYTES_DEFAULT // 1024 // 1024,
+        help=f"Per-request upload size cap in MB. Default "
+             f"{_MAX_UPLOAD_BYTES_DEFAULT // 1024 // 1024} MB "
+             f"(≈130-260 RAW shots). Raise for bigger batches.",
+    )
+    parser.add_argument(
+        "--max-upload-files", type=int, default=_MAX_UPLOAD_FILES_DEFAULT,
+        help=f"Per-request file count cap. Default {_MAX_UPLOAD_FILES_DEFAULT}.",
+    )
     args = parser.parse_args()
 
     _DEMO_ROOT.mkdir(parents=True, exist_ok=True)
@@ -882,6 +968,8 @@ def main() -> None:
     server = ThreadingHTTPServer((args.host, port), _Handler)
     server.rescorer_mode = rescorer_mode  # type: ignore[attr-defined]
     server.rescorer_path = rescorer_path  # type: ignore[attr-defined]
+    server.max_upload_bytes = args.max_upload_mb * 1024 * 1024  # type: ignore[attr-defined]
+    server.max_upload_files = args.max_upload_files  # type: ignore[attr-defined]
 
     # Print URLs the user can paste into a browser. On 0.0.0.0 we also
     # show the LAN IP so the operator knows the address to share rather
@@ -901,6 +989,7 @@ def main() -> None:
         print(f"  rescorer: {rescorer_mode} (auto-resolved; model at {rescorer_path})")
     else:
         print(f"  rescorer: {rescorer_mode} (forced; model at {rescorer_path})")
+    print(f"  upload limits: {args.max_upload_mb} MB / {args.max_upload_files} files per request")
     if not args.no_open and args.host in ("127.0.0.1", "localhost"):
         threading.Timer(0.4, lambda: webbrowser.open(local_url)).start()
 
@@ -1107,6 +1196,12 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
 
   let pickedFiles = [];
 
+  function fmtBytes(b) {
+    if (b >= 1e9) return (b / 1e9).toFixed(2) + " GB";
+    if (b >= 1e6) return (b / 1e6).toFixed(0) + " MB";
+    return (b / 1024).toFixed(0) + " KB";
+  }
+
   function refreshList() {
     if (!pickedFiles.length) {
       fileList.style.display = "none";
@@ -1116,10 +1211,15 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
     }
     fileList.style.display = "block";
     fileList.innerHTML = pickedFiles.map(f =>
-      `<div class="item">• ${f.name} <span style="opacity:0.5">(${(f.size/1024).toFixed(0)} KB)</span></div>`
+      `<div class="item">• ${f.name} <span style="opacity:0.5">(${fmtBytes(f.size)})</span></div>`
     ).join("");
     uploadBtn.disabled = false;
-    hint.textContent = `${pickedFiles.length} 张已选`;
+    const total = pickedFiles.reduce((s, f) => s + f.size, 0);
+    let warn = "";
+    if (total > 1.5e9) {
+      warn = ` <span style="color:var(--maybe)">· 较大,上传会慢</span>`;
+    }
+    hint.innerHTML = `${pickedFiles.length} 张 · 共 ${fmtBytes(total)}${warn}`;
   }
 
   dropZone.addEventListener("click", () => fileInput.click());
@@ -1167,13 +1267,22 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
     try {
       const res = await fetch("/analyze", { method: "POST", body: fd });
       if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+        // Server now returns JSON {error: "..."} on rejection; fall back
+        // to raw text only if that's not what we got.
+        let msg;
+        try {
+          const data = await res.json();
+          msg = data.error || `HTTP ${res.status}`;
+        } catch (_) {
+          msg = `HTTP ${res.status}`;
+        }
+        throw new Error(msg);
       }
       const data = await res.json();
       runId = data.run_id;
     } catch (err) {
       stateLabel.textContent = "上传失败";
-      messageEl.textContent = String(err);
+      messageEl.textContent = err.message || String(err);
       progressBar.classList.add("error");
       progressBar.style.width = "100%";
       uploadBtn.disabled = false;
