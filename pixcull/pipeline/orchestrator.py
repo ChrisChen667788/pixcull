@@ -30,6 +30,7 @@ def run_pipeline(
     strictness: str = "standard",
     rescorer_mode: str | None = None,
     rescorer_path: str | None = None,
+    progress_cb: Callable[[int, int, str], None] | None = None,
 ) -> Path:
     """Run the full culling pipeline on `folder` and write `scores.csv`.
 
@@ -38,6 +39,13 @@ def run_pipeline(
             Values: "off" | "shadow" | "adjudicate". See RescorerConfig
             docstring for semantics.
         rescorer_path: if provided, overrides ``config.rescorer.model_path``.
+
+    Web-demo addition (not a versioned feature; just plumbing):
+        progress_cb: optional callback ``(done, total, message)`` invoked
+            once per image during the analyze loop and again at each major
+            phase boundary (cluster / score / export). Used by
+            ``scripts/serve_demo.py`` to drive a browser progress bar. No-op
+            when None — CLI users see only the tqdm bar as before.
     """
     output.mkdir(parents=True, exist_ok=True)
     config = PixCullConfig.load()
@@ -48,20 +56,29 @@ def run_pipeline(
 
     paths = list_images(folder)
     console.print(f"[cyan]Found {len(paths)} images under {folder}[/]")
+    total = len(paths)
+    if progress_cb is not None:
+        progress_cb(0, total, f"找到 {total} 张图,开始分析…")
 
     records = []
-    for p in tqdm(paths, desc="analyzing"):
+    for i, p in enumerate(tqdm(paths, desc="analyzing"), start=1):
         r = analyze_one(p)
         if r:
             if scene_override:
                 r["scene"] = scene_override
             records.append(r)
+        if progress_cb is not None:
+            progress_cb(i, total, f"分析中 {i}/{total}: {p.name}")
 
     df = pd.DataFrame(records)
     if df.empty:
         console.print("[red]No analyzable images.[/]")
+        if progress_cb is not None:
+            progress_cb(total, total, "没有可分析的图片")
         return output
 
+    if progress_cb is not None:
+        progress_cb(total, total, "聚类与连拍检测…")
     df = cluster_bursts(df)
 
     # V1.2: optionally load the learned rescorer once per run. Failures are
@@ -83,6 +100,8 @@ def run_pipeline(
                 f"but model unavailable — running rule-only"
             )
 
+    if progress_cb is not None:
+        progress_cb(total, total, "评分与决策…")
     decisions, dim_scores, reasons_all = [], [], []
     rescorer_preds: list[str | None] = []
     rescorer_probs: list[float | None] = []
@@ -170,4 +189,6 @@ def run_pipeline(
         f"Cull=[bold]{counts.get('cull', 0)}[/][/]"
     )
     console.print(f"[cyan]CSV:[/] {csv_path}")
+    if progress_cb is not None:
+        progress_cb(total, total, "完成")
     return output
