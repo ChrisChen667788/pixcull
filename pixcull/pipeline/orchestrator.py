@@ -21,6 +21,9 @@ from pixcull.scoring.fusion import fuse_score
 from pixcull.scoring.rescorer import load_rescorer, score_row
 from pixcull.scoring.rubric import RUBRIC_AXES
 from pixcull.scoring.rubric_decompose import decompose_row
+from pixcull.scoring.axis_rescorer import (
+    load_axis_rescorers, score_row_per_axis,
+)
 
 console = Console()
 
@@ -101,6 +104,21 @@ def run_pipeline(
                 f"[yellow]Rescorer[/] mode={config.rescorer.mode} requested "
                 f"but model unavailable — running rule-only"
             )
+
+    # V2.1: optionally load per-axis rescorers. Independent of the
+    # binary rescorer above — these run whenever the joblibs exist
+    # (no config flag), since adding signal is always safe and the
+    # results are display-only at this stage. ``axis_models`` is an
+    # empty dict when nothing's trained, which makes the per-row loop
+    # below a clean no-op.
+    axis_model_dir = Path(config.rescorer.model_path).parent if config.rescorer.model_path else Path("models")
+    axis_models = load_axis_rescorers(axis_model_dir)
+    if axis_models:
+        console.print(
+            f"[cyan]Axis rescorers[/] loaded: "
+            f"{', '.join(sorted(axis_models.keys()))} "
+            f"({len(axis_models)}/{len(RUBRIC_AXES)} axes)"
+        )
 
     if progress_cb is not None:
         progress_cb(total, total, "评分与决策…")
@@ -203,6 +221,18 @@ def run_pipeline(
         df[f"rubric_{axis.name}_pass"] = [
             rs.axes[axis.name].checklist_pass for rs in rubric_scores
         ]
+
+    # V2.1: per-axis model predictions (`model_<axis>_stars`). Display-only
+    # for now — UI shows them next to the auto-decomposed stars so the
+    # photographer can compare. Falls through silently when no models
+    # are trained.
+    if axis_models:
+        for axis in RUBRIC_AXES:
+            df[f"model_{axis.name}_stars"] = None
+        for i, (_, row) in enumerate(df.iterrows()):
+            preds = score_row_per_axis(axis_models, row.to_dict())
+            for axis_name, stars in preds.items():
+                df.at[df.index[i], f"model_{axis_name}_stars"] = stars
 
     # Export CSV (drop embedding to keep file small)
     df_export = df.drop(columns=["embedding"]).copy()

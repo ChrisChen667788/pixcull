@@ -1,0 +1,52 @@
+{
+  "created_at": "2026-04-26T15:35:13.513705+00:00",
+  "training_csv": "/Users/chenhaorui/Downloads/zero-basics-python/2/pixcull-restored/pixcull/training_axis.csv",
+  "n_rows_in_csv": 183,
+  "axes": [
+    {
+      "axis": "technical",
+      "rows": 134,
+      "n_human": 1,
+      "cv_r2": 0.434,
+      "cv_mae": 0.196
+    },
+    {
+      "axis": "subject",
+      "rows": 134,
+      "n_human": 1,
+      "cv_r2": 0.506,
+      "cv_mae": 0.574
+    },
+    {
+      "axis": "composition",
+      "rows": 134,
+      "n_human": 0,
+      "cv_r2": 0.803,
+      "cv_mae": 0.182
+    },
+    {
+      "axis": "light",
+      "rows": 134,
+      "n_human": 1,
+      "cv_r2": 0.981,
+      "cv_mae": 0.109
+    },
+    {
+      "axis": "moment",
+      "rows": 128,
+      "n_human": 0,
+      "cv_r2": 0.148,
+      "cv_mae": 1.119
+    },
+    {
+      "axis": "aesthetic",
+      "rows": 134,
+      "n_human": 0,
+      "cv_r2": 0.724,
+      "cv_mae": 0.375
+    }
+  ],
+  "seed": 42,
+  "cv": 5,
+  "n_runs_with_human": 1
+}

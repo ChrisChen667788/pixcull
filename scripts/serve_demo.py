@@ -87,6 +87,11 @@ from urllib.parse import unquote, urlparse
 _RUNS: dict[str, dict] = {}
 _RUNS_LOCK = threading.Lock()
 
+# V2.1 retrain state — one global slot since you only ever want one
+# training job running at a time. Guarded by _RUNS_LOCK to keep the
+# /retrain handler simple.
+_RETRAIN_STATE: dict = {"state": "idle"}
+
 _DEFAULT_PORT = 8770
 _FALLBACK_PORTS = (8770, 8771, 8772, 9322, 7799)
 _DEMO_ROOT = Path("/tmp/pixcull_demo")  # base dir for upload + output trees
@@ -272,6 +277,12 @@ def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
             name: _f(r.get(f"rubric_{name}_stars"))
             for name in rubric_axis_names
         }
+        # V2.1 model predictions ('model_<axis>_stars') if rescorer
+        # was loaded at run time. Absent for pre-V2.1 runs.
+        model_stars = {
+            name: _f(r.get(f"model_{name}_stars"))
+            for name in rubric_axis_names
+        }
         # Human override if present — last save per filename wins.
         human_rec = human_by_fn.get(fn)
         human_stars: dict[str, float | None] = {}
@@ -279,10 +290,17 @@ def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
             for name in rubric_axis_names:
                 axis_data = (human_rec.get("axes") or {}).get(name) or {}
                 human_stars[name] = axis_data.get("stars")
-        # Final stars per axis: human if present, else auto.
+        # Final stars per axis: human → model → auto. Reflects priority
+        # of trustworthiness — humans always win, model beats heuristic
+        # check list when available.
         final_stars = {
-            name: (human_stars.get(name) if human_stars.get(name) is not None
-                   else auto_stars.get(name))
+            name: (
+                human_stars.get(name)
+                if human_stars.get(name) is not None
+                else (model_stars.get(name)
+                      if model_stars.get(name) is not None
+                      else auto_stars.get(name))
+            )
             for name in rubric_axis_names
         }
         rows.append({
@@ -308,6 +326,13 @@ def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
             # Rubric: per-axis stars (the visible 1-5) plus the human
             # override marker so the UI can show a 'human-graded' badge.
             "rubric_stars": final_stars,
+            # V2.1: keep auto/model/human as separate dicts so the modal
+            # can render a 3-way comparison ("auto says 4, model says 3,
+            # human says 5 — interesting!"). Tooltips on the result
+            # cards use these to surface disagreements at a glance.
+            "rubric_auto_stars": auto_stars,
+            "rubric_model_stars": model_stars,
+            "rubric_human_stars": {k: human_stars.get(k) for k in rubric_axis_names},
             "rubric_human_labeled": human_rec is not None,
             "rubric_overall_rationale": (
                 human_rec.get("overall_rationale") if human_rec else ""
@@ -365,6 +390,171 @@ def _f(v: object) -> float | None:
         return round(x, 3)
     except (TypeError, ValueError):
         return None
+
+
+# ---------------------------------------------------------------------------
+# V2.1 retrain worker — invokes build_axis_training_set + train_axis_rescorers
+# as Python imports (faster than shelling out, and we get exceptions back).
+# Updates _RETRAIN_STATE so the admin UI can poll progress.
+# ---------------------------------------------------------------------------
+def _retrain_in_background(include_auto: bool, also_goldenset: bool) -> None:
+    """Background worker for /retrain. Never raises."""
+    global _RETRAIN_STATE
+    try:
+        with _RUNS_LOCK:
+            _RETRAIN_STATE = {
+                "state": "running",
+                "phase": "collecting training data",
+                "started_at": time.time(),
+            }
+
+        # Step 1: build training_axis.csv. Reuse the script's main-style
+        # logic by calling its helpers directly.
+        import sys as _sys
+        scripts_dir = Path(__file__).parent.resolve()
+        if str(scripts_dir) not in _sys.path:
+            _sys.path.insert(0, str(scripts_dir))
+        # Defer imports until inside the worker so we don't block startup
+        # on sklearn loading. ImportError here is reported via state.
+        from build_axis_training_set import _gather_run, AXIS_NAMES  # type: ignore
+        import pandas as pd
+
+        all_rows: list[dict] = []
+        n_with_human = 0
+        for run_dir in sorted(_DEMO_ROOT.iterdir()):
+            if not run_dir.is_dir():
+                continue
+            if not (len(run_dir.name) == 10 and
+                    all(c in "0123456789abcdef" for c in run_dir.name)):
+                continue
+            rows = _gather_run(run_dir)
+            if not rows:
+                continue
+            had_human = any(
+                any(r.get(f"target_{ax}_source") == "human" for ax in AXIS_NAMES)
+                for r in rows
+            )
+            if had_human:
+                n_with_human += 1
+            all_rows.extend(rows)
+
+        # Optional goldenset warm-start
+        gs_csv = Path.home() / "Pictures/pixcull-goldenset/_eval_output/scores.csv"
+        gt_csv = Path.home() / "Pictures/pixcull-goldenset/ground_truth.csv"
+        if also_goldenset and gs_csv.exists() and gt_csv.exists():
+            with _RUNS_LOCK:
+                _RETRAIN_STATE["phase"] = "loading goldenset warm-start"
+            gs = pd.read_csv(gs_csv)
+            gt = pd.read_csv(gt_csv, comment="#")
+            gt = gt[gt["manual_label"].isin(["keep", "maybe", "cull"])]
+            merged = gs.merge(gt[["filename", "manual_label"]],
+                              on="filename", how="inner")
+            from build_axis_training_set import (  # type: ignore
+                FEATURE_COLS_NUMERIC, FEATURE_COLS_CATEGORICAL,
+            )
+            for _, r in merged.iterrows():
+                row: dict = {
+                    "filename": r["filename"],
+                    "_run_id": "goldenset_warmstart",
+                }
+                for col in FEATURE_COLS_NUMERIC + FEATURE_COLS_CATEGORICAL:
+                    row[col] = r.get(col)
+                # Prefer per-axis stars from V2.0 columns; fall back to
+                # the coarse keep/maybe/cull → 5/3/1 mapping.
+                label_to_stars = {"keep": 5.0, "maybe": 3.0, "cull": 1.0}
+                fallback = label_to_stars.get(r["manual_label"], 3.0)
+                for axis in AXIS_NAMES:
+                    auto_v = r.get(f"rubric_{axis}_stars")
+                    row[f"target_{axis}"] = (
+                        float(auto_v) if pd.notna(auto_v) else fallback
+                    )
+                    row[f"target_{axis}_source"] = (
+                        "goldenset_v2" if pd.notna(auto_v) else "goldenset"
+                    )
+                all_rows.append(row)
+
+        if not all_rows:
+            with _RUNS_LOCK:
+                _RETRAIN_STATE = {
+                    "state": "error",
+                    "message": "没有训练数据 — 先标几张或开 also_goldenset",
+                    "finished_at": time.time(),
+                }
+            return
+
+        df = pd.DataFrame(all_rows)
+        if not include_auto:
+            human_mask = pd.Series(False, index=df.index)
+            for axis in AXIS_NAMES:
+                human_mask |= (df[f"target_{axis}_source"] == "human")
+            df = df[human_mask]
+        if df.empty:
+            with _RUNS_LOCK:
+                _RETRAIN_STATE = {
+                    "state": "error",
+                    "message": "过滤后无训练数据,试试 include_auto=true",
+                    "finished_at": time.time(),
+                }
+            return
+
+        # Persist + train
+        with _RUNS_LOCK:
+            _RETRAIN_STATE.update({
+                "phase": f"training on {len(df)} rows",
+                "n_rows": len(df),
+            })
+
+        # Use a stable on-disk path so the user can inspect what was
+        # trained — keeps the audit story straight.
+        repo_root = Path(__file__).parent.parent
+        training_csv = repo_root / "training_axis.csv"
+        df.to_csv(training_csv, index=False)
+
+        # Now train. Import the trainer's helpers and invoke per axis.
+        from train_axis_rescorers import train_one_axis  # type: ignore
+        out_dir = repo_root / "models"
+        results = []
+        for axis in AXIS_NAMES:
+            with _RUNS_LOCK:
+                _RETRAIN_STATE["phase"] = f"training axis: {axis}"
+            r = train_one_axis(df, axis, out_dir, cv=5, seed=42, min_rows=20)
+            if r is not None:
+                results.append(r)
+
+        # Save meta JSON (matches train_axis_rescorers.py)
+        from pixcull.scoring.axis_rescorer import axis_meta_path
+        meta = {
+            "created_at": pd.Timestamp.now("UTC").isoformat(),
+            "training_csv": str(training_csv.resolve()),
+            "n_rows_in_csv": len(df),
+            "axes": results,
+            "seed": 42,
+            "cv": 5,
+            "n_runs_with_human": n_with_human,
+        }
+        axis_meta_path(out_dir).write_text(
+            json.dumps(meta, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
+        with _RUNS_LOCK:
+            _RETRAIN_STATE = {
+                "state": "done",
+                "started_at": _RETRAIN_STATE.get("started_at"),
+                "finished_at": time.time(),
+                "axes": results,
+                "n_rows": len(df),
+                "message": f"训练完成 {len(results)}/{len(AXIS_NAMES)} 轴",
+            }
+
+    except Exception as exc:  # noqa: BLE001
+        traceback.print_exc(file=sys.stderr)
+        with _RUNS_LOCK:
+            _RETRAIN_STATE = {
+                "state": "error",
+                "message": f"训练失败: {type(exc).__name__}: {exc}",
+                "finished_at": time.time(),
+            }
 
 
 # ---------------------------------------------------------------------------
@@ -623,6 +813,8 @@ class _Handler(BaseHTTPRequestHandler):
             return self._serve_storage_info()
         if path == "/rubric_meta":
             return self._serve_rubric_meta()
+        if path == "/retrain_status":
+            return self._serve_retrain_status()
         if path.startswith("/status/"):
             return self._serve_status(path[len("/status/"):])
         if path.startswith("/results/"):
@@ -655,6 +847,8 @@ class _Handler(BaseHTTPRequestHandler):
             return self._handle_runs_cleanup()
         if path.startswith("/annotation/"):
             return self._handle_save_annotation(path[len("/annotation/"):])
+        if path == "/retrain":
+            return self._handle_retrain()
         self.send_error(404, "not found")
 
     def do_DELETE(self) -> None:  # noqa: N802
@@ -1486,6 +1680,60 @@ class _Handler(BaseHTTPRequestHandler):
             "why": "; ".join(reasons),
             "row": chosen,
         }, ensure_ascii=False).encode("utf-8"))
+
+    # --- V2.1 retrain ------------------------------------------------------
+    def _handle_retrain(self) -> None:
+        """Trigger a per-axis rescorer retrain in a background thread.
+
+        Does the same job as ``scripts/build_axis_training_set.py +
+        scripts/train_axis_rescorers.py`` but as a one-click admin op.
+        Read-only by design — the existing models stay loaded by the
+        orchestrator until the next ``run_pipeline`` call rebinds them.
+
+        Body (all optional): {include_auto: bool, also_goldenset: bool}
+        """
+        clen = int(self.headers.get("Content-Length", "0") or "0")
+        params: dict = {}
+        if clen > 0:
+            try:
+                params = json.loads(self.rfile.read(clen).decode("utf-8") or "{}")
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                pass
+
+        global _RETRAIN_STATE
+        with _RUNS_LOCK:
+            if _RETRAIN_STATE.get("state") == "running":
+                self._reject_upload(409, "已有训练任务在跑,等完成再来")
+                return
+            _RETRAIN_STATE = {
+                "state": "queued",
+                "started_at": time.time(),
+                "message": "排队中",
+            }
+
+        threading.Thread(
+            target=_retrain_in_background,
+            args=(bool(params.get("include_auto", True)),
+                  bool(params.get("also_goldenset", True))),
+            daemon=True,
+        ).start()
+        self._send_json(200, json.dumps(
+            {"ok": True, "message": "训练已启动,GET /retrain_status 看进度"},
+            ensure_ascii=False,
+        ).encode("utf-8"))
+
+    def _serve_retrain_status(self) -> None:
+        """Return the latest retrain run's state + per-axis CV metrics."""
+        with _RUNS_LOCK:
+            state = dict(_RETRAIN_STATE)
+        # Augment with on-disk meta if available (last-completed run)
+        meta_path = Path("models/rescorer_axis_meta.json")
+        if meta_path.exists():
+            try:
+                state["last_meta"] = json.loads(meta_path.read_text("utf-8"))
+            except (OSError, json.JSONDecodeError):
+                pass
+        self._send_json(200, json.dumps(state, ensure_ascii=False).encode("utf-8"))
 
     # --- storage admin -----------------------------------------------------
     def _serve_admin_page(self) -> None:
@@ -3012,6 +3260,28 @@ _ADMIN_HTML = r"""<!DOCTYPE html>
   </header>
   <main>
     <div class="card">
+      <h2>V2.1 多轴 rescorer 训练</h2>
+      <div class="muted" style="margin-bottom: 10px">
+        把累计的人工 rubric 标注 + auto/goldenset 数据训成 6 个 per-axis 回归模型。
+        训完后下次跑 pipeline 自动启用,与 auto rubric 并排显示。
+      </div>
+      <div id="retrainStatus" style="margin-bottom:10px;font-size:12px"></div>
+      <table class="global-cache" id="axisModelsTable" style="margin-bottom:8px">
+        <thead><tr><th>轴</th><th>训练行数</th><th>含人工</th><th>CV R²</th><th>CV MAE (★)</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <div class="actions">
+        <button id="retrainBtn">立即训练</button>
+        <label style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:4px">
+          <input type="checkbox" id="retrainGoldenset" checked> 含 goldenset 冷启动数据
+        </label>
+        <label style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:4px">
+          <input type="checkbox" id="retrainIncludeAuto" checked> 含 auto rubric 数据
+        </label>
+      </div>
+    </div>
+
+    <div class="card">
       <h2>本 demo 占用</h2>
       <div class="summary-row">
         <div class="stat"><div class="v" id="totalSize">--</div><div class="k">总占用</div></div>
@@ -3183,7 +3453,74 @@ _ADMIN_HTML = r"""<!DOCTYPE html>
   document.getElementById("cleanupAll").addEventListener("click",
     () => cleanup({ keep_last: 0 }, "全部清空(不含正在运行)"));
 
+  // V2.1 retrain panel
+  const retrainBtn = document.getElementById("retrainBtn");
+  const retrainStatus = document.getElementById("retrainStatus");
+  const axisTable = document.querySelector("#axisModelsTable tbody");
+
+  async function refreshRetrain() {
+    try {
+      const res = await fetch("/retrain_status");
+      const s = await res.json();
+      const meta = s.last_meta || {};
+      const axes = (s.axes || meta.axes || []);
+      // Status pill
+      let statusHtml = "";
+      if (s.state === "running") {
+        statusHtml = `<span style="color:var(--accent)">▶ 训练中</span> · ${s.phase || "..."}`;
+      } else if (s.state === "queued") {
+        statusHtml = `<span style="color:var(--muted)">排队中</span>`;
+      } else if (s.state === "error") {
+        statusHtml = `<span style="color:var(--danger)">✗ ${s.message}</span>`;
+      } else if (s.state === "done") {
+        const dur = ((s.finished_at - s.started_at)).toFixed(1);
+        statusHtml = `<span style="color:var(--keep)">✓ ${s.message}</span> · ${dur}s`;
+      }
+      if (meta.created_at) {
+        statusHtml += ` <span class="muted">(上次训练 ${meta.created_at.slice(0,16)})</span>`;
+      }
+      retrainStatus.innerHTML = statusHtml || `<span class="muted">尚未训练 · 点"立即训练"开始</span>`;
+      // Table
+      if (axes.length) {
+        axisTable.innerHTML = axes.map(a =>
+          `<tr><td><b>${a.axis}</b></td><td>${a.rows}</td><td>${a.n_human}</td><td>${a.cv_r2.toFixed(3)}</td><td>${a.cv_mae.toFixed(3)}</td></tr>`
+        ).join("");
+      } else {
+        axisTable.innerHTML = `<tr><td colspan="5" class="muted">无</td></tr>`;
+      }
+      // Keep polling while running
+      if (s.state === "running" || s.state === "queued") {
+        setTimeout(refreshRetrain, 1500);
+      }
+    } catch (e) {
+      retrainStatus.textContent = "状态读取失败: " + e;
+    }
+  }
+
+  retrainBtn.addEventListener("click", async () => {
+    if (!confirm("开始训练?会用累计的所有人工标注 + 选定的辅助数据集。预计 < 1 分钟。")) return;
+    retrainBtn.disabled = true;
+    try {
+      const res = await fetch("/retrain", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          include_auto: document.getElementById("retrainIncludeAuto").checked,
+          also_goldenset: document.getElementById("retrainGoldenset").checked,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert("启动失败: " + (data.error || res.status));
+      }
+    } finally {
+      setTimeout(() => { retrainBtn.disabled = false; }, 1000);
+      refreshRetrain();
+    }
+  });
+
   refresh();
+  refreshRetrain();
 })();
 </script>
 </body>
