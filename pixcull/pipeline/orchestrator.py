@@ -36,6 +36,7 @@ def run_pipeline(
     rescorer_mode: str | None = None,
     rescorer_path: str | None = None,
     progress_cb: Callable[[int, int, str], None] | None = None,
+    vlm_mode: str = "off",
 ) -> Path:
     """Run the full culling pipeline on `folder` and write `scores.csv`.
 
@@ -233,6 +234,50 @@ def run_pipeline(
             preds = score_row_per_axis(axis_models, row.to_dict())
             for axis_name, stars in preds.items():
                 df.at[df.index[i], f"model_{axis_name}_stars"] = stars
+
+    # V3.0: VLM-as-judge. Optional fourth opinion from a vision-language
+    # model — slower (~3-10s/image) so opt-in via vlm_mode="local".
+    # Persists per-axis stars + a per-image rationale to the CSV and
+    # vlm_verdicts.jsonl. Skips rule-CULL rows to save time (a CULL is
+    # already a CULL — VLM disagreement on culls isn't actionable).
+    if vlm_mode and vlm_mode != "off":
+        if progress_cb is not None:
+            progress_cb(total, total, f"VLM ({vlm_mode}) 评分中…")
+        from pixcull.scoring.vlm_judge import load_judge
+        judge = load_judge(vlm_mode)
+        if judge is not None:
+            for axis in RUBRIC_AXES:
+                df[f"vlm_{axis.name}_stars"] = None
+            df["vlm_overall_label"] = None
+            df["vlm_overall_rationale"] = ""
+            df["vlm_elapsed_s"] = None
+            verdicts_path = output / "vlm_verdicts.jsonl"
+            with open(verdicts_path, "w", encoding="utf-8") as vf:
+                for i, (_, row) in enumerate(df.iterrows()):
+                    if str(row.get("decision", "")) == "cull":
+                        # Skip culls — saves ~30% time on rough batches
+                        continue
+                    img_path = Path(row["path"])
+                    if progress_cb is not None:
+                        progress_cb(i + 1, total,
+                                    f"VLM {i+1}/{total}: {img_path.name}")
+                    verdict = judge.score(img_path,
+                                          scene=str(row.get("scene") or ""))
+                    vf.write(_json.dumps(verdict.to_dict(),
+                                         ensure_ascii=False) + "\n")
+                    if verdict.error:
+                        continue
+                    for axis_name, ax in verdict.axes.items():
+                        if ax.stars is not None:
+                            df.at[df.index[i],
+                                  f"vlm_{axis_name}_stars"] = ax.stars
+                    df.at[df.index[i], "vlm_overall_label"] = verdict.overall_label
+                    df.at[df.index[i], "vlm_overall_rationale"] = verdict.overall_rationale
+                    df.at[df.index[i], "vlm_elapsed_s"] = verdict.elapsed_s
+            console.print(
+                f"[cyan]VLM[/] {judge.model_name} scored "
+                f"{(df['vlm_elapsed_s'].notna()).sum()} non-cull images"
+            )
 
     # Export CSV (drop embedding to keep file small)
     df_export = df.drop(columns=["embedding"]).copy()

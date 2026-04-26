@@ -174,6 +174,7 @@ def _analyze_in_background(
     run_id: str,
     rescorer_mode: str,
     rescorer_path: str | None,
+    vlm_mode: str = "off",
 ) -> None:
     """Worker thread: run the pipeline on the run's source dir.
 
@@ -202,7 +203,7 @@ def _analyze_in_background(
     def progress_cb(done: int, total: int, message: str) -> None:
         _set_run(run_id, done=done, total=total, message=message)
 
-    _set_run(run_id, state="running", started_at=time.time())
+    _set_run(run_id, state="running", started_at=time.time(), vlm_mode=vlm_mode)
     try:
         run_pipeline(
             source_dir,
@@ -210,6 +211,7 @@ def _analyze_in_background(
             rescorer_mode=rescorer_mode,
             rescorer_path=rescorer_path,
             progress_cb=progress_cb,
+            vlm_mode=vlm_mode,
         )
         _set_run(
             run_id,
@@ -969,6 +971,7 @@ class _Handler(BaseHTTPRequestHandler):
 
         rescorer_mode = self.server.rescorer_mode  # type: ignore[attr-defined]
         rescorer_path = self.server.rescorer_path  # type: ignore[attr-defined]
+        vlm_mode = self.server.vlm_mode  # type: ignore[attr-defined]
 
         _set_run(
             run_id,
@@ -984,7 +987,7 @@ class _Handler(BaseHTTPRequestHandler):
         )
         threading.Thread(
             target=_analyze_in_background,
-            args=(run_id, rescorer_mode, rescorer_path),
+            args=(run_id, rescorer_mode, rescorer_path, vlm_mode),
             daemon=True,
         ).start()
 
@@ -1073,6 +1076,7 @@ class _Handler(BaseHTTPRequestHandler):
 
         rescorer_mode = self.server.rescorer_mode  # type: ignore[attr-defined]
         rescorer_path = self.server.rescorer_path  # type: ignore[attr-defined]
+        vlm_mode = self.server.vlm_mode  # type: ignore[attr-defined]
 
         _set_run(
             run_id,
@@ -1088,7 +1092,7 @@ class _Handler(BaseHTTPRequestHandler):
         )
         threading.Thread(
             target=_analyze_in_background,
-            args=(run_id, rescorer_mode, rescorer_path),
+            args=(run_id, rescorer_mode, rescorer_path, vlm_mode),
             daemon=True,
         ).start()
 
@@ -1892,6 +1896,14 @@ def main() -> None:
         "--max-upload-files", type=int, default=_MAX_UPLOAD_FILES_DEFAULT,
         help=f"Per-request file count cap. Default {_MAX_UPLOAD_FILES_DEFAULT}.",
     )
+    parser.add_argument(
+        "--vlm-mode", default="off",
+        help="V3.0 VLM-as-judge backend. Off by default (slow + optional). "
+             "Values: 'off' | 'local' | 'local:<repo>' | 'deepseek' | "
+             "'minimax' | 'openai'. API backends require the corresponding "
+             "*_API_KEY env var (DEEPSEEK_API_KEY / MINIMAX_API_KEY / "
+             "OPENAI_API_KEY).",
+    )
     args = parser.parse_args()
 
     _DEMO_ROOT.mkdir(parents=True, exist_ok=True)
@@ -1926,6 +1938,7 @@ def main() -> None:
     server.rescorer_path = rescorer_path  # type: ignore[attr-defined]
     server.max_upload_bytes = args.max_upload_mb * 1024 * 1024  # type: ignore[attr-defined]
     server.max_upload_files = args.max_upload_files  # type: ignore[attr-defined]
+    server.vlm_mode = args.vlm_mode  # type: ignore[attr-defined]
 
     # Print URLs the user can paste into a browser. On 0.0.0.0 we also
     # show the LAN IP so the operator knows the address to share rather
@@ -1946,6 +1959,8 @@ def main() -> None:
     else:
         print(f"  rescorer: {rescorer_mode} (forced; model at {rescorer_path})")
     print(f"  upload limits: {args.max_upload_mb} MB / {args.max_upload_files} files per request")
+    if args.vlm_mode != "off":
+        print(f"  VLM mode: {args.vlm_mode} (V3.0 — adds ~10s/img local, ~2s/img API)")
     if not args.no_open and args.host in ("127.0.0.1", "localhost"):
         threading.Timer(0.4, lambda: webbrowser.open(local_url)).start()
 
