@@ -90,6 +90,13 @@ DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 def build_meta_prompt(packet: dict[str, Any]) -> str:
     """Render the per-image signal packet as the user-turn prompt.
 
+    V5.0 update: prepends the photography canon so the meta-judge
+    explicitly cross-checks each upstream verdict against canonical
+    standards (Zone System exposure, Rule of Thirds, Cartier-Bresson
+    moment, etc.). Inconsistencies are now graded by canon-citation
+    quality — a "VLM gave aesthetic 5★ but the image has Zone IX
+    clipping" is a stronger flag than just "scores diverge".
+
     Packet shape (everything optional; we fill what we have):
       filename: str
       scene: str
@@ -101,11 +108,15 @@ def build_meta_prompt(packet: dict[str, Any]) -> str:
       rubric_model: dict[axis_name, stars]
       vlm_verdict: dict (full output of upstream VLM, may be None)
     """
+    from pixcull.scoring.photography_canon import build_canon_section_zh
     axes_lines = "\n".join(
         f'  - {a.name}: {_axis_brief(a.name)}'
         for a in RUBRIC_AXES
     )
+    canon = build_canon_section_zh()
     return f"""你是资深摄影编辑,需要基于多个评分系统的结果给出最终判断。
+
+{canon}
 
 下方是同一张照片的所有可用信号(JSON):
 

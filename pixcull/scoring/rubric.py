@@ -82,13 +82,18 @@ class AxisDef:
 # Each rubric axis: descriptors written for *this domain* (curating
 # pro photo shoots, not generic Instagram fodder). Star descriptors
 # specifically aim to be discriminative — a "3★" should feel
-# different from a "4★" to a working photographer.
+# different from a "4★" to a working photographer. V5.0: descriptors
+# now sourced from photography_canon.CANON_DESCRIPTORS_ZH which
+# encodes the Cartier-Bresson + Adams + classic-composition canon.
+from pixcull.scoring.photography_canon import get_axis_descriptors as _canon_desc
+
+
 RUBRIC_AXES: tuple[AxisDef, ...] = (
     AxisDef(
         name="technical",
         label_zh="技术",
         label_en="Technical",
-        description_zh="对焦、曝光、清晰度、噪点 —— 是不是技术上能用的片子",
+        description_zh="对焦、曝光、清晰度、噪点 — Adams Zone System 标准",
         checklist=(
             ("not_severely_blurry", 1.0),
             ("not_severely_overexposed", 1.0),
@@ -96,87 +101,57 @@ RUBRIC_AXES: tuple[AxisDef, ...] = (
             ("subject_in_focus", 1.0),
             ("face_not_motion_blurred", 0.8),
         ),
-        rubric_descriptors=(
-            "技术废片(明显失焦/过曝/欠曝/抖动)",
-            "技术问题明显但能看(轻度抖动或局部过曝)",
-            "技术合格(对焦准、曝光基本正确)",
-            "技术干净(锐度好、动态范围充分、几乎无可挑剔)",
-            "技术完美(每一像素都精准、无任何瑕疵)",
-        ),
+        rubric_descriptors=_canon_desc("technical"),
     ),
     AxisDef(
         name="subject",
         label_zh="主体",
         label_en="Subject",
-        description_zh="主体清晰、姿态/表情/动作是否到位",
+        description_zh="主体明确性 + Cartier-Bresson 决定性瞬间",
         checklist=(
             ("has_clear_subject", 1.0),
             ("subject_eyes_open", 0.5),     # face only
             ("subject_pose_natural", 0.8),
             ("not_random_passersby", 0.5),
         ),
-        rubric_descriptors=(
-            "无明确主体(画面散乱/没有视觉锚点)",
-            "主体存在但姿态/表情勉强",
-            "主体清楚、姿态自然但缺亮点",
-            "主体表现力强(peak pose / 生动表情)",
-            "决定性瞬间(经典意义上的 'the moment')",
-        ),
+        rubric_descriptors=_canon_desc("subject"),
     ),
     AxisDef(
         name="composition",
         label_zh="构图",
         label_en="Composition",
-        description_zh="画面布局、负空间、引导线、平衡感",
+        description_zh="三分法 / 黄金比 / 引导线 / 负空间 / 奇数法则",
         checklist=(
             ("horizon_within_2deg", 0.8),
             ("rule_of_thirds_close", 0.5),
             ("subject_not_at_edge", 1.0),
             ("no_distracting_clutter", 0.8),
         ),
-        rubric_descriptors=(
-            "构图错位(地平线歪、主体被裁、背景杂乱)",
-            "构图能看但平庸",
-            "标准构图(三分法/中心法,符合预期)",
-            "构图有意识(引导线、负空间、几何感受得到)",
-            "构图惊艳(画面元素全部参与叙事)",
-        ),
+        rubric_descriptors=_canon_desc("composition"),
     ),
     AxisDef(
         name="light",
         label_zh="光线",
         label_en="Light",
-        description_zh="光质、方向、色温、明暗对比",
+        description_zh="光质 / 光位(Loop/Split/Rembrandt) / 黄金时刻",
         checklist=(
             ("not_blown_highlights", 1.0),
             ("not_crushed_shadows", 0.8),
             ("color_temperature_clean", 0.5),
         ),
-        rubric_descriptors=(
-            "光线问题大(死黑/死白/严重偏色)",
-            "光线一般(平光、缺乏氛围)",
-            "光线干净(均匀、无明显问题)",
-            "光线讲究(有光质、方向感强、明暗有戏)",
-            "光线绝佳(决定整张照片成败的那种光)",
-        ),
+        rubric_descriptors=_canon_desc("light"),
     ),
     AxisDef(
         name="moment",
         label_zh="瞬间",
         label_en="Moment",
-        description_zh="时机、动作峰值、情绪含量",
+        description_zh="时机、动作峰值、情绪含量(Cartier-Bresson)",
         checklist=(
             ("not_blink_or_mid_yawn", 0.5),
             ("action_at_peak", 0.8),
             ("emotion_present", 0.8),
         ),
-        rubric_descriptors=(
-            "时机错失(中途/闭眼/动作中断)",
-            "时机普通(姿势 OK 但无情绪)",
-            "时机准(动作或表情到位)",
-            "时机精彩(有情绪有力量)",
-            "决定性瞬间(再拍一万张也碰不到第二次)",
-        ),
+        rubric_descriptors=_canon_desc("moment"),
     ),
     AxisDef(
         name="aesthetic",
@@ -188,13 +163,7 @@ RUBRIC_AXES: tuple[AxisDef, ...] = (
             ("laion_aes_above_median", 0.8),
             ("no_subject_environment_conflict", 0.5),
         ),
-        rubric_descriptors=(
-            "美感差(整体不协调,看完没记忆)",
-            "美感平庸(及格但平淡)",
-            "美感及格(色彩协调、视觉舒服)",
-            "美感强(色彩/情绪/视觉语言一致)",
-            "美感顶级(可作品集封面)",
-        ),
+        rubric_descriptors=_canon_desc("aesthetic"),
     ),
 )
 

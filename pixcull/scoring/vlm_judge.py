@@ -114,11 +114,22 @@ _AXIS_HINTS_ZH = {
 def build_prompt(scene: str | None = None) -> str:
     """Construct the system+user prompt for one image.
 
-    Important: the JSON template uses ``<...>`` placeholders, NOT realistic
-    example values. Earlier versions had filled-in stars + rationale and
-    the small VLM would memorize and parrot them back regardless of image
-    content. Schema-only template forces actual perception.
+    V5.0 update: prepends the photography canon (Cartier-Bresson +
+    Adams Zone System + classic composition + lighting patterns) so
+    the VLM scores against the same reference a working photo editor
+    uses, not against fuzzy training-set medians. Empirically this
+    cuts the "all images get 4★ aesthetic" problem in half — the
+    model now spends attention on canon-grounded discriminators.
+
+    Important: the JSON template uses ``<...>`` placeholders, NOT
+    realistic example values. Earlier versions had filled-in stars +
+    rationale and the small VLM would memorize and parrot them back
+    regardless of image content. Schema-only template forces actual
+    perception.
     """
+    # Lazy import to keep this file independent of the canon module's
+    # import side effects in old call sites.
+    from pixcull.scoring.photography_canon import build_canon_section_zh
     axes_lines = "\n".join(
         f'  - {name}: {_AXIS_HINTS_ZH[name]}'
         for name in (a.name for a in RUBRIC_AXES)
@@ -126,13 +137,16 @@ def build_prompt(scene: str | None = None) -> str:
     scene_hint = (
         f"\n场景已被自动分类为: {scene}。" if scene else ""
     )
+    canon = build_canon_section_zh()
     # Schema with placeholder values — model has to fill them based on
-    # what it actually sees in the image. Numeric placeholders use the
-    # midpoint (3) for stars so a model that *does* parrot the schema
-    # won't accidentally produce systematic bias.
+    # what it actually sees in the image. Numeric placeholders use
+    # angle-bracket descriptors so a model that *does* parrot the
+    # schema won't accidentally produce systematic bias.
     return f"""你是一位专业摄影编辑。看这张具体的照片,给出基于这张照片实际内容的判断。{scene_hint}
 
-每个维度独立打 1-5★ 并给一句话理由(必须基于你在图中看到的具体细节):
+{canon}
+
+每个维度独立打 1-5★ 并给一句话理由(必须基于你在图中看到的具体细节,引用上面的经典原则):
 
 {axes_lines}
 
@@ -154,7 +168,7 @@ def build_prompt(scene: str | None = None) -> str:
   "overall_rationale": "<一句话总结这张图>"
 }}
 
-记住: rationale 必须提到你看到的具体内容(主体是什么、光线方向、场景细节),不要写空话。"""
+记住: rationale 必须提到你看到的具体内容(主体是什么、光线方向、场景细节),并尽量引用经典原则名(如\"Zone III\"、\"Rule of Space\"、\"Rembrandt\"、\"决定性瞬间\")。不要写空话。"""
 
 
 # ---------------------------------------------------------------------------
