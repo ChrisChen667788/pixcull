@@ -37,6 +37,7 @@ def run_pipeline(
     rescorer_path: str | None = None,
     progress_cb: Callable[[int, int, str], None] | None = None,
     vlm_mode: str = "off",
+    meta_mode: str = "off",
 ) -> Path:
     """Run the full culling pipeline on `folder` and write `scores.csv`.
 
@@ -240,6 +241,9 @@ def run_pipeline(
     # Persists per-axis stars + a per-image rationale to the CSV and
     # vlm_verdicts.jsonl. Skips rule-CULL rows to save time (a CULL is
     # already a CULL — VLM disagreement on culls isn't actionable).
+    # Cache VLM verdicts per filename so the meta-judge stage can read
+    # them without re-querying. None = no VLM ran for that row.
+    vlm_verdicts_by_fn: dict[str, "object"] = {}
     if vlm_mode and vlm_mode != "off":
         if progress_cb is not None:
             progress_cb(total, total, f"VLM ({vlm_mode}) 评分中…")
@@ -265,6 +269,7 @@ def run_pipeline(
                                           scene=str(row.get("scene") or ""))
                     vf.write(_json.dumps(verdict.to_dict(),
                                          ensure_ascii=False) + "\n")
+                    vlm_verdicts_by_fn[img_path.name] = verdict
                     if verdict.error:
                         continue
                     for axis_name, ax in verdict.axes.items():
@@ -277,6 +282,60 @@ def run_pipeline(
             console.print(
                 f"[cyan]VLM[/] {judge.model_name} scored "
                 f"{(df['vlm_elapsed_s'].notna()).sum()} non-cull images"
+            )
+
+    # V3.1: Meta-judge stage. DeepSeek V4 (text-only) reads ALL the
+    # signals — rule scores, V2.1 model stars, VLM verdict, detector
+    # metrics, flags — and produces a calibrated final verdict +
+    # explicit inconsistency report. Catches VLM over-confidence
+    # (e.g. 5★ subject when no_clear_subject flag is set).
+    if meta_mode and meta_mode != "off":
+        if progress_cb is not None:
+            progress_cb(total, total, f"Meta judge ({meta_mode}) 综合中…")
+        from pixcull.scoring.meta_judge import load_meta_judge, build_packet
+        mjudge = load_meta_judge(meta_mode)
+        if mjudge is not None:
+            for axis in RUBRIC_AXES:
+                df[f"meta_{axis.name}_stars"] = None
+            df["meta_overall_label"] = None
+            df["meta_overall_rationale"] = ""
+            df["meta_confidence"] = None
+            df["meta_inconsistencies"] = ""
+            df["meta_elapsed_s"] = None
+            meta_path = output / "meta_verdicts.jsonl"
+            n_meta_done = 0
+            with open(meta_path, "w", encoding="utf-8") as mf:
+                for i, (_, row) in enumerate(df.iterrows()):
+                    # Skip rule-CULL rows: a CULL is already a CULL,
+                    # paying ¥0.003 to confirm it isn't worth it.
+                    if str(row.get("decision", "")) == "cull":
+                        continue
+                    if progress_cb is not None:
+                        progress_cb(i + 1, total,
+                                    f"Meta {i+1}/{total}: {row.get('filename', '?')}")
+                    fn = str(row.get("filename", ""))
+                    packet = build_packet(row.to_dict(),
+                                          vlm_verdicts_by_fn.get(fn))
+                    mv = mjudge.consolidate(packet)
+                    mf.write(_json.dumps(mv.to_dict(),
+                                         ensure_ascii=False) + "\n")
+                    if mv.error:
+                        continue
+                    for axis_name, ax in mv.axes.items():
+                        if ax.stars is not None:
+                            df.at[df.index[i],
+                                  f"meta_{axis_name}_stars"] = ax.stars
+                    df.at[df.index[i], "meta_overall_label"] = mv.overall_label
+                    df.at[df.index[i], "meta_overall_rationale"] = mv.overall_rationale
+                    df.at[df.index[i], "meta_confidence"] = mv.confidence
+                    df.at[df.index[i], "meta_inconsistencies"] = (
+                        " | ".join(mv.inconsistencies or [])[:500]
+                    )
+                    df.at[df.index[i], "meta_elapsed_s"] = mv.elapsed_s
+                    n_meta_done += 1
+            console.print(
+                f"[cyan]Meta-judge[/] {mjudge.model_name} consolidated "
+                f"{n_meta_done} non-cull rows"
             )
 
     # Export CSV (drop embedding to keep file small)

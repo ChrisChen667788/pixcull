@@ -263,7 +263,7 @@ class MlxQwen3VlJudge:
         self,
         image_path: Path,
         scene: str | None = None,
-        max_tokens: int = 400,
+        max_tokens: int = 800,    # Chinese rationale ×6 axes is long
     ) -> VlmVerdict:
         from mlx_vlm import generate
         from mlx_vlm.prompt_utils import apply_chat_template

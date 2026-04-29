@@ -175,6 +175,7 @@ def _analyze_in_background(
     rescorer_mode: str,
     rescorer_path: str | None,
     vlm_mode: str = "off",
+    meta_mode: str = "off",
 ) -> None:
     """Worker thread: run the pipeline on the run's source dir.
 
@@ -203,7 +204,8 @@ def _analyze_in_background(
     def progress_cb(done: int, total: int, message: str) -> None:
         _set_run(run_id, done=done, total=total, message=message)
 
-    _set_run(run_id, state="running", started_at=time.time(), vlm_mode=vlm_mode)
+    _set_run(run_id, state="running", started_at=time.time(),
+             vlm_mode=vlm_mode, meta_mode=meta_mode)
     try:
         run_pipeline(
             source_dir,
@@ -212,6 +214,7 @@ def _analyze_in_background(
             rescorer_path=rescorer_path,
             progress_cb=progress_cb,
             vlm_mode=vlm_mode,
+            meta_mode=meta_mode,
         )
         _set_run(
             run_id,
@@ -285,6 +288,16 @@ def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
             name: _f(r.get(f"model_{name}_stars"))
             for name in rubric_axis_names
         }
+        # V3.0 VLM predictions ('vlm_<axis>_stars') if VLM was on.
+        vlm_stars = {
+            name: _f(r.get(f"vlm_{name}_stars"))
+            for name in rubric_axis_names
+        }
+        # V3.1 Meta-judge predictions ('meta_<axis>_stars') if meta on.
+        meta_stars = {
+            name: _f(r.get(f"meta_{name}_stars"))
+            for name in rubric_axis_names
+        }
         # Human override if present — last save per filename wins.
         human_rec = human_by_fn.get(fn)
         human_stars: dict[str, float | None] = {}
@@ -292,19 +305,16 @@ def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
             for name in rubric_axis_names:
                 axis_data = (human_rec.get("axes") or {}).get(name) or {}
                 human_stars[name] = axis_data.get("stars")
-        # Final stars per axis: human → model → auto. Reflects priority
-        # of trustworthiness — humans always win, model beats heuristic
-        # check list when available.
-        final_stars = {
-            name: (
-                human_stars.get(name)
-                if human_stars.get(name) is not None
-                else (model_stars.get(name)
-                      if model_stars.get(name) is not None
-                      else auto_stars.get(name))
-            )
-            for name in rubric_axis_names
-        }
+        # Final stars per axis: human → meta → vlm → model → auto.
+        # Trustworthiness order: humans always win, meta-judge calibrated
+        # against multi-source > raw VLM > V2.1 regressor > heuristic.
+        def _pick(name: str) -> float | None:
+            for src in (human_stars, meta_stars, vlm_stars, model_stars, auto_stars):
+                v = src.get(name) if isinstance(src, dict) else None
+                if v is not None:
+                    return v
+            return None
+        final_stars = {name: _pick(name) for name in rubric_axis_names}
         rows.append({
             "filename": fn,
             "scene": str(r.get("scene", "") or ""),
@@ -334,11 +344,20 @@ def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
             # cards use these to surface disagreements at a glance.
             "rubric_auto_stars": auto_stars,
             "rubric_model_stars": model_stars,
+            "rubric_vlm_stars": vlm_stars,
+            "rubric_meta_stars": meta_stars,
             "rubric_human_stars": {k: human_stars.get(k) for k in rubric_axis_names},
             "rubric_human_labeled": human_rec is not None,
             "rubric_overall_rationale": (
                 human_rec.get("overall_rationale") if human_rec else ""
             ),
+            # V3.x rationales for the modal's 4-way comparison
+            "vlm_overall_rationale": str(r.get("vlm_overall_rationale", "") or ""),
+            "vlm_overall_label": str(r.get("vlm_overall_label", "") or ""),
+            "meta_overall_rationale": str(r.get("meta_overall_rationale", "") or ""),
+            "meta_overall_label": str(r.get("meta_overall_label", "") or ""),
+            "meta_confidence": _f(r.get("meta_confidence")),
+            "meta_inconsistencies": str(r.get("meta_inconsistencies", "") or ""),
         })
 
     # Sort: keep first, then maybe, then cull, by score within group.
@@ -972,6 +991,7 @@ class _Handler(BaseHTTPRequestHandler):
         rescorer_mode = self.server.rescorer_mode  # type: ignore[attr-defined]
         rescorer_path = self.server.rescorer_path  # type: ignore[attr-defined]
         vlm_mode = self.server.vlm_mode  # type: ignore[attr-defined]
+        meta_mode = self.server.meta_mode  # type: ignore[attr-defined]
 
         _set_run(
             run_id,
@@ -987,7 +1007,7 @@ class _Handler(BaseHTTPRequestHandler):
         )
         threading.Thread(
             target=_analyze_in_background,
-            args=(run_id, rescorer_mode, rescorer_path, vlm_mode),
+            args=(run_id, rescorer_mode, rescorer_path, vlm_mode, meta_mode),
             daemon=True,
         ).start()
 
@@ -1077,6 +1097,7 @@ class _Handler(BaseHTTPRequestHandler):
         rescorer_mode = self.server.rescorer_mode  # type: ignore[attr-defined]
         rescorer_path = self.server.rescorer_path  # type: ignore[attr-defined]
         vlm_mode = self.server.vlm_mode  # type: ignore[attr-defined]
+        meta_mode = self.server.meta_mode  # type: ignore[attr-defined]
 
         _set_run(
             run_id,
@@ -1092,7 +1113,7 @@ class _Handler(BaseHTTPRequestHandler):
         )
         threading.Thread(
             target=_analyze_in_background,
-            args=(run_id, rescorer_mode, rescorer_path, vlm_mode),
+            args=(run_id, rescorer_mode, rescorer_path, vlm_mode, meta_mode),
             daemon=True,
         ).start()
 
@@ -1898,11 +1919,19 @@ def main() -> None:
     )
     parser.add_argument(
         "--vlm-mode", default="off",
-        help="V3.0 VLM-as-judge backend. Off by default (slow + optional). "
+        help="V3.0 VLM-as-judge backend (sees pixels). Default off. "
              "Values: 'off' | 'local' | 'local:<repo>' | 'deepseek' | "
-             "'minimax' | 'openai'. API backends require the corresponding "
-             "*_API_KEY env var (DEEPSEEK_API_KEY / MINIMAX_API_KEY / "
-             "OPENAI_API_KEY).",
+             "'minimax' | 'openai'. Note: as of 2026-04 DeepSeek's API is "
+             "TEXT ONLY — use 'local' for vision and 'deepseek' for the "
+             "meta judge below.",
+    )
+    parser.add_argument(
+        "--meta-mode", default="off",
+        help="V3.1 meta-judge: text LLM consolidates all signals "
+             "(rule + V2.1 model + VLM + detector metrics) into a "
+             "calibrated final verdict. Off by default. Values: "
+             "'off' | 'deepseek' (V4-Flash) | 'deepseek:deepseek-v4-pro'. "
+             "Requires DEEPSEEK_API_KEY env var. ~¥0.003/image.",
     )
     args = parser.parse_args()
 
@@ -1939,6 +1968,7 @@ def main() -> None:
     server.max_upload_bytes = args.max_upload_mb * 1024 * 1024  # type: ignore[attr-defined]
     server.max_upload_files = args.max_upload_files  # type: ignore[attr-defined]
     server.vlm_mode = args.vlm_mode  # type: ignore[attr-defined]
+    server.meta_mode = args.meta_mode  # type: ignore[attr-defined]
 
     # Print URLs the user can paste into a browser. On 0.0.0.0 we also
     # show the LAN IP so the operator knows the address to share rather
@@ -1961,6 +1991,8 @@ def main() -> None:
     print(f"  upload limits: {args.max_upload_mb} MB / {args.max_upload_files} files per request")
     if args.vlm_mode != "off":
         print(f"  VLM mode: {args.vlm_mode} (V3.0 — adds ~10s/img local, ~2s/img API)")
+    if args.meta_mode != "off":
+        print(f"  Meta-judge: {args.meta_mode} (V3.1 — adds ~5-10s/img · ~¥0.003/img)")
     if not args.no_open and args.host in ("127.0.0.1", "localhost"):
         threading.Timer(0.4, lambda: webbrowser.open(local_url)).start()
 
@@ -2658,9 +2690,11 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
     .row1 .rs {
       font-size: 9px; padding: 1px 5px; border-radius: 2px;
       background: rgba(255,255,255,0.07); color: var(--muted);
-      font-family: ui-monospace, monospace;
+      font-family: ui-monospace, monospace; cursor: help;
     }
     .row1 .rs.dis { background: var(--maybe); color: white; }
+    .row1 .rs.meta { background: rgba(168, 85, 247, 0.18); color: #c4b5fd; }
+    .row1 .rs.meta.dis { background: var(--maybe); color: white; }
     .row2 { display: flex; align-items: center; justify-content: space-between;
             margin-top: 4px; font-size: 11px; color: var(--muted); }
     .row2 .scene { color: var(--fg); }
@@ -2852,6 +2886,17 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
           r.rescorer_prob_keep.toFixed(2);
         rescorerBadge = `<span class="rs ${dis ? 'dis' : ''}" title="V1.1 rescorer: ${r.rescorer_pred} (P=${probTxt})">${r.rescorer_pred==='keep'?'✓':'?'} ${probTxt}</span>`;
       }
+      // V3.1 meta-judge badge: shows overall verdict + confidence and
+      // a tooltip with inconsistencies. When meta disagrees with rule,
+      // pop a yellow ring like the rescorer-disagreement marker.
+      let metaBadge = "";
+      if (r.meta_overall_label) {
+        const dis = r.meta_overall_label !== r.decision;
+        const conf = r.meta_confidence == null ? "" : ` ${(r.meta_confidence*100).toFixed(0)}%`;
+        const inc = r.meta_inconsistencies || "";
+        const tip = `DeepSeek meta-judge: ${r.meta_overall_label}${conf}\n${r.meta_overall_rationale}\n${inc ? '矛盾: '+inc : ''}`.replace(/"/g,'&quot;');
+        metaBadge = `<span class="rs meta ${dis?'dis':''}" title="${tip}">⌬ ${r.meta_overall_label[0].toUpperCase()}${conf}</span>`;
+      }
       // V2.0 rubric stars per axis. Only show shorter labels on each
       // card (full descriptors live in the annotation modal).
       const axisAbbr = {
@@ -2875,6 +2920,7 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
               <span class="badge ${r.decision}">${r.decision}</span>
               <span class="fn" title="${r.filename}">${r.filename}</span>
               ${rescorerBadge}
+              ${metaBadge}
             </div>
             <div class="row2">
               <span class="scene">${r.scene || "?"}</span>
