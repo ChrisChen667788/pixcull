@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Required for ad-hoc-signed Python bundles: lets the launcher
+         load libpython3.12.dylib + the hundreds of compiled .so files
+         without team-ID matching, which doesn't apply to ad-hoc.       -->
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+    <!-- Some ML libs JIT-compile (numba, torch.compile) — harmless to
+         enable; rejecting the entitlement only triggers crashes.       -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    <!-- Default-allow filesystem reads from user-selected folders.
+         macOS shows the standard "Allow X to access folder?" prompt
+         the first time the app reads from each location.                -->
+    <key>com.apple.security.files.user-selected.read-write</key>
+    <true/>
+</dict>
+</plist>
