@@ -272,6 +272,7 @@ def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
                     human_by_fn[fn] = rec
 
     from pixcull.scoring.rubric import RUBRIC_AXES
+    from pixcull.scoring.photo_advice import build_advice
     rubric_axis_names = [a.name for a in RUBRIC_AXES]
 
     rows: list[dict] = []
@@ -315,6 +316,14 @@ def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
                     return v
             return None
         final_stars = {name: _pick(name) for name in rubric_axis_names}
+        # V5.2: build photographer-friendly advice from final stars +
+        # raw row metrics + meta inconsistencies
+        advice = build_advice(
+            row=r.to_dict(),
+            final_stars=final_stars,
+            decision=str(r.get("decision", "") or ""),
+            meta_inconsistencies=str(r.get("meta_inconsistencies", "") or ""),
+        )
         rows.append({
             "filename": fn,
             "scene": str(r.get("scene", "") or ""),
@@ -326,6 +335,7 @@ def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
             "score_composition": _f(r.get("score_composition")),
             "flags": str(r.get("flags", "") or ""),
             "reason": str(r.get("reason", "") or ""),
+            "advice": advice,
             "rescorer_pred": (
                 str(r.get("rescorer_pred"))
                 if "rescorer_pred" in df.columns
@@ -2716,6 +2726,10 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
     .row3 .ax.s5 { color: var(--keep); }
     .row4 { font-size: 10px; color: var(--muted); margin-top: 6px;
             text-overflow: ellipsis; overflow: hidden; white-space: nowrap; }
+    .row5 { font-size: 10px; margin-top: 4px; line-height: 1.35;
+            text-overflow: ellipsis; overflow: hidden; white-space: nowrap; cursor: help; }
+    .row5.strengths { color: var(--keep); }
+    .row5.fixes { color: var(--maybe); }
     .annotate-btn {
       position: absolute; top: 6px; right: 6px;
       background: rgba(0,0,0,0.65); color: white; border: 0;
@@ -2931,6 +2945,8 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
               ${ax("light")}${ax("moment")}${ax("aesthetic")}
             </div>
             <div class="row4" title="${(r.reason || '').replace(/"/g,'&quot;')}">${reasonShort || ""}</div>
+            ${(r.advice && r.advice.strengths && r.advice.strengths.length) ? `<div class="row5 strengths" title="V5.2 摄影正典优点">✓ ${r.advice.strengths.slice(0,2).join(' · ')}</div>` : ''}
+            ${(r.advice && r.advice.suggestions && r.advice.suggestions.length) ? `<div class="row5 fixes" title="V5.2 改进建议">→ ${r.advice.suggestions[0]}</div>` : ''}
           </div>
         </div>
       `;
