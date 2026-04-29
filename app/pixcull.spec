@@ -176,7 +176,7 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name="PixCull.app",
-    icon=None,                      # TODO: ship a .icns
+    icon=str(SPEC / "PixCull.icns") if (SPEC / "PixCull.icns").exists() else None,
     bundle_identifier="dev.pixcull.app",
     info_plist={
         "CFBundleName": "PixCull",
