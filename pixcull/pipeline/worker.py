@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Optional
 
 from pixcull.detectors.blur import BlurDetector
+from pixcull.detectors.canon import CanonDetector
 from pixcull.detectors.composition import CompositionDetector
 from pixcull.detectors.duplicate import DuplicateDetector
 from pixcull.detectors.exposure import ExposureDetector
@@ -26,6 +27,7 @@ def _detectors():
         "aesthetic":   AestheticScorer(),
         "face":        FaceDetector(),
         "composition": CompositionDetector(),
+        "canon":       CanonDetector(),
     }
 
 
@@ -47,10 +49,11 @@ def analyze_one(path: Path) -> Optional[dict]:
     aes = d["aesthetic"].analyze(img)
     face = d["face"].analyze(img)
     comp = d["composition"].analyze(img, mask=mask, scene=scene_name)
+    canon = d["canon"].analyze(img, mask=mask)
 
     metrics: dict = {}
     flags: list[str] = []
-    for r in (subj, blur, expo, scene, dup, aes, face, comp):
+    for r in (subj, blur, expo, scene, dup, aes, face, comp, canon):
         metrics.update(r.metrics)
         flags.extend(r.flags)
 

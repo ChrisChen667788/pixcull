@@ -91,6 +91,25 @@ def _check_eval(check_key: str, row: dict[str, Any]) -> bool | None:
         if _f(row, "face_count") in (None, 0):
             return None  # no face → not applicable
         return not _flag(row, "motion_blur_on_face")
+    # V5.1 canon checks — Adams Zone System
+    if check_key == "canon_zone_full_range":
+        # Distribution KL < 0.5 means histogram is reasonably close
+        # to a "good photo" prior with thin tails. > 0.5 means
+        # heavy clipping or severe imbalance.
+        kl = _f(row, "canon_zone_distribution_kl")
+        if kl is None:
+            return None
+        return kl < 0.5
+    if check_key == "canon_no_zone_clipping":
+        clip = _f(row, "canon_zone_clip_pct")
+        if clip is None:
+            return None
+        return clip < 0.05  # < 5% in zones 0+X
+    if check_key == "canon_midgray_anchored":
+        offset = _f(row, "canon_midgray_offset")
+        if offset is None:
+            return None
+        return offset < 0.15
 
     # subject
     if check_key == "has_clear_subject":
@@ -132,6 +151,32 @@ def _check_eval(check_key: str, row: dict[str, Any]) -> bool | None:
         if s is None:
             return None
         return 0.05 <= s <= 0.85
+    # V5.1 canon — composition
+    if check_key == "canon_thirds_concentration":
+        # Above 0.45 means the rule-of-thirds intersection cells
+        # carry meaningful weight (vs. concentrated dead-center).
+        t = _f(row, "canon_thirds_concentration")
+        if t is None:
+            return None
+        return t >= 0.45
+    if check_key == "canon_balanced_weight":
+        b = _f(row, "canon_balance")
+        if b is None:
+            return None
+        return b >= 0.6
+    if check_key == "canon_lead_room_ok":
+        lr = _f(row, "canon_lead_room")
+        if lr is None:
+            return None
+        # 0.5 = symmetric (no clear direction); we want lead room
+        # positively above 0.5 OR exactly at 0.5 (no directional
+        # subject — not applicable, treat as pass).
+        return lr >= 0.45
+    if check_key == "canon_figure_ground_pop":
+        fg = _f(row, "canon_figure_ground")
+        if fg is None:
+            return None
+        return fg >= 0.4
 
     # light
     if check_key == "not_blown_highlights":

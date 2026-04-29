@@ -100,6 +100,10 @@ RUBRIC_AXES: tuple[AxisDef, ...] = (
             ("not_severely_underexposed", 0.5),
             ("subject_in_focus", 1.0),
             ("face_not_motion_blurred", 0.8),
+            # V5.1 canon — quantified Zone System checks
+            ("canon_zone_full_range", 0.7),    # tonal range covers II-IX
+            ("canon_no_zone_clipping", 0.6),   # < 5% in zones 0+X
+            ("canon_midgray_anchored", 0.4),   # zone V near 0.5 luma
         ),
         rubric_descriptors=_canon_desc("technical"),
     ),
@@ -126,6 +130,11 @@ RUBRIC_AXES: tuple[AxisDef, ...] = (
             ("rule_of_thirds_close", 0.5),
             ("subject_not_at_edge", 1.0),
             ("no_distracting_clutter", 0.8),
+            # V5.1 canon — quantified composition principles
+            ("canon_thirds_concentration", 0.6),  # rule of thirds quantified
+            ("canon_balanced_weight", 0.5),       # 3x3 visual weight balance
+            ("canon_lead_room_ok", 0.5),          # lead room from mask geom
+            ("canon_figure_ground_pop", 0.7),     # fig vs bg luma contrast
         ),
         rubric_descriptors=_canon_desc("composition"),
     ),
