@@ -79,6 +79,30 @@ def hf_cache_dir() -> Path:
     return p
 
 
+def config_path() -> Path:
+    """User config file: API keys, mode defaults. Mode 0600.
+
+    Schema (all optional):
+      {
+        "deepseek_api_key": "sk-...",
+        "vlm_mode": "off" | "local" | "deepseek" | ...,
+        "meta_mode": "off" | "deepseek" | ...
+      }
+    """
+    return app_data_dir() / "config.json"
+
+
+def load_config() -> dict:
+    """Load + sanitize the user's config. Returns empty dict on any error."""
+    p = config_path()
+    if not p.exists():
+        return {}
+    try:
+        return json.loads(p.read_text("utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
 def first_run_marker() -> Path:
     return app_data_dir() / ".pixcull_first_run_done"
 
@@ -186,14 +210,30 @@ class ServerHandle:
         os.environ["HF_HOME"] = str(hf_cache_dir())
         os.environ["TRANSFORMERS_CACHE"] = str(hf_cache_dir())
 
+        # V7.1: read user-supplied config.json for API keys + mode
+        # defaults. Sets the env var DeepSeek meta-judge looks up,
+        # so users don't need to launch from terminal with env vars.
+        cfg = load_config()
+        if cfg.get("deepseek_api_key"):
+            os.environ["DEEPSEEK_API_KEY"] = cfg["deepseek_api_key"]
+        # Defaults: if the user has a DeepSeek key, turn on the full
+        # hybrid stack. Otherwise gracefully degrade to off.
+        default_vlm = "local" if (
+            (cfg.get("deepseek_api_key") or os.environ.get("DEEPSEEK_API_KEY"))
+        ) else "off"
+        default_meta = "deepseek" if os.environ.get("DEEPSEEK_API_KEY") else "off"
+
         server = ThreadingHTTPServer(("127.0.0.1", self.port), sd._Handler)
         # Stash config the way serve_demo's CLI flag would
         server.rescorer_mode = "auto"        # type: ignore[attr-defined]
         server.rescorer_path = str(resource_root() / "models" / "rescorer_v1.joblib")  # type: ignore[attr-defined]
         server.max_upload_bytes = 8 * 1024 * 1024 * 1024  # 8 GB  # type: ignore[attr-defined]
         server.max_upload_files = 500        # type: ignore[attr-defined]
-        server.vlm_mode = "off"              # type: ignore[attr-defined]
-        server.meta_mode = "off"             # type: ignore[attr-defined]
+        server.vlm_mode = cfg.get("vlm_mode", default_vlm)   # type: ignore[attr-defined]
+        server.meta_mode = cfg.get("meta_mode", default_meta) # type: ignore[attr-defined]
+
+        print(f"[launcher] vlm_mode={server.vlm_mode} meta_mode={server.meta_mode}",
+              file=sys.stderr)
 
         self._server = server
         t = threading.Thread(target=server.serve_forever, daemon=True)
@@ -317,6 +357,8 @@ class PixCullMenuApp(rumps.App):
             rumps.MenuItem(f"数据目录: …/{app_data_dir().name}",
                            callback=self._on_open_data_dir),
             None,
+            rumps.MenuItem("配置 DeepSeek API key", callback=self._on_set_key),
+            rumps.MenuItem("查看错误日志", callback=self._on_open_logs),
             rumps.MenuItem("重新下载模型 (首次设置)", callback=self._on_resetup),
             None,
             rumps.MenuItem(f"关于 {APP_NAME} v{APP_VERSION}", callback=self._on_about),
@@ -332,6 +374,45 @@ class PixCullMenuApp(rumps.App):
 
     def _on_open_data_dir(self, _):
         subprocess.run(["open", str(app_data_dir())])
+
+    def _on_set_key(self, _):
+        """Prompt for DeepSeek API key + persist to config.json."""
+        # Use AppleScript display dialog with hidden answer for the key
+        script = (
+            'set t to display dialog "粘贴 DeepSeek API key (会写到 '
+            '~/Library/Application Support/PixCull/config.json,权限 0600,'
+            '不会进 git)" default answer "" with hidden answer '
+            'with title "PixCull · DeepSeek API key"\n'
+            'return text returned of t'
+        )
+        try:
+            out = subprocess.run(
+                ["osascript", "-e", script],
+                capture_output=True, text=True, timeout=120,
+            )
+            key = (out.stdout or "").strip()
+        except Exception:
+            return
+        if not key:
+            return
+        cfg = load_config()
+        cfg["deepseek_api_key"] = key
+        cfg.setdefault("vlm_mode", "local")
+        cfg.setdefault("meta_mode", "deepseek")
+        try:
+            config_path().write_text(
+                json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8"
+            )
+            os.chmod(config_path(), 0o600)
+        except OSError as exc:
+            osa_notify(APP_NAME, f"保存失败: {exc}")
+            return
+        osa_notify(APP_NAME, "API key 已保存,下次启动生效")
+
+    def _on_open_logs(self, _):
+        log_dir = app_data_dir() / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["open", str(log_dir)])
 
     def _on_resetup(self, _):
         try:
@@ -369,7 +450,34 @@ class PixCullMenuApp(rumps.App):
 # Entry
 # ---------------------------------------------------------------------------
 
+def _redirect_stderr_to_log() -> None:
+    """V7.1: capture stdout/stderr to a per-launch log file.
+
+    PyInstaller --windowed mode silently drops any text written to
+    stdout/stderr. When the pipeline crashes (FileNotFoundError on
+    a missing data file etc.) the user sees nothing in the UI and
+    Console.app shows only macOS framework chatter. Redirecting to
+    a file inside the user's data dir means the next time something
+    breaks we have a Python traceback to read.
+
+    Files rotate by date so logs don't grow unbounded.
+    """
+    import datetime
+    log_dir = app_data_dir() / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    fname = log_dir / f"pixcull_{datetime.date.today().isoformat()}.log"
+    try:
+        # Use line-buffered append. Inherit fd to subprocess if any.
+        f = open(fname, "a", buffering=1, encoding="utf-8")
+        sys.stdout = f
+        sys.stderr = f
+        f.write(f"\n--- launcher started at {datetime.datetime.now().isoformat()} ---\n")
+    except OSError:
+        pass
+
+
 def main() -> int:
+    _redirect_stderr_to_log()
     os.environ.setdefault("HF_HOME", str(hf_cache_dir()))
     os.environ.setdefault("TRANSFORMERS_CACHE", str(hf_cache_dir()))
 

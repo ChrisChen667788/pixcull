@@ -107,6 +107,14 @@ collect_packages = [
     "sklearn",
     "rumps",
     "openai",
+    # V7.1: data-file packages PyInstaller's static analysis misses.
+    # `clip` ships bpe_simple_vocab_16e6.txt.gz that pyiqa's clipiqa /
+    # laion_aes need at runtime — without it the pipeline crashes with
+    # FileNotFoundError on the very first scored image.
+    "clip",
+    "facexlib",     # used by pyiqa for face-region IQA metrics
+    "timm",         # backbone library for several pyiqa metrics
+    "scipy",        # canon detector uses scipy.ndimage.sobel
 ]
 for pkg in collect_packages:
     try:
