@@ -2229,22 +2229,72 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
     }
     .folder-info b { color: var(--fg); }
 
+    /* V8.3: folder browser was breaking when the listing was long
+       (>15 entries) — the modal-card's max-height: 80vh combined
+       with absent inner scrolling pushed header + footer offscreen.
+       Lock to a fixed viewport-relative size, scroll only the body,
+       sticky header + footer. */
     .browser-modal {
-      position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+      position: fixed; inset: 0; background: rgba(0,0,0,0.78);
       display: flex; align-items: center; justify-content: center;
-      z-index: 10;
+      z-index: 10; backdrop-filter: blur(6px);
     }
     .browser-card {
-      background: var(--bg-card); border: 1px solid var(--border);
-      border-radius: 8px; width: 92vw; max-width: 580px; max-height: 80vh;
+      background: var(--bg-card); border: 1px solid var(--border-hi);
+      border-radius: 12px;
+      width: min(640px, 94vw);
+      height: min(78vh, 720px);
       display: flex; flex-direction: column;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.6);
+      overflow: hidden;     /* contain the inner scroll */
     }
     .browser-header {
-      display: flex; align-items: center; gap: 8px;
-      padding: 12px 14px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;       /* never collapse */
+      background: rgba(255,255,255,0.02);
+    }
+    .browser-header code {
+      flex: 1; min-width: 0;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      font-family: ui-monospace, monospace;
+      color: var(--fg); font-size: 12px;
+    }
+    .browser-header .quick {
+      display: flex; gap: 4px; flex-wrap: wrap;
+    }
+    .browser-header .quick a {
+      color: var(--muted); font-size: 11px;
+      padding: 3px 8px; border-radius: 4px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      text-decoration: none; cursor: pointer; user-select: none;
+    }
+    .browser-header .quick a:hover {
+      color: var(--fg); border-color: var(--border-hi);
+    }
+    .browser-header .close {
+      width: 28px; height: 28px; border-radius: 6px;
+      display: inline-flex; align-items: center; justify-content: center;
+      cursor: pointer; user-select: none; font-size: 16px;
+      color: var(--muted);
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .browser-header .close:hover {
+      color: var(--fg); border-color: var(--border-hi);
     }
     .browser-body {
-      overflow-y: auto; padding: 4px 0; flex: 1;
+      overflow-y: auto;     /* THIS scrolls when content overflows */
+      flex: 1 1 auto; min-height: 0;
+      padding: 6px 0;
+    }
+    .browser-body::-webkit-scrollbar { width: 8px; }
+    .browser-body::-webkit-scrollbar-track { background: transparent; }
+    .browser-body::-webkit-scrollbar-thumb {
+      background: var(--border-hi); border-radius: 4px;
     }
     .browser-body .row {
       display: flex; align-items: center; gap: 10px;
@@ -2253,14 +2303,17 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
     .browser-body .row:hover { background: rgba(255,255,255,0.05); }
     .browser-body .row.parent { color: var(--muted); }
     .browser-body .icon { width: 16px; opacity: 0.7; }
-    .browser-body .name { flex: 1; }
+    .browser-body .name { flex: 1; min-width: 0;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .browser-body .badge {
       background: rgba(59,130,246,0.15); color: #4b9aff;
       padding: 1px 6px; font-size: 10px; border-radius: 2px;
+      flex-shrink: 0;
     }
     .browser-footer {
-      padding: 10px 14px; border-top: 1px solid var(--border);
+      padding: 12px 14px; border-top: 1px solid var(--border);
       display: flex; align-items: center; gap: 10px;
+      flex-shrink: 0; background: rgba(255,255,255,0.02);
     }
     .browser-footer button { padding: 6px 14px; }
   </style>
@@ -2313,13 +2366,19 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
         <span id="scanHint" style="color:var(--muted);font-size:12px"></span>
       </div>
 
-      <!-- Folder browser modal -->
+      <!-- Folder browser modal — V8.3 with sticky header + quick jumps -->
       <div class="browser-modal" id="browserModal" style="display:none">
         <div class="browser-card">
           <div class="browser-header">
-            <span class="muted" style="font-size:11px">当前位置:</span>
-            <code id="browserPath" style="flex:1; overflow:auto"></code>
-            <button id="browserClose" class="secondary" type="button">关闭</button>
+            <code id="browserPath" title="当前位置"></code>
+            <span class="quick" id="browserQuick">
+              <a data-go="~">~</a>
+              <a data-go="~/Pictures">Pictures</a>
+              <a data-go="~/Desktop">Desktop</a>
+              <a data-go="~/Downloads">Downloads</a>
+              <a data-go="/Volumes">Volumes</a>
+            </span>
+            <span class="close" id="browserClose" title="关闭 (Esc)">×</span>
           </div>
           <div class="browser-body" id="browserBody"></div>
           <div class="browser-footer">
@@ -2586,6 +2645,19 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
     folderPath.value = browserCurrent;
     browserModal.style.display = "none";
     inspectFolder();
+  });
+  // V8.3: quick-jump shortcut buttons in the modal header.
+  document.querySelectorAll("#browserQuick a").forEach(a => {
+    a.addEventListener("click", () => loadBrowser(a.dataset.go));
+  });
+  // V8.3: Esc to close, click on backdrop to close.
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && browserModal.style.display !== "none") {
+      browserModal.style.display = "none";
+    }
+  });
+  browserModal.addEventListener("click", e => {
+    if (e.target === browserModal) browserModal.style.display = "none";
   });
 
   // ---------------------- Upload (existing path) -----------------------
