@@ -828,6 +828,42 @@ def _storage_info() -> dict:
 class _Handler(BaseHTTPRequestHandler):
     server_version = "PixCullDemo/1.2"
 
+    def send_error(self, code: int, message: str | None = None,
+                    explain: str | None = None) -> None:
+        """Override stdlib send_error to handle non-ASCII messages.
+
+        BaseHTTPRequestHandler.send_response_only() encodes the HTTP
+        status line as latin-1; any em-dash / Chinese / etc. character
+        crashes the request thread mid-response with UnicodeEncodeError,
+        which has cascaded into '查看结果按钮整个崩溃' before this fix.
+        We strip the message to ASCII for the status line and stash the
+        original (Unicode-safe) text in the JSON body that's already
+        ASCII-only HTTP-headers + utf-8 payload.
+        """
+        if message is None:
+            message = "error"
+        # ASCII-safe status reason phrase (per RFC 7230 §3.1.2)
+        ascii_msg = message.encode("ascii", "ignore").decode("ascii") or "error"
+        # Body carries the original message in UTF-8 JSON
+        try:
+            body = json.dumps(
+                {"code": code, "error": message, "explain": explain or ""},
+                ensure_ascii=False,
+            ).encode("utf-8")
+        except Exception:
+            body = json.dumps({"code": code, "error": ascii_msg}).encode("utf-8")
+        try:
+            self.send_response(code, ascii_msg)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            if self.command != "HEAD":
+                self.wfile.write(body)
+        except Exception:
+            # Last-resort: don't let secondary failures crash the worker
+            pass
+
     def log_message(self, fmt: str, *args: object) -> None:
         sys.stderr.write("%s - %s\n" % (self.address_string(), fmt % args))
 
