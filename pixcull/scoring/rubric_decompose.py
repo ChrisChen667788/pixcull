@@ -227,25 +227,42 @@ def _check_eval(check_key: str, row: dict[str, Any]) -> bool | None:
 def decompose_row(row: dict[str, Any]) -> RubricScore:
     """Compute the rubric for one pipeline row.
 
+    V8.0: routes through ``detect_style_modes`` first so that
+    intentionally-broken-rules photos (B&W, low-key, long exposure,
+    silhouette) don't get punished for breaking rules they're MEANT
+    to break. Style overrides apply per-check:
+      "suppress" → check excluded from this image's denominator
+      "boost"    → passed check counts double
+      "invert"   → failed check considered passing
+
     Each axis's stars come from the weighted check list pass rate; the
     rationale is the list of failed checks (reverse-engineered to be
     human-readable). Sources stays "auto" so downstream code can tell
     auto-pre-fills from human gold labels.
     """
+    from pixcull.scoring.style_modes import detect_style_modes
     rs = RubricScore.empty(row.get("filename", ""))
     rs.source = "auto"
+
+    style = detect_style_modes(row)
 
     for axis in RUBRIC_AXES:
         weighted_sum = 0.0
         weight_total = 0.0
         failed: list[str] = []
         for check_key, w in axis.checklist:
+            override = style.overrides.get(check_key)
+            if override == "suppress":
+                continue                  # skip this check entirely
             result = _check_eval(check_key, row)
             if result is None:
                 continue
-            weight_total += w
+            if override == "invert":
+                result = not result
+            effective_w = w * 2.0 if (override == "boost" and result) else w
+            weight_total += effective_w
             if result:
-                weighted_sum += w
+                weighted_sum += effective_w
             else:
                 failed.append(check_key)
         if weight_total > 0:
@@ -260,6 +277,14 @@ def decompose_row(row: dict[str, Any]) -> RubricScore:
             rationale=("失分项: " + ", ".join(failed)) if failed else "",
             source="auto",
         )
+
+    # Stash detected styles into the overall rationale prefix so
+    # downstream UI surfaces them. Doesn't change scoring beyond
+    # the per-check overrides above.
+    if style.modes:
+        rs.overall_rationale = (
+            "[" + " · ".join(sorted(style.modes)) + "] "
+        ) + (rs.overall_rationale or "")
 
     # Overall label — borrow from the pipeline's own decision (already
     # in row["decision"] when called post-decide). Rationale is the

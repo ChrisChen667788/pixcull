@@ -315,6 +315,9 @@ class DeepseekMetaJudge:
 
 def build_packet(row: dict[str, Any],
                  vlm_verdict: VlmVerdict | None) -> dict[str, Any]:
+    """V8.0: detected style modes are added to the packet so the meta
+    judge knows when to relax canon-of-generic rules in favor of
+    canon-of-this-style. See pixcull.scoring.style_modes."""
     """Project a pipeline row + optional VLM verdict into a JSON-friendly
     packet for the meta judge.
 
@@ -380,6 +383,13 @@ def build_packet(row: dict[str, Any],
             "overall_rationale": vlm_verdict.overall_rationale[:200],
             "model": vlm_verdict.model_name,
         }
+    # V8.0: style modes drive how aggressively to honor classical
+    # canon vs. style-of-style canon.
+    from pixcull.scoring.style_modes import detect_style_modes
+    profile = detect_style_modes(row)
+    if profile.modes:
+        packet["detected_style_modes"] = sorted(profile.modes)
+        packet["style_hints"] = profile.prompt_hints
     return packet
 
 

@@ -2047,43 +2047,86 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
 <html lang="zh">
 <head>
   <meta charset="utf-8">
-  <title>PixCull — 一键分拣</title>
+  <title>PixCull — AI 摄影分拣</title>
   <style>
     :root {
-      --bg: #111418;
-      --bg-card: #1a1e24;
-      --fg: #e5e7eb;
+      --bg: #0b0d10;
+      --bg-grad: radial-gradient(1200px 600px at 50% -200px, rgba(59,130,246,0.08), transparent 60%),
+                 radial-gradient(900px 500px at 90% 110%, rgba(168,85,247,0.05), transparent 60%);
+      --bg-card: #14171c;
+      --bg-card-hi: #1a1e25;
+      --fg: #e9ecf2;
       --muted: #8892a0;
-      --border: #2a2f38;
+      --border: #232830;
+      --border-hi: #2f3742;
       --accent: #3b82f6;
-      --keep: #2ea84a;
-      --maybe: #d9a30c;
-      --cull: #d95050;
+      --accent-hi: #60a5fa;
+      --accent-glow: rgba(59,130,246,0.18);
+      --keep: #34d399;
+      --maybe: #fbbf24;
+      --cull: #ef6363;
       --error: #ef4444;
+      --shadow-sm: 0 1px 2px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.02);
+      --shadow-md: 0 4px 16px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.03);
+      --shadow-lg: 0 16px 60px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.04);
     }
     * { box-sizing: border-box; }
     body {
-      margin: 0; min-height: 100vh; background: var(--bg); color: var(--fg);
-      font: 14px/1.5 -apple-system, "PingFang SC", "Helvetica Neue", sans-serif;
+      margin: 0; min-height: 100vh;
+      background: var(--bg);
+      background-image: var(--bg-grad);
+      background-attachment: fixed;
+      color: var(--fg);
+      font: 14px/1.55 -apple-system, "PingFang SC", "Helvetica Neue",
+            "Microsoft Yahei", "Inter", sans-serif;
+      letter-spacing: 0.01em;
       display: flex; flex-direction: column; align-items: center;
-      padding: 60px 20px 40px;
+      padding: 80px 20px 60px;
     }
-    h1 { margin: 0 0 6px; font-size: 22px; font-weight: 600; }
-    .subtitle { color: var(--muted); margin-bottom: 28px; max-width: 540px; text-align: center; }
+    h1 {
+      margin: 0 0 8px; font-size: 28px; font-weight: 700;
+      letter-spacing: -0.02em;
+      background: linear-gradient(180deg, #ffffff 0%, #c8d0db 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .subtitle {
+      color: var(--muted); margin-bottom: 36px; max-width: 540px;
+      text-align: center; font-size: 13.5px;
+    }
+    .subtitle .pill {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 2px 7px; border-radius: 999px; font-size: 11px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+    }
+    .subtitle .pill.k { color: var(--keep); }
+    .subtitle .pill.m { color: var(--maybe); }
+    .subtitle .pill.c { color: var(--cull); }
     .card {
-      width: 100%; max-width: 600px; background: var(--bg-card);
-      border: 1px solid var(--border); border-radius: 10px; padding: 24px;
+      width: 100%; max-width: 620px; background: var(--bg-card);
+      border: 1px solid var(--border); border-radius: 14px;
+      padding: 24px; box-shadow: var(--shadow-lg);
+      backdrop-filter: blur(8px);
     }
     .drop-zone {
-      border: 2px dashed var(--border); border-radius: 8px;
-      padding: 40px 20px; text-align: center;
-      cursor: pointer; transition: border-color 0.15s, background 0.15s;
+      border: 1.5px dashed var(--border-hi); border-radius: 10px;
+      padding: 48px 20px; text-align: center;
+      cursor: pointer;
+      transition: border-color 0.18s, background 0.18s, box-shadow 0.18s;
+      background: linear-gradient(180deg, rgba(255,255,255,0.015), transparent);
     }
     .drop-zone:hover, .drop-zone.dragover {
-      border-color: var(--accent); background: rgba(59, 130, 246, 0.08);
+      border-color: var(--accent);
+      background: linear-gradient(180deg, rgba(59,130,246,0.06), transparent);
+      box-shadow: 0 0 0 4px var(--accent-glow);
     }
-    .drop-zone .big { font-size: 28px; margin-bottom: 10px; opacity: 0.7; }
-    .drop-zone .hint { color: var(--muted); font-size: 12px; margin-top: 8px; }
+    .drop-zone .big {
+      font-size: 32px; margin-bottom: 12px; opacity: 0.55;
+      transition: opacity 0.15s;
+    }
+    .drop-zone:hover .big { opacity: 0.9; }
+    .drop-zone .hint { color: var(--muted); font-size: 12px; margin-top: 10px; }
     .file-list {
       margin-top: 14px; max-height: 160px; overflow-y: auto;
       border-top: 1px solid var(--border);
@@ -2094,12 +2137,21 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
       margin-top: 16px; display: flex; gap: 10px; align-items: center;
     }
     button {
-      background: var(--accent); color: white; border: 0;
-      padding: 10px 20px; font-size: 13px; font-weight: 500;
-      border-radius: 6px; cursor: pointer;
+      background: linear-gradient(180deg, var(--accent-hi), var(--accent));
+      color: white; border: 0; padding: 10px 22px;
+      font-size: 13px; font-weight: 600; letter-spacing: 0.02em;
+      border-radius: 7px; cursor: pointer;
+      box-shadow: 0 1px 0 rgba(255,255,255,0.15) inset, 0 4px 14px var(--accent-glow);
+      transition: transform 0.06s, box-shadow 0.15s, opacity 0.15s;
     }
-    button:disabled { opacity: 0.4; cursor: not-allowed; }
-    button.secondary { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+    button:hover { box-shadow: 0 1px 0 rgba(255,255,255,0.25) inset, 0 6px 18px var(--accent-glow); }
+    button:active { transform: translateY(1px); }
+    button:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
+    button.secondary {
+      background: transparent; color: var(--muted);
+      border: 1px solid var(--border); box-shadow: none;
+    }
+    button.secondary:hover { color: var(--fg); border-color: var(--border-hi); }
     .status { margin-top: 18px; padding: 14px; border-radius: 6px;
               background: rgba(255,255,255,0.03); border: 1px solid var(--border);
               display: none; }
@@ -2108,15 +2160,29 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
                      text-transform: uppercase; letter-spacing: 0.5px;
                      margin-bottom: 6px; }
     .progress {
-      height: 6px; background: var(--border); border-radius: 3px;
-      overflow: hidden; margin-top: 10px;
+      height: 6px; background: rgba(255,255,255,0.04);
+      border-radius: 999px; overflow: hidden; margin-top: 12px;
+      border: 1px solid var(--border);
     }
     .progress-bar {
-      height: 100%; background: var(--accent); width: 0%;
-      transition: width 0.3s; border-radius: 3px;
+      height: 100%; width: 0%;
+      background: linear-gradient(90deg, var(--accent), var(--accent-hi));
+      transition: width 0.3s; border-radius: 999px;
+      box-shadow: 0 0 18px var(--accent-glow);
+      animation: shimmer 2s ease-in-out infinite;
     }
-    .progress-bar.error { background: var(--error); }
-    .progress-bar.done { background: var(--keep); }
+    @keyframes shimmer {
+      0%, 100% { box-shadow: 0 0 12px var(--accent-glow); }
+      50%      { box-shadow: 0 0 24px var(--accent-glow); }
+    }
+    .progress-bar.error {
+      background: linear-gradient(90deg, #dc2626, var(--error));
+      animation: none;
+    }
+    .progress-bar.done {
+      background: linear-gradient(90deg, #10b981, var(--keep));
+      animation: none;
+    }
     a.results-link {
       display: inline-block; margin-top: 12px;
       color: var(--accent); text-decoration: none;
@@ -2202,9 +2268,12 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
 <body>
   <h1>PixCull</h1>
   <div class="subtitle">
-    自动判断 <span style="color:var(--keep)">●keep</span>
-    / <span style="color:var(--maybe)">●maybe</span>
-    / <span style="color:var(--cull)">●cull</span>,并给出场景与各维度评分。
+    AI 摄影分拣 · 6 轴 rubric · 风格感知评分<br>
+    <span style="display:inline-flex;gap:6px;margin-top:8px;flex-wrap:wrap;justify-content:center">
+      <span class="pill k">● keep</span>
+      <span class="pill m">● maybe</span>
+      <span class="pill c">● cull</span>
+    </span>
   </div>
 
   <div class="card">
@@ -2618,31 +2687,44 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
   <title>PixCull — 分析结果</title>
   <style>
     :root {
-      --bg: #111418;
-      --bg-card: #1a1e24;
-      --bg-card-hi: #232830;
-      --fg: #e5e7eb;
+      --bg: #0b0d10;
+      --bg-card: #14171c;
+      --bg-card-hi: #1a1e25;
+      --fg: #e9ecf2;
       --muted: #8892a0;
-      --border: #2a2f38;
-      --keep: #2ea84a;
-      --maybe: #d9a30c;
-      --cull: #d95050;
+      --border: #232830;
+      --border-hi: #2f3742;
+      --keep: #34d399;
+      --maybe: #fbbf24;
+      --cull: #ef6363;
+      --accent: #3b82f6;
+      --accent-glow: rgba(59,130,246,0.18);
     }
     * { box-sizing: border-box; }
     body {
       margin: 0; background: var(--bg); color: var(--fg);
-      font: 13px/1.45 -apple-system, "PingFang SC", "Helvetica Neue", sans-serif;
+      font: 13px/1.5 -apple-system, "PingFang SC", "Helvetica Neue",
+            "Microsoft Yahei", sans-serif;
+      letter-spacing: 0.01em;
     }
     header {
       position: sticky; top: 0; z-index: 5;
-      background: rgba(17, 20, 24, 0.92);
-      backdrop-filter: blur(8px);
+      background: rgba(11, 13, 16, 0.85);
+      backdrop-filter: blur(14px) saturate(180%);
+      -webkit-backdrop-filter: blur(14px) saturate(180%);
       border-bottom: 1px solid var(--border);
-      padding: 14px 20px 12px;
+      padding: 16px 24px 14px;
     }
-    h1 { font-size: 15px; margin: 0 0 8px; font-weight: 600; }
-    h1 a { color: var(--muted); text-decoration: none; font-weight: 400; margin-left: 12px; }
-    h1 a:hover { color: var(--fg); }
+    h1 {
+      font-size: 16px; margin: 0 0 10px; font-weight: 700;
+      letter-spacing: -0.01em;
+      background: linear-gradient(180deg, #ffffff, #c8d0db);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    h1 a { color: var(--muted); text-decoration: none; font-weight: 400; margin-left: 12px; font-size: 12px;
+           -webkit-text-fill-color: var(--muted); }
+    h1 a:hover { color: var(--fg); -webkit-text-fill-color: var(--fg); }
     .stats { display: flex; gap: 18px; color: var(--muted); font-size: 12px; flex-wrap: wrap; }
     .stats b { color: var(--fg); font-weight: 600; }
     .stats .keep b { color: var(--keep); }
@@ -2674,16 +2756,26 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
     }
     .card {
       background: var(--bg-card); border: 1px solid var(--border);
-      border-radius: 6px; overflow: hidden;
+      border-radius: 10px; overflow: hidden;
       display: flex; flex-direction: column;
+      transition: transform 0.18s, box-shadow 0.18s, border-color 0.18s;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    }
+    .card:hover {
+      transform: translateY(-2px);
+      border-color: var(--border-hi);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.04);
     }
     .card.keep { border-left: 3px solid var(--keep); }
     .card.maybe { border-left: 3px solid var(--maybe); }
-    .card.cull { border-left: 3px solid var(--cull); opacity: 0.75; }
+    .card.cull { border-left: 3px solid var(--cull); opacity: 0.65; }
+    .card.cull:hover { opacity: 1; }
     .card .thumb {
       width: 100%; aspect-ratio: 4/3; object-fit: cover;
       background: #000; cursor: zoom-in;
+      transition: filter 0.18s;
     }
+    .card:hover .thumb { filter: brightness(1.04); }
     .card .body { padding: 8px 10px 10px; }
     .row1 { display: flex; align-items: baseline; gap: 6px; }
     .row1 .fn {

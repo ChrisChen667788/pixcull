@@ -267,6 +267,65 @@ def _figure_ground_contrast(luma: np.ndarray, mask: np.ndarray) -> float:
     return float(np.clip(gap / 0.30, 0.0, 1.0))
 
 
+# V8.0: style-detection inputs --------------------------------------------
+
+def _mono_channel_delta(arr: np.ndarray) -> float:
+    """How chromatic is this image? 0.0 = perfect grayscale, 0.5 = vivid.
+
+    Returns mean per-pixel (max(R,G,B) - min(R,G,B)) / 255. < 0.03 is
+    a reliable B&W indicator (covers split-toned and warm-tinted prints
+    too — the chroma is global, not pixel-level).
+    """
+    if arr.ndim < 3 or arr.shape[-1] < 3:
+        return 0.0  # already grayscale
+    rgb = arr[..., :3].astype(np.float32) / 255.0
+    spread = rgb.max(axis=-1) - rgb.min(axis=-1)
+    return float(spread.mean())
+
+
+def _long_exposure_score(luma: np.ndarray) -> float:
+    """Heuristic 0..1 score: how likely is this a long-exposure shot?
+
+    Idea: long-exposure images have STRONGLY DIRECTIONAL motion blur
+    (water silk, light trails) coexisting with sharp regions. We
+    measure that by:
+      1) Compute Sobel gradients
+      2) Histogram of gradient angles in regions of low magnitude
+         (the "blurred" parts) — if directional, has a tight peak
+      3) Existence of high-laplacian patches (sharp anchors) is a
+         prerequisite to distinguish from "everything blurry" hand-
+         shake shots
+    Cheap to compute; ~5 ms per image at 1024px.
+    """
+    from scipy.ndimage import sobel
+
+    luma_f = luma.astype(np.float32)
+    gx = sobel(luma_f, axis=1)
+    gy = sobel(luma_f, axis=0)
+    mag = np.sqrt(gx * gx + gy * gy)
+    if mag.size == 0:
+        return 0.0
+    # Sharp-anchor evidence: at least 2% of pixels with strong edges
+    sharp_frac = float((mag > 60).mean())
+    if sharp_frac < 0.02:
+        return 0.0  # uniformly blurry → not intentional long exposure
+
+    # Directional blur evidence: among low-magnitude regions
+    # (mag < 20), what fraction of pixels has gradient angle in a
+    # narrow band? Concentrated band = directional smear.
+    soft = mag < 20
+    if soft.sum() < 100:
+        return 0.0
+    angles = np.degrees(np.arctan2(gy[soft], gx[soft])) % 180.0
+    # 18-bin histogram, 10° per bin
+    hist, _ = np.histogram(angles, bins=18, range=(0, 180))
+    hist = hist.astype(np.float32) / max(hist.sum(), 1)
+    peak = float(hist.max())
+    # peak ≥ 0.18 means > 3x uniform expectation of 1/18 ≈ 0.055
+    directional = max(0.0, (peak - 0.10) / 0.20)  # → [0, 1]
+    return float(np.clip(sharp_frac * 5.0 * directional, 0.0, 1.0))
+
+
 # ---------------------------------------------------------------------------
 # Detector class
 # ---------------------------------------------------------------------------
@@ -337,5 +396,12 @@ class CanonDetector(Detector):
         result.metrics["canon_figure_ground"] = _figure_ground_contrast(
             luma, mask
         )
+
+        # V8.0: style-mode signals consumed by pixcull.scoring.style_modes
+        result.metrics["canon_mono_channel_delta"] = _mono_channel_delta(arr)
+        try:
+            result.metrics["canon_long_exposure_score"] = _long_exposure_score(luma)
+        except ImportError:
+            result.metrics["canon_long_exposure_score"] = float("nan")
 
         return result

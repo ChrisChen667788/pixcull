@@ -265,8 +265,20 @@ def run_pipeline(
                     if progress_cb is not None:
                         progress_cb(i + 1, total,
                                     f"VLM {i+1}/{total}: {img_path.name}")
-                    verdict = judge.score(img_path,
-                                          scene=str(row.get("scene") or ""))
+                    # V8.0: detect style modes from rule outputs, build a
+                    # style-aware prompt section, pass to the VLM so it
+                    # grades a B&W / low-key / long-exposure photo
+                    # against THAT style's canon, not the generic one.
+                    from pixcull.scoring.style_modes import (
+                        detect_style_modes, render_style_section_zh,
+                    )
+                    style_profile = detect_style_modes(row.to_dict())
+                    style_section = render_style_section_zh(style_profile)
+                    verdict = judge.score(
+                        img_path,
+                        scene=str(row.get("scene") or ""),
+                        style_section=style_section,
+                    )
                     vf.write(_json.dumps(verdict.to_dict(),
                                          ensure_ascii=False) + "\n")
                     vlm_verdicts_by_fn[img_path.name] = verdict
