@@ -241,17 +241,27 @@ def decompose_row(row: dict[str, Any]) -> RubricScore:
     auto-pre-fills from human gold labels.
     """
     from pixcull.scoring.style_modes import detect_style_modes
+    from pixcull.scoring.genre_strategies import get_strategy
     rs = RubricScore.empty(row.get("filename", ""))
     rs.source = "auto"
 
     style = detect_style_modes(row)
+    # V8.2: per-genre strategy. Style overrides take priority over
+    # genre overrides where they conflict (style is more specific
+    # than genre — a B&W landscape uses mono's overrides over
+    # landscape's defaults).
+    scene_name = str(row.get("scene", "") or "")
+    genre = get_strategy(scene_name)
+    merged_overrides: dict[str, str] = {}
+    merged_overrides.update(genre.check_overrides)
+    merged_overrides.update(style.overrides)        # style wins ties
 
     for axis in RUBRIC_AXES:
         weighted_sum = 0.0
         weight_total = 0.0
         failed: list[str] = []
         for check_key, w in axis.checklist:
-            override = style.overrides.get(check_key)
+            override = merged_overrides.get(check_key)
             if override == "suppress":
                 continue                  # skip this check entirely
             result = _check_eval(check_key, row)
@@ -267,7 +277,12 @@ def decompose_row(row: dict[str, Any]) -> RubricScore:
                 failed.append(check_key)
         if weight_total > 0:
             pct = weighted_sum / weight_total
-            stars = round(1.0 + 4.0 * pct, 2)
+            base_stars = 1.0 + 4.0 * pct
+            # V8.2: per-genre axis emphasis. Multiplied AFTER the base
+            # 1-5 mapping; clipped to [1, 5] to stay in-range. A
+            # 1.3× emphasis on a 4.0 → 5.0 (capped); 0.6× on 4.0 → 2.4.
+            emphasis = genre.emphasis_for(axis.name)
+            stars = max(1.0, min(5.0, round(base_stars * emphasis, 2)))
         else:
             pct = None
             stars = None
@@ -278,12 +293,20 @@ def decompose_row(row: dict[str, Any]) -> RubricScore:
             source="auto",
         )
 
-    # Stash detected styles into the overall rationale prefix so
-    # downstream UI surfaces them. Doesn't change scoring beyond
-    # the per-check overrides above.
+    # Stash detected styles + genre into the overall rationale prefix
+    # so downstream UI surfaces them. Doesn't change scoring beyond
+    # the overrides + emphasis above.
+    prefix_bits = []
     if style.modes:
+        prefix_bits.append(" · ".join(sorted(style.modes)))
+    if scene_name and scene_name in {
+        "macro", "astro", "abstract", "documentary", "fashion",
+        "architecture", "sports", "food",
+    }:
+        prefix_bits.append(scene_name)
+    if prefix_bits:
         rs.overall_rationale = (
-            "[" + " · ".join(sorted(style.modes)) + "] "
+            "[" + " | ".join(prefix_bits) + "] "
         ) + (rs.overall_rationale or "")
 
     # Overall label — borrow from the pipeline's own decision (already

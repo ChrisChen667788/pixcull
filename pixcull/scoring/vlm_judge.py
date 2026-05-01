@@ -147,13 +147,20 @@ def build_prompt(scene: str | None = None,
     style_block = (
         "\n" + style_section + "\n" if style_section else ""
     )
+    # V8.2: per-genre standards
+    genre_block = ""
+    if scene:
+        from pixcull.scoring.genre_strategies import render_genre_section_zh
+        gs = render_genre_section_zh(scene)
+        if gs:
+            genre_block = "\n" + gs + "\n"
     # Schema with placeholder values — model has to fill them based on
     # what it actually sees in the image. Numeric placeholders use
     # angle-bracket descriptors so a model that *does* parrot the
     # schema won't accidentally produce systematic bias.
     return f"""你是一位专业摄影编辑。看这张具体的照片,给出基于这张照片实际内容的判断。{scene_hint}
 
-{canon}{style_block}
+{canon}{genre_block}{style_block}
 每个维度独立打 1-5★ 并给一句话理由(必须基于你在图中看到的具体细节,引用上面的经典原则):
 
 {axes_lines}

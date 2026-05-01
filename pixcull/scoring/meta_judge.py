@@ -109,14 +109,20 @@ def build_meta_prompt(packet: dict[str, Any]) -> str:
       vlm_verdict: dict (full output of upstream VLM, may be None)
     """
     from pixcull.scoring.photography_canon import build_canon_section_zh
+    from pixcull.scoring.genre_strategies import render_genre_section_zh
     axes_lines = "\n".join(
         f'  - {a.name}: {_axis_brief(a.name)}'
         for a in RUBRIC_AXES
     )
     canon = build_canon_section_zh()
+    # V8.2: per-genre brief, derived from the packet's scene field
+    scene = packet.get("scene") or ""
+    genre_block = render_genre_section_zh(scene) if scene else ""
     return f"""你是资深摄影编辑,需要基于多个评分系统的结果给出最终判断。
 
 {canon}
+
+{genre_block}
 
 下方是同一张照片的所有可用信号(JSON):
 
