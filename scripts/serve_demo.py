@@ -239,7 +239,11 @@ def _analyze_in_background(
 # expects. Mirrors serve_review's row schema (subset) so the same CSS works.
 # ---------------------------------------------------------------------------
 def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
-    run = _get_run(run_id)
+    # V8.5: fall back to disk-reload if the run isn't in memory
+    # (e.g. server restarted, or the .app and dev server share runs
+    # via a symlink). Without this fallback /results/<run_id> is
+    # 404 even when scores.csv exists on disk.
+    run = _get_run(run_id) or _reload_run_from_disk(run_id)
     if run is None:
         return None
     output_dir = Path(run["output_dir"])
@@ -324,6 +328,17 @@ def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
             decision=str(r.get("decision", "") or ""),
             meta_inconsistencies=str(r.get("meta_inconsistencies", "") or ""),
         )
+        # V9.0: detected style modes for the UI tag chip
+        from pixcull.scoring.style_modes import detect_style_modes
+        sp = detect_style_modes(r.to_dict())
+        # cluster_id from duplicate detector — used by V9.0 grouping
+        cluster_id = r.get("cluster_id")
+        try:
+            cluster_id = int(cluster_id) if cluster_id is not None else None
+        except (TypeError, ValueError):
+            cluster_id = None
+        # take time of capture for date sorting
+        dt_str = str(r.get("datetime", "") or "")
         rows.append({
             "filename": fn,
             "scene": str(r.get("scene", "") or ""),
@@ -336,6 +351,10 @@ def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
             "flags": str(r.get("flags", "") or ""),
             "reason": str(r.get("reason", "") or ""),
             "advice": advice,
+            # V9.0 sort/filter/group fields
+            "cluster_id": cluster_id,
+            "datetime": dt_str,
+            "style_modes": sorted(sp.modes),
             "rescorer_pred": (
                 str(r.get("rescorer_pred"))
                 if "rescorer_pred" in df.columns
@@ -2845,6 +2864,116 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
       font-size: 11px; user-select: none;
     }
     .filters .pill.active { color: var(--fg); border-color: var(--fg); background: var(--bg-card-hi); }
+    /* V9.0 sort + filter UI */
+    .filters .filter-divider {
+      width: 1px; align-self: stretch; background: var(--border);
+      margin: 2px 4px;
+    }
+    .filters .filter-group {
+      display: flex; gap: 4px; flex-wrap: wrap; align-items: center;
+    }
+    .filters .filter-group .pill { font-size: 10.5px; padding: 3px 8px; }
+    .filters .filter-group .pill .x {
+      margin-left: 4px; opacity: 0.5; font-size: 11px;
+    }
+    .filters .sort-select {
+      background: var(--bg-card); color: var(--fg);
+      border: 1px solid var(--border); border-radius: 4px;
+      padding: 4px 8px; font-size: 11px; font-family: inherit;
+      cursor: pointer; outline: none;
+    }
+    .filters .sort-select:hover { border-color: var(--border-hi); }
+    /* V9.0 cluster grouping */
+    .grid { row-gap: 12px; }
+    .cluster-divider {
+      grid-column: 1 / -1; margin: 14px 4px 4px;
+      display: flex; align-items: center; gap: 10px;
+      color: var(--muted); font-size: 11px;
+      letter-spacing: 0.05em; text-transform: uppercase;
+    }
+    .cluster-divider::before, .cluster-divider::after {
+      content: ""; flex: 1; height: 1px;
+      background: linear-gradient(90deg, transparent, var(--border), transparent);
+    }
+    .cluster-divider .compare-btn {
+      cursor: pointer; padding: 2px 8px; border-radius: 4px;
+      background: rgba(59,130,246,0.15); color: #4b9aff;
+      border: 1px solid rgba(59,130,246,0.3);
+      font-size: 10px; text-transform: none; letter-spacing: 0;
+      user-select: none;
+    }
+    .cluster-divider .compare-btn:hover { background: rgba(59,130,246,0.25); }
+    /* V9.2 cluster compare modal */
+    .cmp-modal {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.92);
+      display: none; flex-direction: column; z-index: 12;
+      backdrop-filter: blur(8px);
+    }
+    .cmp-modal.show { display: flex; }
+    .cmp-header {
+      padding: 14px 24px; display: flex; gap: 16px; align-items: center;
+      border-bottom: 1px solid var(--border);
+      background: rgba(0,0,0,0.5);
+    }
+    .cmp-header h3 { margin: 0; font-size: 15px; font-weight: 600; }
+    .cmp-header .muted { color: var(--muted); font-size: 12px; }
+    .cmp-header .close {
+      margin-left: auto; cursor: pointer; padding: 6px 12px;
+      border: 1px solid var(--border); border-radius: 5px;
+      color: var(--muted);
+    }
+    .cmp-header .close:hover { color: var(--fg); border-color: var(--border-hi); }
+    .cmp-body {
+      flex: 1; overflow: auto;
+      display: grid; gap: 10px; padding: 14px;
+      grid-auto-flow: column; grid-auto-columns: minmax(280px, 1fr);
+      align-items: stretch;
+    }
+    .cmp-cell {
+      display: flex; flex-direction: column;
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 8px; overflow: hidden;
+    }
+    .cmp-cell.best { border: 2px solid var(--keep); }
+    .cmp-cell .img-wrap {
+      flex: 1; min-height: 280px;
+      display: flex; align-items: center; justify-content: center;
+      background: #000; cursor: zoom-in;
+    }
+    .cmp-cell .img-wrap img { max-width: 100%; max-height: 100%; object-fit: contain; }
+    .cmp-cell .meta {
+      padding: 10px 12px; font-size: 11px;
+      border-top: 1px solid var(--border);
+    }
+    .cmp-cell .meta .fn {
+      font-family: ui-monospace, monospace; font-size: 10.5px;
+      color: var(--muted); display: block; margin-bottom: 6px;
+      text-overflow: ellipsis; overflow: hidden; white-space: nowrap;
+    }
+    .cmp-cell .meta .stars {
+      display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px;
+      margin: 4px 0;
+    }
+    .cmp-cell .meta .stars .a {
+      background: rgba(255,255,255,0.04); padding: 2px 4px;
+      border-radius: 2px; text-align: center; font-size: 9.5px;
+    }
+    .cmp-cell .meta .pick-btn {
+      width: 100%; margin-top: 6px;
+      background: rgba(46,168,74,0.15); color: var(--keep);
+      border: 1px solid rgba(46,168,74,0.3);
+      padding: 5px; border-radius: 4px; font-size: 11px; cursor: pointer;
+    }
+    .cmp-cell.best .pick-btn {
+      background: var(--keep); color: white;
+      border-color: var(--keep);
+    }
+    /* V9.0 style chip in card */
+    .row1 .style-chip {
+      font-size: 9px; padding: 1px 5px; border-radius: 2px;
+      background: rgba(168, 85, 247, 0.18); color: #c4b5fd;
+      letter-spacing: 0.02em;
+    }
     .filters button.export-btn {
       padding: 4px 10px; border: 1px solid var(--border); border-radius: 4px;
       background: var(--bg-card); color: var(--fg); cursor: pointer;
@@ -2878,6 +3007,12 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
     .card.maybe { border-left: 3px solid var(--maybe); }
     .card.cull { border-left: 3px solid var(--cull); opacity: 0.65; }
     .card.cull:hover { opacity: 1; }
+    /* V9.1 keyboard focus ring */
+    .card.focused {
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
+      box-shadow: 0 0 0 4px var(--accent-glow), 0 8px 24px rgba(0,0,0,0.5);
+    }
     .card .thumb {
       width: 100%; aspect-ratio: 4/3; object-fit: cover;
       background: #000; cursor: zoom-in;
@@ -3015,15 +3150,43 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
       <span class="pill" data-d="keep">keep</span>
       <span class="pill" data-d="maybe">maybe</span>
       <span class="pill" data-d="cull">cull</span>
+
+      <!-- V9.0: scene + style filter chips populated dynamically from rows -->
+      <span class="filter-divider"></span>
+      <span class="filter-group" id="sceneFilters"></span>
+      <span class="filter-group" id="styleFilters"></span>
+
       <span style="flex:1"></span>
-      <button class="export-btn" id="annNextBtn" title="按 active learning 优先级标注 — 优先暴露规则与 rescorer 不一致、概率临界、聚类分裂的图">▸ 标注下一张 (active learning)</button>
-      <button class="export-btn" id="exportZipBtn" title="导出 XMP 评级到 zip 包(Lightroom / Capture One)">下载 XMP zip</button>
-      <button class="export-btn" id="exportAlongsideBtn" style="display:none" title="把 XMP sidecar 写到原图旁边(Lightroom 直接读到)">写到原图旁边</button>
+
+      <!-- V9.0: sort + group dropdowns -->
+      <select id="sortBy" class="sort-select" title="排序方式">
+        <option value="default">默认 (keep > maybe > cull)</option>
+        <option value="score_desc">总分高 → 低</option>
+        <option value="score_asc">总分低 → 高</option>
+        <option value="datetime_asc">拍摄时间(早→晚)</option>
+        <option value="datetime_desc">拍摄时间(晚→早)</option>
+        <option value="cluster">按连拍聚类</option>
+      </select>
+
+      <button class="export-btn" id="kbdHelpBtn" title="键盘快捷键 (?)" style="font-family:ui-monospace,monospace">?</button>
+      <button class="export-btn" id="annNextBtn" title="按 active learning 优先级标注 — 优先暴露规则与 rescorer 不一致、概率临界、聚类分裂的图">▸ 标注下一张</button>
+      <button class="export-btn" id="exportZipBtn" title="导出 XMP 评级到 zip 包(Lightroom / Capture One)">下载 XMP</button>
+      <button class="export-btn" id="exportAlongsideBtn" style="display:none" title="把 XMP sidecar 写到原图旁边">写到原图旁边</button>
       <span class="export-status" id="exportStatus"></span>
     </div>
   </header>
   <div class="grid" id="grid"></div>
   <div class="lightbox" id="lightbox"><img id="lbImg" alt=""></div>
+
+  <!-- V9.2 cluster compare modal -->
+  <div class="cmp-modal" id="cmpModal">
+    <div class="cmp-header">
+      <h3 id="cmpTitle">连拍组比较</h3>
+      <span class="muted" id="cmpMeta"></span>
+      <span class="close" id="cmpClose">关闭 (Esc)</span>
+    </div>
+    <div class="cmp-body" id="cmpBody"></div>
+  </div>
 
   <!-- V2.0 annotation modal: rubric form + active-learning queue -->
   <div class="ann-modal" id="annModal">
@@ -3079,11 +3242,102 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
   }
   statsEl.innerHTML = stats.join("");
 
+  // V9.0 — sort + scene filter + style filter + cluster grouping
+  // Active filter state. activeDecision is one of all/keep/maybe/cull.
+  // activeScenes is a Set of scene names; empty = no filter (all scenes).
+  // activeStyles is a Set of style mode names; empty = no filter.
+  const filterState = {
+    decision: "all",
+    scenes: new Set(),
+    styles: new Set(),
+    sort: "default",
+  };
+
+  // Build dynamic scene + style filter chips from data
+  function buildDynamicFilters() {
+    const sceneCounts = {};
+    const styleCounts = {};
+    rows.forEach(r => {
+      if (r.scene) sceneCounts[r.scene] = (sceneCounts[r.scene] || 0) + 1;
+      (r.style_modes || []).forEach(s => {
+        styleCounts[s] = (styleCounts[s] || 0) + 1;
+      });
+    });
+    const sceneEl = document.getElementById("sceneFilters");
+    sceneEl.innerHTML = Object.entries(sceneCounts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([s, n]) => `<span class="pill" data-scene="${s}">${s} <span style="opacity:0.5">${n}</span></span>`)
+      .join("");
+    const styleEl = document.getElementById("styleFilters");
+    styleEl.innerHTML = Object.entries(styleCounts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([s, n]) => `<span class="pill" data-style="${s}">${s} <span style="opacity:0.5">${n}</span></span>`)
+      .join("");
+    sceneEl.querySelectorAll(".pill").forEach(el => {
+      el.addEventListener("click", () => {
+        const s = el.dataset.scene;
+        if (filterState.scenes.has(s)) { filterState.scenes.delete(s); el.classList.remove("active"); }
+        else { filterState.scenes.add(s); el.classList.add("active"); }
+        render();
+      });
+    });
+    styleEl.querySelectorAll(".pill").forEach(el => {
+      el.addEventListener("click", () => {
+        const s = el.dataset.style;
+        if (filterState.styles.has(s)) { filterState.styles.delete(s); el.classList.remove("active"); }
+        else { filterState.styles.add(s); el.classList.add("active"); }
+        render();
+      });
+    });
+  }
+  buildDynamicFilters();
+
+  // Sort key function
+  function sortRows(arr) {
+    const order = { keep: 0, maybe: 1, cull: 2, "": 3 };
+    const a = [...arr];
+    const s = filterState.sort;
+    if (s === "score_desc")   a.sort((x, y) => (y.score_final ?? -1) - (x.score_final ?? -1));
+    else if (s === "score_asc")  a.sort((x, y) => (x.score_final ?? 999) - (y.score_final ?? 999));
+    else if (s === "datetime_asc")  a.sort((x, y) => (x.datetime || "").localeCompare(y.datetime || ""));
+    else if (s === "datetime_desc") a.sort((x, y) => (y.datetime || "").localeCompare(x.datetime || ""));
+    else if (s === "cluster") {
+      a.sort((x, y) => {
+        const cx = x.cluster_id ?? 1e9, cy = y.cluster_id ?? 1e9;
+        if (cx !== cy) return cx - cy;
+        // within cluster: best first (descending final score)
+        return (y.score_final ?? 0) - (x.score_final ?? 0);
+      });
+    } else {
+      // default: keep > maybe > cull, then descending score
+      a.sort((x, y) => {
+        const dx = order[x.decision] ?? 4, dy = order[y.decision] ?? 4;
+        if (dx !== dy) return dx - dy;
+        return (y.score_final ?? 0) - (x.score_final ?? 0);
+      });
+    }
+    return a;
+  }
+
   // Grid
   const grid = document.getElementById("grid");
-  function render(filter) {
-    const filtered = filter === "all" ? rows : rows.filter(r => r.decision === filter);
-    grid.innerHTML = filtered.map(r => {
+  function render() {
+    let filtered = rows;
+    if (filterState.decision !== "all") {
+      filtered = filtered.filter(r => r.decision === filterState.decision);
+    }
+    if (filterState.scenes.size > 0) {
+      filtered = filtered.filter(r => filterState.scenes.has(r.scene));
+    }
+    if (filterState.styles.size > 0) {
+      filtered = filtered.filter(r =>
+        (r.style_modes || []).some(s => filterState.styles.has(s))
+      );
+    }
+    const sorted = sortRows(filtered);
+
+    // Card renderer (extracted)
+    function renderCard(r) {
       const thumb = `/thumb/${run_id}/${encodeURIComponent(r.filename)}`;
       const full = `/full/${run_id}/${encodeURIComponent(r.filename)}`;
       const dim = (k, v) => v == null
@@ -3125,6 +3379,10 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
         return `<div class="ax ${cls}" title="${name}: ${stars.toFixed(1)}★${r.rubric_human_labeled?' (human)':''}"><span class="k">${axisAbbr[name]}</span><span class="v">${stars.toFixed(1)}</span></div>`;
       };
       const cardCls = r.decision + (r.rubric_human_labeled ? " has-human" : "");
+      // V9.0 style chip
+      const styleChips = (r.style_modes || []).map(
+        s => `<span class="style-chip" title="检测到风格: ${s}">${s}</span>`
+      ).join("");
       return `
         <div class="card ${cardCls}" data-fn="${r.filename}">
           <img class="thumb" src="${thumb}" data-full="${full}" loading="lazy" alt="${r.filename}">
@@ -3135,6 +3393,7 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
               <span class="fn" title="${r.filename}">${r.filename}</span>
               ${rescorerBadge}
               ${metaBadge}
+              ${styleChips}
             </div>
             <div class="row2">
               <span class="scene">${r.scene || "?"}</span>
@@ -3150,16 +3409,53 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
           </div>
         </div>
       `;
-    }).join("") || `<div style="color:var(--muted);padding:20px">没有符合的图片</div>`;
-  }
-  render("all");
+    }
+    // End of renderCard
 
-  // Filter pills
-  document.querySelectorAll("#filters .pill").forEach(el => {
+    // V9.0: when sorting by cluster, insert visual dividers for each
+    // multi-image cluster so the user sees burst groupings explicitly.
+    let html = "";
+    if (filterState.sort === "cluster") {
+      let lastCluster = "__none__";
+      let clusterMembers = [];
+      // Group rows by cluster_id
+      const groups = new Map();
+      sorted.forEach(r => {
+        const c = r.cluster_id == null ? `solo-${r.filename}` : `c${r.cluster_id}`;
+        if (!groups.has(c)) groups.set(c, []);
+        groups.get(c).push(r);
+      });
+      // Render: only show divider for clusters with >1 member
+      groups.forEach((members, key) => {
+        if (members.length > 1) {
+          const best = members[0];
+          html += `<div class="cluster-divider">
+            <span>连拍组 (${members.length} 张) · 最佳: ${best.filename}</span>
+            <span class="compare-btn" data-cluster="${key}">⊞ 并排比较</span>
+          </div>`;
+        }
+        members.forEach(r => { html += renderCard(r); });
+      });
+    } else {
+      html = sorted.map(renderCard).join("");
+    }
+    grid.innerHTML = html || `<div style="color:var(--muted);padding:20px">没有符合的图片</div>`;
+  }
+  render();
+
+  // V9.0 sort dropdown
+  document.getElementById("sortBy").addEventListener("change", e => {
+    filterState.sort = e.target.value;
+    render();
+  });
+
+  // Decision filter pills (the original keep/maybe/cull/all set)
+  document.querySelectorAll("#filters > .pill").forEach(el => {
     el.addEventListener("click", () => {
-      document.querySelectorAll("#filters .pill").forEach(x => x.classList.remove("active"));
+      document.querySelectorAll("#filters > .pill").forEach(x => x.classList.remove("active"));
       el.classList.add("active");
-      render(el.dataset.d);
+      filterState.decision = el.dataset.d;
+      render();
     });
   });
 
@@ -3174,9 +3470,135 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
     }
   });
   lb.addEventListener("click", () => lb.classList.remove("show"));
+
+  // ==================================================================
+  // V9.1 — keyboard navigation + quick labeling
+  //   j / k / ←→        prev / next card
+  //   1 / 2 / 3        label current as keep/maybe/cull (saves human anno)
+  //   space / enter    open lightbox (zoom)
+  //   ?                show shortcut cheat sheet
+  //   Esc              close any modal
+  // Active card is the one that has class .focused (visually outlined).
+  // ==================================================================
+  let focusedFn = null;
+  function visibleCards() {
+    return Array.from(grid.querySelectorAll('.card[data-fn]'));
+  }
+  function focusCard(fn, scrollInto = true) {
+    visibleCards().forEach(c => c.classList.remove('focused'));
+    const t = grid.querySelector(`.card[data-fn="${CSS.escape(fn)}"]`);
+    if (t) {
+      t.classList.add('focused');
+      if (scrollInto) t.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      focusedFn = fn;
+    }
+  }
+  function moveFocus(delta) {
+    const cards = visibleCards();
+    if (!cards.length) return;
+    const idx = cards.findIndex(c => c.dataset.fn === focusedFn);
+    const next = (idx === -1) ? 0 : Math.max(0, Math.min(cards.length - 1, idx + delta));
+    focusCard(cards[next].dataset.fn);
+  }
+  // Save a quick label for the focused card by POSTing /annotation
+  // with overall_label only — same endpoint the modal uses.
+  async function quickLabel(label) {
+    if (!focusedFn) return;
+    try {
+      await fetch(`/annotation/${run_id}/${encodeURIComponent(focusedFn)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          axes: {},  // no per-axis stars
+          overall_label: label,
+          overall_rationale: `quick-labeled ${label} via keyboard`,
+        }),
+      });
+      // Mirror to local rows so re-render shows the new label.
+      const r = rows.find(x => x.filename === focusedFn);
+      if (r) {
+        r.rubric_human_labeled = true;
+        r.decision = label;
+      }
+      // Quick visual feedback: flash a label badge near the card.
+      const card = grid.querySelector(`.card[data-fn="${CSS.escape(focusedFn)}"]`);
+      if (card) {
+        card.classList.remove('keep','maybe','cull');
+        card.classList.add(label, 'has-human');
+      }
+      summary.n_human_labeled = (summary.n_human_labeled || 0) + 1;
+    } catch (e) { /* ignore quick errors */ }
+  }
+  // Help cheat-sheet
+  function showShortcuts() {
+    alert([
+      "PixCull · 键盘快捷键",
+      "",
+      "  j / →       下一张",
+      "  k / ←       上一张",
+      "  1           标 keep",
+      "  2           标 maybe",
+      "  3           标 cull",
+      "  space       放大查看",
+      "  enter       打开标注 modal",
+      "  Esc         关闭",
+      "  ?           本帮助",
+    ].join("\n"));
+  }
+
   document.addEventListener("keydown", e => {
-    if (e.key === "Escape") lb.classList.remove("show");
+    // Ignore when typing in inputs / textareas
+    const tag = (e.target && e.target.tagName) || "";
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    // Modal-aware: Esc closes any open modal first
+    if (e.key === "Escape") {
+      if (lb.classList.contains("show")) { lb.classList.remove("show"); return; }
+      const am = document.getElementById("annModal");
+      if (am && am.classList.contains("show")) { am.classList.remove("show"); return; }
+      const bm = document.getElementById("browserModal");
+      if (bm && bm.style.display !== "none") { bm.style.display = "none"; return; }
+      return;
+    }
+    // Don't act when an annotation modal is open — let modal own input
+    const am = document.getElementById("annModal");
+    if (am && am.classList.contains("show")) return;
+
+    if (e.key === "j" || e.key === "ArrowRight") { e.preventDefault(); moveFocus(+1); }
+    else if (e.key === "k" || e.key === "ArrowLeft") { e.preventDefault(); moveFocus(-1); }
+    else if (e.key === "1") { e.preventDefault(); quickLabel("keep"); }
+    else if (e.key === "2") { e.preventDefault(); quickLabel("maybe"); }
+    else if (e.key === "3") { e.preventDefault(); quickLabel("cull"); }
+    else if (e.key === " " || e.key === "Spacebar") {
+      // toggle lightbox on focused card
+      e.preventDefault();
+      if (lb.classList.contains("show")) {
+        lb.classList.remove("show");
+      } else if (focusedFn) {
+        lbImg.src = `/full/${run_id}/${encodeURIComponent(focusedFn)}`;
+        lb.classList.add("show");
+      }
+    }
+    else if (e.key === "Enter") {
+      e.preventDefault();
+      if (focusedFn && typeof openAnnotation === "function") {
+        openAnnotation(focusedFn);
+      }
+    }
+    else if (e.key === "?") {
+      e.preventDefault();
+      showShortcuts();
+    }
   });
+
+  // Auto-focus the first visible card after each render
+  const _origRender = render;
+  render = function () {
+    _origRender();
+    const cards = visibleCards();
+    if (cards.length) focusCard(cards[0].dataset.fn, false);
+  };
+  render();
 
   // ==================================================================
   // V2.0 rubric annotation flow.
@@ -3397,6 +3819,110 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
     if (e.target === annModal) annModal.classList.remove("show");
   });
   document.getElementById("annNextBtn").addEventListener("click", () => openNextToLabel());
+  document.getElementById("kbdHelpBtn").addEventListener("click", () => showShortcuts());
+
+  // ==================================================================
+  // V9.2 cluster compare modal — open via "⊞ 并排比较" on dividers
+  // ==================================================================
+  const cmpModal = document.getElementById("cmpModal");
+  const cmpTitle = document.getElementById("cmpTitle");
+  const cmpMeta = document.getElementById("cmpMeta");
+  const cmpBody = document.getElementById("cmpBody");
+  const cmpClose = document.getElementById("cmpClose");
+
+  function openCompare(clusterKey) {
+    // Pull all rows in this cluster
+    const members = rows.filter(r => {
+      const ck = r.cluster_id == null ? `solo-${r.filename}` : `c${r.cluster_id}`;
+      return ck === clusterKey;
+    });
+    if (members.length < 2) return;
+    // Sort by score_final descending so best is first / left-most
+    members.sort((a, b) => (b.score_final ?? 0) - (a.score_final ?? 0));
+    const best = members[0];
+    cmpTitle.textContent = `连拍组 ${clusterKey} (${members.length} 张)`;
+    cmpMeta.textContent = `按 score_final 降序;左为最佳。空格键查看大图。`;
+
+    const axisAbbr = {technical:"技", subject:"主", composition:"构",
+                       light:"光", moment:"瞬", aesthetic:"美"};
+    cmpBody.innerHTML = members.map(r => {
+      const isBest = (r === best);
+      const stars = ["technical","subject","composition","light","moment","aesthetic"].map(name => {
+        const s = r.rubric_stars && r.rubric_stars[name];
+        return `<div class="a">${axisAbbr[name]} ${s == null ? "--" : s.toFixed(1)}</div>`;
+      }).join("");
+      const dec = r.decision || "";
+      return `
+        <div class="cmp-cell ${isBest?'best':''}" data-fn="${r.filename}">
+          <div class="img-wrap" data-full="/full/${run_id}/${encodeURIComponent(r.filename)}">
+            <img src="/thumb/${run_id}/${encodeURIComponent(r.filename)}" alt="${r.filename}">
+          </div>
+          <div class="meta">
+            <span class="fn" title="${r.filename}">${r.filename}</span>
+            <div>
+              <span class="badge ${dec}" style="font-size:9px;padding:1px 5px">${dec || '?'}</span>
+              <span style="margin-left:6px">final ${r.score_final == null ? "--" : r.score_final.toFixed(2)}</span>
+            </div>
+            <div class="stars">${stars}</div>
+            <button class="pick-btn" data-fn="${r.filename}">${isBest?'✓ 已选最佳':'选这张'}</button>
+          </div>
+        </div>
+      `;
+    }).join("");
+    cmpModal.classList.add("show");
+
+    // Click to zoom inside cmp
+    cmpBody.querySelectorAll(".img-wrap").forEach(el => {
+      el.addEventListener("click", () => {
+        lbImg.src = el.dataset.full;
+        lb.classList.add("show");
+      });
+    });
+    // Pick handler — keep this one, cull the others
+    cmpBody.querySelectorAll(".pick-btn").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const pickFn = btn.dataset.fn;
+        const ok = confirm(`选 ${pickFn} 为最佳,其余 ${members.length - 1} 张标 cull?`);
+        if (!ok) return;
+        for (const m of members) {
+          const lbl = (m.filename === pickFn) ? "keep" : "cull";
+          try {
+            await fetch(`/annotation/${run_id}/${encodeURIComponent(m.filename)}`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                axes: {},
+                overall_label: lbl,
+                overall_rationale: `cluster compare: ${lbl === 'keep' ? 'picked as best' : 'rejected sibling'}`,
+              }),
+            });
+            // Mirror locally
+            const local = rows.find(x => x.filename === m.filename);
+            if (local) {
+              local.rubric_human_labeled = true;
+              local.decision = lbl;
+            }
+          } catch (e) { /* ignore */ }
+        }
+        summary.n_human_labeled = (summary.n_human_labeled || 0) + members.length;
+        cmpModal.classList.remove("show");
+        render();
+      });
+    });
+  }
+
+  // Wire compare buttons (inside cluster dividers — they're rebuilt
+  // on each render(), so use event delegation on the grid).
+  grid.addEventListener("click", e => {
+    const btn = e.target.closest(".compare-btn");
+    if (btn && btn.dataset.cluster) {
+      openCompare(btn.dataset.cluster);
+    }
+  });
+  cmpClose.addEventListener("click", () => cmpModal.classList.remove("show"));
+  cmpModal.addEventListener("click", e => {
+    if (e.target === cmpModal) cmpModal.classList.remove("show");
+  });
 
   // XMP export — POST /export/<run_id>.
   // Two buttons:
