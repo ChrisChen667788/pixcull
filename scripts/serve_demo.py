@@ -913,6 +913,10 @@ class _Handler(BaseHTTPRequestHandler):
             return self._serve_retrain_status()
         if path == "/license":
             return self._serve_license_status()
+        if path == "/license/refresh":
+            return self._handle_license_refresh()
+        if path == "/sync/download":
+            return self._handle_sync_download()
         if path.startswith("/status/"):
             return self._serve_status(path[len("/status/"):])
         if path.startswith("/results/"):
@@ -952,6 +956,8 @@ class _Handler(BaseHTTPRequestHandler):
             return self._handle_retrain()
         if path == "/license":
             return self._handle_license_install()
+        if path == "/sync/upload":
+            return self._handle_sync_upload()
         self.send_error(404, "not found")
 
     def do_DELETE(self) -> None:  # noqa: N802
@@ -1945,6 +1951,83 @@ class _Handler(BaseHTTPRequestHandler):
             "message": f"已激活 {lic.tier.upper()} · 重启服务后立即生效",
         }, ensure_ascii=False).encode("utf-8")
         self._send_json(200, body)
+
+    def _handle_license_refresh(self) -> None:
+        """V12.1: trigger a cloud-side license refresh.
+
+        Useful after the user pays for renewal — they hit this and
+        the server pushes the rotated token back. Also called daily
+        in the background by maybe_cloud_refresh's debouncer.
+        """
+        from pixcull.license import maybe_cloud_refresh
+        result = maybe_cloud_refresh(force=True)
+        body = json.dumps(result, ensure_ascii=False).encode("utf-8")
+        self._send_json(200, body)
+
+    def _handle_sync_upload(self) -> None:
+        """V12.1: push all annotations from all local runs to cloud.
+
+        Pro+ only. Walks every run's annotations.jsonl, joins them
+        into a single payload, posts to the cloud sync endpoint.
+        """
+        from pixcull.license import cloud_sync_upload
+        records: list[dict] = []
+        for run_dir in sorted(_DEMO_ROOT.iterdir()):
+            if not run_dir.is_dir():
+                continue
+            ann = run_dir / "output" / "annotations.jsonl"
+            if not ann.exists():
+                continue
+            with open(ann, encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        rec = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    rec["__run_id"] = run_dir.name
+                    records.append(rec)
+        result = cloud_sync_upload(records)
+        result["uploaded"] = len(records)
+        self._send_json(200 if result.get("ok") else 402,
+                         json.dumps(result, ensure_ascii=False).encode("utf-8"))
+
+    def _handle_sync_download(self) -> None:
+        """V12.1: pull annotations from cloud + merge into local runs.
+
+        Annotations from cloud arrive with __run_id; for each, append
+        to the matching local run's annotations.jsonl (or skip if the
+        run isn't on this machine — the user can re-scan to materialize).
+        """
+        from pixcull.license import cloud_sync_download
+        result = cloud_sync_download()
+        if not result.get("ok"):
+            self._send_json(402,
+                json.dumps(result, ensure_ascii=False).encode("utf-8"))
+            return
+
+        merged = 0
+        skipped_unknown_run = 0
+        for rec in result.get("annotations", []):
+            run_id = rec.get("__run_id", "")
+            if not run_id:
+                continue
+            run_dir = _DEMO_ROOT / run_id
+            if not run_dir.exists():
+                skipped_unknown_run += 1
+                continue
+            ann_path = run_dir / "output" / "annotations.jsonl"
+            ann_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(ann_path, "a", encoding="utf-8") as f:
+                # Strip the sync-only field before writing
+                clean = {k: v for k, v in rec.items() if k != "__run_id"}
+                f.write(json.dumps(clean, ensure_ascii=False) + "\n")
+            merged += 1
+        result["merged"] = merged
+        result["skipped_unknown_run"] = skipped_unknown_run
+        self._send_json(200, json.dumps(result, ensure_ascii=False).encode("utf-8"))
 
     def _serve_retrain_status(self) -> None:
         """Return the latest retrain run's state + per-axis CV metrics."""

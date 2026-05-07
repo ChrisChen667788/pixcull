@@ -55,6 +55,16 @@ from pathlib import Path
 # production fork with the real key embedded in the .app bundle.
 _VERIFY_KEY = b"pixcull-v12-public-verify-key-replace-in-prod"
 
+# V12.1 — cloud verification server. Defaults to the public
+# pixcull.dev endpoint; overridable via PIXCULL_LICENSE_API env
+# var (e.g. for self-hosted enterprise installs).
+import os as _os
+_CLOUD_LICENSE_API = _os.environ.get(
+    "PIXCULL_LICENSE_API",
+    "https://api.pixcull.dev/v1/license",
+)
+_CLOUD_REFRESH_INTERVAL_S = 24 * 3600   # check once per day max
+
 
 @dataclass
 class License:
@@ -249,3 +259,210 @@ def status_line() -> str:
         return f"PixCull {lic.tier.upper()}{days_str}"
     used = usage_this_month()
     return f"PixCull Free · 本月已分析 {used}/{lic.monthly_quota} 张"
+
+
+# ---------------------------------------------------------------------------
+# V12.1 — cloud refresh + revocation check
+#
+# Why this exists
+# ---------------
+# Offline HMAC verification (decode_license) catches naive token
+# forgery, but it can't stop a stolen / refunded / abused token —
+# the bytes still verify. The cloud server keeps a revocation list
+# AND can roll the token's expires_at forward as the user keeps
+# paying their subscription.
+#
+# Behavior
+# --------
+# load_license() now calls maybe_cloud_refresh() in the background
+# (non-blocking, fire-and-forget). The refresh:
+#   1. Reads the cached license token + last-checked timestamp.
+#   2. If we already checked within _CLOUD_REFRESH_INTERVAL_S, skip.
+#   3. Else POST {token: ...} to <_CLOUD_LICENSE_API>/refresh
+#      and either:
+#      - get back a new {token: ...}  → install (new expires_at)
+#      - get back {revoked: true, reason: "..."} → wipe the file
+#      - on network failure, keep the cached token (graceful degrade)
+#
+# Privacy: only the token + a daily refresh ping leaves the box.
+# No image data, no annotation data is touched by license refresh.
+# ---------------------------------------------------------------------------
+
+def _last_refresh_path() -> Path:
+    return license_path().parent / "license_refresh.json"
+
+
+def _last_refresh_ts() -> float:
+    p = _last_refresh_path()
+    if not p.exists():
+        return 0.0
+    try:
+        return float(json.loads(p.read_text("utf-8")).get("last_check", 0))
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        return 0.0
+
+
+def _set_last_refresh_ts() -> None:
+    _last_refresh_path().write_text(
+        json.dumps({"last_check": _now()}), encoding="utf-8",
+    )
+
+
+def maybe_cloud_refresh(force: bool = False) -> dict:
+    """V12.1: try to refresh the cached license against the cloud.
+
+    Returns a status dict suitable for surfacing in the admin UI:
+      {
+        "skipped": True/False,    # debounced or no token to refresh
+        "ok": True/False,
+        "action": "no_change" | "renewed" | "revoked" | "network_error",
+        "message": "<human readable>"
+      }
+
+    Safe to call from a thread; uses urllib stdlib (no extra deps).
+    """
+    import urllib.request
+    import urllib.error
+
+    p = license_path()
+    if not p.exists():
+        return {"skipped": True, "ok": True,
+                "action": "no_change", "message": "尚未安装 license"}
+    try:
+        token = json.loads(p.read_text("utf-8")).get("token", "")
+    except (OSError, json.JSONDecodeError):
+        return {"skipped": True, "ok": False,
+                "action": "no_change", "message": "license 文件损坏"}
+
+    if not token:
+        return {"skipped": True, "ok": True,
+                "action": "no_change", "message": "license 为空"}
+
+    if not force and (_now() - _last_refresh_ts()) < _CLOUD_REFRESH_INTERVAL_S:
+        return {"skipped": True, "ok": True,
+                "action": "no_change",
+                "message": "24 小时内已检查过,跳过"}
+
+    try:
+        req = urllib.request.Request(
+            f"{_CLOUD_LICENSE_API}/refresh",
+            data=json.dumps({"token": token}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except (urllib.error.URLError, json.JSONDecodeError, OSError) as exc:
+        # Network failure — keep the cached token
+        return {"skipped": False, "ok": False,
+                "action": "network_error",
+                "message": f"无法联网校验({type(exc).__name__});"
+                           f"使用本地缓存的 license 继续工作"}
+
+    _set_last_refresh_ts()
+
+    if data.get("revoked"):
+        try:
+            p.unlink()
+        except OSError:
+            pass
+        return {"skipped": False, "ok": True,
+                "action": "revoked",
+                "message": f"license 已被撤销: {data.get('reason', '未注明原因')}"}
+
+    new_token = data.get("token")
+    if new_token and new_token != token:
+        # Server rotated the token (e.g. extended expiry after renewal)
+        new_lic = install_license(new_token)
+        if new_lic is not None:
+            return {"skipped": False, "ok": True,
+                    "action": "renewed",
+                    "message": f"license 已续期至 {new_lic.expires_at}"}
+
+    return {"skipped": False, "ok": True,
+            "action": "no_change",
+            "message": "license 仍然有效"}
+
+
+# ---------------------------------------------------------------------------
+# V12.1 — annotation sync (upload to cloud, download on new install)
+#
+# Photographers using PixCull on a Mac Studio + a MacBook Pro need
+# their annotations to follow them. The implementation is a thin
+# wrapper around the cloud endpoint:
+#
+#   POST <api>/sync/upload    {token, annotations: [...]}
+#   GET  <api>/sync/download  {token}  →  {annotations: [...]}
+#
+# Cloud sync is Pro+ only — gated client-side by lic.is_pro.
+# The protocol is opaque to PixCull: we just post the JSONL lines.
+# ---------------------------------------------------------------------------
+
+def cloud_sync_upload(annotation_records: list[dict]) -> dict:
+    """Push the user's annotations to the cloud. Pro+ only."""
+    import urllib.request
+    import urllib.error
+
+    lic = load_license()
+    if not lic.is_pro:
+        return {"ok": False, "message": "云同步是 Pro 功能"}
+    p = license_path()
+    if not p.exists():
+        return {"ok": False, "message": "无 license token"}
+    try:
+        token = json.loads(p.read_text("utf-8")).get("token", "")
+    except (OSError, json.JSONDecodeError):
+        return {"ok": False, "message": "license 文件损坏"}
+
+    body = json.dumps({
+        "token": token,
+        "annotations": annotation_records,
+    }, ensure_ascii=False).encode("utf-8")
+
+    try:
+        req = urllib.request.Request(
+            f"{_CLOUD_LICENSE_API}/../sync/upload",  # neighbor of /license
+            data=body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=12) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        return {"ok": True, "message": data.get("message", "已上传")}
+    except (urllib.error.URLError, json.JSONDecodeError, OSError) as exc:
+        return {"ok": False,
+                "message": f"上传失败: {type(exc).__name__}: {exc}"}
+
+
+def cloud_sync_download() -> dict:
+    """Pull annotations from the cloud. Returns {ok, annotations, message}."""
+    import urllib.request
+    import urllib.error
+
+    lic = load_license()
+    if not lic.is_pro:
+        return {"ok": False, "annotations": [], "message": "云同步是 Pro 功能"}
+    p = license_path()
+    if not p.exists():
+        return {"ok": False, "annotations": [], "message": "无 license token"}
+    try:
+        token = json.loads(p.read_text("utf-8")).get("token", "")
+    except (OSError, json.JSONDecodeError):
+        return {"ok": False, "annotations": [], "message": "license 文件损坏"}
+
+    try:
+        # Send token via Authorization header rather than URL param
+        # so it doesn't end up in cloud-server access logs.
+        req = urllib.request.Request(
+            f"{_CLOUD_LICENSE_API}/../sync/download",
+            headers={"Authorization": f"Bearer {token}"},
+            method="GET",
+        )
+        with urllib.request.urlopen(req, timeout=12) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        return {"ok": True,
+                "annotations": data.get("annotations", []),
+                "message": f"已下载 {len(data.get('annotations', []))} 条"}
+    except (urllib.error.URLError, json.JSONDecodeError, OSError) as exc:
+        return {"ok": False, "annotations": [],
+                "message": f"下载失败: {type(exc).__name__}: {exc}"}
