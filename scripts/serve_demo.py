@@ -3159,13 +3159,127 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
     .ann-foot button.skip {
       background: transparent; color: var(--muted); border: 1px solid var(--border);
     }
+    /* V10.1 Lightbox upgrade: image + full evaluation panel side-by-side. */
     .lightbox {
-      position: fixed; inset: 0; background: rgba(0,0,0,0.92);
-      display: none; align-items: center; justify-content: center; z-index: 9;
-      cursor: zoom-out;
+      position: fixed; inset: 0; background: rgba(0,0,0,0.94);
+      display: none; z-index: 9; backdrop-filter: blur(4px);
     }
-    .lightbox.show { display: flex; }
-    .lightbox img { max-width: 95vw; max-height: 95vh; }
+    .lightbox.show { display: grid; grid-template-columns: 1fr 380px; }
+    @media (max-width: 900px) {
+      .lightbox.show { grid-template-columns: 1fr; }
+    }
+    .lightbox .img-pane {
+      display: flex; align-items: center; justify-content: center;
+      padding: 28px 24px; cursor: zoom-out; min-height: 0;
+    }
+    .lightbox .img-pane img {
+      max-width: 100%; max-height: 100%; object-fit: contain;
+      border-radius: 6px; box-shadow: 0 12px 40px rgba(0,0,0,0.7);
+    }
+    .lightbox .info-pane {
+      background: var(--bg-card); border-left: 1px solid var(--border);
+      overflow-y: auto; padding: 20px 22px;
+      font-size: 12.5px; line-height: 1.55;
+    }
+    .lightbox .info-pane::-webkit-scrollbar { width: 8px; }
+    .lightbox .info-pane::-webkit-scrollbar-thumb {
+      background: var(--border-hi); border-radius: 4px;
+    }
+    .lightbox .info-pane h2 {
+      margin: 0 0 4px; font-size: 14px; font-weight: 600;
+      font-family: ui-monospace, monospace;
+      word-break: break-all;
+    }
+    .lightbox .info-pane .meta-line {
+      color: var(--muted); font-size: 11px; margin-bottom: 14px;
+      display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+    }
+    .lightbox .info-pane .meta-line .badge {
+      padding: 2px 7px; font-size: 10px; border-radius: 3px;
+      font-weight: 600; text-transform: uppercase;
+    }
+    .lightbox .info-pane .meta-line .badge.keep { background: var(--keep); color: #fff; }
+    .lightbox .info-pane .meta-line .badge.maybe { background: var(--maybe); color: #fff; }
+    .lightbox .info-pane .meta-line .badge.cull { background: var(--cull); color: #fff; }
+    .lightbox .info-pane .section {
+      margin-bottom: 14px; padding-bottom: 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    .lightbox .info-pane .section:last-child {
+      border-bottom: 0; margin-bottom: 0;
+    }
+    .lightbox .info-pane .section-title {
+      font-size: 10.5px; color: var(--muted); margin-bottom: 6px;
+      text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;
+    }
+    .lightbox .axis-grid {
+      display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px;
+      margin-bottom: 8px;
+    }
+    .lightbox .axis-grid .ax {
+      background: rgba(255,255,255,0.04); padding: 6px 4px;
+      border-radius: 4px; text-align: center;
+    }
+    .lightbox .axis-grid .ax .k {
+      font-size: 9.5px; color: var(--muted); display: block;
+    }
+    .lightbox .axis-grid .ax .v {
+      font-size: 14px; font-weight: 600; margin-top: 2px;
+    }
+    .lightbox .axis-grid .ax.s1 .v { color: var(--cull); }
+    .lightbox .axis-grid .ax.s2 .v { color: #ee8888; }
+    .lightbox .axis-grid .ax.s3 .v { color: var(--muted); }
+    .lightbox .axis-grid .ax.s4 .v { color: #88cc88; }
+    .lightbox .axis-grid .ax.s5 .v { color: var(--keep); }
+    .lightbox .axis-grid-detail {
+      font-size: 10.5px; color: var(--muted); line-height: 1.5;
+    }
+    .lightbox .axis-grid-detail .row {
+      padding: 4px 0; border-top: 1px dashed rgba(255,255,255,0.06);
+      display: flex; gap: 8px;
+    }
+    .lightbox .axis-grid-detail .row .name {
+      flex: 0 0 36px; color: var(--fg);
+    }
+    .lightbox .rationale {
+      font-size: 11.5px; color: var(--fg); line-height: 1.65;
+      background: rgba(255,255,255,0.025);
+      padding: 8px 10px; border-radius: 4px;
+      border-left: 2px solid var(--accent);
+    }
+    .lightbox .rationale.warn {
+      border-left-color: var(--maybe);
+      color: var(--maybe);
+    }
+    .lightbox .strengths-list, .lightbox .weak-list {
+      list-style: none; margin: 0; padding: 0;
+      font-size: 11.5px;
+    }
+    .lightbox .strengths-list li {
+      color: var(--keep); padding: 3px 0; line-height: 1.5;
+    }
+    .lightbox .strengths-list li::before { content: "✓ "; }
+    .lightbox .weak-list li {
+      color: var(--maybe); padding: 3px 0; line-height: 1.5;
+    }
+    .lightbox .weak-list li::before { content: "→ "; }
+    .lightbox .info-pane .style-tag {
+      display: inline-block; margin-right: 4px;
+      font-size: 10px; padding: 1px 6px; border-radius: 2px;
+      background: rgba(168,85,247,0.18); color: #c4b5fd;
+    }
+    .lightbox .close-btn {
+      position: absolute; top: 18px; right: 408px;
+      width: 32px; height: 32px; border-radius: 6px;
+      background: rgba(0,0,0,0.6); color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; font-size: 18px; user-select: none;
+      border: 1px solid rgba(255,255,255,0.15);
+    }
+    .lightbox .close-btn:hover { background: rgba(0,0,0,0.85); }
+    @media (max-width: 900px) {
+      .lightbox .close-btn { right: 18px; }
+    }
   </style>
 </head>
 <body>
@@ -3205,7 +3319,11 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
     </div>
   </header>
   <div class="grid" id="grid"></div>
-  <div class="lightbox" id="lightbox"><img id="lbImg" alt=""></div>
+  <div class="lightbox" id="lightbox">
+    <span class="close-btn" id="lbClose" title="关闭 (Esc)">×</span>
+    <div class="img-pane"><img id="lbImg" alt=""></div>
+    <div class="info-pane" id="lbInfo"></div>
+  </div>
 
   <!-- V9.2 cluster compare modal -->
   <div class="cmp-modal" id="cmpModal">
@@ -3488,17 +3606,144 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
     });
   });
 
-  // Lightbox
+  // V10.1 Lightbox — image + full evaluation panel
   const lb = document.getElementById("lightbox");
   const lbImg = document.getElementById("lbImg");
+  const lbInfo = document.getElementById("lbInfo");
+  const lbClose = document.getElementById("lbClose");
+
+  function openLightbox(fn) {
+    const r = rows.find(x => x.filename === fn);
+    if (!r) return;
+    lbImg.src = `/full/${run_id}/${encodeURIComponent(fn)}`;
+    lbInfo.innerHTML = renderInfoPane(r);
+    lb.classList.add("show");
+  }
+
+  function renderInfoPane(r) {
+    const axisNames = ["technical","subject","composition","light","moment","aesthetic"];
+    const axisAbbr = {technical:"技术", subject:"主体", composition:"构图",
+                       light:"光线", moment:"瞬间", aesthetic:"美感"};
+    // Final star strip + per-source detail rows
+    const finalStars = axisNames.map(n => {
+      const s = r.rubric_stars && r.rubric_stars[n];
+      const cls = s == null ? "" : `s${Math.round(s)}`;
+      return `<div class="ax ${cls}"><span class="k">${axisAbbr[n]}</span><span class="v">${s == null ? '--' : s.toFixed(1)}</span></div>`;
+    }).join("");
+    // Per-source comparison (auto / model / vlm / human if present)
+    const sourceRows = [
+      ["auto", r.rubric_auto_stars],
+      ["模型", r.rubric_model_stars],
+      ["VLM", r.rubric_vlm_stars],
+      ["meta", r.rubric_meta_stars],
+      ["人工", r.rubric_human_stars],
+    ].filter(([_, m]) => m && Object.values(m).some(v => v != null));
+    const detailHtml = sourceRows.map(([label, m]) => {
+      const vals = axisNames.map(n => m[n] == null ? '·' : m[n].toFixed(1)).join(' / ');
+      return `<div class="row"><span class="name">${label}</span><span>${vals}</span></div>`;
+    }).join("");
+
+    // Style chips + scene + decision header
+    const styleChips = (r.style_modes || []).map(
+      s => `<span class="style-tag">${s}</span>`
+    ).join("");
+    const dec = r.decision || "?";
+    const scoreLine = r.score_final == null ? "--" : r.score_final.toFixed(2);
+
+    // Strengths + suggestions
+    const strengths = (r.advice && r.advice.strengths) || [];
+    const weaknesses = (r.advice && r.advice.weaknesses) || [];
+    const suggestions = (r.advice && r.advice.suggestions) || [];
+    const inconsistencies = (r.advice && r.advice.inconsistencies) || [];
+
+    // Esc-safe HTML escape
+    const esc = s => String(s || '').replace(/[&<>"']/g, c => (
+      {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
+    ));
+
+    return `
+      <h2>${esc(r.filename)}</h2>
+      <div class="meta-line">
+        <span class="badge ${dec}">${dec}</span>
+        <span>${esc(r.scene || '?')}</span>
+        <span>final ${scoreLine}</span>
+        ${styleChips}
+        ${r.cluster_id != null ? `<span title="连拍组 ID">cluster ${r.cluster_id}</span>` : ''}
+        ${r.rubric_human_labeled ? '<span style="color:var(--keep)">✓ 人工已标</span>' : ''}
+      </div>
+
+      <div class="section">
+        <div class="section-title">最终评分(综合优先级 human → meta → vlm → model → auto)</div>
+        <div class="axis-grid">${finalStars}</div>
+        ${detailHtml ? `<div class="axis-grid-detail">${detailHtml}</div>` : ''}
+      </div>
+
+      ${r.meta_overall_rationale ? `
+      <div class="section">
+        <div class="section-title">⌬ DeepSeek meta-judge ${r.meta_confidence != null ? `(置信 ${(r.meta_confidence*100).toFixed(0)}%)` : ''}</div>
+        <div class="rationale">${esc(r.meta_overall_rationale)}</div>
+      </div>
+      ` : ''}
+
+      ${r.vlm_overall_rationale ? `
+      <div class="section">
+        <div class="section-title">VLM 视觉判断</div>
+        <div class="rationale">${esc(r.vlm_overall_rationale)}</div>
+      </div>
+      ` : ''}
+
+      ${inconsistencies.length ? `
+      <div class="section">
+        <div class="section-title">⚠ 矛盾警示</div>
+        <div class="rationale warn">${inconsistencies.map(esc).join('<br>')}</div>
+      </div>
+      ` : ''}
+
+      ${strengths.length ? `
+      <div class="section">
+        <div class="section-title">优点</div>
+        <ul class="strengths-list">${strengths.map(s => `<li>${esc(s)}</li>`).join('')}</ul>
+      </div>
+      ` : ''}
+
+      ${(weaknesses.length || suggestions.length) ? `
+      <div class="section">
+        <div class="section-title">改进建议</div>
+        <ul class="weak-list">${[...weaknesses, ...suggestions].map(s => `<li>${esc(s)}</li>`).join('')}</ul>
+      </div>
+      ` : ''}
+
+      ${r.flags ? `
+      <div class="section">
+        <div class="section-title">检测器旗标</div>
+        <div class="rationale">${esc(r.flags)}</div>
+      </div>
+      ` : ''}
+
+      ${r.reason ? `
+      <div class="section">
+        <div class="section-title">规则栈说明</div>
+        <div class="rationale">${esc(r.reason)}</div>
+      </div>
+      ` : ''}
+    `;
+  }
+
   grid.addEventListener("click", e => {
     const t = e.target;
     if (t.tagName === "IMG" && t.classList.contains("thumb")) {
-      lbImg.src = t.dataset.full;
-      lb.classList.add("show");
+      // climb to find data-fn on the .card
+      const card = t.closest(".card");
+      if (card && card.dataset.fn) openLightbox(card.dataset.fn);
     }
   });
-  lb.addEventListener("click", () => lb.classList.remove("show"));
+  lbClose.addEventListener("click", () => lb.classList.remove("show"));
+  lb.addEventListener("click", e => {
+    // Only close on backdrop or img-pane click — not on info-pane
+    if (e.target.closest(".info-pane")) return;
+    if (e.target === lbClose) return;
+    lb.classList.remove("show");
+  });
 
   // ==================================================================
   // V9.1 — keyboard navigation + quick labeling
@@ -3510,6 +3755,64 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
   // Active card is the one that has class .focused (visually outlined).
   // ==================================================================
   let focusedFn = null;
+  // V10.1 — toast notifications (Cmd+Z, batch result, etc.)
+  function showToast(msg, kind = "info") {
+    let t = document.getElementById("__toast");
+    if (!t) {
+      t = document.createElement("div");
+      t.id = "__toast";
+      t.style.cssText = "position:fixed;bottom:24px;left:50%;transform:translateX(-50%);"
+        + "background:rgba(0,0,0,0.85);color:#fff;padding:10px 18px;border-radius:6px;"
+        + "font-size:13px;z-index:99;border:1px solid rgba(255,255,255,0.15);"
+        + "transition:opacity 0.3s;backdrop-filter:blur(8px);box-shadow:0 8px 24px rgba(0,0,0,0.5);";
+      document.body.appendChild(t);
+    }
+    t.textContent = msg;
+    t.style.borderLeft = `3px solid ${
+      kind === "error" ? "var(--cull)" :
+      kind === "success" ? "var(--keep)" : "var(--accent)"
+    }`;
+    t.style.opacity = "1";
+    clearTimeout(t._timer);
+    t._timer = setTimeout(() => { t.style.opacity = "0"; }, 3000);
+  }
+  // V10.1 — undo stack for batch / quick-label actions
+  // Each entry: array of {filename, prev_decision, prev_human_labeled}
+  const undoStack = [];
+  const UNDO_LIMIT = 20;
+  function pushUndo(snapshots) {
+    if (!snapshots || !snapshots.length) return;
+    undoStack.push(snapshots);
+    if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+  }
+  async function performUndo() {
+    const snap = undoStack.pop();
+    if (!snap) return;
+    let n = 0;
+    for (const item of snap) {
+      try {
+        // Re-post annotation with the old decision (or a special clear)
+        await fetch(`/annotation/${run_id}/${encodeURIComponent(item.filename)}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            axes: {},
+            overall_label: item.prev_decision || "",
+            overall_rationale: "撤销",
+          }),
+        });
+        const r = rows.find(x => x.filename === item.filename);
+        if (r) {
+          r.decision = item.prev_decision;
+          r.rubric_human_labeled = item.prev_human_labeled;
+        }
+        n++;
+      } catch (e) { /* ignore */ }
+    }
+    render();
+    return n;
+  }
+
   function visibleCards() {
     return Array.from(grid.querySelectorAll('.card[data-fn]'));
   }
@@ -3533,18 +3836,24 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
   // with overall_label only — same endpoint the modal uses.
   async function quickLabel(label) {
     if (!focusedFn) return;
+    const r = rows.find(x => x.filename === focusedFn);
+    if (r) {
+      pushUndo([{
+        filename: focusedFn,
+        prev_decision: r.decision,
+        prev_human_labeled: r.rubric_human_labeled,
+      }]);
+    }
     try {
       await fetch(`/annotation/${run_id}/${encodeURIComponent(focusedFn)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          axes: {},  // no per-axis stars
+          axes: {},
           overall_label: label,
           overall_rationale: `quick-labeled ${label} via keyboard`,
         }),
       });
-      // Mirror to local rows so re-render shows the new label.
-      const r = rows.find(x => x.filename === focusedFn);
       if (r) {
         r.rubric_human_labeled = true;
         r.decision = label;
@@ -3568,8 +3877,9 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
       "  1           标 keep",
       "  2           标 maybe",
       "  3           标 cull",
-      "  space       放大查看",
+      "  space       放大 + 查看完整评分",
       "  enter       打开标注 modal",
+      "  Cmd/Ctrl+Z  撤销最近一次标注操作",
       "  Esc         关闭",
       "  ?           本帮助",
     ].join("\n"));
@@ -3579,6 +3889,12 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
     // Ignore when typing in inputs / textareas
     const tag = (e.target && e.target.tagName) || "";
     if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+    // V10.1: Cmd+Z / Ctrl+Z → undo (allow modifier passthrough)
+    if ((e.metaKey || e.ctrlKey) && e.key === "z" && !e.shiftKey) {
+      e.preventDefault();
+      performUndo().then(n => { if (n) showToast(`已撤销 ${n} 个标注`); });
+      return;
+    }
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     // Modal-aware: Esc closes any open modal first
     if (e.key === "Escape") {
@@ -3599,13 +3915,12 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
     else if (e.key === "2") { e.preventDefault(); quickLabel("maybe"); }
     else if (e.key === "3") { e.preventDefault(); quickLabel("cull"); }
     else if (e.key === " " || e.key === "Spacebar") {
-      // toggle lightbox on focused card
+      // toggle lightbox (with info pane) on focused card
       e.preventDefault();
       if (lb.classList.contains("show")) {
         lb.classList.remove("show");
       } else if (focusedFn) {
-        lbImg.src = `/full/${run_id}/${encodeURIComponent(focusedFn)}`;
-        lb.classList.add("show");
+        openLightbox(focusedFn);
       }
     }
     else if (e.key === "Enter") {
@@ -3877,6 +4192,14 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
       `共写 ${keepRows.length + cullRows.length} 个 annotation,会立刻反映到 UI。继续?`
     );
     if (!ok) return;
+    // V10.1 — capture undo snapshot BEFORE mutating
+    const snap = [];
+    [...keepRows, ...cullRows].forEach(r => snap.push({
+      filename: r.filename,
+      prev_decision: r.decision,
+      prev_human_labeled: r.rubric_human_labeled,
+    }));
+    pushUndo(snap);
     let n = 0;
     for (const [list, label] of [[keepRows, "keep"], [cullRows, "cull"]]) {
       for (const r of list) {
@@ -3897,7 +4220,7 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
       }
     }
     summary.n_human_labeled = (summary.n_human_labeled || 0) + n;
-    alert(`已批量标注 ${n} 张。`);
+    showToast(`已批量标注 ${n} 张 · Cmd+Z 撤销`, "success");
     render();
   });
 
@@ -3964,6 +4287,12 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
         const pickFn = btn.dataset.fn;
         const ok = confirm(`选 ${pickFn} 为最佳,其余 ${members.length - 1} 张标 cull?`);
         if (!ok) return;
+        // V10.1 — undo snapshot
+        pushUndo(members.map(m => ({
+          filename: m.filename,
+          prev_decision: m.decision,
+          prev_human_labeled: m.rubric_human_labeled,
+        })));
         for (const m of members) {
           const lbl = (m.filename === pickFn) ? "keep" : "cull";
           try {
@@ -3976,7 +4305,6 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
                 overall_rationale: `cluster compare: ${lbl === 'keep' ? 'picked as best' : 'rejected sibling'}`,
               }),
             });
-            // Mirror locally
             const local = rows.find(x => x.filename === m.filename);
             if (local) {
               local.rubric_human_labeled = true;
@@ -3986,6 +4314,7 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
         }
         summary.n_human_labeled = (summary.n_human_labeled || 0) + members.length;
         cmpModal.classList.remove("show");
+        showToast(`已选 ${pickFn},其余 ${members.length-1} 张标 cull · Cmd+Z 撤销`, "success");
         render();
       });
     });
