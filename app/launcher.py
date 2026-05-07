@@ -360,6 +360,7 @@ class PixCullMenuApp(rumps.App):
             rumps.MenuItem("配置 DeepSeek API key", callback=self._on_set_key),
             rumps.MenuItem("查看错误日志", callback=self._on_open_logs),
             rumps.MenuItem("重新下载模型 (首次设置)", callback=self._on_resetup),
+            rumps.MenuItem("检查更新", callback=self._on_check_update),
             None,
             rumps.MenuItem(f"关于 {APP_NAME} v{APP_VERSION}", callback=self._on_about),
             rumps.MenuItem("退出", callback=self._on_quit),
@@ -413,6 +414,32 @@ class PixCullMenuApp(rumps.App):
         log_dir = app_data_dir() / "logs"
         log_dir.mkdir(parents=True, exist_ok=True)
         subprocess.run(["open", str(log_dir)])
+
+    def _on_check_update(self, _):
+        """V13.0 — manual Sparkle-style update check."""
+        try:
+            sys.path.insert(0, str(resource_root() / "app"))
+            import updater  # type: ignore
+            result = updater.check_for_update(force=True)
+        except Exception as exc:
+            rumps.alert(title=APP_NAME,
+                         message=f"检查失败: {type(exc).__name__}: {exc}")
+            return
+        if not result.get("available"):
+            rumps.alert(title=APP_NAME,
+                         message=f"已是最新版本 v{updater._running_version()}")
+            return
+        choice = rumps.alert(
+            title=APP_NAME,
+            message=(f"发现新版本 v{result['latest']}\n"
+                     f"你当前 v{result['current']}\n\n"
+                     f"{(result.get('notes') or '')[:300]}\n\n"
+                     f"在浏览器打开下载页?"),
+            ok="打开下载",
+            cancel="稍后",
+        )
+        if choice == 1:  # "ok"
+            webbrowser.open(result.get("download_url") or "https://pixcull.dev/")
 
     def _on_resetup(self, _):
         try:
@@ -511,6 +538,17 @@ def main() -> int:
 
     osa_notify(APP_NAME, f"已启动 · 顶部菜单栏图标 · {port}")
     webbrowser.open(f"http://127.0.0.1:{port}/")
+
+    # V13.0 — fire a background update check (debounced to once per
+    # day inside the function). Doesn't block startup.
+    def _update_worker():
+        try:
+            sys.path.insert(0, str(resource_root() / "app"))
+            import updater  # type: ignore
+            updater.background_check()
+        except Exception:
+            pass
+    threading.Thread(target=_update_worker, daemon=True).start()
 
     # rumps owns the run loop from here. ^C in dev mode shuts everything
     # down via the quit handler.

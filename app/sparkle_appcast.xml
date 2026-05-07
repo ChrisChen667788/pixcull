@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  PixCull · Sparkle appcast.xml template
+
+  Hosted at:   https://pixcull.dev/appcast.xml
+  Polled by:   Sparkle framework (or our pure-Python checker in
+               app/updater.py for non-PyObjC builds).
+
+  Each <item> declares one available release. Sparkle reads this
+  feed, compares <sparkle:version> against the running .app's
+  CFBundleVersion, and offers an update if newer. The launcher's
+  in-app menu has a "检查更新" item that triggers a manual poll;
+  the daemon also polls daily on its own.
+
+  HOW TO RELEASE A NEW VERSION
+  ============================
+  1. Build the .app:        scripts/build_app.sh
+  2. Code-sign + notarize:  see app/NOTARIZATION.md
+  3. Build the DMG:         scripts/make_dmg.sh
+  4. Upload DMG to your release host (GitHub releases / S3 / etc.)
+  5. Compute Sparkle EdDSA signature of the DMG:
+        sign_update PixCull-13.0.dmg          # ships with Sparkle
+     copy the signature into the appcast item below.
+  6. Update <enclosure ... sparkle:version="13.0.0"
+        sparkle:edSignature="..." length="..." />
+  7. Bump the file's <pubDate>, push to https://pixcull.dev/appcast.xml
+  8. Existing users get notified within 24h.
+-->
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"
+     xmlns:dc="http://purl.org/dc/elements/1.1/"
+     version="2.0">
+  <channel>
+    <title>PixCull 更新通道</title>
+    <link>https://pixcull.dev/appcast.xml</link>
+    <description>PixCull 自动更新源</description>
+    <language>zh</language>
+
+    <item>
+      <title>V13.0</title>
+      <pubDate>Mon, 06 May 2026 00:00:00 +0800</pubDate>
+      <sparkle:minimumSystemVersion>12.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>V13.0 - Sparkle 自动更新 + 真签名</h2>
+        <ul>
+          <li>支持 Apple Developer ID 签名的正式版本(免去右键打开)</li>
+          <li>Sparkle 自动更新框架 - 24h 自动检查,一键升级</li>
+          <li>App Store 上架前的所有准备物料</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://pixcull.dev/releases/PixCull-13.0.dmg"
+        sparkle:version="13.0.0"
+        sparkle:shortVersionString="13.0"
+        sparkle:edSignature="REPLACE_WITH_REAL_SIGNATURE_AT_RELEASE_TIME"
+        length="1400000000"
+        type="application/octet-stream" />
+    </item>
+
+    <!-- Older items kept for users on outdated versions -->
+    <item>
+      <title>V12.2</title>
+      <pubDate>Sun, 03 May 2026 00:00:00 +0800</pubDate>
+      <description><![CDATA[
+        <ul><li>5-step onboarding tour</li>
+            <li>云端 license 校验 + 标注同步 (Pro+)</li></ul>
+      ]]></description>
+      <enclosure
+        url="https://pixcull.dev/releases/PixCull-12.2.dmg"
+        sparkle:version="12.2.0"
+        sparkle:shortVersionString="12.2"
+        sparkle:edSignature="..."
+        length="1300000000"
+        type="application/octet-stream" />
+    </item>
+  </channel>
+</rss>

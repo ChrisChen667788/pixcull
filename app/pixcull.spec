@@ -86,7 +86,34 @@ hiddenimports = [
 
 # Collect all submodules + data for these heavyweight packages — their
 # import graphs are dynamic and PyInstaller's analysis misses pieces.
-from PyInstaller.utils.hooks import collect_all
+from PyInstaller.utils.hooks import collect_all, copy_metadata
+
+# Packages that read their own dist-info at import time
+# (importlib.metadata.version("name")). PyInstaller doesn't bundle
+# *.dist-info by default, so these crash with PackageNotFoundError
+# even though the code itself was bundled correctly.
+for pkg in (
+    "pymatting",        # rembg dependency — caused the V7.1 crash
+    "rembg",            # uses version() for the CLI tagline
+    "pyiqa",            # reads version in metric registration
+    "timm",             # version() in __init__
+    "huggingface_hub",  # version() for user-agent header
+    "transformers",     # version() for user-agent + model card
+    "tokenizers",       # ditto
+    "torch",            # __version__ from metadata in some paths
+    "openai",           # version() for the SDK user-agent
+    "openai_clip",      # original openai/CLIP package
+    "clip",             # also expose under bare name (some forks)
+    "mlx",              # version() reads from metadata
+    "mlx_lm",
+    "mlx_vlm",
+    "rumps",
+    "imagededup",
+):
+    try:
+        datas += copy_metadata(pkg)
+    except Exception as e:
+        print(f"warn: copy_metadata({pkg!r}) skipped: {e}")
 
 collect_packages = [
     "torch",
@@ -115,6 +142,9 @@ collect_packages = [
     "facexlib",     # used by pyiqa for face-region IQA metrics
     "timm",         # backbone library for several pyiqa metrics
     "scipy",        # canon detector uses scipy.ndimage.sobel
+    "pymatting",    # rembg matting backend
+    "skimage",      # rembg + several CV utilities
+    "PIL",          # Pillow — sometimes missed via static analysis
 ]
 for pkg in collect_packages:
     try:
