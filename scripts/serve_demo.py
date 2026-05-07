@@ -911,6 +911,8 @@ class _Handler(BaseHTTPRequestHandler):
             return self._serve_rubric_meta()
         if path == "/retrain_status":
             return self._serve_retrain_status()
+        if path == "/license":
+            return self._serve_license_status()
         if path.startswith("/status/"):
             return self._serve_status(path[len("/status/"):])
         if path.startswith("/results/"):
@@ -948,6 +950,8 @@ class _Handler(BaseHTTPRequestHandler):
             return self._handle_save_annotation(path[len("/annotation/"):])
         if path == "/retrain":
             return self._handle_retrain()
+        if path == "/license":
+            return self._handle_license_install()
         self.send_error(404, "not found")
 
     def do_DELETE(self) -> None:  # noqa: N802
@@ -1066,6 +1070,14 @@ class _Handler(BaseHTTPRequestHandler):
             self._reject_upload(400, f"上传里没有可用图片。{hint}")
             return
 
+        # V12.0 — license + quota gate
+        from pixcull.license import check_quota, increment_usage
+        ok, msg = check_quota(n_saved)
+        if not ok:
+            self._reject_upload(402, msg)
+            return
+        increment_usage(n_saved)
+
         rescorer_mode = self.server.rescorer_mode  # type: ignore[attr-defined]
         rescorer_path = self.server.rescorer_path  # type: ignore[attr-defined]
         vlm_mode = self.server.vlm_mode  # type: ignore[attr-defined]
@@ -1156,6 +1168,14 @@ class _Handler(BaseHTTPRequestHandler):
             return
 
         n = len(paths)
+        # V12.0 — license + monthly quota gate. Free tier 100/月.
+        from pixcull.license import check_quota, increment_usage
+        ok, msg = check_quota(n)
+        if not ok:
+            self._reject_upload(402, msg)
+            return
+        increment_usage(n)
+
         run_id = _new_run_id()
         run_root = _run_dir(run_id)
         output_dir = run_root / "output"
@@ -1878,6 +1898,54 @@ class _Handler(BaseHTTPRequestHandler):
             ensure_ascii=False,
         ).encode("utf-8"))
 
+    def _serve_license_status(self) -> None:
+        """V12.0: GET license + quota status JSON."""
+        from pixcull.license import (
+            load_license, usage_this_month, status_line,
+        )
+        lic = load_license()
+        body = json.dumps({
+            "tier": lic.tier,
+            "is_pro": lic.is_pro,
+            "is_unlimited": lic.is_unlimited,
+            "monthly_quota": lic.monthly_quota,
+            "used_this_month": usage_this_month(),
+            "expires_at": lic.expires_at,
+            "days_remaining": lic.days_remaining,
+            "email": lic.email,
+            "status_line": status_line(),
+        }, ensure_ascii=False).encode("utf-8")
+        self._send_json(200, body)
+
+    def _handle_license_install(self) -> None:
+        """V12.0: POST {token: '...'} to install a license token."""
+        clen = int(self.headers.get("Content-Length", "0") or "0")
+        if clen <= 0 or clen > 65536:
+            self._reject_upload(400, "expected JSON body with token")
+            return
+        try:
+            params = json.loads(self.rfile.read(clen).decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            self._reject_upload(400, f"JSON parse failed: {exc}")
+            return
+        token = (params.get("token") or "").strip()
+        if not token:
+            self._reject_upload(400, "缺少 token 字段")
+            return
+        from pixcull.license import install_license
+        lic = install_license(token)
+        if lic is None:
+            self._reject_upload(400, "license token 验证失败 — 已过期或被篡改")
+            return
+        body = json.dumps({
+            "ok": True,
+            "tier": lic.tier,
+            "expires_at": lic.expires_at,
+            "monthly_quota": lic.monthly_quota,
+            "message": f"已激活 {lic.tier.upper()} · 重启服务后立即生效",
+        }, ensure_ascii=False).encode("utf-8")
+        self._send_json(200, body)
+
     def _serve_retrain_status(self) -> None:
         """Return the latest retrain run's state + per-axis CV metrics."""
         with _RUNS_LOCK:
@@ -2535,6 +2603,7 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
     <span id="storageHintEmpty">
       · <a href="/admin" style="color:var(--muted)">存储管理</a>
     </span>
+    <span id="licenseHint" style="margin-left:8px"></span>
   </div>
 
 <script>
@@ -2550,6 +2619,34 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
         `${mb} · ${s.n_runs} 次记录`;
       document.getElementById("storageHint").style.display = "inline";
       document.getElementById("storageHintEmpty").style.display = "none";
+    }
+  }).catch(() => {});
+
+  // V12.0 — license + monthly quota status badge
+  fetch("/license").then(r => r.json()).then(L => {
+    const el = document.getElementById("licenseHint");
+    if (!el) return;
+    if (L.is_pro) {
+      el.innerHTML = `· <span style="color:var(--keep)">⚡ ${L.tier.toUpperCase()}</span>`;
+    } else {
+      const used = L.used_this_month, q = L.monthly_quota;
+      const pct = q > 0 ? Math.round(100 * used / q) : 0;
+      const color = pct >= 90 ? "var(--cull)" : pct >= 70 ? "var(--maybe)" : "var(--muted)";
+      el.innerHTML = `· <span style="color:${color}">FREE ${used}/${q}</span> · `
+        + `<a id="upgradeLink" style="color:var(--accent);cursor:pointer">升级 Pro</a>`;
+      const up = document.getElementById("upgradeLink");
+      if (up) up.addEventListener("click", () => {
+        const tok = prompt("贴上 Pro license token (可在 https://pixcull.dev 获取):");
+        if (!tok) return;
+        fetch("/license", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token: tok.trim() }),
+        }).then(r => r.json()).then(d => {
+          alert(d.ok ? d.message : ("失败: " + (d.error || "未知")));
+          if (d.ok) location.reload();
+        });
+      });
     }
   }).catch(() => {});
 </script>
