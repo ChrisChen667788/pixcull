@@ -1,26 +1,36 @@
-"""V11.1 actionable photography advice — turns scores into next-steps.
+"""V14.3 actionable photography advice — turns scores into next-steps.
 
-Major V11.1 upgrade over V5.2:
-* Strength + weakness templates now SPECIALIZED per (axis, genre, style)
-  so a wildlife photo gets wildlife-specific praise ("捕到飞行姿态")
-  not the generic landscape phrase ("Lead Room 充足").
-* Each axis has 3-5 alternative phrasings; pick one deterministically
-  by hashing filename so a 50-image batch doesn't repeat the same
-  sentence over and over.
-* When the meta-judge produced a per-axis rationale, we PREFER that
-  text over our static templates — it's grounded in the actual image
-  and cites real metrics ("LAION-AES 4.874 表明色彩协调").
-* Suggestions distinguish technique fixes from gear / shooting fixes
-  so post-processing-friendly users see relevant tips.
+Lineage:
+* V5.2  introduced per-genre + per-style templating
+* V11.1 added 3-5 phrasings per axis with filename-hash rotation
+* V14.3 (this file):
+  - Phrase rotation now anchors on batch *index*, not filename, so
+    renaming a JPG no longer rotates its review text.
+  - Stricter ``anti_genres`` on generic subject/composition templates
+    so a macro shot no longer gets the portrait-coded phrase
+    "主体占画 30%+, 视觉锚点稳" — a more specific genre template
+    fires instead.
+  - Canon-grounded phrases (Adams' Zone System, Cartier-Bresson's
+    決定性瞬間, f/64 Group sharpness ideals) now carry a ``source``
+    field, surfaced in the lightbox info pane as a small italic
+    citation. Adds a sense of "you're being graded against the
+    canon, not just numbers".
+  - "maybe" verdicts now ship a one-sentence rationale ("低对比 +
+    主体居中, 等同票") synthesized from final_stars + flags. Closes
+    the audit gap where users complained "maybe" was opaque.
 
-Output shape (unchanged from V5.2):
+Output shape (V14.3 — extended, fully back-compat with V5.2 readers
+that ignore unknown keys):
   {
-    "verdict_short":  ...,
-    "strengths":      [...],
-    "weaknesses":     [...],
-    "suggestions":    [...],
-    "inconsistencies": [...],
-    "verdict":        "keep" | "maybe" | "cull",
+    "verdict_short":      ...,            # one-line head + first bullet
+    "verdict":            "keep" | "maybe" | "cull",
+    "strengths":          ["phrase", ...] (flat strings, V5.2 shape),
+    "weaknesses":         ["phrase", ...],
+    "suggestions":        ["fix", ...],
+    "inconsistencies":    [...],
+    "rationale":          "..." | None,   # NEW: 1-line "why maybe"
+    "strengths_detail":   [{phrase, source?}, ...],  # NEW: rich form
+    "weaknesses_detail":  [{phrase, source?, fix?}, ...],  # NEW
   }
 """
 
@@ -61,6 +71,7 @@ STRENGTH_TEMPLATES: dict[str, list[dict[str, Any]]] = {
                 "动态范围保留充分,亮暗双端有细节",
                 "影调控制干净,阴影/高光皆有信息",
             ],
+            "source": "Adams · Zone System",
         },
         {
             "metric": "canon_midgray_offset", "thresh": 0.05, "op": "<=",
@@ -69,6 +80,7 @@ STRENGTH_TEMPLATES: dict[str, list[dict[str, Any]]] = {
                 "中灰位置标准,整体曝光基调对",
                 "测光精准,中性灰落在 50% luma",
             ],
+            "source": "Adams · Zone System",
         },
         {
             "metric": "laplacian_subject", "thresh": 200, "op": ">=",
@@ -85,10 +97,15 @@ STRENGTH_TEMPLATES: dict[str, list[dict[str, Any]]] = {
                 "锐度顶级,堪比 f/64 派要求",
                 "全画面锐度都到位",
             ],
+            "source": "f/64 Group · 全画面景深",
         },
     ],
     "subject": [
-        # Generic
+        # Generic — V14.3: exclude genres that have their OWN specific
+        # subject templates below (macro/wildlife/landscape/architecture/
+        # abstract). Generic "主体占画 30%+" was firing for macro shots
+        # where it's tonally wrong; the macro figure-ground template
+        # (further down) is the right fit instead.
         {
             "metric": "subject_fraction", "thresh": 0.25, "op": ">=",
             "phrases": [
@@ -96,6 +113,8 @@ STRENGTH_TEMPLATES: dict[str, list[dict[str, Any]]] = {
                 "主体比例舒适,不会过小或淹没",
                 "主体在画面中分量足够",
             ],
+            "anti_genres": {"macro", "wildlife", "landscape",
+                              "architecture", "abstract", "astro"},
         },
         # Portrait-specific
         {
@@ -140,6 +159,10 @@ STRENGTH_TEMPLATES: dict[str, list[dict[str, Any]]] = {
                 "主体落在 1/3 线交点附近,经典构图",
                 "九宫格 4 个交点附近有意识布置",
             ],
+            "source": "Rule of Thirds",
+            # V14.3 — abstract / macro / astro often *want* centered
+            # composition; thirds praise is misleading there.
+            "anti_genres": {"abstract", "macro", "astro"},
         },
         {
             "metric": "canon_lead_room", "thresh": 0.7, "op": ">=",
@@ -148,6 +171,7 @@ STRENGTH_TEMPLATES: dict[str, list[dict[str, Any]]] = {
                 "主体朝向方向留白合理(Rule of Space)",
                 "前景空间预留得当",
             ],
+            "source": "Rule of Space",
             # only meaningful when there's a directional subject
             "genres": {"portrait", "wildlife", "street", "event",
                         "documentary", "sports"},
@@ -158,6 +182,7 @@ STRENGTH_TEMPLATES: dict[str, list[dict[str, Any]]] = {
                 "Figure-ground 对比强,主体跳出背景",
                 "明暗对比有效隔离主体与背景",
             ],
+            "source": "格式塔 · 图底关系",
         },
         {
             "metric": "canon_symmetry", "thresh": 0.85, "op": ">=",
@@ -207,6 +232,7 @@ STRENGTH_TEMPLATES: dict[str, list[dict[str, Any]]] = {
                 "去色后影调分离清晰,适合黑白叙事",
             ],
             "styles": {"mono"},
+            "source": "Ansel Adams · 黑白叙事",
         },
         {
             "metric": "score_exposure", "thresh": 0.0, "op": ">=",
@@ -215,6 +241,7 @@ STRENGTH_TEMPLATES: dict[str, list[dict[str, Any]]] = {
                 "低调氛围浓,暗部包裹主体",
             ],
             "styles": {"low_key"},
+            "source": "Caravaggio · 明暗对照法",
         },
         {
             "metric": "score_exposure", "thresh": 0.0, "op": ">=",
@@ -250,6 +277,7 @@ STRENGTH_TEMPLATES: dict[str, list[dict[str, Any]]] = {
                 "动作峰值 + 情绪叠加",
                 "时机精准,事件本质 + 形式同框",
             ],
+            "source": "Henri Cartier-Bresson · 决定性瞬间 (1952)",
         },
         # Long exposure / motion blur — moment is "gesture of time"
         {
@@ -481,20 +509,37 @@ def _passes(value: float, threshold: float, op: str) -> bool:
     return False
 
 
-def _stable_pick(phrases: list[str], filename: str, salt: str = "") -> str:
+def _stable_pick(
+    phrases: list[str],
+    anchor: str | int,
+    salt: str = "",
+) -> str:
     """Deterministic phrase rotation across a batch.
 
-    Hashes (filename + salt + len(phrases)) to pick one phrase. Same
-    image always gets same phrase, but two different images on the
-    same axis usually pick different synonyms. Avoids the 'every card
-    says Zone V 中灰锚定准确' problem the user complained about.
+    V14.3 — ``anchor`` is either:
+      * an int  (preferred): the row's index within the batch. Stable
+        across renames; rotates synonyms cleanly across siblings.
+      * a str   (fallback): legacy filename-anchored hash, kept for
+        callers that still pass a filename.
+
+    Same anchor + salt always returns the same phrase, but two
+    different anchors on the same axis usually pick different
+    synonyms — solves the "every card says Zone V 中灰锚定准确"
+    repetition the user flagged.
     """
     if not phrases:
         return ""
     if len(phrases) == 1:
         return phrases[0]
-    h = hashlib.sha256(f"{filename}|{salt}".encode("utf-8")).hexdigest()
-    idx = int(h[:8], 16) % len(phrases)
+    if isinstance(anchor, int):
+        # Mix in salt so the same row picks different synonyms across
+        # different axes/templates instead of always getting index N
+        # of every pool.
+        salt_bits = int(hashlib.sha256(salt.encode("utf-8")).hexdigest()[:8], 16)
+        idx = (anchor * 0x9E3779B1 + salt_bits) % len(phrases)
+    else:
+        h = hashlib.sha256(f"{anchor}|{salt}".encode("utf-8")).hexdigest()
+        idx = int(h[:8], 16) % len(phrases)
     return phrases[idx]
 
 
@@ -526,14 +571,26 @@ def _pick_per_axis(
     star_max: float | None = None,
     max_total: int = 3,
     is_strength: bool = True,
-) -> list[Any]:
+    anchor: int | str | None = None,
+) -> list[dict[str, Any]]:
     """Pick phrases across axes that meet star+genre+style+metric criteria.
 
-    Returns a list — for strengths it's [phrase, phrase];
-    for weaknesses it's [(phrase, fix), ...].
+    V14.3 — returns rich dicts so callers can show source citations
+    and per-axis context:
+
+        [{"phrase": str, "source": str | None, "axis": str,
+          "fix": str | None}, ...]
+
+    Caller flattens to ``["phrase", ...]`` for the V5.2 ``strengths``
+    field shape and ``[fix, ...]`` for ``suggestions``.
+
+    ``anchor`` controls phrase rotation determinism. Pass the row's
+    batch index (preferred) or filename (legacy). Falls back to
+    ``row['filename']`` if None.
     """
-    out: list[Any] = []
-    fn = row.get("filename", "")
+    out: list[dict[str, Any]] = []
+    if anchor is None:
+        anchor = row.get("filename", "")
     for axis_name, stars in axis_stars.items():
         if stars is None:
             continue
@@ -549,19 +606,97 @@ def _pick_per_axis(
                 continue
             if not _passes(v, t["thresh"], t["op"]):
                 continue
-            phrase = _stable_pick(t["phrases"], fn, axis_name + t["metric"])
+            phrase = _stable_pick(t["phrases"], anchor, axis_name + t["metric"])
             if not phrase:
                 continue
-            if is_strength:
-                out.append(phrase)
-            else:
+            entry: dict[str, Any] = {
+                "phrase": phrase,
+                "source": t.get("source"),
+                "axis": axis_name,
+            }
+            if not is_strength:
                 fixes = t.get("fixes") or []
-                fix = _stable_pick(fixes, fn, axis_name + "fix") if fixes else ""
-                out.append((phrase, fix))
+                entry["fix"] = (
+                    _stable_pick(fixes, anchor, axis_name + "fix")
+                    if fixes else ""
+                )
+            out.append(entry)
             if len(out) >= max_total:
                 return out
             break  # one phrase per axis to avoid stacking
     return out
+
+
+# V14.3 — short-axis labels for the rationale synth. Shorter than the
+# canonical RubricAxis.label_zh because it goes mid-sentence inside a
+# 1-line summary; "技术" reads better than "技术(锐 / 曝光)" in that
+# context.
+_AXIS_LABEL_ZH = {
+    "technical":   "技术",
+    "subject":     "主体",
+    "composition": "构图",
+    "light":       "光线",
+    "moment":      "瞬间",
+    "aesthetic":   "美感",
+}
+
+
+def _synthesize_maybe_rationale(
+    final_stars: dict[str, float | None],
+    flags: str,
+    inconsistencies_count: int,
+) -> str:
+    """One-line "why is this maybe" sentence.
+
+    The audit gap: "maybe" feels opaque to users — they don't see
+    what tipped it from keep / why it didn't make it to cull. We
+    surface the strongest-up and strongest-down axes, plus a hint
+    if the meta-judge disagreed with the rule.
+
+    Examples:
+      "瞬间高 + 构图弱,势均力敌"
+      "曝光高 + 主体小,等同票"
+      "美感强 + 多源判断分歧"
+    """
+    rated = [(n, s) for n, s in final_stars.items() if s is not None]
+    if not rated:
+        return ""
+    rated.sort(key=lambda x: x[1])
+    weakest = rated[0]
+    strongest = rated[-1]
+    parts: list[str] = []
+    if strongest[1] >= 4.0:
+        parts.append(f"{_AXIS_LABEL_ZH.get(strongest[0], strongest[0])}强")
+    elif strongest[1] >= 3.5:
+        parts.append(f"{_AXIS_LABEL_ZH.get(strongest[0], strongest[0])}过得去")
+    if weakest[1] <= 2.0 and strongest[0] != weakest[0]:
+        parts.append(f"{_AXIS_LABEL_ZH.get(weakest[0], weakest[0])}弱")
+    elif weakest[1] <= 2.5 and strongest[0] != weakest[0]:
+        parts.append(f"{_AXIS_LABEL_ZH.get(weakest[0], weakest[0])}偏低")
+
+    # Flag-derived contributions
+    flag_bits: list[str] = []
+    fl = (flags or "").lower()
+    if "blurred_subject" in fl or "soft_subject" in fl:
+        flag_bits.append("主体软")
+    if "blink" in fl:
+        flag_bits.append("可能闭眼")
+    if "highlight_clip" in fl:
+        flag_bits.append("高光剪切")
+    if "horizon_tilt" in fl:
+        flag_bits.append("地平线斜")
+    parts.extend(flag_bits[:1])  # cap at 1 flag bit to keep sentence short
+
+    if inconsistencies_count >= 2:
+        tail = "多源判断分歧"
+    elif strongest[1] - weakest[1] < 1.0:
+        tail = "等同票"
+    else:
+        tail = "势均力敌"
+
+    if not parts:
+        return tail
+    return " + ".join(parts) + ", " + tail
 
 
 def build_advice(
@@ -569,13 +704,16 @@ def build_advice(
     final_stars: dict[str, float | None],
     decision: str,
     meta_inconsistencies: str = "",
+    idx: int | None = None,
 ) -> dict[str, Any]:
-    """V11.1: produce per-image-distinctive advice.
+    """V14.3: produce per-image-distinctive advice.
 
     Genre + style derived from the row so wildlife / fashion /
     architecture / silhouette get different praise vocabularies.
-    Phrase pools rotated by hashing filename so within a batch the
-    same axis on different images doesn't repeat verbatim.
+
+    Phrase pools rotated by ``idx`` (batch index) when provided —
+    rename-stable. Falls back to filename hash for callers that
+    don't pass an index (back-compat with the V11.1 signature).
     """
     genre = str(row.get("scene", "") or "")
     # Derive style modes — avoid the import unless needed
@@ -587,16 +725,22 @@ def build_advice(
     except Exception:
         pass
 
-    strengths = _pick_per_axis(
+    anchor: int | str = idx if idx is not None else str(row.get("filename", ""))
+
+    strengths_detail = _pick_per_axis(
         STRENGTH_TEMPLATES, row, final_stars, genre, styles,
-        star_min=4.0, max_total=3, is_strength=True,
+        star_min=4.0, max_total=3, is_strength=True, anchor=anchor,
     )
-    weak_pairs = _pick_per_axis(
+    weak_detail = _pick_per_axis(
         WEAKNESS_TEMPLATES, row, final_stars, genre, styles,
-        star_max=3.0, max_total=3, is_strength=False,
+        star_max=3.0, max_total=3, is_strength=False, anchor=anchor,
     )
-    weaknesses = [w for w, _ in weak_pairs]
-    suggestions = [f for _, f in weak_pairs if f]
+
+    # Flat string lists for V5.2-shape callers (card row, JS templates,
+    # XMP exporter — none of them care about sources)
+    strengths = [d["phrase"] for d in strengths_detail]
+    weaknesses = [d["phrase"] for d in weak_detail]
+    suggestions = [d.get("fix") for d in weak_detail if d.get("fix")]
 
     # 1-line verdict head
     if decision == "keep":
@@ -619,6 +763,17 @@ def build_advice(
             if x.strip()
         ][:3]
 
+    # V14.3 — only synthesize the rationale on "maybe". For keep/cull
+    # the verdict_short already conveys it; adding more text would
+    # crowd the card.
+    rationale: str | None = None
+    if decision == "maybe":
+        rationale = _synthesize_maybe_rationale(
+            final_stars,
+            str(row.get("flags", "") or ""),
+            len(inc_list),
+        ) or None
+
     return {
         "verdict_short": verdict_short,
         "verdict": decision,
@@ -626,4 +781,7 @@ def build_advice(
         "weaknesses": weaknesses,
         "suggestions": suggestions,
         "inconsistencies": inc_list,
+        "rationale": rationale,
+        "strengths_detail": strengths_detail,
+        "weaknesses_detail": weak_detail,
     }

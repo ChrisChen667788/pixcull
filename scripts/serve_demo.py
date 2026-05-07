@@ -445,7 +445,10 @@ def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
     rubric_axis_names = [a.name for a in RUBRIC_AXES]
 
     rows: list[dict] = []
-    for _, r in df.iterrows():
+    # V14.3 — enumerate so build_advice can pick phrases by batch index
+    # rather than filename hash. Renaming a JPG no longer rotates its
+    # review text (which the user found confusing).
+    for _idx, (_, r) in enumerate(df.iterrows()):
         fn = str(r["filename"])
         # Auto rubric stars from CSV columns ('rubric_<axis>_stars')
         auto_stars = {
@@ -486,12 +489,17 @@ def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
             return None
         final_stars = {name: _pick(name) for name in rubric_axis_names}
         # V5.2: build photographer-friendly advice from final stars +
-        # raw row metrics + meta inconsistencies
+        # raw row metrics + meta inconsistencies. V14.3: idx is the
+        # row's position in the batch — used as the deterministic
+        # phrase-rotation anchor (rename-stable, unlike old filename
+        # hash) and fed into _synthesize_maybe_rationale for the
+        # 'why is this maybe?' summary line.
         advice = build_advice(
             row=r.to_dict(),
             final_stars=final_stars,
             decision=str(r.get("decision", "") or ""),
             meta_inconsistencies=str(r.get("meta_inconsistencies", "") or ""),
+            idx=_idx,
         )
         # V9.0: detected style modes for the UI tag chip
         from pixcull.scoring.style_modes import detect_style_modes
@@ -3869,6 +3877,13 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
             text-overflow: ellipsis; overflow: hidden; white-space: nowrap; cursor: help; }
     .row5.strengths { color: var(--keep); }
     .row5.fixes { color: var(--maybe); }
+    /* V14.3 — "why maybe" rationale on the card. Subtle accent so it
+       doesn't compete with strengths/fixes. */
+    .row5.rationale-line {
+      color: var(--accent-hi);
+      font-style: italic;
+      opacity: 0.92;
+    }
     .annotate-btn {
       position: absolute; top: 6px; right: 6px;
       background: rgba(0,0,0,0.65); color: white; border: 0;
@@ -4039,7 +4054,25 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
     .lightbox .weak-list li {
       color: var(--maybe); padding: 3px 0; line-height: 1.5;
     }
-    .lightbox .weak-list li::before { content: "→ "; }
+    .lightbox .weak-list li::before { content: "△ "; }
+    /* V14.3 — canon citation suffix on a strength/weakness phrase. */
+    .lightbox .canon-cite {
+      display: inline-block;
+      margin-left: 6px;
+      font-size: 10.5px;
+      font-style: italic;
+      color: var(--muted);
+      opacity: 0.85;
+    }
+    .lightbox .canon-cite::before { content: ""; }
+    /* V14.3 — fix tip below a weakness. */
+    .lightbox .fix-line {
+      margin-left: 14px;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 400;
+    }
     .lightbox .info-pane .style-tag {
       display: inline-block; margin-right: 4px;
       font-size: 10px; padding: 1px 6px; border-radius: 2px;
@@ -4383,6 +4416,7 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
               ${ax("light")}${ax("moment")}${ax("aesthetic")}
             </div>
             <div class="row4" title="${esc(r.reason || '')}">${esc(reasonShort || "")}</div>
+            ${(r.advice && r.advice.rationale) ? `<div class="row5 rationale-line" title="V14.3 — 为何 maybe">⊕ ${esc(r.advice.rationale)}</div>` : ''}
             ${(r.advice && r.advice.strengths && r.advice.strengths.length) ? `<div class="row5 strengths" title="V5.2 摄影正典优点">✓ ${r.advice.strengths.slice(0,2).map(esc).join(' · ')}</div>` : ''}
             ${(r.advice && r.advice.suggestions && r.advice.suggestions.length) ? `<div class="row5 fixes" title="V5.2 改进建议">→ ${esc(r.advice.suggestions[0])}</div>` : ''}
           </div>
@@ -4605,6 +4639,12 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
     const weaknesses = (r.advice && r.advice.weaknesses) || [];
     const suggestions = (r.advice && r.advice.suggestions) || [];
     const inconsistencies = (r.advice && r.advice.inconsistencies) || [];
+    // V14.3 — detail arrays carry per-phrase canon source attribution
+    // ("Adams · Zone System" etc). Falls back to flat-string render
+    // when detail isn't populated (older runs / API-fed data).
+    const strengthsDetail = (r.advice && r.advice.strengths_detail) || null;
+    const weaknessesDetail = (r.advice && r.advice.weaknesses_detail) || null;
+    const rationale = (r.advice && r.advice.rationale) || "";
 
     // Esc-safe HTML escape
     const esc = s => String(s || '').replace(/[&<>"']/g, c => (
@@ -4649,17 +4689,38 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
       </div>
       ` : ''}
 
+      ${rationale ? `
+      <div class="section">
+        <div class="section-title">⊕ 为何 maybe</div>
+        <div class="rationale">${esc(rationale)}</div>
+      </div>
+      ` : ''}
+
       ${strengths.length ? `
       <div class="section">
         <div class="section-title">优点</div>
-        <ul class="strengths-list">${strengths.map(s => `<li>${esc(s)}</li>`).join('')}</ul>
+        <ul class="strengths-list">${(strengthsDetail || strengths.map(s => ({phrase: s}))).map(d => `
+          <li>
+            ${esc(d.phrase || d)}
+            ${d.source ? `<span class="canon-cite" title="正典出处">— ${esc(d.source)}</span>` : ''}
+          </li>
+        `).join('')}</ul>
       </div>
       ` : ''}
 
       ${(weaknesses.length || suggestions.length) ? `
       <div class="section">
         <div class="section-title">改进建议</div>
-        <ul class="weak-list">${[...weaknesses, ...suggestions].map(s => `<li>${esc(s)}</li>`).join('')}</ul>
+        <ul class="weak-list">${
+          weaknessesDetail
+            ? weaknessesDetail.map(d => `
+                <li>
+                  ${esc(d.phrase)}
+                  ${d.source ? `<span class="canon-cite">— ${esc(d.source)}</span>` : ''}
+                  ${d.fix ? `<div class="fix-line">→ ${esc(d.fix)}</div>` : ''}
+                </li>`).join('')
+            : [...weaknesses, ...suggestions].map(s => `<li>${esc(s)}</li>`).join('')
+        }</ul>
       </div>
       ` : ''}
 
