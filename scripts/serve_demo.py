@@ -2779,10 +2779,23 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
        with absent inner scrolling pushed header + footer offscreen.
        Lock to a fixed viewport-relative size, scroll only the body,
        sticky header + footer. */
+    /* V14.4 — flip browser modal from style.display to .show class
+       so it can share the modalBackdropIn / modalContentIn keyframes
+       and ARIA helpers below. The legacy ``style.display=flex|none``
+       call sites have been migrated to ``classList.add/remove("show")``. */
     .browser-modal {
       position: fixed; inset: 0; background: rgba(0,0,0,0.78);
-      display: flex; align-items: center; justify-content: center;
+      display: none; align-items: center; justify-content: center;
       z-index: 10; backdrop-filter: blur(6px);
+    }
+    .browser-modal.show { display: flex; animation: modalBackdropIn 160ms ease-out; }
+    .browser-modal.show .browser-card {
+      animation: modalContentIn 200ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .browser-modal.show, .browser-modal.show .browser-card {
+        animation-duration: 0.01ms;
+      }
     }
     .browser-card {
       background: var(--bg-card); border: 1px solid var(--border-hi);
@@ -2830,6 +2843,48 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
     }
     .browser-header .close:hover {
       color: var(--fg); border-color: var(--border-hi);
+    }
+    /* V14.4 — at narrow widths, the breadcrumb path + quick-jump
+       chips + close button compress into a tiny illegible row. Stack
+       vertically with bigger tap targets (≥36 px). The quick chips
+       stay flex-wrap'd so they drop to a second row instead of
+       horizontally scrolling. */
+    @media (max-width: 640px) {
+      .browser-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+        padding: 12px;
+      }
+      .browser-header code {
+        order: 1;
+        font-size: 13px;
+        word-break: break-all;
+        white-space: normal;
+        overflow: visible;
+        text-overflow: clip;
+      }
+      .browser-header .quick {
+        order: 2;
+        gap: 6px;
+      }
+      .browser-header .quick a {
+        padding: 6px 10px;
+        font-size: 12px;
+        min-height: 32px;
+        display: inline-flex;
+        align-items: center;
+      }
+      .browser-header .close {
+        order: 0;
+        align-self: flex-end;
+        width: 36px; height: 36px;
+        font-size: 18px;
+      }
+      .browser-card {
+        height: 92vh;
+        width: 96vw;
+      }
     }
     .browser-body {
       overflow-y: auto;     /* THIS scrolls when content overflows */
@@ -3135,6 +3190,82 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
 
   let pickedFiles = [];
 
+  // V14.4 — modal a11y. Each modal registered with ``registerModal``
+  // gets ARIA role=dialog, aria-modal, aria-labelledby (auto-derived),
+  // a Tab focus trap, and focus restore on close. Toggle visibility
+  // via ``classList.add/remove("show")`` exactly like before — the
+  // observer handles the ARIA/focus side reactively.
+  function _modalFocusables(el) {
+    return Array.from(el.querySelectorAll(
+      'a[href], button, input, textarea, select, [tabindex]:not([tabindex="-1"])'
+    )).filter(x => !x.disabled && x.offsetParent !== null);
+  }
+  function _attachTrap(el) {
+    el.setAttribute("role", "dialog");
+    el.setAttribute("aria-modal", "true");
+    if (!el.getAttribute("aria-labelledby")) {
+      const head = el.querySelector("h1, h2, h3, .modal-title");
+      if (head) {
+        if (!head.id) head.id = "modal-title-" + Math.random().toString(36).slice(2, 8);
+        el.setAttribute("aria-labelledby", head.id);
+      }
+    }
+    el._previouslyFocused = document.activeElement;
+    setTimeout(() => {
+      const f = _modalFocusables(el);
+      if (f.length) f[0].focus();
+    }, 0);
+    el._trapHandler = (e) => {
+      if (e.key !== "Tab") return;
+      const f = _modalFocusables(el);
+      if (!f.length) return;
+      const first = f[0], last = f[f.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault(); last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault(); first.focus();
+      }
+    };
+    el.addEventListener("keydown", el._trapHandler);
+  }
+  function _detachTrap(el) {
+    if (el._trapHandler) {
+      el.removeEventListener("keydown", el._trapHandler);
+      el._trapHandler = null;
+    }
+    const prev = el._previouslyFocused;
+    el._previouslyFocused = null;
+    if (prev && typeof prev.focus === "function" && document.body.contains(prev)) {
+      prev.focus();
+    }
+  }
+  function registerModal(el) {
+    if (!el || el._a11yWired) return;
+    el._a11yWired = true;
+    el._isOpen = el.classList.contains("show");
+    if (el._isOpen) _attachTrap(el);
+    const obs = new MutationObserver(() => {
+      const open = el.classList.contains("show");
+      if (open && !el._isOpen) {
+        el._isOpen = true;
+        _attachTrap(el);
+      } else if (!open && el._isOpen) {
+        el._isOpen = false;
+        _detachTrap(el);
+      }
+    });
+    obs.observe(el, { attributes: true, attributeFilter: ["class"] });
+  }
+  function openModal(el) {
+    if (!el) return;
+    registerModal(el);
+    el.classList.add("show");
+  }
+  function closeModal(el) {
+    if (!el) return;
+    el.classList.remove("show");
+  }
+
   function fmtBytes(b) {
     if (b >= 1e9) return (b / 1e9).toFixed(2) + " GB";
     if (b >= 1e6) return (b / 1e6).toFixed(0) + " MB";
@@ -3378,28 +3509,33 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
       browserBody.innerHTML = `<div class="muted" style="padding:14px">${e}</div>`;
     }
   }
+  // V14.4 — flipped from style.display to .show class so the modal
+  // can share the global animation keyframes + ARIA helpers below.
+  // Pre-register so the observer wires up focus trap + restoration
+  // even on the very first open.
+  registerModal(browserModal);
   browseBtn.addEventListener("click", () => {
-    browserModal.style.display = "flex";
+    openModal(browserModal);
     loadBrowser(folderPath.value.trim() || "");
   });
-  browserClose.addEventListener("click", () => browserModal.style.display = "none");
+  browserClose.addEventListener("click", () => closeModal(browserModal));
   browserUseHere.addEventListener("click", () => {
     folderPath.value = browserCurrent;
-    browserModal.style.display = "none";
+    closeModal(browserModal);
     inspectFolder();
   });
   // V8.3: quick-jump shortcut buttons in the modal header.
   document.querySelectorAll("#browserQuick a").forEach(a => {
     a.addEventListener("click", () => loadBrowser(a.dataset.go));
   });
-  // V8.3: Esc to close, click on backdrop to close.
+  // V8.3 + V14.4: Esc to close, click on backdrop to close.
   document.addEventListener("keydown", e => {
-    if (e.key === "Escape" && browserModal.style.display !== "none") {
-      browserModal.style.display = "none";
+    if (e.key === "Escape" && browserModal.classList.contains("show")) {
+      closeModal(browserModal);
     }
   });
   browserModal.addEventListener("click", e => {
-    if (e.target === browserModal) browserModal.style.display = "none";
+    if (e.target === browserModal) closeModal(browserModal);
   });
 
   // ---------------------- Upload (existing path) -----------------------
@@ -3713,6 +3849,37 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
     @keyframes toastOut {
       from { transform: translateX(0);    opacity: 1; }
       to   { transform: translateX(20px); opacity: 0; }
+    }
+
+    /* V14.4 — unified modal animation. Every modal that uses
+       ``.show`` now fades the backdrop and translates+scales the
+       content. ``prefers-reduced-motion`` cuts the duration to
+       almost-instant for users who set that OS preference. */
+    @keyframes modalBackdropIn {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+    @keyframes modalContentIn {
+      from { opacity: 0; transform: translateY(8px) scale(0.985); }
+      to   { opacity: 1; transform: translateY(0)   scale(1);     }
+    }
+    .lightbox.show, .ann-modal.show, .cmp-modal.show {
+      animation: modalBackdropIn 160ms ease-out;
+    }
+    .lightbox.show .img-pane,
+    .lightbox.show .info-pane,
+    .ann-modal.show .ann-card,
+    .cmp-modal.show .cmp-header,
+    .cmp-modal.show .cmp-body {
+      animation: modalContentIn 200ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .lightbox.show, .ann-modal.show, .cmp-modal.show,
+      .lightbox.show .img-pane, .lightbox.show .info-pane,
+      .ann-modal.show .ann-card,
+      .cmp-modal.show .cmp-header, .cmp-modal.show .cmp-body {
+        animation-duration: 0.01ms;
+      }
     }
 
     /* V9.2 cluster compare modal */
@@ -4209,6 +4376,86 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
     {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
   ));
 
+  // V14.4 — modal a11y wiring via MutationObserver. The existing
+  // results page has 16+ ``classList.add/remove("show")`` call sites
+  // for lightbox / annotation / cluster-compare; rather than rewrite
+  // them all, we observe the class attribute on each registered modal
+  // and apply ARIA + focus trap reactively. The same observer also
+  // restores focus to the opener on close.
+  function _modalFocusables(el) {
+    return Array.from(el.querySelectorAll(
+      'a[href], button, input, textarea, select, [tabindex]:not([tabindex="-1"])'
+    )).filter(x => !x.disabled && x.offsetParent !== null);
+  }
+  function _attachTrap(el) {
+    el.setAttribute("role", "dialog");
+    el.setAttribute("aria-modal", "true");
+    if (!el.getAttribute("aria-labelledby")) {
+      const head = el.querySelector("h1, h2, h3, .modal-title");
+      if (head) {
+        if (!head.id) head.id = "modal-title-" + Math.random().toString(36).slice(2, 8);
+        el.setAttribute("aria-labelledby", head.id);
+      }
+    }
+    el._previouslyFocused = document.activeElement;
+    setTimeout(() => {
+      const f = _modalFocusables(el);
+      if (f.length) f[0].focus();
+    }, 0);
+    el._trapHandler = (e) => {
+      if (e.key !== "Tab") return;
+      const f = _modalFocusables(el);
+      if (!f.length) return;
+      const first = f[0], last = f[f.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault(); last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault(); first.focus();
+      }
+    };
+    el.addEventListener("keydown", el._trapHandler);
+  }
+  function _detachTrap(el) {
+    if (el._trapHandler) {
+      el.removeEventListener("keydown", el._trapHandler);
+      el._trapHandler = null;
+    }
+    const prev = el._previouslyFocused;
+    el._previouslyFocused = null;
+    if (prev && typeof prev.focus === "function" && document.body.contains(prev)) {
+      prev.focus();
+    }
+  }
+  function registerModal(el) {
+    if (!el || el._a11yWired) return;
+    el._a11yWired = true;
+    el._isOpen = el.classList.contains("show");
+    if (el._isOpen) _attachTrap(el);
+    const obs = new MutationObserver(() => {
+      const open = el.classList.contains("show");
+      if (open && !el._isOpen) {
+        el._isOpen = true;
+        _attachTrap(el);
+      } else if (!open && el._isOpen) {
+        el._isOpen = false;
+        _detachTrap(el);
+      }
+    });
+    obs.observe(el, { attributes: true, attributeFilter: ["class"] });
+  }
+  // Convenience wrappers that bookend a class toggle with a11y.
+  // (Used by the new browser-modal call sites; legacy sites benefit
+  // automatically via the observer.)
+  function openModal(el) {
+    if (!el) return;
+    registerModal(el);
+    el.classList.add("show");
+  }
+  function closeModal(el) {
+    if (!el) return;
+    el.classList.remove("show");
+  }
+
   // V14.2 — non-blocking toast. Replaces native alert() for ack
   // messages where you don't actually need to interrupt the user.
   // ``kind`` is one of: '' (info, blue), 'success', 'error', 'warning'.
@@ -4566,6 +4813,10 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
   const lbImg = document.getElementById("lbImg");
   const lbInfo = document.getElementById("lbInfo");
   const lbClose = document.getElementById("lbClose");
+  // V14.4 — register for ARIA + focus trap. Existing call sites that
+  // do ``lb.classList.add("show")`` continue to work; the observer
+  // handles a11y reactively.
+  registerModal(lb);
 
   // V14.2 — track the current lightbox row so keyboard nav can step
   // through the *visible* card order (whatever filters/sort are
@@ -4976,6 +5227,7 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
   //      navigates to the next active-learning candidate
   // ==================================================================
   const annModal = document.getElementById("annModal");
+  registerModal(annModal);  // V14.4 — ARIA dialog + focus trap
   const annThumb = document.getElementById("annThumb");
   const annMeta = document.getElementById("annMeta");
   const annWhy = document.getElementById("annWhy");
@@ -5250,6 +5502,7 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
   // V9.2 cluster compare modal — open via "⊞ 并排比较" on dividers
   // ==================================================================
   const cmpModal = document.getElementById("cmpModal");
+  registerModal(cmpModal);  // V14.4 — ARIA dialog + focus trap
   const cmpTitle = document.getElementById("cmpTitle");
   const cmpMeta = document.getElementById("cmpMeta");
   const cmpBody = document.getElementById("cmpBody");
