@@ -303,7 +303,7 @@ def run_pipeline(
     # (e.g. 5★ subject when no_clear_subject flag is set).
     if meta_mode and meta_mode != "off":
         if progress_cb is not None:
-            progress_cb(total, total, f"Meta judge ({meta_mode}) 综合中…")
+            progress_cb(total, total, f"Meta judge ({meta_mode}) 并发综合中…")
         from pixcull.scoring.meta_judge import load_meta_judge, build_packet
         mjudge = load_meta_judge(meta_mode)
         if mjudge is not None:
@@ -315,39 +315,65 @@ def run_pipeline(
             df["meta_inconsistencies"] = ""
             df["meta_elapsed_s"] = None
             meta_path = output / "meta_verdicts.jsonl"
+
+            # V11.0 — concurrent meta-judge calls.
+            # Each call is a network round-trip to DeepSeek (~5-15s
+            # blocked on I/O). With 8 concurrent workers a 50-image
+            # batch goes from 50 × 10s = 500s down to ~80s.
+            # DeepSeek allows generous concurrency on V4-Flash; use
+            # ThreadPoolExecutor (the OpenAI client is thread-safe).
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+
+            # Pre-build packets and indices for all non-cull rows
+            tasks: list[tuple[int, str, dict]] = []  # (df_idx, fn, packet)
+            for i, (_, row) in enumerate(df.iterrows()):
+                if str(row.get("decision", "")) == "cull":
+                    continue
+                fn = str(row.get("filename", ""))
+                packet = build_packet(row.to_dict(),
+                                      vlm_verdicts_by_fn.get(fn))
+                tasks.append((i, fn, packet))
+
             n_meta_done = 0
-            with open(meta_path, "w", encoding="utf-8") as mf:
-                for i, (_, row) in enumerate(df.iterrows()):
-                    # Skip rule-CULL rows: a CULL is already a CULL,
-                    # paying ¥0.003 to confirm it isn't worth it.
-                    if str(row.get("decision", "")) == "cull":
-                        continue
-                    if progress_cb is not None:
-                        progress_cb(i + 1, total,
-                                    f"Meta {i+1}/{total}: {row.get('filename', '?')}")
-                    fn = str(row.get("filename", ""))
-                    packet = build_packet(row.to_dict(),
-                                          vlm_verdicts_by_fn.get(fn))
-                    mv = mjudge.consolidate(packet)
-                    mf.write(_json.dumps(mv.to_dict(),
-                                         ensure_ascii=False) + "\n")
-                    if mv.error:
-                        continue
-                    for axis_name, ax in mv.axes.items():
-                        if ax.stars is not None:
-                            df.at[df.index[i],
-                                  f"meta_{axis_name}_stars"] = ax.stars
-                    df.at[df.index[i], "meta_overall_label"] = mv.overall_label
-                    df.at[df.index[i], "meta_overall_rationale"] = mv.overall_rationale
-                    df.at[df.index[i], "meta_confidence"] = mv.confidence
-                    df.at[df.index[i], "meta_inconsistencies"] = (
-                        " | ".join(mv.inconsistencies or [])[:500]
-                    )
-                    df.at[df.index[i], "meta_elapsed_s"] = mv.elapsed_s
-                    n_meta_done += 1
+            n_meta_total = len(tasks)
+            mf = open(meta_path, "w", encoding="utf-8")
+            try:
+                with ThreadPoolExecutor(max_workers=8) as pool:
+                    future_to_task = {
+                        pool.submit(mjudge.consolidate, pkt): (i, fn)
+                        for (i, fn, pkt) in tasks
+                    }
+                    for fut in as_completed(future_to_task):
+                        i, fn = future_to_task[fut]
+                        try:
+                            mv = fut.result()
+                        except Exception as exc:  # noqa: BLE001
+                            console.print(f"[yellow]meta error[/] {fn}: {exc}")
+                            continue
+                        n_meta_done += 1
+                        if progress_cb is not None:
+                            progress_cb(n_meta_done, n_meta_total,
+                                        f"Meta {n_meta_done}/{n_meta_total}: {fn}")
+                        mf.write(_json.dumps(mv.to_dict(),
+                                             ensure_ascii=False) + "\n")
+                        if mv.error:
+                            continue
+                        for axis_name, ax in mv.axes.items():
+                            if ax.stars is not None:
+                                df.at[df.index[i],
+                                      f"meta_{axis_name}_stars"] = ax.stars
+                        df.at[df.index[i], "meta_overall_label"] = mv.overall_label
+                        df.at[df.index[i], "meta_overall_rationale"] = mv.overall_rationale
+                        df.at[df.index[i], "meta_confidence"] = mv.confidence
+                        df.at[df.index[i], "meta_inconsistencies"] = (
+                            " | ".join(mv.inconsistencies or [])[:500]
+                        )
+                        df.at[df.index[i], "meta_elapsed_s"] = mv.elapsed_s
+            finally:
+                mf.close()
             console.print(
                 f"[cyan]Meta-judge[/] {mjudge.model_name} consolidated "
-                f"{n_meta_done} non-cull rows"
+                f"{n_meta_done} non-cull rows (concurrent x8)"
             )
 
     # Export CSV (drop embedding to keep file small)
