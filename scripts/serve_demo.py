@@ -2483,12 +2483,18 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
       --bg-card: #14171c;
       --bg-card-hi: #1a1e25;
       --fg: #e9ecf2;
-      --muted: #8892a0;
+      /* V14.2 — bumped from #8892a0 (5.4:1 on --bg) to #a8b2c1
+         (~7.2:1) so muted body text comfortably passes WCAG AA Large
+         and approaches AAA. The old value was technically passing
+         but felt dim during testing. */
+      --muted: #a8b2c1;
+      --muted-soft: #7a8696;  /* still-quieter level for tertiary chrome */
       --border: #232830;
       --border-hi: #2f3742;
       --accent: #3b82f6;
       --accent-hi: #60a5fa;
       --accent-glow: rgba(59,130,246,0.18);
+      --focus-ring: rgba(96,165,250,0.55);  /* V14.2 — focus-visible color */
       --keep: #34d399;
       --maybe: #fbbf24;
       --cull: #ef6363;
@@ -2496,6 +2502,14 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
       --shadow-sm: 0 1px 2px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.02);
       --shadow-md: 0 4px 16px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.03);
       --shadow-lg: 0 16px 60px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.04);
+      /* V14.2 — design tokens. Use these everywhere instead of magic
+         pixels so spacing/sizing stays on a 4px grid. */
+      --space-1: 4px;  --space-2: 8px;  --space-3: 12px;
+      --space-4: 16px; --space-5: 20px; --space-6: 24px;
+      --radius-sm: 4px; --radius-md: 6px; --radius-lg: 10px;
+      --btn-pad-s: 4px 10px;
+      --btn-pad-m: 7px 14px;
+      --btn-pad-l: 10px 22px;
     }
     * { box-sizing: border-box; }
     body {
@@ -2504,11 +2518,32 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
       background-image: var(--bg-grad);
       background-attachment: fixed;
       color: var(--fg);
-      font: 14px/1.55 -apple-system, "PingFang SC", "Helvetica Neue",
-            "Microsoft Yahei", "Inter", sans-serif;
+      /* V14.2 — Windows-friendly system fallback chain. The old chain
+         pinned to PingFang SC (macOS-only) before Yahei; Inter was
+         last. Now: Inter → SF on macOS → Segoe UI Variable on Win11
+         → Microsoft Yahei UI for CJK on Windows → fallbacks. */
+      font: 14px/1.55 "Inter", -apple-system, BlinkMacSystemFont,
+            "Segoe UI Variable", "Segoe UI", "PingFang SC",
+            "Microsoft Yahei UI", "Microsoft Yahei",
+            "Helvetica Neue", sans-serif;
       letter-spacing: 0.01em;
       display: flex; flex-direction: column; align-items: center;
       padding: 80px 20px 60px;
+    }
+    /* V14.2 — visible focus ring for keyboard users on every
+       interactive element. ``focus-visible`` doesn't fire on mouse
+       click, so this is invisible to mouse users (matching the
+       intent: a11y for keyboard nav without aesthetic tax on
+       pointer use). */
+    *:focus-visible {
+      outline: 2px solid var(--focus-ring);
+      outline-offset: 2px;
+      border-radius: var(--radius-sm);
+    }
+    button, input, select, a {
+      /* belt-and-braces: nuke the default browser focus then let
+         our :focus-visible above re-add a consistent ring */
+      outline: none;
     }
     h1 {
       margin: 0 0 8px; font-size: 28px; font-weight: 700;
@@ -2839,9 +2874,9 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
 
     <div class="tab-pane" data-pane="upload">
     <div class="drop-zone" id="dropZone">
-      <div class="big">⇪</div>
-      <div>拖拽照片到这里,或<u>点击选择</u></div>
-      <div class="hint">支持 JPG / PNG / RAW (CR3/CR2/NEF/ARW/DNG)</div>
+      <div class="big" id="dropIcon">⇪</div>
+      <div id="dropMain">拖拽照片到这里,或<u>点击选择</u></div>
+      <div class="hint" id="dropHint">支持 JPG / PNG / RAW (CR3/CR2/NEF/ARW/DNG)</div>
     </div>
     <input id="fileInput" type="file" multiple accept=".jpg,.jpeg,.png,.cr3,.cr2,.nef,.arw,.dng,.tif,.tiff" style="display:none">
     <div class="file-list" id="fileList" style="display:none"></div>
@@ -3125,14 +3160,37 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
     fileInput.value = "";
   });
 
+  // V14.2 — live drag feedback. We can read e.dataTransfer.items
+  // count during dragover (the actual File objects are sealed until
+  // drop) so the user gets "丢下 N 张" instead of just a glow.
+  const dropMain = document.getElementById("dropMain");
+  const dropHint = document.getElementById("dropHint");
+  const dropIcon = document.getElementById("dropIcon");
+  const _dropDefaults = {
+    main: dropMain.innerHTML,
+    hint: dropHint.innerHTML,
+    icon: dropIcon.innerHTML,
+  };
   ["dragenter", "dragover"].forEach(ev =>
     dropZone.addEventListener(ev, e => {
       e.preventDefault(); dropZone.classList.add("dragover");
+      // dataTransfer.items is the live count even during drag
+      const n = e.dataTransfer && e.dataTransfer.items
+        ? Array.from(e.dataTransfer.items).filter(i => i.kind === "file").length
+        : 0;
+      if (n > 0) {
+        dropIcon.innerHTML = "⤓";
+        dropMain.innerHTML = `松开以加入 <b>${n}</b> 张图片`;
+        dropHint.innerHTML = `已选 ${pickedFiles.length} · 加上将共 ${pickedFiles.length + n} 张`;
+      }
     })
   );
   ["dragleave", "drop"].forEach(ev =>
     dropZone.addEventListener(ev, e => {
       e.preventDefault(); dropZone.classList.remove("dragover");
+      dropMain.innerHTML = _dropDefaults.main;
+      dropHint.innerHTML = _dropDefaults.hint;
+      dropIcon.innerHTML = _dropDefaults.icon;
     })
   );
   dropZone.addEventListener("drop", e => {
@@ -3393,9 +3451,22 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
     runUpload(snapshot);
   });
 
+  // V14.2 — rolling-window ETA. We collect (timestamp, done) samples
+  // for the last ~25 polls and compute "items per second" from the
+  // tail. Smoother than naive total-elapsed/done because per-image
+  // cost varies (RAW decode is slower for the first image, model
+  // warming, occasional API stalls).
+  function fmtEta(secs) {
+    if (!isFinite(secs) || secs < 1) return "<1s";
+    if (secs < 60) return `${Math.round(secs)}s`;
+    const m = Math.floor(secs / 60), s = Math.round(secs % 60);
+    return s ? `${m}m${s}s` : `${m}m`;
+  }
+
   async function pollStatus(runId) {
     let stalled = 0;
     let lastDone = 0;
+    const samples = [];   // [{t, done}, ...] up to 25
     while (true) {
       let s;
       try {
@@ -3406,7 +3477,25 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
         continue;
       }
 
-      messageEl.textContent = s.message || "处理中…";
+      // Update rolling samples for ETA
+      const now = Date.now() / 1000;
+      samples.push({ t: now, done: s.done || 0 });
+      while (samples.length > 25) samples.shift();
+
+      let etaTxt = "";
+      if (s.total && s.done > 0 && samples.length >= 4) {
+        // Use only the most recent half of the window so the rate
+        // tracks current pace, not the cold-start spike.
+        const tail = samples.slice(-Math.max(4, Math.floor(samples.length / 2)));
+        const dt = tail[tail.length - 1].t - tail[0].t;
+        const dn = tail[tail.length - 1].done - tail[0].done;
+        if (dt > 0 && dn > 0) {
+          const rate = dn / dt;  // items/sec
+          const remain = s.total - s.done;
+          if (remain > 0) etaTxt = ` · 预计 ${fmtEta(remain / rate)}`;
+        }
+      }
+      messageEl.textContent = (s.message || "处理中…") + etaTxt;
       if (s.total) {
         const pct = Math.max(5, Math.round(100 * s.done / s.total));
         progressBar.style.width = pct + "%";
@@ -3457,7 +3546,9 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
       --bg-card: #14171c;
       --bg-card-hi: #1a1e25;
       --fg: #e9ecf2;
-      --muted: #8892a0;
+      /* V14.2 — same contrast bump as upload page */
+      --muted: #a8b2c1;
+      --muted-soft: #7a8696;
       --border: #232830;
       --border-hi: #2f3742;
       --keep: #34d399;
@@ -3465,14 +3556,27 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
       --cull: #ef6363;
       --accent: #3b82f6;
       --accent-glow: rgba(59,130,246,0.18);
+      --focus-ring: rgba(96,165,250,0.55);
+      --space-1: 4px;  --space-2: 8px;  --space-3: 12px;
+      --space-4: 16px; --space-5: 20px; --space-6: 24px;
+      --radius-sm: 4px; --radius-md: 6px; --radius-lg: 10px;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0; background: var(--bg); color: var(--fg);
-      font: 13px/1.5 -apple-system, "PingFang SC", "Helvetica Neue",
-            "Microsoft Yahei", sans-serif;
+      font: 13px/1.5 "Inter", -apple-system, BlinkMacSystemFont,
+            "Segoe UI Variable", "Segoe UI", "PingFang SC",
+            "Microsoft Yahei UI", "Microsoft Yahei",
+            "Helvetica Neue", sans-serif;
       letter-spacing: 0.01em;
     }
+    /* V14.2 — visible focus ring */
+    *:focus-visible {
+      outline: 2px solid var(--focus-ring);
+      outline-offset: 2px;
+      border-radius: var(--radius-sm);
+    }
+    button, input, select, a, [tabindex] { outline: none; }
     header {
       position: sticky; top: 0; z-index: 5;
       background: rgba(11, 13, 16, 0.85);
@@ -3565,6 +3669,42 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
     .empty-actions {
       display: flex; gap: 10px; margin-top: 12px;
       flex-wrap: wrap; justify-content: center;
+    }
+
+    /* V14.2 — toast notification stack. Replaces native alert() for
+       non-blocking ops (annotation save, export ack, retry trigger).
+       Stacks bottom-right; auto-dismisses after 3-5s; click to remove. */
+    .toast-stack {
+      position: fixed;
+      right: 18px; bottom: 18px;
+      display: flex; flex-direction: column-reverse; gap: 8px;
+      z-index: 50; pointer-events: none;
+    }
+    .toast {
+      pointer-events: auto;
+      min-width: 240px; max-width: 380px;
+      padding: 10px 14px;
+      background: rgba(20,23,28,0.96);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      border-radius: 6px;
+      color: var(--fg); font-size: 13px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.45);
+      backdrop-filter: blur(8px);
+      animation: toastIn 180ms ease-out;
+      cursor: pointer;
+    }
+    .toast.success { border-left-color: var(--keep); }
+    .toast.error   { border-left-color: var(--cull); }
+    .toast.warning { border-left-color: var(--maybe); }
+    .toast.fading { animation: toastOut 220ms ease-in forwards; }
+    @keyframes toastIn {
+      from { transform: translateX(20px); opacity: 0; }
+      to   { transform: translateX(0);    opacity: 1; }
+    }
+    @keyframes toastOut {
+      from { transform: translateX(0);    opacity: 1; }
+      to   { transform: translateX(20px); opacity: 0; }
     }
 
     /* V9.2 cluster compare modal */
@@ -3914,8 +4054,24 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
       border: 1px solid rgba(255,255,255,0.15);
     }
     .lightbox .close-btn:hover { background: rgba(0,0,0,0.85); }
+    /* V14.2 — prev/next chevrons. Keyboard ←→ already works; chevrons
+       expose the affordance for mouse users (audit flagged this). */
+    .lightbox .nav-btn {
+      position: absolute; top: 50%; transform: translateY(-50%);
+      width: 44px; height: 60px; border-radius: 6px;
+      background: rgba(0,0,0,0.55); color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; font-size: 22px; user-select: none;
+      border: 1px solid rgba(255,255,255,0.15);
+      z-index: 11;
+      transition: background 120ms;
+    }
+    .lightbox .nav-btn:hover { background: rgba(0,0,0,0.85); }
+    .lightbox .nav-prev { left: 18px; }
+    .lightbox .nav-next { right: 18px; }
     @media (max-width: 900px) {
       .lightbox .close-btn { right: 18px; }
+      .lightbox .nav-btn { width: 38px; height: 50px; }
     }
   </style>
 </head>
@@ -3956,8 +4112,13 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
     </div>
   </header>
   <div class="grid" id="grid"></div>
+  <!-- V14.2 — toast container; populated by ``toast(msg, kind)`` in JS -->
+  <div class="toast-stack" id="toastStack" aria-live="polite"></div>
   <div class="lightbox" id="lightbox">
     <span class="close-btn" id="lbClose" title="关闭 (Esc)">×</span>
+    <!-- V14.2 — prev/next chevrons; keyboard ←→ also works -->
+    <span class="nav-btn nav-prev" id="lbPrev" title="上一张 (← / k)" aria-label="上一张">‹</span>
+    <span class="nav-btn nav-next" id="lbNext" title="下一张 (→ / j)" aria-label="下一张">›</span>
     <div class="img-pane"><img id="lbImg" alt=""></div>
     <div class="info-pane" id="lbInfo"></div>
   </div>
@@ -4014,6 +4175,28 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
   const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => (
     {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
   ));
+
+  // V14.2 — non-blocking toast. Replaces native alert() for ack
+  // messages where you don't actually need to interrupt the user.
+  // ``kind`` is one of: '' (info, blue), 'success', 'error', 'warning'.
+  // Auto-dismisses after `ms` (default 3500); click to dismiss early.
+  function toast(message, kind = "", ms = 3500) {
+    const stack = document.getElementById("toastStack");
+    if (!stack) { console.log("[toast]", message); return; }
+    const el = document.createElement("div");
+    el.className = "toast" + (kind ? " " + kind : "");
+    el.textContent = message;
+    el.addEventListener("click", () => removeToast(el));
+    stack.appendChild(el);
+    setTimeout(() => removeToast(el), ms);
+  }
+  function removeToast(el) {
+    if (!el || !el.parentNode) return;
+    el.classList.add("fading");
+    setTimeout(() => el.remove(), 220);
+  }
+  // expose for any inline-script / debugging callers
+  window.pcToast = toast;
 
   // Header stats
   const statsEl = document.getElementById("stats");
@@ -4350,9 +4533,19 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
   const lbInfo = document.getElementById("lbInfo");
   const lbClose = document.getElementById("lbClose");
 
+  // V14.2 — track the current lightbox row so keyboard nav can step
+  // through the *visible* card order (whatever filters/sort are
+  // applied), not just the raw `rows` array.
+  let _lbCurrentFn = null;
+
+  function _lbVisibleFns() {
+    return Array.from(grid.querySelectorAll(".card")).map(c => c.dataset.fn);
+  }
+
   function openLightbox(fn) {
     const r = rows.find(x => x.filename === fn);
     if (!r) return;
+    _lbCurrentFn = fn;
     // V14.1 — tell the server how big our viewport actually is so it
     // can serve a viewport-bucketed cache (800/1200/1600/...) instead
     // of always 1600 even on a 13" laptop. devicePixelRatio handles
@@ -4362,6 +4555,19 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
     lbImg.src = `/full/${run_id}/${encodeURIComponent(fn)}?w=${w}`;
     lbInfo.innerHTML = renderInfoPane(r);
     lb.classList.add("show");
+  }
+
+  // V14.2 — step within the visible card order. Wraps around the ends.
+  function lightboxStep(delta) {
+    const visible = _lbVisibleFns();
+    if (!visible.length) return;
+    let i = visible.indexOf(_lbCurrentFn);
+    if (i < 0) i = 0;
+    const nextI = (i + delta + visible.length) % visible.length;
+    openLightbox(visible[nextI]);
+    // Also move card focus so closing the lightbox lands on the
+    // matching card (consistent with mouse behavior).
+    if (typeof focusCard === "function") focusCard(visible[nextI], false);
   }
 
   function renderInfoPane(r) {
@@ -4482,10 +4688,22 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
     }
   });
   lbClose.addEventListener("click", () => lb.classList.remove("show"));
+  // V14.2 — wire chevron clicks for mouse users; keyboard already
+  // covered by the document-level keydown handler above.
+  const lbPrev = document.getElementById("lbPrev");
+  const lbNext = document.getElementById("lbNext");
+  if (lbPrev) lbPrev.addEventListener("click", e => {
+    e.stopPropagation(); lightboxStep(-1);
+  });
+  if (lbNext) lbNext.addEventListener("click", e => {
+    e.stopPropagation(); lightboxStep(+1);
+  });
   lb.addEventListener("click", e => {
-    // Only close on backdrop or img-pane click — not on info-pane
+    // Only close on backdrop or img-pane click — not on info-pane,
+    // close button, or nav buttons.
     if (e.target.closest(".info-pane")) return;
     if (e.target === lbClose) return;
+    if (e.target.closest(".nav-btn")) return;
     lb.classList.remove("show");
   });
 
@@ -4499,26 +4717,11 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
   // Active card is the one that has class .focused (visually outlined).
   // ==================================================================
   let focusedFn = null;
-  // V10.1 — toast notifications (Cmd+Z, batch result, etc.)
+  // V10.1 toast (single-element, bottom-center). V14.2 — keep the
+  // signature, delegate to the new stack-based ``toast()`` so we get
+  // multi-toast support for free without rewriting all callers.
   function showToast(msg, kind = "info") {
-    let t = document.getElementById("__toast");
-    if (!t) {
-      t = document.createElement("div");
-      t.id = "__toast";
-      t.style.cssText = "position:fixed;bottom:24px;left:50%;transform:translateX(-50%);"
-        + "background:rgba(0,0,0,0.85);color:#fff;padding:10px 18px;border-radius:6px;"
-        + "font-size:13px;z-index:99;border:1px solid rgba(255,255,255,0.15);"
-        + "transition:opacity 0.3s;backdrop-filter:blur(8px);box-shadow:0 8px 24px rgba(0,0,0,0.5);";
-      document.body.appendChild(t);
-    }
-    t.textContent = msg;
-    t.style.borderLeft = `3px solid ${
-      kind === "error" ? "var(--cull)" :
-      kind === "success" ? "var(--keep)" : "var(--accent)"
-    }`;
-    t.style.opacity = "1";
-    clearTimeout(t._timer);
-    t._timer = setTimeout(() => { t.style.opacity = "0"; }, 3000);
+    toast(msg, kind === "info" ? "" : kind);
   }
   // V10.1 — undo stack for batch / quick-label actions
   // Each entry: array of {filename, prev_decision, prev_human_labeled}
@@ -4652,6 +4855,20 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
     // Don't act when an annotation modal is open — let modal own input
     const am = document.getElementById("annModal");
     if (am && am.classList.contains("show")) return;
+
+    // V14.2 — when the lightbox is open, j/k/← →/PageUp/PageDown
+    // navigate between filtered+sorted rows *within* the lightbox so
+    // the user can flip through the keep/maybe/cull batch without
+    // closing and re-opening. Falls back to card focus only when the
+    // lightbox is closed.
+    if (lb.classList.contains("show")) {
+      if (e.key === "j" || e.key === "ArrowRight" || e.key === "PageDown") {
+        e.preventDefault(); lightboxStep(+1); return;
+      }
+      if (e.key === "k" || e.key === "ArrowLeft" || e.key === "PageUp") {
+        e.preventDefault(); lightboxStep(-1); return;
+      }
+    }
 
     if (e.key === "j" || e.key === "ArrowRight") { e.preventDefault(); moveFocus(+1); }
     else if (e.key === "k" || e.key === "ArrowLeft") { e.preventDefault(); moveFocus(-1); }
@@ -4834,7 +5051,7 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
       }
     });
     if (Object.keys(axes).length === 0 && !annOverall.value) {
-      alert("至少打 1 颗星 或 选 keep/maybe/cull");
+      toast("至少打 1 颗星 或 选 keep/maybe/cull", "warning");
       return;
     }
     const body = {
@@ -4851,7 +5068,7 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
       });
       if (!res.ok) {
         const e = await res.json().catch(() => ({}));
-        alert("保存失败:" + (e.error || res.status));
+        toast("保存失败:" + (e.error || res.status), "error");
         return;
       }
       // Update local rows so the card re-render reflects the save
@@ -4882,13 +5099,13 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
       const data = await res.json();
       if (data.done) {
         annModal.classList.remove("show");
-        alert(data.message || "已标完");
+        toast(data.message || "已标完本批所有图片", "success");
         return;
       }
       openAnnotation(data.filename, data.why);
     } catch (e) {
       annModal.classList.remove("show");
-      alert("active learning 队列失败:" + e);
+      toast("active learning 队列失败:" + e, "error");
     }
   }
 
@@ -5142,18 +5359,28 @@ _ADMIN_HTML = r"""<!DOCTYPE html>
       --bg-card: #1a1e24;
       --bg-card-hi: #232830;
       --fg: #e5e7eb;
-      --muted: #8892a0;
+      /* V14.2 — contrast bump */
+      --muted: #a8b2c1;
       --border: #2a2f38;
       --accent: #3b82f6;
       --keep: #2ea84a;
       --maybe: #d9a30c;
       --cull: #d95050;
       --danger: #ef4444;
+      --focus-ring: rgba(96,165,250,0.55);
     }
     * { box-sizing: border-box; }
     body {
       margin: 0; min-height: 100vh; background: var(--bg); color: var(--fg);
-      font: 13px/1.5 -apple-system, "PingFang SC", "Helvetica Neue", sans-serif;
+      font: 13px/1.5 "Inter", -apple-system, BlinkMacSystemFont,
+            "Segoe UI Variable", "Segoe UI", "PingFang SC",
+            "Microsoft Yahei UI", "Microsoft Yahei",
+            "Helvetica Neue", sans-serif;
+    }
+    *:focus-visible {
+      outline: 2px solid var(--focus-ring);
+      outline-offset: 2px;
+      border-radius: 4px;
     }
     header {
       padding: 18px 24px 12px; border-bottom: 1px solid var(--border);
