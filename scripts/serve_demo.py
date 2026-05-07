@@ -92,6 +92,16 @@ _RUNS_LOCK = threading.Lock()
 # /retrain handler simple.
 _RETRAIN_STATE: dict = {"state": "idle"}
 
+# V11.2 auto-retrain trigger:
+# Increments on every human annotation save; once it crosses
+# AUTO_RETRAIN_THRESHOLD, the next /annotation save will spawn a
+# background retrain (debounced — won't fire while one is already
+# running) then reset the counter. Small enough to feel
+# 'continuously learning', large enough that we don't burn CPU
+# on every single click.
+_AUTO_RETRAIN_THRESHOLD = 10
+_annotations_since_retrain = 0
+
 _DEFAULT_PORT = 8770
 _FALLBACK_PORTS = (8770, 8771, 8772, 9322, 7799)
 _DEMO_ROOT = Path("/tmp/pixcull_demo")  # base dir for upload + output trees
@@ -1702,8 +1712,37 @@ class _Handler(BaseHTTPRequestHandler):
         ann_path.parent.mkdir(parents=True, exist_ok=True)
         with open(ann_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+        # V11.2 — auto-retrain trigger. Each annotation increments a
+        # global counter; once the threshold is crossed AND no retrain
+        # is currently running, spawn one. The user gets a personalized
+        # picking model that improves silently as they label.
+        global _annotations_since_retrain
+        with _RUNS_LOCK:
+            _annotations_since_retrain += 1
+            should_train = (
+                _annotations_since_retrain >= _AUTO_RETRAIN_THRESHOLD
+                and _RETRAIN_STATE.get("state") != "running"
+            )
+            if should_train:
+                _annotations_since_retrain = 0
+
+        if should_train:
+            print(f"[auto-retrain] threshold reached, spawning retrain",
+                  file=sys.stderr)
+            threading.Thread(
+                target=_retrain_in_background,
+                args=(True, True),
+                daemon=True,
+            ).start()
+
         self._send_json(200, json.dumps(
-            {"ok": True, "filename": fn}, ensure_ascii=False
+            {
+                "ok": True, "filename": fn,
+                "auto_retrain_spawned": should_train,
+                "annotations_since_retrain": _annotations_since_retrain,
+            },
+            ensure_ascii=False,
         ).encode("utf-8"))
 
     def _serve_next_to_label(self, rel: str) -> None:
@@ -1843,6 +1882,13 @@ class _Handler(BaseHTTPRequestHandler):
         """Return the latest retrain run's state + per-axis CV metrics."""
         with _RUNS_LOCK:
             state = dict(_RETRAIN_STATE)
+            # V11.2 — surface auto-retrain progress for admin UI
+            state["auto_retrain"] = {
+                "threshold": _AUTO_RETRAIN_THRESHOLD,
+                "annotations_since_last": _annotations_since_retrain,
+                "remaining_until_trigger":
+                    max(0, _AUTO_RETRAIN_THRESHOLD - _annotations_since_retrain),
+            }
         # Augment with on-disk meta if available (last-completed run)
         meta_path = Path("models/rescorer_axis_meta.json")
         if meta_path.exists():
