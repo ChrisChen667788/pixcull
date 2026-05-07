@@ -2476,6 +2476,67 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
       background: rgba(255,255,255,0.06);
       padding: 1px 6px; border-radius: 3px;
     }
+    /* V12.2 onboarding tour overlays */
+    .tour-overlay {
+      position: fixed; inset: 0; z-index: 100;
+      background: rgba(0,0,0,0.7);
+      display: none; align-items: center; justify-content: center;
+      backdrop-filter: blur(4px);
+    }
+    .tour-overlay.show { display: flex; }
+    .tour-card {
+      background: var(--bg-card); border: 1px solid var(--border-hi);
+      border-radius: 12px; padding: 28px 32px;
+      width: min(520px, 92vw);
+      box-shadow: 0 24px 80px rgba(0,0,0,0.7);
+      position: relative;
+    }
+    .tour-card .step-num {
+      position: absolute; top: 12px; right: 16px;
+      color: var(--muted); font-size: 11px;
+      font-family: ui-monospace, monospace;
+    }
+    .tour-card h2 {
+      margin: 0 0 12px; font-size: 20px;
+      background: linear-gradient(180deg, #fff, #c8d0db);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .tour-card .body {
+      color: var(--fg); font-size: 14px; line-height: 1.7;
+      margin-bottom: 18px;
+    }
+    .tour-card .body code {
+      background: rgba(255,255,255,0.06); padding: 2px 7px;
+      border-radius: 3px; font-size: 12px;
+    }
+    .tour-card .body kbd {
+      display: inline-block;
+      background: rgba(255,255,255,0.08); border: 1px solid var(--border-hi);
+      border-bottom-width: 2px;
+      padding: 1px 7px; border-radius: 4px;
+      font-family: ui-monospace, monospace; font-size: 11px;
+      color: var(--accent-hi);
+    }
+    .tour-card .actions {
+      display: flex; gap: 8px; align-items: center;
+      border-top: 1px solid var(--border); padding-top: 16px;
+    }
+    .tour-card .skip {
+      background: transparent; color: var(--muted);
+      border: 1px solid var(--border);
+    }
+    .tour-card .next {
+      margin-left: auto;
+    }
+    .tour-card .progress-dots {
+      display: flex; gap: 6px;
+    }
+    .tour-card .dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--border);
+    }
+    .tour-card .dot.active { background: var(--accent); }
     .tabs {
       display: flex; gap: 4px; margin-bottom: 16px;
       border-bottom: 1px solid var(--border);
@@ -2687,6 +2748,7 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
       · <a href="/admin" style="color:var(--muted)">存储管理</a>
     </span>
     <span id="licenseHint" style="margin-left:8px"></span>
+    · <a href="?tour=1" style="color:var(--muted)">再看一次教程</a>
   </div>
 
 <script>
@@ -2732,6 +2794,121 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
       });
     }
   }).catch(() => {});
+</script>
+
+<!-- V12.2 Onboarding tour overlay -->
+<div class="tour-overlay" id="tourOverlay">
+  <div class="tour-card">
+    <span class="step-num" id="tourStep">1 / 5</span>
+    <h2 id="tourTitle"></h2>
+    <div class="body" id="tourBody"></div>
+    <div class="actions">
+      <div class="progress-dots" id="tourDots"></div>
+      <button class="skip" id="tourSkip">跳过</button>
+      <button class="next" id="tourNext">下一步</button>
+    </div>
+  </div>
+</div>
+<script>
+// V12.2 — first-run onboarding tour. 5 steps. Skippable.
+// Sets localStorage 'pixcull_tour_done' so it doesn't re-fire.
+(() => {
+  const STEPS = [
+    {
+      title: "欢迎使用 PixCull",
+      body: `<p>1.3 GB 的本地 AI 摄影分拣器。30 秒带你看完核心用法。</p>
+        <p style="color:var(--muted);font-size:12px">基于 Cartier-Bresson《决定性瞬间》、
+        Ansel Adams Zone System、14 类摄影题材定制评分,搭配本地 VLM (Qwen3-VL) +
+        DeepSeek meta-judge 的混合判断流。</p>`
+    },
+    {
+      title: "两种导入照片的方式",
+      body: `<p>顶部两个 tab:</p>
+        <p>📤 <b>上传模式</b>:把照片复制到 <code>/tmp/pixcull_demo</code> 处理(适合小批量、跨机)</p>
+        <p>📁 <b>扫描本地文件夹</b> ⭐:零拷贝索引,只把 score / 缩略图写到本地。
+        适合 GB 级 RAW(推荐)。</p>
+        <p style="color:var(--muted);font-size:12px">"浏览…" 模态顶部有 <code>~</code> /
+        <code>Pictures</code> / <code>Volumes</code> 等一键跳转,外置硬盘也能直接选。</p>`
+    },
+    {
+      title: "结果页的关键操作",
+      body: `<p>分析跑完进结果页:</p>
+        <p>🖱 点缩略图 → <b>大图 + 完整评分面板</b>(右侧 380px 信息栏)</p>
+        <p>⌨ <kbd>j</kbd> / <kbd>k</kbd> 切换 · <kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> 标 keep/maybe/cull</p>
+        <p>⌨ <kbd>space</kbd> 大图 · <kbd>Cmd+Z</kbd> 撤销 · <kbd>?</kbd> 完整快捷键</p>
+        <p>顶部下拉可按 <b>分数 / 时间 / 连拍聚类</b> 排序,聚类后每组有"⊞ 并排比较"按钮。</p>`
+    },
+    {
+      title: "DeepSeek meta-judge 看不见的英雄",
+      body: `<p>每张图分析后都会被 <b>4 路评分</b>:</p>
+        <p>① 规则栈 (canon check list) ② V2.1 多轴回归模型 ③ 本地 Qwen3-VL 视觉</p>
+        <p>④ <b>DeepSeek V4-Flash 综合</b> ⌬ — 读 ①②③ + detector 数值,产生最终判断 + 矛盾警示</p>
+        <p style="color:var(--muted);font-size:12px">紫色 ⌬ 标的卡片是 meta 给出的判断;
+        悬浮可看完整 rationale 和"VLM 给 5★ 但 detector 显示 subject_fraction=0.005"这种校准。</p>`
+    },
+    {
+      title: "导出 + 学习闭环",
+      body: `<p>📤 <b>下载 XMP</b> → Lightroom / Capture One 直接读 5★/3★/1★ 评级</p>
+        <p>📊 <b>下载 CSV</b> → Excel/Numbers 友好</p>
+        <p>🎯 <b>批量打分</b> → 输 <code>0.7,0.4</code> 自动按分数分桶</p>
+        <p>🔥 <b>每标 10 张系统自动重训练个性化模型</b> — 你的判断会被学进去,越用越准。</p>
+        <p style="color:var(--muted);font-size:12px;margin-top:14px">
+        现在你已经掌握了 90% 的功能。开始拖照片或选文件夹 →</p>`
+    },
+  ];
+  let cur = 0;
+  const overlay = document.getElementById("tourOverlay");
+  const stepEl = document.getElementById("tourStep");
+  const titleEl = document.getElementById("tourTitle");
+  const bodyEl = document.getElementById("tourBody");
+  const nextBtn = document.getElementById("tourNext");
+  const skipBtn = document.getElementById("tourSkip");
+  const dotsEl = document.getElementById("tourDots");
+
+  function paint() {
+    const s = STEPS[cur];
+    stepEl.textContent = `${cur + 1} / ${STEPS.length}`;
+    titleEl.textContent = s.title;
+    bodyEl.innerHTML = s.body;
+    nextBtn.textContent = (cur === STEPS.length - 1) ? "开始使用" : "下一步";
+    dotsEl.innerHTML = STEPS.map((_, i) =>
+      `<span class="dot ${i === cur ? 'active' : ''}"></span>`
+    ).join("");
+  }
+  function close() {
+    overlay.classList.remove("show");
+    try { localStorage.setItem("pixcull_tour_done", "1"); } catch (e) {}
+  }
+  nextBtn.addEventListener("click", () => {
+    if (cur < STEPS.length - 1) { cur++; paint(); }
+    else close();
+  });
+  skipBtn.addEventListener("click", close);
+  // Keyboard: → next, Esc skip
+  document.addEventListener("keydown", e => {
+    if (!overlay.classList.contains("show")) return;
+    if (e.key === "ArrowRight" || e.key === "Enter") {
+      e.preventDefault(); nextBtn.click();
+    } else if (e.key === "ArrowLeft") {
+      if (cur > 0) { cur--; paint(); }
+    } else if (e.key === "Escape") {
+      e.preventDefault(); close();
+    }
+  });
+  // Click backdrop = skip
+  overlay.addEventListener("click", e => {
+    if (e.target === overlay) close();
+  });
+
+  // Auto-show on first visit, OR if URL has ?tour=1
+  const forced = location.search.includes("tour=1");
+  let done = false;
+  try { done = localStorage.getItem("pixcull_tour_done") === "1"; } catch (e) {}
+  if (forced || !done) {
+    paint();
+    overlay.classList.add("show");
+  }
+})();
 </script>
 
 <script>
