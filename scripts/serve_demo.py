@@ -126,6 +126,85 @@ _MAX_UPLOAD_FILES_DEFAULT = 500
 _MIN_FREE_SPACE_AFTER_BYTES = 1 * 1024 * 1024 * 1024  # 1 GB
 
 
+# V14.0 — replace silent ``except: pass`` with traceable debug logs.
+# We don't want noisy stderr in normal operation, but every "we tried, it
+# failed, we kept going" path should leave a fingerprint for the rare bug
+# report ("my run shows 0 images though there's a manifest"). One-line
+# DEBUG-level breadcrumbs make those reproducible.
+_DEBUG_LOG = "PIXCULL_DEBUG" in __import__("os").environ
+
+
+def _dbg(where: str, exc: BaseException | None = None, extra: str = "") -> None:
+    """One-line breadcrumb to stderr for a non-fatal failure path.
+
+    Always writes when PIXCULL_DEBUG is set; otherwise stays quiet to keep
+    happy-path output clean. The point isn't user-facing logs — it's that
+    when a bug report comes in we can ask the user to re-run with
+    PIXCULL_DEBUG=1 and immediately see *which* fallback fired.
+    """
+    if not _DEBUG_LOG:
+        return
+    msg = f"[pixcull.dbg] {where}"
+    if exc is not None:
+        msg += f" :: {type(exc).__name__}: {exc}"
+    if extra:
+        msg += f" :: {extra}"
+    sys.stderr.write(msg + "\n")
+
+
+# V14.0 — JSON encoder that turns NaN/Infinity into null instead of writing
+# literal "NaN" / "Infinity" tokens (which are not valid JSON and crash
+# strict parsers like the JS frontend's JSON.parse). Use anywhere a
+# pandas-derived value might be NaN.
+class _SafeJSONEncoder(json.JSONEncoder):
+    def __init__(self, *a, **kw):
+        # allow_nan=False would raise — we want a quiet substitution instead
+        kw.setdefault("ensure_ascii", False)
+        super().__init__(*a, **kw)
+
+    def iterencode(self, o, _one_shot=False):
+        # JSONEncoder.iterencode emits "NaN"/"Infinity" by default. We
+        # walk the object first and substitute, which is cheap relative
+        # to the network cost of sending the response.
+        return super().iterencode(_scrub_nan(o), _one_shot=_one_shot)
+
+
+def _scrub_nan(o):
+    """Recursively replace float NaN/inf with None; everything else unchanged."""
+    import math
+    if isinstance(o, float):
+        if math.isnan(o) or math.isinf(o):
+            return None
+        return o
+    if isinstance(o, dict):
+        return {k: _scrub_nan(v) for k, v in o.items()}
+    if isinstance(o, (list, tuple)):
+        return [_scrub_nan(v) for v in o]
+    return o
+
+
+def _safe_dumps(obj, **kwargs) -> str:
+    """``json.dumps`` that never emits invalid NaN/Infinity tokens."""
+    kwargs.setdefault("ensure_ascii", False)
+    return json.dumps(_scrub_nan(obj), **kwargs)
+
+
+def _html_escape(s) -> str:
+    """Minimal HTML escape for filename / alt-text interpolation. Returns
+    ``""`` on None so f-strings stay safe. We don't import the ``html``
+    module here because we want explicit control over which characters
+    matter for the very narrow cases we hit (alt attribute, data-*).
+    """
+    if s is None:
+        return ""
+    return (str(s)
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace('"', "&quot;")
+            .replace("'", "&#39;"))
+
+
 def _pick_port(preferred: int, host: str) -> int:
     """Return the preferred port if free on ``host``, else first free fallback."""
     candidates = (preferred, *_FALLBACK_PORTS)
@@ -632,10 +711,11 @@ def _dir_size_bytes(p: Path) -> int:
             try:
                 if f.is_file() and not f.is_symlink():
                     total += f.stat().st_size
-            except OSError:
+            except OSError as exc:
+                _dbg("_dir_size_bytes/stat", exc, str(f))
                 continue
-    except OSError:
-        pass
+    except OSError as exc:
+        _dbg("_dir_size_bytes/rglob", exc, str(p))
     return total
 
 
@@ -676,8 +756,8 @@ def _enumerate_runs() -> list[dict]:
                         d = row.get("decision", "")
                         if d in decisions:
                             decisions[d] += 1
-            except (OSError, csv.Error):
-                pass
+            except (OSError, csv.Error) as exc:
+                _dbg("_enumerate_runs/scores.csv", exc, str(scores_csv))
 
         # Modification time of the run dir = "last touched"; useful for
         # the older-than-N-hours policy.
@@ -706,8 +786,8 @@ def _enumerate_runs() -> list[dict]:
             try:
                 manifest = json.loads(manifest_path.read_text("utf-8"))
                 n_input = len(manifest)
-            except (OSError, json.JSONDecodeError):
-                pass
+            except (OSError, json.JSONDecodeError) as exc:
+                _dbg("_enumerate_runs/manifest", exc, str(manifest_path))
 
         out.append({
             "run_id": run_id,
@@ -1294,8 +1374,8 @@ class _Handler(BaseHTTPRequestHandler):
             for f in target.iterdir():
                 if f.is_file() and f.suffix.lower() in IMG_EXTS:
                     n_imgs_here += 1
-        except OSError:
-            pass
+        except OSError as exc:
+            _dbg("browse/iterdir", exc, str(target))
 
         body = json.dumps({
             "path": str(target),
@@ -1326,16 +1406,31 @@ class _Handler(BaseHTTPRequestHandler):
     def _serve_results(self, run_id: str) -> None:
         result = _build_results(run_id)
         if result is None:
+            # V14.0 — distinguish "run hasn't started/doesn't exist" from
+            # "run finished but produced no analyzable images". The first
+            # is a real 404; the second is a polite "your batch contained
+            # 0 valid images, here's why" page.
+            run = _get_run(run_id) or _reload_run_from_disk(run_id)
+            if run is None:
+                self.send_error(
+                    404,
+                    "no such run — run_id may be wrong or expired",
+                )
+                return
+            # Run exists but no scores.csv yet — pipeline still running
             self.send_error(
-                404,
-                "no scores.csv yet — run not finished or invalid run_id",
+                425,  # Too Early — semantically correct for "not done yet"
+                "results not ready — pipeline may still be running. "
+                "Refresh in a few seconds.",
             )
             return
         rows, summary = result
         payload = {"run_id": run_id, "rows": rows, "summary": summary}
+        # _safe_dumps strips NaN/Infinity (V14.0) so JS JSON.parse never
+        # blows up on a stray inf in score_final or a NaN in axis stars.
         html = _RESULTS_HTML.replace(
             "__PAYLOAD__",
-            json.dumps(payload, ensure_ascii=False).replace("</", "<\\/"),
+            _safe_dumps(payload).replace("</", "<\\/"),
         )
         self._send_html(200, html.encode("utf-8"))
 
@@ -1424,8 +1519,8 @@ class _Handler(BaseHTTPRequestHandler):
             try:
                 params = json.loads(self.rfile.read(clen).decode("utf-8") or "{}")
                 target_mode = params.get("target", "tmp")
-            except (UnicodeDecodeError, json.JSONDecodeError):
-                pass
+            except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                _dbg("export/parse_body", exc)
         if target_mode not in ("tmp", "alongside"):
             self._reject_upload(400, "target must be 'tmp' or 'alongside'")
             return
@@ -1879,8 +1974,8 @@ class _Handler(BaseHTTPRequestHandler):
         if clen > 0:
             try:
                 params = json.loads(self.rfile.read(clen).decode("utf-8") or "{}")
-            except (UnicodeDecodeError, json.JSONDecodeError):
-                pass
+            except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                _dbg("retrain/parse_body", exc)
 
         global _RETRAIN_STATE
         with _RUNS_LOCK:
@@ -2045,8 +2140,8 @@ class _Handler(BaseHTTPRequestHandler):
         if meta_path.exists():
             try:
                 state["last_meta"] = json.loads(meta_path.read_text("utf-8"))
-            except (OSError, json.JSONDecodeError):
-                pass
+            except (OSError, json.JSONDecodeError) as exc:
+                _dbg("retrain_status/meta", exc, str(meta_path))
         self._send_json(200, json.dumps(state, ensure_ascii=False).encode("utf-8"))
 
     # --- storage admin -----------------------------------------------------
@@ -2468,6 +2563,20 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
       font-weight: 500;
     }
     a.results-link:hover { text-decoration: underline; }
+    /* V14.0 — Retry CTA. Stylistically secondary so it doesn't shout
+       at the user — but obvious enough to discover after a failure. */
+    .retry-btn {
+      display: inline-block; margin-top: 12px; margin-left: 8px;
+      padding: 6px 14px;
+      border: 1px solid var(--border); border-radius: 6px;
+      background: rgba(255,255,255,0.04); color: var(--fg);
+      font-size: 13px; cursor: pointer;
+      transition: background 120ms, border-color 120ms;
+    }
+    .retry-btn:hover {
+      background: rgba(255,255,255,0.08);
+      border-color: var(--border-hi);
+    }
     .footer {
       margin-top: 36px; color: var(--muted); font-size: 11px;
       text-align: center; max-width: 600px; line-height: 1.6;
@@ -2734,6 +2843,9 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
       <div id="message">--</div>
       <div class="progress"><div class="progress-bar" id="progressBar"></div></div>
       <a class="results-link" id="resultsLink" style="display:none">查看结果 →</a>
+      <!-- V14.0: explicit Retry affordance when the run errored. Hidden
+           by default; pollStatus / catch-blocks reveal it. -->
+      <button class="retry-btn" id="retryBtn" type="button" style="display:none">↻ 重试</button>
     </div>
   </div>
 
@@ -3041,10 +3153,28 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
     folderPath._t = setTimeout(inspectFolder, 350);
   });
 
-  scanBtn.addEventListener("click", async () => {
-    const p = folderPath.value.trim();
-    if (!p) return;
+  // V14.0 — Retry support. We remember the last fired action (scan or
+  // upload) so the user can re-trigger it without re-picking files or
+  // re-typing a folder path. ``lastAction`` is set on success path,
+  // re-fired on retry click.
+  let lastAction = null;  // { kind: 'scan'|'upload', run: () => Promise }
+  const retryBtn = document.getElementById("retryBtn");
+
+  function showRetry(visible) {
+    if (retryBtn) retryBtn.style.display = visible ? "inline-block" : "none";
+  }
+
+  if (retryBtn) {
+    retryBtn.addEventListener("click", () => {
+      if (!lastAction) return;
+      showRetry(false);
+      lastAction.run();
+    });
+  }
+
+  async function runScan(p) {
     scanBtn.disabled = true;
+    showRetry(false);
     statusEl.classList.add("show");
     stateLabel.textContent = "索引中";
     messageEl.textContent = "扫描文件夹…";
@@ -3073,7 +3203,15 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
       progressBar.classList.add("error");
       progressBar.style.width = "100%";
       scanBtn.disabled = false;
+      showRetry(true);  // V14.0 — let user retry without re-entering path
     }
+  }
+
+  scanBtn.addEventListener("click", () => {
+    const p = folderPath.value.trim();
+    if (!p) return;
+    lastAction = { kind: "scan", run: () => runScan(p) };
+    runScan(p);
   });
 
   // ---------------------- Folder browser modal -------------------------
@@ -3146,18 +3284,19 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
   });
 
   // ---------------------- Upload (existing path) -----------------------
-  uploadBtn.addEventListener("click", async () => {
-    if (!pickedFiles.length) return;
+  async function runUpload(files) {
+    if (!files.length) return;
     uploadBtn.disabled = true;
     clearBtn.disabled = true;
+    showRetry(false);
     statusEl.classList.add("show");
     stateLabel.textContent = "上传中";
-    messageEl.textContent = `正在上传 ${pickedFiles.length} 张图片…`;
+    messageEl.textContent = `正在上传 ${files.length} 张图片…`;
     progressBar.style.width = "5%";
     progressBar.classList.remove("error", "done");
 
     const fd = new FormData();
-    pickedFiles.forEach(f => fd.append("files", f));
+    files.forEach(f => fd.append("files", f));
 
     let runId = null;
     try {
@@ -3183,11 +3322,22 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
       progressBar.style.width = "100%";
       uploadBtn.disabled = false;
       clearBtn.disabled = false;
+      // V14.0 — Retry will re-upload the same File objects. The
+      // browser keeps them alive in memory as long as the input
+      // hasn't been re-clicked, so this works without re-picking.
+      showRetry(true);
       return;
     }
 
     stateLabel.textContent = "分析中";
     pollStatus(runId);
+  }
+
+  uploadBtn.addEventListener("click", () => {
+    if (!pickedFiles.length) return;
+    const snapshot = pickedFiles.slice();
+    lastAction = { kind: "upload", run: () => runUpload(snapshot) };
+    runUpload(snapshot);
   });
 
   async function pollStatus(runId) {
@@ -3222,6 +3372,12 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
         progressBar.classList.add("error");
         stateLabel.textContent = "失败";
         clearBtn.disabled = false;
+        // V14.0 — pipeline-side error → user can retry the same files
+        if (lastAction) {
+          uploadBtn.disabled = false;
+          scanBtn.disabled = false;
+          showRetry(true);
+        }
         return;
       }
       // stall detector — purely cosmetic, doesn't abort
@@ -3333,6 +3489,31 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
       user-select: none;
     }
     .cluster-divider .compare-btn:hover { background: rgba(59,130,246,0.25); }
+
+    /* V14.0 — empty-state placeholders */
+    .empty-state {
+      grid-column: 1 / -1;
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 10px;
+      padding: 56px 24px; margin: 16px 0;
+      background: rgba(255,255,255,0.02);
+      border: 1px dashed var(--border);
+      border-radius: 12px;
+      text-align: center;
+    }
+    .empty-icon { font-size: 38px; opacity: 0.7; line-height: 1; }
+    .empty-title {
+      font-size: 16px; font-weight: 600; color: var(--fg);
+    }
+    .empty-hint {
+      color: var(--muted); font-size: 13px; max-width: 420px;
+      line-height: 1.55;
+    }
+    .empty-actions {
+      display: flex; gap: 10px; margin-top: 12px;
+      flex-wrap: wrap; justify-content: center;
+    }
+
     /* V9.2 cluster compare modal */
     .cmp-modal {
       position: fixed; inset: 0; background: rgba(0,0,0,0.92);
@@ -3773,6 +3954,14 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
   const PAYLOAD = __PAYLOAD__;
   const { run_id, rows, summary } = PAYLOAD;
 
+  // V14.0 — shared HTML escape. Used everywhere a server-supplied
+  // string (filename, scene name, rationale text) lands in innerHTML
+  // or an attribute. Prevents a filename like ``"><script>alert(1)`` from
+  // breaking the lightbox or the cluster header.
+  const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => (
+    {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
+  ));
+
   // Header stats
   const statsEl = document.getElementById("stats");
   const ela = summary.elapsed_s != null ? summary.elapsed_s + "s" : "--";
@@ -3816,12 +4005,12 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
     const sceneEl = document.getElementById("sceneFilters");
     sceneEl.innerHTML = Object.entries(sceneCounts)
       .sort((a, b) => b[1] - a[1])
-      .map(([s, n]) => `<span class="pill" data-scene="${s}">${s} <span style="opacity:0.5">${n}</span></span>`)
+      .map(([s, n]) => `<span class="pill" data-scene="${esc(s)}">${esc(s)} <span style="opacity:0.5">${n}</span></span>`)
       .join("");
     const styleEl = document.getElementById("styleFilters");
     styleEl.innerHTML = Object.entries(styleCounts)
       .sort((a, b) => b[1] - a[1])
-      .map(([s, n]) => `<span class="pill" data-style="${s}">${s} <span style="opacity:0.5">${n}</span></span>`)
+      .map(([s, n]) => `<span class="pill" data-style="${esc(s)}">${esc(s)} <span style="opacity:0.5">${n}</span></span>`)
       .join("");
     sceneEl.querySelectorAll(".pill").forEach(el => {
       el.addEventListener("click", () => {
@@ -3931,31 +4120,35 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
       const cardCls = r.decision + (r.rubric_human_labeled ? " has-human" : "");
       // V9.0 style chip
       const styleChips = (r.style_modes || []).map(
-        s => `<span class="style-chip" title="检测到风格: ${s}">${s}</span>`
+        s => `<span class="style-chip" title="检测到风格: ${esc(s)}">${esc(s)}</span>`
       ).join("");
+      // V14.0 — escape filename for every interpolation site. Filenames
+      // can contain quotes/angle brackets on macOS+APFS, and an injected
+      // attribute would break the whole card.
+      const fnEsc = esc(r.filename);
       return `
-        <div class="card ${cardCls}" data-fn="${r.filename}">
-          <img class="thumb" src="${thumb}" data-full="${full}" loading="lazy" alt="${r.filename}">
-          <button class="annotate-btn" data-fn="${r.filename}" title="人工标注 (rubric)">${r.rubric_human_labeled ? "✓ 已标" : "标注"}</button>
+        <div class="card ${cardCls}" data-fn="${fnEsc}">
+          <img class="thumb" src="${thumb}" data-full="${full}" loading="lazy" alt="${fnEsc}">
+          <button class="annotate-btn" data-fn="${fnEsc}" title="人工标注 (rubric)">${r.rubric_human_labeled ? "✓ 已标" : "标注"}</button>
           <div class="body">
             <div class="row1">
               <span class="badge ${r.decision}">${r.decision}</span>
-              <span class="fn" title="${r.filename}">${r.filename}</span>
+              <span class="fn" title="${fnEsc}">${fnEsc}</span>
               ${rescorerBadge}
               ${metaBadge}
               ${styleChips}
             </div>
             <div class="row2">
-              <span class="scene">${r.scene || "?"}</span>
+              <span class="scene">${esc(r.scene || "?")}</span>
               <span>final ${r.score_final == null ? "--" : r.score_final.toFixed(2)}</span>
             </div>
             <div class="row3">
               ${ax("technical")}${ax("subject")}${ax("composition")}
               ${ax("light")}${ax("moment")}${ax("aesthetic")}
             </div>
-            <div class="row4" title="${(r.reason || '').replace(/"/g,'&quot;')}">${reasonShort || ""}</div>
-            ${(r.advice && r.advice.strengths && r.advice.strengths.length) ? `<div class="row5 strengths" title="V5.2 摄影正典优点">✓ ${r.advice.strengths.slice(0,2).join(' · ')}</div>` : ''}
-            ${(r.advice && r.advice.suggestions && r.advice.suggestions.length) ? `<div class="row5 fixes" title="V5.2 改进建议">→ ${r.advice.suggestions[0]}</div>` : ''}
+            <div class="row4" title="${esc(r.reason || '')}">${esc(reasonShort || "")}</div>
+            ${(r.advice && r.advice.strengths && r.advice.strengths.length) ? `<div class="row5 strengths" title="V5.2 摄影正典优点">✓ ${r.advice.strengths.slice(0,2).map(esc).join(' · ')}</div>` : ''}
+            ${(r.advice && r.advice.suggestions && r.advice.suggestions.length) ? `<div class="row5 fixes" title="V5.2 改进建议">→ ${esc(r.advice.suggestions[0])}</div>` : ''}
           </div>
         </div>
       `;
@@ -3980,8 +4173,8 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
         if (members.length > 1) {
           const best = members[0];
           html += `<div class="cluster-divider">
-            <span>连拍组 (${members.length} 张) · 最佳: ${best.filename}</span>
-            <span class="compare-btn" data-cluster="${key}">⊞ 并排比较</span>
+            <span>连拍组 (${members.length} 张) · 最佳: ${esc(best.filename)}</span>
+            <span class="compare-btn" data-cluster="${esc(key)}">⊞ 并排比较</span>
           </div>`;
         }
         members.forEach(r => { html += renderCard(r); });
@@ -3989,7 +4182,54 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
     } else {
       html = sorted.map(renderCard).join("");
     }
-    grid.innerHTML = html || `<div style="color:var(--muted);padding:20px">没有符合的图片</div>`;
+    // V14.0 — richer empty states. Three cases:
+    //   1) rows.length === 0           → pipeline produced nothing
+    //   2) filtered.length === 0       → user's filter excluded everything
+    //   3) html === ""                 → defensive (shouldn't happen)
+    if (!html) {
+      let emptyHtml;
+      if (rows.length === 0) {
+        emptyHtml = `
+          <div class="empty-state">
+            <div class="empty-icon">📭</div>
+            <div class="empty-title">这个 run 没有产出任何结果</div>
+            <div class="empty-hint">
+              可能原因:全部图片解码失败 / 文件夹为空 / 仅含非图片文件。
+            </div>
+            <div class="empty-actions">
+              <a class="btn primary" href="/">返回上传新批次</a>
+              <button class="btn" onclick="window.location.reload()">刷新此页</button>
+            </div>
+          </div>`;
+      } else {
+        const totalFilters = filterState.scenes.size + filterState.styles.size +
+                             (filterState.decision !== "all" ? 1 : 0);
+        emptyHtml = `
+          <div class="empty-state">
+            <div class="empty-icon">🔍</div>
+            <div class="empty-title">当前筛选下没有图片</div>
+            <div class="empty-hint">
+              ${totalFilters} 个筛选条件正在过滤这个 ${rows.length} 张图的批次。
+            </div>
+            <div class="empty-actions">
+              <button class="btn primary" id="resetFiltersBtn">重置所有筛选</button>
+            </div>
+          </div>`;
+      }
+      grid.innerHTML = emptyHtml;
+      const reset = document.getElementById("resetFiltersBtn");
+      if (reset) reset.addEventListener("click", () => {
+        filterState.decision = "all";
+        filterState.scenes.clear();
+        filterState.styles.clear();
+        document.querySelectorAll("#filters .pill, #sceneFilters .pill, #styleFilters .pill")
+          .forEach(el => el.classList.remove("active"));
+        document.querySelector('#filters .pill[data-d="all"]')?.classList.add("active");
+        render();
+      });
+    } else {
+      grid.innerHTML = html;
+    }
   }
   render();
 

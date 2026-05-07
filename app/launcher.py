@@ -93,13 +93,36 @@ def config_path() -> Path:
 
 
 def load_config() -> dict:
-    """Load + sanitize the user's config. Returns empty dict on any error."""
+    """Load + sanitize the user's config.
+
+    V14.0: instead of silently swallowing a corrupt file (which used to
+    drop the user's DeepSeek key without warning), back up the bad file
+    with a timestamp suffix and surface a one-line note via stderr so
+    something rebooted the user's API key isn't a mystery. The notify
+    side is wired by the launcher's main() at startup since we can't
+    import rumps from this module-level helper.
+    """
     p = config_path()
     if not p.exists():
         return {}
     try:
         return json.loads(p.read_text("utf-8"))
-    except (OSError, json.JSONDecodeError):
+    except (OSError, json.JSONDecodeError) as exc:
+        # Back up the corrupt file before returning empty so the user can
+        # recover their key by hand if they had one.
+        try:
+            stamp = time.strftime("%Y%m%d-%H%M%S")
+            backup = p.with_suffix(f".corrupt-{stamp}.json")
+            p.replace(backup)
+            sys.stderr.write(
+                f"[pixcull] config.json was unreadable ({type(exc).__name__}: "
+                f"{exc}); backed up to {backup}\n"
+            )
+        except OSError as exc2:
+            sys.stderr.write(
+                f"[pixcull] config.json unreadable AND couldn't back up: "
+                f"{type(exc2).__name__}: {exc2}\n"
+            )
         return {}
 
 
@@ -245,8 +268,13 @@ class ServerHandle:
             try:
                 self._server.shutdown()
                 self._server.server_close()
-            except Exception:
-                pass
+            except Exception as exc:
+                # V14.0 — server shutdown failure during quit shouldn't
+                # block the app exit, but it's worth knowing about.
+                sys.stderr.write(
+                    f"[launcher] server.stop() failed: "
+                    f"{type(exc).__name__}: {exc}\n"
+                )
 
 
 def wait_for_ready(port: int, timeout: float = 30.0) -> bool:
@@ -546,8 +574,13 @@ def main() -> int:
             sys.path.insert(0, str(resource_root() / "app"))
             import updater  # type: ignore
             updater.background_check()
-        except Exception:
-            pass
+        except Exception as exc:
+            # V14.0 — leave a trail; stderr is captured to the log file
+            # by _redirect_stderr_to_log so this is recoverable later.
+            sys.stderr.write(
+                f"[launcher] update check failed silently: "
+                f"{type(exc).__name__}: {exc}\n"
+            )
     threading.Thread(target=_update_worker, daemon=True).start()
 
     # rumps owns the run loop from here. ^C in dev mode shuts everything
