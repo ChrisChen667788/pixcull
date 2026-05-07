@@ -90,13 +90,52 @@ def axis_meta_path(model_dir: Path | str) -> Path:
     return Path(model_dir) / "rescorer_axis_meta.json"
 
 
+# V14.1 — process-local cache. Each axis joblib is ~few MB; loading 6
+# of them adds 200-500 ms per pipeline run. The web demo invokes the
+# pipeline N times per server lifetime (one per /analyze hit) so the
+# total wasted time on hot reload is meaningful. Keyed by (path, mtime)
+# so that the auto-retrain hook (V11.2) which rewrites the joblibs
+# naturally invalidates the cache.
+_AXIS_CACHE: dict[tuple, "AxisModel"] = {}
+
+
+def _load_one_axis(p: Path, axis_name: str) -> "AxisModel | None":
+    """Load + validate one axis joblib. Returns None on any failure
+    (with a loud stderr line so silent regressions are obvious)."""
+    try:
+        import joblib
+        obj = joblib.load(p)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[axis_rescorer] failed to load {p}: "
+              f"{type(exc).__name__}: {exc} — axis '{axis_name}' "
+              f"will fall through to auto rubric",
+              file=sys.stderr)
+        return None
+    try:
+        return AxisModel(
+            pipeline=obj["pipeline"],
+            feature_cols=list(obj["feature_cols"]),
+            cv_r2=float(obj.get("cv_r2", 0.0)),
+            cv_mae=float(obj.get("cv_mae", 0.0)),
+            train_rows=int(obj.get("train_rows", 0)),
+            target_axis=str(obj.get("target_axis", axis_name)),
+            n_human_targets=int(obj.get("n_human_targets", 0)),
+        )
+    except (KeyError, TypeError) as exc:
+        print(f"[axis_rescorer] artifact at {p} malformed: {exc}",
+              file=sys.stderr)
+        return None
+
+
 def load_axis_rescorers(model_dir: Path | str) -> dict[str, AxisModel]:
     """Load every per-axis joblib found under ``model_dir``.
 
     Returns an empty dict — not None — if nothing's trained yet, so
     callers can do ``if axis_models:`` without a None check. Partial
     training is supported: missing axes just don't appear in the dict.
-    Loud on stderr for any failure so silent regressions are obvious.
+
+    V14.1: results are cached by (path, mtime). A retrain that rewrites
+    the joblib bumps mtime, which invalidates the cache transparently.
     """
     out: dict[str, AxisModel] = {}
     md = Path(model_dir)
@@ -107,28 +146,23 @@ def load_axis_rescorers(model_dir: Path | str) -> dict[str, AxisModel]:
         if not p.exists():
             continue
         try:
-            import joblib
-            obj = joblib.load(p)
-        except Exception as exc:  # noqa: BLE001
-            print(f"[axis_rescorer] failed to load {p}: "
-                  f"{type(exc).__name__}: {exc} — axis '{axis_def.name}' "
-                  f"will fall through to auto rubric",
-                  file=sys.stderr)
+            mtime = p.stat().st_mtime_ns
+        except OSError:
+            mtime = 0
+        key = (str(p), mtime)
+        cached = _AXIS_CACHE.get(key)
+        if cached is not None:
+            out[axis_def.name] = cached
             continue
-        try:
-            out[axis_def.name] = AxisModel(
-                pipeline=obj["pipeline"],
-                feature_cols=list(obj["feature_cols"]),
-                cv_r2=float(obj.get("cv_r2", 0.0)),
-                cv_mae=float(obj.get("cv_mae", 0.0)),
-                train_rows=int(obj.get("train_rows", 0)),
-                target_axis=str(obj.get("target_axis", axis_def.name)),
-                n_human_targets=int(obj.get("n_human_targets", 0)),
-            )
-        except (KeyError, TypeError) as exc:
-            print(f"[axis_rescorer] artifact at {p} malformed: {exc}",
-                  file=sys.stderr)
+        loaded = _load_one_axis(p, axis_def.name)
+        if loaded is None:
             continue
+        # Drop any older entries for this same path before inserting
+        for k in list(_AXIS_CACHE.keys()):
+            if k[0] == str(p) and k != key:
+                _AXIS_CACHE.pop(k, None)
+        _AXIS_CACHE[key] = loaded
+        out[axis_def.name] = loaded
     return out
 
 

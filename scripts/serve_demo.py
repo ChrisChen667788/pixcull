@@ -189,6 +189,95 @@ def _safe_dumps(obj, **kwargs) -> str:
     return json.dumps(_scrub_nan(obj), **kwargs)
 
 
+# V14.1 — JSONL cache. rubric.jsonl + annotations.jsonl get re-parsed
+# from disk on every result render, every annotation modal open, every
+# rubric API hit. For a 1000-image batch where the user clicks through
+# 200 thumbnails this is 200 full re-parses of a multi-MB file.
+#
+# This is a tiny mtime-keyed LRU. Files are invalidated whenever their
+# mtime moves forward (annotation save bumps mtime, so the cache stays
+# fresh without explicit invalidation calls). Bounded to 16 entries to
+# survive aggressive admin tools without memory growth.
+class _MtimeLRUCache:
+    """Tiny thread-safe LRU keyed by (path, mtime).
+
+    Why not functools.lru_cache: we need to invalidate when the file
+    changes on disk, and lru_cache has no eviction by anything other
+    than its arg tuple. Keying on mtime makes a write naturally bust
+    the entry without needing to touch the cache from the writer.
+    """
+
+    def __init__(self, maxsize: int = 16):
+        self._max = maxsize
+        self._d: "dict[tuple, object]" = {}
+        self._lock = threading.Lock()
+
+    def get_or_load(self, path: Path, loader):
+        try:
+            mtime = path.stat().st_mtime_ns
+        except OSError:
+            return loader()  # path gone; let loader handle
+        key = (str(path), mtime)
+        with self._lock:
+            if key in self._d:
+                # Touch by re-inserting to keep MRU at the end (Py 3.7+
+                # dicts preserve insertion order)
+                v = self._d.pop(key)
+                self._d[key] = v
+                return v
+        v = loader()
+        with self._lock:
+            self._d[key] = v
+            # Evict any older entries for this same path AND drop oldest
+            # entries past the bound.
+            for k in list(self._d.keys()):
+                if k[0] == str(path) and k != key:
+                    self._d.pop(k, None)
+            while len(self._d) > self._max:
+                self._d.pop(next(iter(self._d)))
+        return v
+
+
+_JSONL_CACHE = _MtimeLRUCache(maxsize=16)
+
+
+def _read_jsonl_cached(path: Path) -> list[dict]:
+    """Return a parsed list of records from a JSONL file, cached by
+    (path, mtime). Lines that fail to parse are skipped (matches the
+    historic behavior — bad lines never aborted the read)."""
+    def _load() -> list[dict]:
+        out: list[dict] = []
+        try:
+            with open(path, encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        out.append(json.loads(line))
+                    except json.JSONDecodeError as exc:
+                        _dbg("_read_jsonl_cached/parse", exc, str(path))
+        except OSError as exc:
+            _dbg("_read_jsonl_cached/open", exc, str(path))
+        return out
+    return _JSONL_CACHE.get_or_load(path, _load)
+
+
+def _read_human_by_fn_cached(ann_path: Path) -> dict[str, dict]:
+    """Latest-wins index of human annotations keyed by filename. Built
+    on top of ``_read_jsonl_cached`` so it benefits from the same mtime
+    cache (with negligible extra memory — same dicts, different shape).
+    """
+    if not ann_path.exists():
+        return {}
+    out: dict[str, dict] = {}
+    for rec in _read_jsonl_cached(ann_path):
+        fn = rec.get("filename")
+        if fn:
+            out[fn] = rec  # later wins
+    return out
+
+
 def _html_escape(s) -> str:
     """Minimal HTML escape for filename / alt-text interpolation. Returns
     ``""`` on None so f-strings stay safe. We don't import the ``html``
@@ -345,24 +434,11 @@ def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
     df = pd.read_csv(scores_path)
 
     # V2.0: pull human annotations off disk (latest line wins per fn).
-    # Cheap I/O — only one read per results render, and most runs will
-    # have an empty file the first time.
+    # V14.1: cached via _MtimeLRUCache so repeat renders / API hits in
+    # the same session don't re-parse the same multi-MB file.
     output_dir = Path(run["output_dir"])
     ann_path = output_dir / "annotations.jsonl"
-    human_by_fn: dict[str, dict] = {}
-    if ann_path.exists():
-        with open(ann_path, encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    rec = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                fn = rec.get("filename")
-                if fn:
-                    human_by_fn[fn] = rec
+    human_by_fn: dict[str, dict] = _read_human_by_fn_cached(ann_path)
 
     from pixcull.scoring.rubric import RUBRIC_AXES
     from pixcull.scoring.photo_advice import build_advice
@@ -1435,12 +1511,36 @@ class _Handler(BaseHTTPRequestHandler):
         self._send_html(200, html.encode("utf-8"))
 
     def _serve_image(self, rel: str, size: int) -> None:
-        # Format: <run_id>/<filename>
+        # Format: <run_id>/<filename>[?w=N]
+        # V14.1 — the client may pass ?w=<viewport_width> so we cap
+        # decode at that pixel size. On a 1280-wide laptop a 50-MP
+        # JPEG used to materialize 6720×4480 RGB pixels in RAM before
+        # downsizing to 1600 — about 90 MB of intermediate data per
+        # lightbox click. With ?w= we serve a cache bucket sized to
+        # what the client can actually display.
         rel = unquote(rel)
-        if "/" not in rel:
+        # Strip + parse query string before run/fn split
+        from urllib.parse import parse_qs, urlsplit
+        sp = urlsplit("/" + rel)  # path-shaped helper, not a real URL
+        rel_path = sp.path.lstrip("/")
+        qs = parse_qs(sp.query) if sp.query else {}
+        try:
+            req_w = int(qs.get("w", ["0"])[0])
+        except (TypeError, ValueError):
+            req_w = 0
+        # Clamp to a sane range. Below 600 isn't worth caching (smaller
+        # than every lightbox); above 4096 is past 5K monitors. We round
+        # to a few buckets so caches can be reused across slightly
+        # different client widths (1280 + 1300 + 1320 all hit the same
+        # 1280 bucket).
+        if req_w > 0:
+            buckets = [800, 1200, 1600, 2000, 2400, 3200, 4000]
+            chosen = next((b for b in buckets if req_w <= b), buckets[-1])
+            size = min(chosen, size) if size > _THUMB_SIZE else size
+        if "/" not in rel_path:
             self.send_error(400, "expected run_id/filename")
             return
-        run_id, fn = rel.split("/", 1)
+        run_id, fn = rel_path.split("/", 1)
         run = _get_run(run_id)
         if run is None:
             # Fall back to disk: maybe the run is from a previous session.
@@ -1678,35 +1778,17 @@ class _Handler(BaseHTTPRequestHandler):
         if not rubric_path.exists():
             self.send_error(404, "rubric.jsonl missing — pre-V2 run?")
             return
-        rows = []
-        with open(rubric_path, encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if line:
-                    rows.append(json.loads(line))
-        # Layer in human annotations (latest per filename wins) so the
-        # response reflects the current best-known rubric for each row.
+        # V14.1: cached read. Both files keyed by (path, mtime) so
+        # they're invalidated as soon as a new annotation lands.
+        rows = list(_read_jsonl_cached(rubric_path))
         ann_path = Path(run["output_dir"]) / "annotations.jsonl"
-        human_by_fn: dict[str, dict] = {}
-        if ann_path.exists():
-            with open(ann_path, encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        rec = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    fn = rec.get("filename")
-                    if fn:
-                        human_by_fn[fn] = rec  # later lines overwrite
+        human_by_fn = _read_human_by_fn_cached(ann_path)
         for r in rows:
             fn = r.get("filename")
             if fn in human_by_fn:
                 r["human"] = human_by_fn[fn]
-        self._send_json(200, json.dumps(
-            {"run_id": run_id, "rows": rows}, ensure_ascii=False
+        self._send_json(200, _safe_dumps(
+            {"run_id": run_id, "rows": rows}
         ).encode("utf-8"))
 
     def _serve_annotation(self, rel: str) -> None:
@@ -1724,45 +1806,24 @@ class _Handler(BaseHTTPRequestHandler):
         if run is None:
             self.send_error(404, "no such run")
             return
-        # Read latest human entry; fall back to auto.
+        # V14.1: cached. Walk in reverse for latest-wins on the human
+        # side; auto rubric is keyed by filename so we just dict-lookup.
         ann_path = Path(run["output_dir"]) / "annotations.jsonl"
-        latest_human = None
-        if ann_path.exists():
-            with open(ann_path, encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        rec = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    if rec.get("filename") == fn:
-                        latest_human = rec  # keep overwriting; last wins
+        latest_human = _read_human_by_fn_cached(ann_path).get(fn)
         if latest_human is not None:
-            self._send_json(200, json.dumps(
+            self._send_json(200, _safe_dumps(
                 {"source": "human", "data": latest_human},
-                ensure_ascii=False,
             ).encode("utf-8"))
             return
         # Fall back to auto from rubric.jsonl
         rubric_path = Path(run["output_dir"]) / "rubric.jsonl"
         if rubric_path.exists():
-            with open(rubric_path, encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        rec = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    if rec.get("filename") == fn:
-                        self._send_json(200, json.dumps(
-                            {"source": "auto", "data": rec},
-                            ensure_ascii=False,
-                        ).encode("utf-8"))
-                        return
+            for rec in _read_jsonl_cached(rubric_path):
+                if rec.get("filename") == fn:
+                    self._send_json(200, _safe_dumps(
+                        {"source": "auto", "data": rec},
+                    ).encode("utf-8"))
+                    return
         self.send_error(404, f"no rubric for {fn}")
 
     def _handle_save_annotation(self, rel: str) -> None:
@@ -1891,17 +1952,9 @@ class _Handler(BaseHTTPRequestHandler):
             return
         rows, _ = result
 
-        # Filter out images already human-labeled
+        # Filter out images already human-labeled (V14.1: cached read)
         ann_path = Path(run["output_dir"]) / "annotations.jsonl"
-        labeled: set[str] = set()
-        if ann_path.exists():
-            with open(ann_path, encoding="utf-8") as f:
-                for line in f:
-                    try:
-                        rec = json.loads(line)
-                        labeled.add(rec.get("filename", ""))
-                    except json.JSONDecodeError:
-                        continue
+        labeled = set(_read_human_by_fn_cached(ann_path).keys())
         candidates = [r for r in rows if r["filename"] not in labeled]
         if not candidates:
             self._send_json(200, json.dumps(
@@ -4157,10 +4210,13 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
 
     // V9.0: when sorting by cluster, insert visual dividers for each
     // multi-image cluster so the user sees burst groupings explicitly.
-    let html = "";
+    //
+    // V14.1 — produce *segments* (HTML strings) rather than one giant
+    // string so the renderer below can flush them to the DOM in
+    // batches. For ≤200 cards we still render in one shot (no point
+    // batching when it's all visible at once).
+    const segments = [];
     if (filterState.sort === "cluster") {
-      let lastCluster = "__none__";
-      let clusterMembers = [];
       // Group rows by cluster_id
       const groups = new Map();
       sorted.forEach(r => {
@@ -4172,16 +4228,33 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
       groups.forEach((members, key) => {
         if (members.length > 1) {
           const best = members[0];
-          html += `<div class="cluster-divider">
+          segments.push(`<div class="cluster-divider">
             <span>连拍组 (${members.length} 张) · 最佳: ${esc(best.filename)}</span>
             <span class="compare-btn" data-cluster="${esc(key)}">⊞ 并排比较</span>
-          </div>`;
+          </div>`);
         }
-        members.forEach(r => { html += renderCard(r); });
+        members.forEach(r => { segments.push(renderCard(r)); });
       });
     } else {
-      html = sorted.map(renderCard).join("");
+      sorted.forEach(r => { segments.push(renderCard(r)); });
     }
+    let html = segments.join("");
+    // V14.1 — progressive rendering for big batches. Inserting 1500
+    // cards at once janks the main thread for ~300 ms on a mid laptop.
+    // Render the first 100 immediately (above-fold), then chunk the
+    // remainder in 80-card slices via requestAnimationFrame so the page
+    // becomes interactive while the rest streams in. Skip the dance
+    // entirely below the threshold — it's already imperceptible there.
+    const BATCH_THRESHOLD = 200;
+    const FIRST_BATCH = 100;
+    const CHUNK = 80;
+
+    // Cancel any in-flight progressive render from a previous filter
+    // change so we don't double-insert cards.
+    if (window._pcProgressiveToken) window._pcProgressiveToken.cancelled = true;
+    const token = { cancelled: false };
+    window._pcProgressiveToken = token;
+
     // V14.0 — richer empty states. Three cases:
     //   1) rows.length === 0           → pipeline produced nothing
     //   2) filtered.length === 0       → user's filter excluded everything
@@ -4227,8 +4300,30 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
         document.querySelector('#filters .pill[data-d="all"]')?.classList.add("active");
         render();
       });
-    } else {
+    } else if (segments.length <= BATCH_THRESHOLD) {
+      // Small batch: one shot, fastest path.
       grid.innerHTML = html;
+    } else {
+      // Big batch: paint the above-fold portion, then stream the rest
+      // in chunks so the user can scroll/click immediately.
+      grid.innerHTML = segments.slice(0, FIRST_BATCH).join("");
+      const remaining = segments.slice(FIRST_BATCH);
+      let idx = 0;
+      function step() {
+        if (token.cancelled) return;
+        const slice = remaining.slice(idx, idx + CHUNK);
+        if (!slice.length) return;
+        const tmp = document.createElement("div");
+        tmp.innerHTML = slice.join("");
+        // Move children directly — appendChild detaches from tmp,
+        // so we don't pay the cost of re-parsing.
+        const frag = document.createDocumentFragment();
+        while (tmp.firstChild) frag.appendChild(tmp.firstChild);
+        grid.appendChild(frag);
+        idx += CHUNK;
+        if (idx < remaining.length) requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
     }
   }
   render();
@@ -4258,7 +4353,13 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
   function openLightbox(fn) {
     const r = rows.find(x => x.filename === fn);
     if (!r) return;
-    lbImg.src = `/full/${run_id}/${encodeURIComponent(fn)}`;
+    // V14.1 — tell the server how big our viewport actually is so it
+    // can serve a viewport-bucketed cache (800/1200/1600/...) instead
+    // of always 1600 even on a 13" laptop. devicePixelRatio handles
+    // retina (a 2× display wants 2× pixels for crispness).
+    const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
+    const w = Math.round(Math.min(window.innerWidth || 1280, 2400) * dpr);
+    lbImg.src = `/full/${run_id}/${encodeURIComponent(fn)}?w=${w}`;
     lbInfo.innerHTML = renderInfoPane(r);
     lb.classList.add("show");
   }

@@ -70,12 +70,21 @@ class RescorerArtifact:
                 if c.endswith("__missing")]
 
 
+# V14.1 — process-local cache for the binary rescorer too. Same idea
+# as the axis cache: keyed by (path, mtime) so retraining transparently
+# busts old entries. Saves the joblib.load() round-trip on every
+# pipeline call (~50-200 ms depending on model size).
+_RESCORER_CACHE: dict[tuple, "RescorerArtifact"] = {}
+
+
 def load_rescorer(path: Path | str | None) -> RescorerArtifact | None:
     """Load the joblib artifact; return ``None`` on any failure.
 
     Failures are logged to stderr so a pipeline run with a broken rescorer
     clearly says *why* it fell back to rule-only — silent regressions are
     the worst thing that can happen to a learned-head integration.
+
+    V14.1: cached by (path, mtime). Retraining bumps mtime, evicting.
     """
     if path is None:
         return None
@@ -84,6 +93,14 @@ def load_rescorer(path: Path | str | None) -> RescorerArtifact | None:
         print(f"[rescorer] model file not found: {p} — running rule-only",
               file=sys.stderr)
         return None
+    try:
+        mtime = p.stat().st_mtime_ns
+    except OSError:
+        mtime = 0
+    key = (str(p), mtime)
+    cached = _RESCORER_CACHE.get(key)
+    if cached is not None:
+        return cached
     try:
         import joblib  # noqa: WPS433 — lazy to keep cold-start light
         obj = joblib.load(p)
@@ -95,7 +112,7 @@ def load_rescorer(path: Path | str | None) -> RescorerArtifact | None:
         return None
 
     try:
-        return RescorerArtifact(
+        artifact = RescorerArtifact(
             pipeline=obj["pipeline"],
             feature_cols=list(obj["feature_cols"]),
             model_name=str(obj.get("model_name", "unknown")),
@@ -108,6 +125,13 @@ def load_rescorer(path: Path | str | None) -> RescorerArtifact | None:
               f"(expected a dict with 'pipeline', 'feature_cols', ...): {exc}",
               file=sys.stderr)
         return None
+
+    # Evict any older entries for this same path
+    for k in list(_RESCORER_CACHE.keys()):
+        if k[0] == str(p) and k != key:
+            _RESCORER_CACHE.pop(k, None)
+    _RESCORER_CACHE[key] = artifact
+    return artifact
 
 
 def score_row(
