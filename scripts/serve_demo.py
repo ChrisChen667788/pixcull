@@ -911,6 +911,9 @@ class _Handler(BaseHTTPRequestHandler):
             return self._serve_image(path[len("/full/"):], _FULL_SIZE)
         if path.startswith("/xmp_zip/"):
             return self._serve_xmp_zip(path[len("/xmp_zip/"):])
+        # V9.3: scores.csv direct download
+        if path.startswith("/scores_csv/"):
+            return self._serve_scores_csv(path[len("/scores_csv/"):])
         if path.startswith("/rubric/"):
             return self._serve_rubric(path[len("/rubric/"):])
         if path.startswith("/annotation/"):
@@ -1448,11 +1451,35 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _serve_scores_csv(self, run_id: str) -> None:
+        """V9.3: download scores.csv directly. Includes the BOM for
+        Excel-friendly Chinese display + an attachment Content-Disposition
+        so the browser saves it instead of rendering."""
+        run = _get_run(run_id) or _reload_run_from_disk(run_id)
+        if run is None:
+            self.send_error(404, "no such run")
+            return
+        csv_path = Path(run["output_dir"]) / "scores.csv"
+        if not csv_path.exists():
+            self.send_error(404, "scores.csv not generated yet")
+            return
+        # Prepend a UTF-8 BOM so Excel doesn't show 中文 as garbled.
+        data = b"\xef\xbb\xbf" + csv_path.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/csv; charset=utf-8")
+        self.send_header(
+            "Content-Disposition",
+            f'attachment; filename="pixcull_{run_id}_scores.csv"',
+        )
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
     def _serve_xmp_zip(self, run_id: str) -> None:
         """Stream all sidecars + a README into a single zip download."""
         import zipfile
 
-        run = _get_run(run_id)
+        run = _get_run(run_id) or _reload_run_from_disk(run_id)
         if run is None:
             self.send_error(404, "no such run")
             return
@@ -3172,6 +3199,8 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
       <button class="export-btn" id="annNextBtn" title="按 active learning 优先级标注 — 优先暴露规则与 rescorer 不一致、概率临界、聚类分裂的图">▸ 标注下一张</button>
       <button class="export-btn" id="exportZipBtn" title="导出 XMP 评级到 zip 包(Lightroom / Capture One)">下载 XMP</button>
       <button class="export-btn" id="exportAlongsideBtn" style="display:none" title="把 XMP sidecar 写到原图旁边">写到原图旁边</button>
+      <a class="export-btn" id="csvBtn" title="下载完整 scores.csv (Excel/Numbers 友好)" style="text-decoration:none">下载 CSV</a>
+      <button class="export-btn" id="batchBtn" title="按总分批量打 keep/cull 标签">批量打分</button>
       <span class="export-status" id="exportStatus"></span>
     </div>
   </header>
@@ -3820,6 +3849,57 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
   });
   document.getElementById("annNextBtn").addEventListener("click", () => openNextToLabel());
   document.getElementById("kbdHelpBtn").addEventListener("click", () => showShortcuts());
+
+  // V9.3 — CSV download is just a link
+  const csvBtn = document.getElementById("csvBtn");
+  csvBtn.href = `/scores_csv/${run_id}`;
+  csvBtn.setAttribute("download", "");
+
+  // V9.3 — batch label by score threshold
+  document.getElementById("batchBtn").addEventListener("click", async () => {
+    const keepThreshStr = prompt(
+      "把 final score ≥ X 的全部标 keep,< Y 的全部标 cull (中间不动)。\n" +
+      "格式: keep_min,cull_max  (例: 0.65,0.4)",
+      "0.65,0.4"
+    );
+    if (!keepThreshStr) return;
+    const parts = keepThreshStr.split(",").map(s => parseFloat(s.trim()));
+    if (parts.length !== 2 || isNaN(parts[0]) || isNaN(parts[1])) {
+      alert("格式错误,需要两个数字以逗号分隔。");
+      return;
+    }
+    const [keepMin, cullMax] = parts;
+    const keepRows = rows.filter(r => (r.score_final ?? -1) >= keepMin);
+    const cullRows = rows.filter(r => (r.score_final ?? -1) > -1 && (r.score_final ?? 999) < cullMax);
+    const ok = confirm(
+      `批量打标:\n  ${keepRows.length} 张 → keep (score ≥ ${keepMin})\n` +
+      `  ${cullRows.length} 张 → cull (score < ${cullMax})\n` +
+      `共写 ${keepRows.length + cullRows.length} 个 annotation,会立刻反映到 UI。继续?`
+    );
+    if (!ok) return;
+    let n = 0;
+    for (const [list, label] of [[keepRows, "keep"], [cullRows, "cull"]]) {
+      for (const r of list) {
+        try {
+          await fetch(`/annotation/${run_id}/${encodeURIComponent(r.filename)}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              axes: {},
+              overall_label: label,
+              overall_rationale: `batch: score ${label === 'keep' ? '≥' : '<'} ${label === 'keep' ? keepMin : cullMax}`,
+            }),
+          });
+          r.rubric_human_labeled = true;
+          r.decision = label;
+          n++;
+        } catch (e) { /* ignore */ }
+      }
+    }
+    summary.n_human_labeled = (summary.n_human_labeled || 0) + n;
+    alert(`已批量标注 ${n} 张。`);
+    render();
+  });
 
   // ==================================================================
   // V9.2 cluster compare modal — open via "⊞ 并排比较" on dividers
