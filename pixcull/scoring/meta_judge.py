@@ -144,6 +144,13 @@ def build_meta_prompt(packet: dict[str, Any]) -> str:
 - 在 inconsistencies 数组中列出你发现的可疑分歧(可以为空)。
 - rationale 必须基于上面 packet 中实际可见的数据,不要编造。
 
+【V11.1 评论差异化要求】
+- 不同图片的 rationale 不要重复套用相同句式
+- 每条 rationale 必须**引用这张图实际的 packet 数值**(如 "laplacian_subject=320 表明锐度合格"、"clipiqa=0.42 说明色彩协调一般")
+- 当 detected_style_modes 中有 mono / low_key / silhouette / long_exposure 等,要在相应轴的 rationale 里**明确提到该风格的判断**(如 "这是 mono 黑白,影调对比 OK")
+- 当 scene 是 wildlife / macro / astro / abstract 等特殊题材时,要明确按该题材的标准评价(如 wildlife 强调"动物姿态/动作峰值",macro 强调"焦平面/景深")
+- 句长控制在 30-100 中文字符,既要专业又要可读
+
 只返回 JSON,不要任何额外文字:
 
 {{
