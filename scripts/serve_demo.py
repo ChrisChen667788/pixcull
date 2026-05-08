@@ -5108,6 +5108,104 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
     {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
   ));
 
+  // V16.0 — i18n display map. Keep token IDs (snake_case English) as
+  // the wire format because (a) they're stable across versions and (b)
+  // the rescorer / golden-set CSV tooling expects them. We translate
+  // ONLY at render time so the data layer stays untouched.
+  //
+  // Strategy: every map falls back to the original token if the key
+  // isn't found, so a new flag emitted by a future detector still
+  // shows up (just in English) instead of vanishing — fail open, not
+  // fail invisible.
+  const I18N_GENRE = {
+    portrait: "人像", wildlife: "野生", landscape: "风光",
+    architecture: "建筑", street: "街拍", event: "事件",
+    documentary: "纪实", fashion: "时尚", macro: "微距",
+    food: "美食", sports: "运动", astro: "天文",
+    abstract: "抽象", stilllife: "静物",
+  };
+  const I18N_STYLE = {
+    mono: "黑白", low_key: "低调", high_key: "高调",
+    silhouette: "剪影", long_exposure: "长曝光",
+    rear_curtain_sync: "后帘同步", night: "夜景",
+  };
+  const I18N_FLAG = {
+    severely_blurry:        "严重模糊",
+    subject_blur:           "主体模糊",
+    global_blur:            "整体偏软",
+    blurred_subject:        "主体模糊",
+    soft_subject:           "主体偏软",
+    closed_eyes:            "闭眼帧",
+    blink:                  "闭眼帧",
+    motion_blur_on_face:    "脸部动态模糊",
+    face_occluded:          "脸部遮挡",
+    no_clear_subject:       "无明确主体",
+    highlights_clipped:     "高光剪切",
+    shadows_clipped:        "阴影剪切",
+    severely_underexposed:  "严重欠曝",
+    severely_overexposed:   "严重过曝",
+    highlight_clip:         "高光剪切",
+    horizon_tilt:           "地平线倾斜",
+    duplicate_in_cluster:   "连拍组重复",
+  };
+  const I18N_SOURCE = {
+    auto:   "自动规则",
+    AUTO:   "自动规则",
+    model:  "训练模型",
+    MODEL:  "训练模型",
+    vlm:    "本地 VLM",
+    VLM:    "本地 VLM",
+    meta:   "DeepSeek",
+    META:   "DeepSeek",
+    human:  "人工",
+    HUMAN:  "人工",
+  };
+  const I18N_DECISION = {
+    keep: "保留", maybe: "待定", cull: "剔除",
+  };
+
+  function tr(token, table) {
+    if (token == null) return "";
+    return (table && table[token]) || token;
+  }
+  function trGenre(g)  { return tr(g, I18N_GENRE); }
+  function trStyle(s)  { return tr(s, I18N_STYLE); }
+  function trFlag(f)   { return tr(f, I18N_FLAG); }
+  function trSource(s) { return tr(s, I18N_SOURCE); }
+
+  // Reasons + flags arrive as strings like "severely_blurry" or
+  // "score=0.57 · severely_blurry · highlight_clip". Split on common
+  // separators, translate each token, rejoin with a Chinese-friendly
+  // middle dot. ``score=0.57`` → ``综合分=0.57``;
+  // ``rescorer_promoted(P=0.85)`` → ``模型上调(P=0.85)``.
+  const _REASON_PREFIX_MAP = [
+    ["low_score=",            "综合分偏低="],
+    ["score=",                "综合分="],
+    ["rescorer_promoted(P=",  "模型上调(P="],
+    ["rescorer_demoted(P=",   "模型下调(P="],
+  ];
+  function trToken(t) {
+    if (!t) return "";
+    for (const [prefix, zh] of _REASON_PREFIX_MAP) {
+      if (t.startsWith(prefix)) return zh + t.slice(prefix.length);
+    }
+    if (I18N_FLAG[t])  return I18N_FLAG[t];
+    if (I18N_STYLE[t]) return I18N_STYLE[t];
+    if (I18N_GENRE[t]) return I18N_GENRE[t];
+    return t;
+  }
+  function trReason(s) {
+    if (!s) return "";
+    // Pipeline emits ``a · b · c`` (Chinese middle dot) or ``a, b`` or
+    // space-separated. Try each; replace whitespace runs with the
+    // middle dot for visual consistency.
+    return String(s)
+      .split(/[·,\s]+/)
+      .filter(x => x.length)
+      .map(trToken)
+      .join(" · ");
+  }
+
   // V14.4 — modal a11y wiring via MutationObserver. The existing
   // results page has 16+ ``classList.add/remove("show")`` call sites
   // for lightbox / annotation / cluster-compare; rather than rewrite
@@ -5330,8 +5428,12 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
       const dim = (k, v) => v == null
         ? `<div class="dim"><span class="k">${k}</span><span class="v">--</span></div>`
         : `<div class="dim"><span class="k">${k}</span><span class="v">${v.toFixed(2)}</span></div>`;
-      const reasonShort = r.reason && r.reason.length > 60
-        ? r.reason.slice(0, 60) + "…" : r.reason;
+      // V16.0 — translate reason tokens for the card display.
+      // Keep the raw value in the title attr so power users can still
+      // grep for the underlying token if needed.
+      const reasonI18N = trReason(r.reason);
+      const reasonShort = reasonI18N && reasonI18N.length > 60
+        ? reasonI18N.slice(0, 60) + "…" : reasonI18N;
       // V1.2 shadow-mode badge: shows the rescorer's verdict + P(keep) when
       // present. Disagrees-with-rule cases get a yellow ring so they pop.
       let rescorerBadge = "";
@@ -5366,9 +5468,10 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
         return `<div class="ax ${cls}" title="${name}: ${stars.toFixed(1)}★${r.rubric_human_labeled?' (human)':''}"><span class="k">${axisAbbr[name]}</span><span class="v">${stars.toFixed(1)}</span></div>`;
       };
       const cardCls = r.decision + (r.rubric_human_labeled ? " has-human" : "");
-      // V9.0 style chip
+      // V9.0 style chip — V16.0 localized to Chinese label, raw token
+      // still in tooltip so users can map to the wire format.
       const styleChips = (r.style_modes || []).map(
-        s => `<span class="style-chip" title="检测到风格: ${esc(s)}">${esc(s)}</span>`
+        s => `<span class="style-chip" title="检测到风格: ${esc(s)}">${esc(trStyle(s))}</span>`
       ).join("");
       // V14.0 — escape filename for every interpolation site. Filenames
       // can contain quotes/angle brackets on macOS+APFS, and an injected
@@ -5380,15 +5483,15 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
           <button class="annotate-btn" data-fn="${fnEsc}" title="人工标注 (rubric)">${r.rubric_human_labeled ? "✓ 已标" : "标注"}</button>
           <div class="body">
             <div class="row1">
-              <span class="badge ${r.decision}">${r.decision}</span>
+              <span class="badge ${r.decision}" title="${esc(r.decision)}">${esc(tr(r.decision, I18N_DECISION) || r.decision)}</span>
               <span class="fn" title="${fnEsc}">${fnEsc}</span>
               ${rescorerBadge}
               ${metaBadge}
               ${styleChips}
             </div>
             <div class="row2">
-              <span class="scene">${esc(r.scene || "?")}</span>
-              <span>final ${r.score_final == null ? "--" : r.score_final.toFixed(2)}</span>
+              <span class="scene" title="${esc(r.scene || '')}">${esc(trGenre(r.scene) || "?")}</span>
+              <span>综合分 ${r.score_final == null ? "--" : r.score_final.toFixed(2)}</span>
             </div>
             <div class="row3">
               ${ax("technical")}${ax("subject")}${ax("composition")}
@@ -5598,23 +5701,27 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
       return `<div class="ax ${cls}"><span class="k">${axisAbbr[n]}</span><span class="v">${s == null ? '--' : s.toFixed(1)}</span></div>`;
     }).join("");
     // Per-source comparison (auto / model / vlm / human if present)
+    // V16.0 — labels translated through I18N_SOURCE so users see
+    // "自动规则 / 训练模型 / 本地 VLM / DeepSeek / 人工" not the
+    // raw English tokens.
     const sourceRows = [
-      ["auto", r.rubric_auto_stars],
-      ["模型", r.rubric_model_stars],
-      ["VLM", r.rubric_vlm_stars],
-      ["meta", r.rubric_meta_stars],
-      ["人工", r.rubric_human_stars],
+      ["auto",   r.rubric_auto_stars],
+      ["model",  r.rubric_model_stars],
+      ["vlm",    r.rubric_vlm_stars],
+      ["meta",   r.rubric_meta_stars],
+      ["human",  r.rubric_human_stars],
     ].filter(([_, m]) => m && Object.values(m).some(v => v != null));
     const detailHtml = sourceRows.map(([label, m]) => {
       const vals = axisNames.map(n => m[n] == null ? '·' : m[n].toFixed(1)).join(' / ');
-      return `<div class="row"><span class="name">${label}</span><span>${vals}</span></div>`;
+      return `<div class="row"><span class="name">${trSource(label)}</span><span>${vals}</span></div>`;
     }).join("");
 
-    // Style chips + scene + decision header
+    // Style chips + scene + decision header — V16.0 localized.
     const styleChips = (r.style_modes || []).map(
-      s => `<span class="style-tag">${s}</span>`
+      s => `<span class="style-tag" title="${esc(s)}">${esc(trStyle(s))}</span>`
     ).join("");
     const dec = r.decision || "?";
+    const decLabel = tr(dec, I18N_DECISION);
     const scoreLine = r.score_final == null ? "--" : r.score_final.toFixed(2);
 
     // Strengths + suggestions
@@ -5637,16 +5744,16 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
     return `
       <h2>${esc(r.filename)}</h2>
       <div class="meta-line">
-        <span class="badge ${dec}">${dec}</span>
-        <span>${esc(r.scene || '?')}</span>
-        <span>final ${scoreLine}</span>
+        <span class="badge ${dec}" title="${esc(dec)}">${esc(decLabel)}</span>
+        <span title="${esc(r.scene || '')}">${esc(trGenre(r.scene) || '?')}</span>
+        <span>综合分 ${scoreLine}</span>
         ${styleChips}
-        ${r.cluster_id != null ? `<span title="连拍组 ID">cluster ${r.cluster_id}</span>` : ''}
+        ${r.cluster_id != null ? `<span title="连拍组 ID">连拍组 ${r.cluster_id}</span>` : ''}
         ${r.rubric_human_labeled ? '<span style="color:var(--keep)">✓ 人工已标</span>' : ''}
       </div>
 
       <div class="section">
-        <div class="section-title">最终评分(综合优先级 human → meta → vlm → model → auto)</div>
+        <div class="section-title">最终评分(优先级:人工 → DeepSeek → VLM → 模型 → 自动)</div>
         <div class="axis-grid">${finalStars}</div>
         ${detailHtml ? `<div class="axis-grid-detail">${detailHtml}</div>` : ''}
       </div>
@@ -5710,14 +5817,14 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
       ${r.flags ? `
       <div class="section">
         <div class="section-title">检测器旗标</div>
-        <div class="rationale">${esc(r.flags)}</div>
+        <div class="rationale" title="${esc(r.flags)}">${esc(trReason(r.flags))}</div>
       </div>
       ` : ''}
 
       ${r.reason ? `
       <div class="section">
         <div class="section-title">规则栈说明</div>
-        <div class="rationale">${esc(r.reason)}</div>
+        <div class="rationale" title="${esc(r.reason)}">${esc(trReason(r.reason))}</div>
       </div>
       ` : ''}
     `;
@@ -6089,7 +6196,7 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
     const r = rows.find(x => x.filename === fn);
     annTitle.textContent = `${fn}`;
     annMeta.innerHTML = r
-      ? `场景:<b>${r.scene || "?"}</b> · 规则:<b>${r.decision}</b> · final ${r.score_final?.toFixed(2) || "--"}`
+      ? `场景:<b>${esc(trGenre(r.scene) || "?")}</b> · 规则:<b>${esc(tr(r.decision, I18N_DECISION) || r.decision)}</b> · 综合分 ${r.score_final?.toFixed(2) || "--"}`
       : "";
     if (why) {
       annWhy.style.display = "block";
