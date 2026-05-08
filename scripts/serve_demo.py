@@ -6596,6 +6596,44 @@ _ADMIN_HTML = r"""<!DOCTYPE html>
       </table>
     </div>
 
+    <!-- V15 — pointer to the goldenset eval workflow. The script
+         is CLI-only for now (running the pipeline programmatically
+         + writing reports to disk); we just surface the recipe so
+         the admin page is the discoverable entry point. -->
+    <div class="card">
+      <h2>评估 rescorer · 对照真实数据集</h2>
+      <div class="muted" style="margin-bottom: 10px">
+        把一组带 <code>manual_label</code>(keep / maybe / cull)的图作为 ground truth,
+        让 pipeline 跑一遍,出 confusion matrix · macro-F1 · Cohen κ · 逐轴 MAE。
+        如果你之前评过一版,把那次的 <code>eval_*.json</code> 喂回去 (<code>--baseline</code>)
+        就能告诉你新模型究竟是否变好。
+      </div>
+      <pre style="background: rgba(0,0,0,0.3); padding: 10px 12px; border-radius: 6px;
+                  border: 1px solid var(--border); font-size: 11px; overflow-x:auto;
+                  margin-bottom: 10px">
+# 数据布局
+golden/
+  ground_truth.csv          # filename, scene, manual_label
+                            #   + 可选 gt_&lt;axis&gt;_stars 列做逐轴评估
+  images/*.jpg
+
+# 单次评估(CLI)
+PYTHONPATH=. python scripts/eval_on_golden_set.py golden/ \
+  --report --label v1
+
+# V1 vs V2 对比 — 哪个 rescorer 更好?
+PYTHONPATH=. python scripts/eval_on_golden_set.py golden/ \
+  --report --label v2 \
+  --baseline golden/_eval_output/eval_v1.json
+</pre>
+      <div class="muted" style="font-size: 11px">
+        输出位置:<code>&lt;golden&gt;/_eval_output/eval_&lt;label&gt;.{json,html}</code>。
+        HTML 是自包含的,可以直接发给搭档看。
+        阈值约定见 <code>pixcull.scoring.eval_metrics._improvement_verdict</code>:
+        macro-F1 +2pp 才算"推荐替换"。
+      </div>
+    </div>
+
     <!-- V14.7 — opt-in error reporting toggle. Defaults OFF. Hard
          requirement: nothing leaves the user's machine until they
          explicitly flip the switch + click "submit". -->
