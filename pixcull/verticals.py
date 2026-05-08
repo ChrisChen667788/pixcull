@@ -251,6 +251,49 @@ def list_verticals() -> tuple[Vertical, ...]:
     return VERTICALS
 
 
+def get_effective_policy(key: str) -> VerticalPolicy | None:
+    """V17.4 — return the active policy for a vertical, layering any
+    auto-tuned override on top of the curated default.
+
+    Lookup order:
+      1. ``vertical_root(key)/policy_override.json`` — written by the
+         policy tuner (V17.4 admin button); supplies the auto-fitted
+         deltas.
+      2. ``Vertical.policy`` from the registry — the V17.2 curated
+         hand-tuned defaults.
+
+    Override layering is *partial*: missing fields fall through to
+    the registry default. Tolerated_flags from the override fully
+    replace the default if specified (else inherit). Notes come from
+    the override when present, else the registry.
+
+    Unknown vertical → None (caller should treat as "no policy",
+    matching ``get_vertical`` behavior).
+    """
+    v = get_vertical(key)
+    if v is None:
+        return None
+    # Lazy import — keep policy_tuner optional from this module's
+    # perspective. policy_tuner imports verticals; making this lazy
+    # avoids the import cycle without complicating either module.
+    try:
+        from pixcull.policy_tuner import load_override
+    except Exception:
+        return v.policy
+    ov = load_override(key)
+    if not ov:
+        return v.policy
+    # Partial override merge — fall through to registry defaults for
+    # any field the override didn't set.
+    return VerticalPolicy(
+        keep_min_delta=float(ov.get("keep_min_delta", v.policy.keep_min_delta)),
+        cull_max_delta=float(ov.get("cull_max_delta", v.policy.cull_max_delta)),
+        tolerated_flags=frozenset(ov.get("tolerated_flags",
+                                          v.policy.tolerated_flags)),
+        notes=str(ov.get("notes") or v.policy.notes),
+    )
+
+
 # -----------------------------------------------------------------------------
 # Storage paths
 # -----------------------------------------------------------------------------
@@ -414,14 +457,26 @@ def registry_with_progress() -> list[dict]:
             sample_target, primary_axes,
             counts: {good, bad, total},
             progress: 0..1 (capped, clamps to 1 when bank exceeds target),
+            policy: {keep_min_delta, cull_max_delta, tolerated_flags, notes,
+                     is_override, baseline_f1?, tuned_f1?},
         }, ...]
+
+    V17.4 — ``policy`` now reflects the EFFECTIVE policy (override
+    layered on top of the registry default). ``is_override`` flags
+    whether an auto-tuned override is in effect; the UI shows a
+    "🎯 已自动调参" badge based on that.
     """
+    # Lazy import — avoid cycle at module load.
+    try:
+        from pixcull.policy_tuner import load_override
+    except Exception:
+        load_override = lambda _k: None  # noqa: E731
     out = []
     for v in VERTICALS:
         c = count_samples(v.key)
-        # Progress is min(good, bad)/target — we want BOTH buckets full
-        # so a vertical that has 50 good + 0 bad doesn't look complete.
         balanced = min(c["good"], c["bad"])
+        ov = load_override(v.key)
+        eff = get_effective_policy(v.key) or v.policy
         out.append({
             "key":           v.key,
             "zh":            v.zh,
@@ -432,6 +487,16 @@ def registry_with_progress() -> list[dict]:
             "primary_axes":  list(v.primary_axes),
             "counts":        c,
             "progress":      min(1.0, balanced / max(1, v.sample_target)),
+            "policy": {
+                "keep_min_delta":  eff.keep_min_delta,
+                "cull_max_delta":  eff.cull_max_delta,
+                "tolerated_flags": sorted(eff.tolerated_flags),
+                "notes":           eff.notes,
+                "is_override":     ov is not None,
+                "baseline_f1":     (ov or {}).get("baseline_f1"),
+                "tuned_f1":        (ov or {}).get("tuned_f1"),
+                "tuned_at":        (ov or {}).get("generated_at"),
+            },
         })
     return out
 

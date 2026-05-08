@@ -1297,6 +1297,15 @@ class _Handler(BaseHTTPRequestHandler):
         # V17.0 — vertical sample upload
         if path.startswith("/verticals/upload/"):
             return self._handle_vertical_upload(path[len("/verticals/upload/"):])
+        # V17.4 — vertical policy tuning + apply / revert
+        if path.startswith("/verticals/tune/"):
+            return self._handle_vertical_tune(path[len("/verticals/tune/"):])
+        if path.startswith("/verticals/apply_override/"):
+            return self._handle_vertical_apply_override(
+                path[len("/verticals/apply_override/"):])
+        if path.startswith("/verticals/revert_override/"):
+            return self._handle_vertical_revert_override(
+                path[len("/verticals/revert_override/"):])
         self.send_error(404, "not found")
 
     def do_DELETE(self) -> None:  # noqa: N802
@@ -2552,6 +2561,106 @@ class _Handler(BaseHTTPRequestHandler):
         }).encode("utf-8")
         self._send_json(200, body)
 
+    def _handle_vertical_tune(self, key: str) -> None:
+        """V17.4 — POST /verticals/tune/<key>
+
+        Run policy_tuner.tune_vertical(key) → return JSON result.
+        Does NOT persist the override (user reviews before applying).
+
+        Body is empty / ignored.
+        """
+        from pixcull import verticals as vmod
+        key = unquote(key.strip("/"))
+        if vmod.get_vertical(key) is None:
+            self._reject_upload(404, f"unknown vertical: {key}")
+            return
+        try:
+            from pixcull import policy_tuner as pt
+            from dataclasses import asdict
+            result = pt.tune_vertical(key)
+            payload = asdict(result)
+            # Trim grid to top 12 rows by F1 — full 121 entries make
+            # the response huge with little marginal value for the UI.
+            grid = sorted(payload.get("grid", []),
+                            key=lambda x: -x["f1"])[:12]
+            payload["grid_top12"] = grid
+            payload["grid"] = []   # drop full grid from wire
+        except ValueError as exc:
+            # Predictable user errors (no samples / unknown key) → 400
+            self._reject_upload(400, str(exc))
+            return
+        except Exception as exc:  # noqa: BLE001
+            traceback.print_exc(file=sys.stderr)
+            self._reject_upload(500, f"调参失败: {type(exc).__name__}: {exc}")
+            return
+        self._send_json(200, _safe_dumps(payload).encode("utf-8"))
+
+    def _handle_vertical_apply_override(self, key: str) -> None:
+        """V17.4 — POST /verticals/apply_override/<key>
+
+        Body: ``{keep_min_delta, cull_max_delta, baseline, tuned, ...}``
+        — typically the result of a prior /verticals/tune call. Saves
+        the override so subsequent runs of decide() pick it up.
+        """
+        from pixcull import verticals as vmod
+        key = unquote(key.strip("/"))
+        if vmod.get_vertical(key) is None:
+            self._reject_upload(404, f"unknown vertical: {key}")
+            return
+        clen = int(self.headers.get("Content-Length", "0") or "0")
+        if clen <= 0 or clen > 1024 * 1024:
+            self._reject_upload(400, "expected JSON body with tune result")
+            return
+        try:
+            params = json.loads(self.rfile.read(clen).decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            self._reject_upload(400, f"JSON parse failed: {exc}")
+            return
+        try:
+            from pixcull import policy_tuner as pt
+            # Reconstruct just enough of TuneResult for save_override.
+            res = pt.TuneResult(
+                vertical=key,
+                n_good=int(params.get("n_good", 0)),
+                n_bad=int(params.get("n_bad", 0)),
+                base_keep_min=float(params.get("base_keep_min", 0.65)),
+                base_cull_max=float(params.get("base_cull_max", 0.40)),
+                baseline_delta_keep=float(params.get("baseline_delta_keep", 0.0)),
+                baseline_delta_cull=float(params.get("baseline_delta_cull", 0.0)),
+                baseline=params.get("baseline") or {},
+                tuned_delta_keep=float(params["tuned_delta_keep"]),
+                tuned_delta_cull=float(params["tuned_delta_cull"]),
+                tuned=params.get("tuned") or {},
+            )
+            pt.save_override(key, res)
+        except (KeyError, TypeError, ValueError) as exc:
+            self._reject_upload(400, f"参数错误: {exc}")
+            return
+        body = _safe_dumps({
+            "ok": True,
+            "key": key,
+            "override_path": str(__import__("pixcull.policy_tuner",
+                                              fromlist=["override_path"])
+                                  .override_path(key)),
+        }).encode("utf-8")
+        self._send_json(200, body)
+
+    def _handle_vertical_revert_override(self, key: str) -> None:
+        """V17.4 — POST /verticals/revert_override/<key>
+
+        Deletes the override file so the registry default takes over.
+        """
+        from pixcull import verticals as vmod
+        from pixcull import policy_tuner as pt
+        key = unquote(key.strip("/"))
+        if vmod.get_vertical(key) is None:
+            self._reject_upload(404, f"unknown vertical: {key}")
+            return
+        ok = pt.delete_override(key)
+        body = _safe_dumps({"ok": ok, "key": key,
+                              "had_override": ok}).encode("utf-8")
+        self._send_json(200, body)
+
     def _handle_vertical_sample_delete(self, rel: str) -> None:
         from pixcull import verticals as vmod
         rel = unquote(rel)
@@ -3320,6 +3429,14 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
     }
     .vstats .pill.good { color: var(--keep); border-color: rgba(74,222,128,0.3); }
     .vstats .pill.bad  { color: var(--cull); border-color: rgba(248,113,113,0.3); }
+    /* V17.4 — auto-tuned indicator */
+    .vstats .pill.tuned {
+      color: var(--accent-hi);
+      border-color: rgba(96,165,250,0.4);
+      background: rgba(59,130,246,0.10);
+      cursor: help;
+    }
+    .vactions button.tune:hover { border-color: var(--accent); }
     .vactions {
       display: flex; gap: 6px;
     }
@@ -3381,6 +3498,66 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
     .sample:hover .rm { opacity: 1; }
     .sample .rm:hover { background: var(--cull); }
 
+    /* V17.4 — tune result modal */
+    .tune-modal {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.85);
+      display: none; align-items: center; justify-content: center;
+      z-index: 25; padding: 20px; backdrop-filter: blur(6px);
+    }
+    .tune-modal.show { display: flex; }
+    .tune-card {
+      background: var(--bg-card); border: 1px solid var(--border-hi);
+      border-radius: 12px; padding: 22px;
+      max-width: 560px; width: 100%;
+    }
+    .tune-card h3 { margin: 0 0 12px; font-size: 16px; }
+    .tune-card .compare {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+      margin: 16px 0;
+    }
+    .tune-card .stat-card {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      border-radius: 8px; padding: 12px;
+    }
+    .tune-card .stat-card.tuned { border-color: rgba(74,222,128,0.4); }
+    .tune-card .stat-card .label {
+      font-size: 11px; color: var(--muted); margin-bottom: 6px;
+    }
+    .tune-card .stat-card .f1 {
+      font-size: 26px; font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      color: var(--fg);
+    }
+    .tune-card .stat-card.tuned .f1 { color: var(--keep); }
+    .tune-card .stat-card .row {
+      font-size: 11.5px; color: var(--muted);
+      margin-top: 4px; font-variant-numeric: tabular-nums;
+    }
+    .tune-card .deltas {
+      font-size: 12px; color: var(--muted);
+      margin-bottom: 14px; padding: 8px 10px;
+      background: rgba(255,255,255,0.03);
+      border-radius: 6px; border: 1px solid var(--border);
+    }
+    .tune-card .deltas b { color: var(--fg); }
+    .tune-card .actions {
+      display: flex; gap: 10px; justify-content: flex-end;
+      margin-top: 14px;
+    }
+    .tune-card .actions button {
+      padding: 8px 18px; font-size: 13px; border-radius: 6px;
+      border: 1px solid var(--border); cursor: pointer;
+      background: rgba(255,255,255,0.04); color: var(--fg);
+      font: inherit;
+    }
+    .tune-card .actions button.primary {
+      background: var(--accent); border-color: var(--accent);
+      color: #fff;
+    }
+    .tune-card .actions button.primary:hover { opacity: 0.9; }
+    .tune-card .actions button:hover { border-color: var(--accent); }
+
     /* V17.1 — sample zoom overlay. Tiny lightbox-of-its-own for the
        /verticals page, doesn't share the results-page lightbox JS. */
     .sample-zoom {
@@ -3440,6 +3617,33 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
     <img id="sampleZoomImg" alt="">
     <div class="caption" id="sampleZoomCaption"></div>
   </div>
+  <!-- V17.4 — tune result modal -->
+  <div class="tune-modal" id="tuneModal" role="dialog" aria-modal="true"
+       aria-labelledby="tuneTitle">
+    <div class="tune-card">
+      <h3 id="tuneTitle">自动调参结果</h3>
+      <div id="tuneSubtitle" class="muted" style="font-size: 12px;
+              color: var(--muted); margin-bottom: 4px"></div>
+      <div class="compare">
+        <div class="stat-card baseline">
+          <div class="label">当前 (V17.2 默认)</div>
+          <div class="f1" id="tuneBaseF1">--</div>
+          <div class="row" id="tuneBaseRow">--</div>
+        </div>
+        <div class="stat-card tuned">
+          <div class="label">建议 (自动调参)</div>
+          <div class="f1" id="tuneNewF1">--</div>
+          <div class="row" id="tuneNewRow">--</div>
+        </div>
+      </div>
+      <div class="deltas" id="tuneDeltas">--</div>
+      <div class="actions">
+        <button id="tuneCancel">关闭</button>
+        <button id="tuneRevert" style="display: none">恢复默认</button>
+        <button class="primary" id="tuneApply">应用建议</button>
+      </div>
+    </div>
+  </div>
   <div class="toast-stack" id="toastStack"></div>
 
   <script>
@@ -3483,6 +3687,147 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
       if (e.key === "Escape" && sampleZoom.classList.contains("show")) {
         closeSampleZoom();
       }
+      if (e.key === "Escape" && tuneModal.classList.contains("show")) {
+        closeTune();
+      }
+    });
+
+    // V17.4 — tune flow.
+    //   tuneFor(key)  → POST /verticals/tune/<key>, render result
+    //   applyTune(key, result) → POST /verticals/apply_override/<key>
+    //   revertTune(key) → POST /verticals/revert_override/<key>
+    const tuneModal = document.getElementById("tuneModal");
+    const tuneTitle = document.getElementById("tuneTitle");
+    const tuneSubtitle = document.getElementById("tuneSubtitle");
+    const tuneBaseF1 = document.getElementById("tuneBaseF1");
+    const tuneBaseRow = document.getElementById("tuneBaseRow");
+    const tuneNewF1 = document.getElementById("tuneNewF1");
+    const tuneNewRow = document.getElementById("tuneNewRow");
+    const tuneDeltas = document.getElementById("tuneDeltas");
+    const tuneCancel = document.getElementById("tuneCancel");
+    const tuneApply  = document.getElementById("tuneApply");
+    const tuneRevert = document.getElementById("tuneRevert");
+    let _currentTune = null;   // last result, keyed for the apply button
+
+    function fmtPP(v) {
+      if (v == null) return "0";
+      const sign = v > 0 ? "+" : "";
+      return sign + (v * 100).toFixed(1) + "pp";
+    }
+
+    function renderTune(key, vert, result) {
+      tuneTitle.textContent = `${vert.icon}  ${vert.zh} · 自动调参结果`;
+      tuneSubtitle.textContent =
+        `分析了 ${result.n_samples_analyzed} 张样本(👍 ${result.n_good} · 👎 ${result.n_bad}) · `
+        + `耗时 ${result.elapsed_s}s`;
+
+      const b = result.baseline || {};
+      const t = result.tuned || {};
+      tuneBaseF1.textContent = (b.f1 || 0).toFixed(3);
+      tuneBaseRow.textContent =
+        `precision ${(b.precision || 0).toFixed(2)} · recall ${(b.recall || 0).toFixed(2)} · acc ${(b.accuracy || 0).toFixed(2)}`;
+      tuneNewF1.textContent = (t.f1 || 0).toFixed(3);
+      tuneNewRow.textContent =
+        `precision ${(t.precision || 0).toFixed(2)} · recall ${(t.recall || 0).toFixed(2)} · acc ${(t.accuracy || 0).toFixed(2)}`;
+
+      const dF1 = (t.f1 || 0) - (b.f1 || 0);
+      const sign = dF1 >= 0 ? "+" : "";
+      tuneDeltas.innerHTML =
+        `keep_min_delta: <b>${fmtPP(result.baseline_delta_keep)}</b> → <b>${fmtPP(result.tuned_delta_keep)}</b>`
+        + ` &nbsp;·&nbsp; cull_max_delta: <b>${fmtPP(result.baseline_delta_cull)}</b> → <b>${fmtPP(result.tuned_delta_cull)}</b>`
+        + ` &nbsp;·&nbsp; F1 提升 <b style="color:${dF1 > 0 ? 'var(--keep)' : (dF1 < 0 ? 'var(--cull)' : 'var(--muted)')}">${sign}${dF1.toFixed(3)}</b>`;
+
+      // Show "revert" button only if an override is already in effect
+      tuneRevert.style.display = vert.policy && vert.policy.is_override ? "" : "none";
+      // Disable apply when the suggestion would worsen things
+      tuneApply.disabled = dF1 < 0;
+      tuneApply.textContent = dF1 >= 0 ? "应用建议" : "建议反而变差,不应用";
+
+      _currentTune = {key, vert, result};
+      tuneModal.classList.add("show");
+    }
+
+    function closeTune() {
+      tuneModal.classList.remove("show");
+      _currentTune = null;
+    }
+    tuneCancel.addEventListener("click", closeTune);
+    tuneModal.addEventListener("click", e => {
+      if (e.target === tuneModal) closeTune();
+    });
+
+    async function tuneFor(key, vert) {
+      const v = vert || registry.find(x => x.key === key);
+      if (!v) return;
+      // Need at least 1 good + 1 bad
+      if ((v.counts.good || 0) < 1 || (v.counts.bad || 0) < 1) {
+        toast(`需要先在 ${v.zh} 中各上传至少 1 张好片 / 待剔除`, "error");
+        return;
+      }
+      toast(`正在分析 ${v.zh} 的 ${v.counts.total} 张样本…`, "");
+      try {
+        const res = await fetch(`/verticals/tune/${encodeURIComponent(key)}`,
+                                  {method: "POST"});
+        if (!res.ok) {
+          const e = await res.json().catch(() => ({}));
+          toast(`调参失败: ${e.error || res.status}`, "error");
+          return;
+        }
+        const result = await res.json();
+        renderTune(key, v, result);
+      } catch (e) {
+        toast(`调参出错: ${e}`, "error");
+      }
+    }
+
+    tuneApply.addEventListener("click", async () => {
+      if (!_currentTune) return;
+      const {key, result} = _currentTune;
+      try {
+        const res = await fetch(`/verticals/apply_override/${encodeURIComponent(key)}`,
+                                  {method: "POST",
+                                   headers: {"Content-Type": "application/json"},
+                                   body: JSON.stringify({
+                                     n_good: result.n_good, n_bad: result.n_bad,
+                                     base_keep_min: result.base_keep_min,
+                                     base_cull_max: result.base_cull_max,
+                                     baseline_delta_keep: result.baseline_delta_keep,
+                                     baseline_delta_cull: result.baseline_delta_cull,
+                                     baseline: result.baseline,
+                                     tuned_delta_keep: result.tuned_delta_keep,
+                                     tuned_delta_cull: result.tuned_delta_cull,
+                                     tuned: result.tuned,
+                                   })});
+        if (!res.ok) {
+          const e = await res.json().catch(() => ({}));
+          toast(`应用失败: ${e.error || res.status}`, "error");
+          return;
+        }
+        toast("已应用,新的 keep/maybe/cull 阈值即刻生效", "success");
+        closeTune();
+        loadRegistry();   // refresh the 🎯 已调参 pill
+      } catch (e) {
+        toast(`应用出错: ${e}`, "error");
+      }
+    });
+
+    tuneRevert.addEventListener("click", async () => {
+      if (!_currentTune) return;
+      const {key} = _currentTune;
+      if (!confirm("恢复到 V17.2 默认 policy?(自动调参的 override 文件会被删除)")) return;
+      try {
+        const res = await fetch(`/verticals/revert_override/${encodeURIComponent(key)}`,
+                                  {method: "POST"});
+        if (!res.ok) {
+          toast("撤销失败", "error");
+          return;
+        }
+        toast("已恢复默认", "success");
+        closeTune();
+        loadRegistry();
+      } catch (e) {
+        toast(`撤销出错: ${e}`, "error");
+      }
     });
 
     function render() {
@@ -3499,11 +3844,15 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
           <div class="vstats">
             <span class="pill good">👍 ${v.counts.good}</span>
             <span class="pill bad">👎 ${v.counts.bad}</span>
+            ${v.policy && v.policy.is_override ?
+              `<span class="pill tuned" title="已自动调参 · F1 ${(v.policy.baseline_f1||0).toFixed(2)} → ${(v.policy.tuned_f1||0).toFixed(2)}">🎯 已调参</span>`
+              : ''}
             <span style="margin-left:auto">目标各 ${v.sample_target} 张</span>
           </div>
           <div class="vactions">
             <button class="good" data-key="${esc(v.key)}" data-bucket="good">+ 好片</button>
             <button class="bad"  data-key="${esc(v.key)}" data-bucket="bad">+ 待剔除</button>
+            <button class="tune" data-key="${esc(v.key)}" title="用收集的好/坏样本自动调阈值">🎯 自动调参</button>
             <button class="manage" data-key="${esc(v.key)}">管理…</button>
           </div>
           <div class="vdetail" data-key="${esc(v.key)}">
@@ -3610,9 +3959,14 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
         t.addEventListener("click", () => setBucket(t.dataset.bucket));
       });
 
-      // Action buttons (+ 好片 / + 待剔除 / 管理…)
+      // Action buttons (+ 好片 / + 待剔除 / 🎯 自动调参 / 管理…)
       card.querySelectorAll(".vactions button").forEach(btn => {
         btn.addEventListener("click", () => {
+          // V17.4 — tune button intercepts before the drawer toggle
+          if (btn.classList.contains("tune")) {
+            tuneFor(btn.dataset.key);
+            return;
+          }
           const b = btn.dataset.bucket;
           if (b) setBucket(b);
           else loadSamples();   // 管理… → just load current bucket

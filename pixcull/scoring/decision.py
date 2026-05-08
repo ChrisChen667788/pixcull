@@ -64,16 +64,17 @@ def decide(
     keep_min = float(thr.get("keep_min_score", 6.5)) / 10.0
     cull_max = float(thr.get("cull_max_score", 4.0)) / 10.0
 
-    # V17.2 — vertical policy override. Looked up at call time (cheap dict
-    # access on a registry of 10) so tests can monkey-patch the registry
-    # without orchestrator restarts.
+    # V17.2 — vertical policy override. V17.4 — uses
+    # ``get_effective_policy`` which layers any auto-tuned override
+    # (saved by the V17.4 admin "🎯 自动调参" button) on top of the
+    # curated registry default. Falls through to no override on any
+    # error so scoring never breaks because of registry hiccups.
     vert_policy = None
     if vertical:
         try:
-            from pixcull.verticals import get_vertical
-            v = get_vertical(vertical)
-            if v is not None:
-                vert_policy = v.policy
+            from pixcull.verticals import get_effective_policy
+            vert_policy = get_effective_policy(vertical)
+            if vert_policy is not None:
                 keep_min = max(0.0, min(1.0, keep_min + vert_policy.keep_min_delta))
                 cull_max = max(0.0, min(1.0, cull_max + vert_policy.cull_max_delta))
         except Exception:
