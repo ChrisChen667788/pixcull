@@ -558,6 +558,12 @@ def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
     from pixcull.scoring.photo_advice import build_advice
     rubric_axis_names = [a.name for a in RUBRIC_AXES]
 
+    # V17.3 — read the run's vertical override (set by /scan_local from
+    # the dropdown) once up front. Passed into build_advice for every
+    # row so wedding/bird/kids/etc tagged batches get business-flavored
+    # phrasing instead of generic.
+    run_vertical = run.get("vertical") or None
+
     rows: list[dict] = []
     # V14.3 — enumerate so build_advice can pick phrases by batch index
     # rather than filename hash. Renaming a JPG no longer rotates its
@@ -614,6 +620,7 @@ def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
             decision=str(r.get("decision", "") or ""),
             meta_inconsistencies=str(r.get("meta_inconsistencies", "") or ""),
             idx=_idx,
+            vertical=run_vertical,        # V17.3 — business-flavored phrases
         )
         # V9.0: detected style modes for the UI tag chip
         from pixcull.scoring.style_modes import detect_style_modes

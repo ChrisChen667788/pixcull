@@ -43,7 +43,7 @@ from typing import Any
 # ---------------------------------------------------------------------------
 # STRENGTH templates
 #
-# Schema:
+# Schema (V17.3):
 #   {
 #     axis_name: [
 #       {
@@ -51,11 +51,26 @@ from typing import Any
 #         "thresh": <float>,
 #         "op":     "<= or >=",
 #         "phrases": [<list of synonyms>],
-#         "genres":  None or set of scenes this applies to,
-#         "styles":  None or set of style modes this applies to,
+#         "genres":         None or set of scenes this applies to,
+#         "anti_genres":    None or set of scenes that DISABLE this template,
+#         "styles":         None or set of style modes this applies to,
+#         "anti_styles":    None or set of style modes that DISABLE this template,
+#         "verticals":      None or set of business verticals
+#                           (V17.3, e.g. {"wedding"} → fires only when the
+#                           run was tagged with that business vertical),
+#         "anti_verticals": None or set of business verticals that DISABLE,
+#         "source":         optional canon citation
+#                           (V14.3, e.g. "Adams · Zone System"),
 #       }
 #     ]
 #   }
+#
+# V17.3 — verticals are independent of genres. A wedding shoot may be
+# tagged genre=portrait, but the business vertical is "wedding" — and
+# the phrase pool used for praise should reflect 婚纱-specific vocabulary
+# ("Lead Room 充足 + 透视舒服 / 高调干净 / 婚纱质感") not generic portrait
+# language. When ``verticals`` is set on a template, that template is
+# GATED — it fires ONLY if the run's vertical key is in the set.
 #
 # Each phrase pool is rotated by hashing the filename so within a batch
 # the same axis on different images doesn't repeat verbatim. None means
@@ -473,6 +488,502 @@ WEAKNESS_TEMPLATES: dict[str, list[dict[str, Any]]] = {
 
 
 # ---------------------------------------------------------------------------
+# V17.3 — per-vertical phrase pools.
+#
+# Schema is identical to STRENGTH_TEMPLATES / WEAKNESS_TEMPLATES, but
+# the outer dict is keyed by vertical FIRST (wedding / bird / kids /
+# etc), then by axis. ``_pick_per_axis`` iterates the matching
+# vertical's pool BEFORE falling through to the generic dict, so a
+# ``wedding``-tagged run gets "Lead Room 充足 + 透视舒服" instead of
+# the generic "三分法构图严谨".
+#
+# Templates here MUST omit the ``verticals`` filter — the vertical
+# scoping is implicit from the outer dict key. Adding ``genres`` /
+# ``styles`` is still allowed and useful (e.g. the wedding "high-key
+# clean" phrase only fires when style_modes also detects ``high_key``).
+# ---------------------------------------------------------------------------
+
+VERTICAL_STRENGTH_TEMPLATES: dict[str, dict[str, list[dict[str, Any]]]] = {
+    # ───────────────────────── 婚纱 ────────────────────────────
+    "wedding": {
+        "subject": [
+            {
+                "metric": "face_count", "thresh": 1, "op": ">=",
+                "phrases": [
+                    "新人眼神接触自然,情感互动到位",
+                    "新人正脸入框,神情松弛",
+                    "情感互动可读,有故事感",
+                ],
+            },
+        ],
+        "composition": [
+            {
+                "metric": "canon_lead_room", "thresh": 0.65, "op": ">=",
+                "phrases": [
+                    "Lead Room 充足,透视舒服",
+                    "新人朝向方向留白合理(Rule of Space)",
+                    "婚纱礼服展开有空间,层次感好",
+                ],
+                "source": "Rule of Space",
+            },
+        ],
+        "light": [
+            {
+                "metric": "score_exposure", "thresh": 0.0, "op": ">=",
+                "phrases": [
+                    "高调干净光,皮肤通透",
+                    "光质柔和,适合婚纱",
+                    "婚礼现场氛围光自然",
+                ],
+                "styles": {"high_key"},
+            },
+        ],
+        "moment": [
+            {
+                "metric": "score_moment", "thresh": 0.65, "op": ">=",
+                "phrases": [
+                    "笑容/泪光/对视的关键瞬间",
+                    "情感峰值定格,Cartier-Bresson 决定性瞬间",
+                    "动作 + 表情同步到位",
+                ],
+                "source": "Henri Cartier-Bresson · 决定性瞬间",
+            },
+        ],
+        "aesthetic": [
+            {
+                "metric": "laion_aes", "thresh": 5.5, "op": ">=",
+                "phrases": [
+                    "婚纱质感柔和,色彩协调",
+                    "整体氛围温暖,情绪饱满",
+                    "影楼级品质,可作主推",
+                ],
+            },
+        ],
+    },
+    # ───────────────────────── 拍鸟 ────────────────────────────
+    "bird": {
+        "subject": [
+            {
+                "metric": "subject_fraction", "thresh": 0.10, "op": ">=",
+                "phrases": [
+                    "眼神光锐,鸟眼有神",
+                    "鸟头部清晰,主体可读",
+                    "鸟眼焦点扎实",
+                ],
+            },
+        ],
+        "composition": [
+            {
+                "metric": "canon_lead_room", "thresh": 0.6, "op": ">=",
+                "phrases": [
+                    "栖息姿态优雅,引导视线",
+                    "飞行轨迹延展感强",
+                    "前方留白合理,飞行感生动",
+                ],
+                "source": "Rule of Space",
+            },
+        ],
+        "moment": [
+            {
+                "metric": "score_moment", "thresh": 0.6, "op": ">=",
+                "phrases": [
+                    "展翅/捕食/降落的决定性瞬间",
+                    "翅膀清晰,飞行姿态完整",
+                    "动作峰值定格",
+                ],
+                "source": "Henri Cartier-Bresson · 决定性瞬间",
+            },
+        ],
+        "technical": [
+            {
+                "metric": "laplacian_subject", "thresh": 180, "op": ">=",
+                "phrases": [
+                    "鸟眼焦点锁定,飞羽细节锐",
+                    "高速锐度,动态主体清晰",
+                    "鸟羽纹理清晰可辨",
+                ],
+            },
+        ],
+        "aesthetic": [
+            {
+                "metric": "laion_aes", "thresh": 5.5, "op": ">=",
+                "phrases": [
+                    "羽毛纹理质感丰富",
+                    "野生鸟类大片质感",
+                ],
+            },
+        ],
+    },
+    # ───────────────────────── 风光 ────────────────────────────
+    "landscape": {
+        "composition": [
+            {
+                "metric": "canon_thirds_concentration", "thresh": 0.5, "op": ">=",
+                "phrases": [
+                    "天地比例考究 (1:2 或 1:3)",
+                    "前中后景过渡自然",
+                    "构图严谨,层次分明",
+                ],
+                "source": "Rule of Thirds",
+            },
+        ],
+        "subject": [
+            {
+                "metric": "canon_figure_ground", "thresh": 0.55, "op": ">=",
+                "phrases": [
+                    "山水主次分明,有视觉重心",
+                    "前景中景远景层次清晰",
+                    "地形特征突出,有视觉锚点",
+                ],
+            },
+        ],
+        "light": [
+            {
+                "metric": "score_exposure", "thresh": 0.85, "op": ">=",
+                "phrases": [
+                    "黄金时刻光质,色温温暖",
+                    "蓝调时刻氛围,色彩诗意",
+                    "晨昏光线柔和,影调过渡平滑",
+                ],
+            },
+        ],
+        "aesthetic": [
+            {
+                "metric": "laion_aes", "thresh": 6.0, "op": ">=",
+                "phrases": [
+                    "云海/星轨/极地大片质感",
+                    "可作壁纸级风光",
+                    "天地交融,意境深远",
+                ],
+            },
+        ],
+    },
+    # ───────────────────────── 儿童 ────────────────────────────
+    "kids": {
+        "moment": [
+            {
+                "metric": "score_moment", "thresh": 0.55, "op": ">=",
+                "phrases": [
+                    "孩童表情真实可读",
+                    "童真流露的瞬间",
+                    "情绪峰值定格,自然不做作",
+                ],
+                "source": "Henri Cartier-Bresson · 决定性瞬间",
+            },
+        ],
+        "subject": [
+            {
+                "metric": "face_count", "thresh": 1, "op": ">=",
+                "phrases": [
+                    "孩子神情自然不做作",
+                    "情绪饱满,眼神有戏",
+                    "童心可读,情感丰富",
+                ],
+            },
+        ],
+        "aesthetic": [
+            {
+                "metric": "laion_aes", "thresh": 5.0, "op": ">=",
+                "phrases": [
+                    "童趣感浓郁",
+                    "色调温暖,适合家庭相册",
+                ],
+            },
+        ],
+    },
+    # ───────────────────────── 宠物 ────────────────────────────
+    "pet": {
+        "subject": [
+            {
+                "metric": "subject_fraction", "thresh": 0.15, "op": ">=",
+                "phrases": [
+                    "宠物神态生动,眼神有戏",
+                    "性格鲜活,动作自然",
+                    "毛发蓬松,质感细腻",
+                ],
+            },
+        ],
+        "moment": [
+            {
+                "metric": "score_moment", "thresh": 0.6, "op": ">=",
+                "phrases": [
+                    "奔跑/跳跃/对视的决定性瞬间",
+                    "宠物互动情绪饱满",
+                ],
+                "source": "Henri Cartier-Bresson · 决定性瞬间",
+            },
+        ],
+        "aesthetic": [
+            {
+                "metric": "laion_aes", "thresh": 5.2, "op": ">=",
+                "phrases": [
+                    "毛发质感细腻,纹理清晰",
+                    "宠物大片质感",
+                ],
+            },
+        ],
+    },
+    # ───────────────────────── 运动 ────────────────────────────
+    "sports": {
+        "moment": [
+            {
+                "metric": "score_moment", "thresh": 0.65, "op": ">=",
+                "phrases": [
+                    "峰值动作定格,Cartier-Bresson 决定性瞬间",
+                    "极限姿态完整,身体张力充足",
+                    "运动峰值瞬间,信息浓度高",
+                ],
+                "source": "Henri Cartier-Bresson · 决定性瞬间",
+            },
+        ],
+        "subject": [
+            {
+                "metric": "laplacian_subject", "thresh": 200, "op": ">=",
+                "phrases": [
+                    "运动员焦点锐,姿态完整",
+                    "主体定格清晰,动作可读",
+                ],
+            },
+        ],
+        "technical": [
+            {
+                "metric": "laplacian_subject", "thresh": 250, "op": ">=",
+                "phrases": [
+                    "高速锐度,1/1000s+ 抓拍清晰",
+                    "动态主体凝固,无残影",
+                ],
+            },
+        ],
+    },
+    # ───────────────────────── cosplay ─────────────────────────
+    "cosplay": {
+        "subject": [
+            {
+                "metric": "subject_fraction", "thresh": 0.30, "op": ">=",
+                "phrases": [
+                    "角色姿态戏剧,符合作品调性",
+                    "造型完整,角色气质到位",
+                    "服装比例舒适,人物入框",
+                ],
+            },
+        ],
+        "aesthetic": [
+            {
+                "metric": "laion_aes", "thresh": 5.5, "op": ">=",
+                "phrases": [
+                    "服装质感细致,氛围契合角色",
+                    "二次元/番剧调性贴合",
+                    "光影戏剧感强,有舞台感",
+                ],
+            },
+        ],
+        "composition": [
+            {
+                "metric": "canon_figure_ground", "thresh": 0.55, "op": ">=",
+                "phrases": [
+                    "造型不被边缘剪切,完整入框",
+                    "道具与人物布置协调",
+                ],
+            },
+        ],
+    },
+    # ───────────────────────── 旅拍 ────────────────────────────
+    "travel": {
+        "composition": [
+            {
+                "metric": "canon_thirds_concentration", "thresh": 0.5, "op": ">=",
+                "phrases": [
+                    "环境与人物比例舒适",
+                    "异域元素入框,叙事有层次",
+                    "目的地标志性元素 + 人物呼应",
+                ],
+            },
+        ],
+        "aesthetic": [
+            {
+                "metric": "laion_aes", "thresh": 5.3, "op": ">=",
+                "phrases": [
+                    "异域氛围浓,旅行感叙事",
+                    "古镇/海岛质感,有目的地辨识度",
+                    "色温有地域特征",
+                ],
+            },
+        ],
+    },
+    # ───────────────────────── 活动 ────────────────────────────
+    "event": {
+        "moment": [
+            {
+                "metric": "score_moment", "thresh": 0.6, "op": ">=",
+                "phrases": [
+                    "事件本质瞬间(发言/握手/合影/颁奖)",
+                    "重要节点定格",
+                    "活动 highlight 一目了然",
+                ],
+                "source": "Henri Cartier-Bresson · 决定性瞬间",
+            },
+        ],
+        "composition": [
+            {
+                "metric": "canon_balance", "thresh": 0.7, "op": ">=",
+                "phrases": [
+                    "信息密度有序,主体焦点 + 环境氛围",
+                    "多人场景层次分明",
+                ],
+            },
+        ],
+        "subject": [
+            {
+                "metric": "face_count", "thresh": 1, "op": ">=",
+                "phrases": [
+                    "重要人物焦点清晰",
+                    "主讲人入框且神态完整",
+                ],
+            },
+        ],
+    },
+    # ───────────────────────── 野生 ────────────────────────────
+    "wildlife": {
+        "subject": [
+            {
+                "metric": "subject_fraction", "thresh": 0.12, "op": ">=",
+                "phrases": [
+                    "动物姿态完整 + 焦点在眼",
+                    "野生主体完整入框",
+                    "动物神态可读,有故事感",
+                ],
+            },
+        ],
+        "moment": [
+            {
+                "metric": "score_moment", "thresh": 0.6, "op": ">=",
+                "phrases": [
+                    "捕食/对峙/狩猎的决定性瞬间",
+                    "动物自然行为定格",
+                ],
+                "source": "Henri Cartier-Bresson · 决定性瞬间",
+            },
+        ],
+        "technical": [
+            {
+                "metric": "laplacian_subject", "thresh": 200, "op": ">=",
+                "phrases": [
+                    "野生主体锐度顶级,毛发清晰",
+                    "焦点扎实,动态主体清晰",
+                ],
+            },
+        ],
+    },
+}
+
+
+# Per-vertical weakness templates — only the high-impact verticals get
+# specific fix-up advice; others fall through to the generic
+# WEAKNESS_TEMPLATES which already covers the major axes.
+VERTICAL_WEAKNESS_TEMPLATES: dict[str, dict[str, list[dict[str, Any]]]] = {
+    "wedding": {
+        "light": [
+            {
+                "metric": "score_exposure", "thresh": 0.30, "op": "<=",
+                "phrases": [
+                    "新人脸部欠缺光,皮肤暗沉",
+                    "脸部光不均,有阴影遮挡",
+                ],
+                "fixes": [
+                    "下次加反光板/补光灯,提亮脸部",
+                    "调整角度,让主光打到脸上",
+                ],
+            },
+        ],
+        "subject": [
+            {
+                "metric": "face_count", "thresh": 0, "op": "<=",
+                "phrases": [
+                    "新人未入框/未对视镜头",
+                    "缺乏正面互动,情感弱",
+                ],
+                "fixes": [
+                    "下次提示新人方向 + 互动",
+                    "等待对视瞬间再按快门",
+                ],
+            },
+        ],
+    },
+    "bird": {
+        "subject": [
+            {
+                "metric": "laplacian_subject", "thresh": 80, "op": "<=",
+                "phrases": [
+                    "鸟头/眼部失焦",
+                    "主体不清,鸟眼模糊",
+                ],
+                "fixes": [
+                    "用单点 AF 锁鸟眼",
+                    "提高快门到 1/1600s+",
+                    "改光圈到 f/5.6-8 增加景深",
+                ],
+            },
+        ],
+        "composition": [
+            {
+                "metric": "canon_lead_room", "thresh": 0.20, "op": "<=",
+                "phrases": [
+                    "翅膀/尾羽被边缘剪切",
+                    "飞行方向无留白,堵感强",
+                ],
+                "fixes": [
+                    "下次用更广焦段或退后",
+                    "留出 60%+ 飞行方向空间",
+                ],
+            },
+        ],
+    },
+    "sports": {
+        "moment": [
+            {
+                "metric": "score_moment", "thresh": 0.30, "op": "<=",
+                "phrases": [
+                    "动作定格非峰值",
+                    "捕到运动间隙,张力弱",
+                ],
+                "fixes": [
+                    "高速连拍 (10fps+) + 选峰值帧",
+                    "预判动作节奏,在峰值前 0.1s 按快门",
+                ],
+            },
+        ],
+        "technical": [
+            {
+                "metric": "laplacian_subject", "thresh": 100, "op": "<=",
+                "phrases": [
+                    "快门偏低,动态主体糊",
+                ],
+                "fixes": [
+                    "提到 1/2000s+ 抓极限动作",
+                    "提高 ISO 换更快快门",
+                ],
+            },
+        ],
+    },
+    "kids": {
+        "aesthetic": [
+            {
+                "metric": "laion_aes", "thresh": 4.0, "op": "<=",
+                "phrases": [
+                    "孩童表情僵硬,不自然",
+                    "情绪未到,缺乏童真",
+                ],
+                "fixes": [
+                    "让孩子放松,引导玩耍后再拍",
+                    "用零食/玩具吸引注意力,等真笑",
+                ],
+            },
+        ],
+    },
+}
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
@@ -543,8 +1054,17 @@ def _stable_pick(
     return phrases[idx]
 
 
-def _template_matches(t: dict, genre: str, styles: set[str]) -> bool:
-    """Genre/style gating for a template entry."""
+def _template_matches(t: dict, genre: str, styles: set[str],
+                        vertical: str | None = None) -> bool:
+    """Genre/style/vertical gating for a template entry.
+
+    V17.3 — added ``verticals`` (must-match) and ``anti_verticals``
+    (must-not-match) fields. Templates without a verticals filter
+    fire normally; templates with a verticals filter fire ONLY when
+    the run's vertical is in the set, which lets us write business-
+    flavored language (婚纱 / 拍鸟 / 风光) without it leaking into
+    runs that didn't pick that vertical.
+    """
     g = t.get("genres")
     if g is not None and genre not in g:
         return False
@@ -556,6 +1076,13 @@ def _template_matches(t: dict, genre: str, styles: set[str]) -> bool:
         return False
     as_ = t.get("anti_styles")
     if as_ is not None and styles.intersection(as_):
+        return False
+    # V17.3 — vertical gating
+    v = t.get("verticals")
+    if v is not None and (not vertical or vertical not in v):
+        return False
+    av = t.get("anti_verticals")
+    if av is not None and vertical and vertical in av:
         return False
     return True
 
@@ -572,6 +1099,7 @@ def _pick_per_axis(
     max_total: int = 3,
     is_strength: bool = True,
     anchor: int | str | None = None,
+    vertical: str | None = None,
 ) -> list[dict[str, Any]]:
     """Pick phrases across axes that meet star+genre+style+metric criteria.
 
@@ -591,6 +1119,15 @@ def _pick_per_axis(
     out: list[dict[str, Any]] = []
     if anchor is None:
         anchor = row.get("filename", "")
+    # V17.3 — pick the right vertical-specific pool based on whether
+    # we're picking strengths or weaknesses. The pool is empty when
+    # ``vertical`` is None or when no overrides are defined for it.
+    vertical_pool: dict[str, list[dict]] = {}
+    if vertical:
+        if is_strength:
+            vertical_pool = VERTICAL_STRENGTH_TEMPLATES.get(vertical, {})
+        else:
+            vertical_pool = VERTICAL_WEAKNESS_TEMPLATES.get(vertical, {})
     for axis_name, stars in axis_stars.items():
         if stars is None:
             continue
@@ -598,8 +1135,13 @@ def _pick_per_axis(
             continue
         if star_max is not None and stars > star_max:
             continue
-        for t in templates.get(axis_name, []):
-            if not _template_matches(t, genre, styles):
+        # V17.3 — vertical-specific templates win over generic ones
+        # when they qualify (iterate them first, the ``break`` after
+        # ``out.append`` ensures only one phrase per axis fires).
+        candidates = list(vertical_pool.get(axis_name, []))
+        candidates.extend(templates.get(axis_name, []))
+        for t in candidates:
+            if not _template_matches(t, genre, styles, vertical):
                 continue
             v = _read(row, t["metric"])
             if v is None:
@@ -705,6 +1247,7 @@ def build_advice(
     decision: str,
     meta_inconsistencies: str = "",
     idx: int | None = None,
+    vertical: str | None = None,
 ) -> dict[str, Any]:
     """V14.3: produce per-image-distinctive advice.
 
@@ -714,6 +1257,13 @@ def build_advice(
     Phrase pools rotated by ``idx`` (batch index) when provided —
     rename-stable. Falls back to filename hash for callers that
     don't pass an index (back-compat with the V11.1 signature).
+
+    V17.3 — when ``vertical`` is set (passed by the orchestrator
+    when the run was tagged from the scan dropdown), per-vertical
+    phrase pools become eligible. A wedding-tagged run can pick
+    "Lead Room 充足 + 透视舒服 / 高调干净 / 婚纱质感" instead of the
+    generic portrait language; a bird-tagged run gets "眼神光锐 /
+    飞行姿态完整". Falls back to genre-only when ``vertical`` is None.
     """
     genre = str(row.get("scene", "") or "")
     # Derive style modes — avoid the import unless needed
@@ -730,10 +1280,12 @@ def build_advice(
     strengths_detail = _pick_per_axis(
         STRENGTH_TEMPLATES, row, final_stars, genre, styles,
         star_min=4.0, max_total=3, is_strength=True, anchor=anchor,
+        vertical=vertical,
     )
     weak_detail = _pick_per_axis(
         WEAKNESS_TEMPLATES, row, final_stars, genre, styles,
         star_max=3.0, max_total=3, is_strength=False, anchor=anchor,
+        vertical=vertical,
     )
 
     # Flat string lists for V5.2-shape callers (card row, JS templates,
