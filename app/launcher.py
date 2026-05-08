@@ -328,27 +328,57 @@ WARM_TARGETS = [
 OPTIONAL_VLM = ("Qwen3-VL-4B-4bit (~2.9 GB)", _warm_qwen3vl)
 
 
-def run_first_setup(include_vlm: bool) -> bool:
-    """Sequential model warming with native progress notifications.
+def run_first_setup(include_vlm: bool, status_cb=None) -> bool:
+    """Sequential model warming with progress reporting.
 
-    Returns True if all targets completed. Failures are logged via a
-    notification but don't abort — degraded mode is OK.
+    Returns True if all targets completed. Failures are logged via the
+    status callback but don't abort — degraded mode is OK.
+
+    V14.6 — ``status_cb`` is an optional callable invoked between
+    targets so the in-process server can update its
+    ``_FIRST_RUN_STATE`` and the browser-side progress page can
+    drive a real progress bar instead of relying on macOS native
+    notifications. Falls back to silent operation if not provided
+    (matches the V11.x behaviour for any non-launcher caller).
     """
     targets = list(WARM_TARGETS)
     if include_vlm:
         targets.append(OPTIONAL_VLM)
 
-    osa_notify(APP_NAME, f"开始下载模型(共 {len(targets)} 个,~10 分钟)…")
+    def _emit(**kw):
+        if status_cb is not None:
+            try:
+                status_cb(**kw)
+            except Exception as exc:
+                # Status callback failure must never derail the actual
+                # download — log and carry on.
+                sys.stderr.write(
+                    f"[setup] status callback failed: "
+                    f"{type(exc).__name__}: {exc}\n"
+                )
+
+    _emit(phase="warming", total=len(targets), current=0,
+          step_label="准备下载…", started_at=time.time(),
+          include_vlm=include_vlm, errors=[])
+
     n_ok = 0
     for i, (label, fn) in enumerate(targets, start=1):
+        _emit(current=i - 1, step_label=f"下载 {label}…")
         try:
             fn()
-            osa_notify(APP_NAME, f"[{i}/{len(targets)}] {label} ✓")
+            _emit(current=i, step_label=f"{label} ✓")
             n_ok += 1
         except Exception as exc:
-            osa_notify(APP_NAME, f"[{i}/{len(targets)}] {label} 失败: {exc}")
-            print(f"[setup] {label} failed: {type(exc).__name__}: {exc}",
-                  file=sys.stderr)
+            err_msg = f"{type(exc).__name__}: {exc}"
+            print(f"[setup] {label} failed: {err_msg}", file=sys.stderr)
+            # Append to errors via a callback that reads-modifies-writes
+            # under the server's lock.
+            if status_cb is not None:
+                try:
+                    status_cb(_append_error=(label, err_msg))
+                except Exception:
+                    pass
+            _emit(current=i, step_label=f"{label} 失败(继续)")
 
     first_run_marker().write_text(
         f"completed at {time.strftime('%Y-%m-%d %H:%M:%S')}\n"
@@ -357,6 +387,8 @@ def run_first_setup(include_vlm: bool) -> bool:
         f"app_version={APP_VERSION}\n",
         encoding="utf-8",
     )
+    _emit(phase="done", current=n_ok, total=len(targets),
+          step_label="全部就绪")
     return n_ok == len(targets)
 
 
@@ -536,8 +568,21 @@ def main() -> int:
     os.environ.setdefault("HF_HOME", str(hf_cache_dir()))
     os.environ.setdefault("TRANSFORMERS_CACHE", str(hf_cache_dir()))
 
-    if not first_run_marker().exists():
-        # Native AppleScript yes/no for the heavy VLM
+    is_first_run = not first_run_marker().exists()
+    include_vlm = False
+
+    # V14.6 — for first runs we still ask the user up-front via a
+    # native dialog (it's a one-time decision: download VLM or skip).
+    # But unlike before, we DON'T block on the actual download in the
+    # foreground. Instead:
+    #   1. Get the include-VLM choice via dialog.
+    #   2. Start the HTTP server immediately.
+    #   3. Open browser to /first_run for live progress.
+    #   4. Spawn run_first_setup() on a background thread that pushes
+    #      state into serve_demo._FIRST_RUN_STATE, which the browser
+    #      polls. This makes the wait visible and gives the user a
+    #      sense of what's happening + how long is left.
+    if is_first_run:
         choice = osa_dialog(
             text=("欢迎使用 PixCull。\n\n"
                   "首次启动需要下载 ~2 GB 预训练模型(CLIP / DINOv2 / U²-Net / pyiqa)。"
@@ -550,10 +595,6 @@ def main() -> int:
         if choice == "取消":
             return 0
         include_vlm = (choice == "全部下载")
-        # Run model warming. This blocks for several minutes; we use
-        # native notifications for progress instead of a window.
-        run_first_setup(include_vlm)
-        osa_notify(APP_NAME, "首次设置完成,启动中…")
 
     port = find_free_port()
     handle = ServerHandle(port)
@@ -564,8 +605,49 @@ def main() -> int:
         handle.stop()
         return 1
 
-    osa_notify(APP_NAME, f"已启动 · 顶部菜单栏图标 · {port}")
-    webbrowser.open(f"http://127.0.0.1:{port}/")
+    if is_first_run:
+        # Browser-side progress page — opens immediately, polls
+        # /first_run_status, redirects to / when phase == "done".
+        osa_notify(APP_NAME, f"开始首次设置 · 浏览器中查看进度 · {port}")
+        webbrowser.open(f"http://127.0.0.1:{port}/first_run")
+
+        # Spawn the actual download on a background thread. The
+        # status_cb hits the in-process serve_demo state via the
+        # ``first_run_set`` / ``first_run_append_error`` helpers —
+        # those acquire the same lock /first_run_status reads from
+        # so the browser sees consistent snapshots.
+        def _setup_worker():
+            try:
+                import scripts.serve_demo as sd  # type: ignore
+
+                def status_cb(_append_error=None, **fields):
+                    if _append_error is not None:
+                        sd.first_run_append_error(*_append_error)
+                    if fields:
+                        sd.first_run_set(**fields)
+
+                run_first_setup(include_vlm, status_cb=status_cb)
+            except Exception as exc:
+                sys.stderr.write(
+                    f"[setup] worker crashed: "
+                    f"{type(exc).__name__}: {exc}\n"
+                )
+                # Best-effort: tell the page to give up so it stops
+                # spinning forever.
+                try:
+                    import scripts.serve_demo as sd  # type: ignore
+                    sd.first_run_set(
+                        phase="done",
+                        step_label=f"setup 异常: {type(exc).__name__}",
+                    )
+                except Exception:
+                    pass
+
+        threading.Thread(target=_setup_worker, daemon=True,
+                          name="pixcull-first-run").start()
+    else:
+        osa_notify(APP_NAME, f"已启动 · 顶部菜单栏图标 · {port}")
+        webbrowser.open(f"http://127.0.0.1:{port}/")
 
     # V13.0 — fire a background update check (debounced to once per
     # day inside the function). Doesn't block startup.

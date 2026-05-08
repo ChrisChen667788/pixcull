@@ -92,6 +92,61 @@ _RUNS_LOCK = threading.Lock()
 # /retrain handler simple.
 _RETRAIN_STATE: dict = {"state": "idle"}
 
+# V14.6 — first-run model-download state. The launcher kicks off
+# ``run_first_setup`` in a thread after starting the server; that
+# thread updates this dict via ``first_run_set`` between targets.
+# The browser polls /first_run_status every 1.5 s to drive a progress
+# UI, so the user sees something happening during the 5-10 minute
+# initial download instead of an eerily silent dock icon.
+#
+# Phases:
+#   "idle"     — first run already completed, page should redirect
+#   "warming"  — actively downloading; ``current`` / ``total`` /
+#                ``step_label`` populated
+#   "done"     — completed (with or without errors); page redirects
+#                to / after a 1 s celebration
+#   "skipped"  — first-run was cancelled by the user (no setup ran)
+_FIRST_RUN_STATE: dict = {
+    "phase":      "idle",
+    "current":    0,
+    "total":      0,
+    "step_label": "",
+    "errors":     [],
+    "include_vlm": False,
+    "started_at": 0.0,
+}
+_FIRST_RUN_LOCK = threading.Lock()
+
+
+def first_run_set(**kwargs) -> None:
+    """Thread-safe state update from the launcher's setup thread.
+
+    Call from the launcher between warming steps to surface progress
+    to any browser tab pointed at /first_run. Unknown keys are
+    accepted so we can extend the schema without coordinating
+    cross-module bumps.
+    """
+    with _FIRST_RUN_LOCK:
+        _FIRST_RUN_STATE.update(kwargs)
+
+
+def first_run_snapshot() -> dict:
+    """Read-only copy for the /first_run_status endpoint."""
+    with _FIRST_RUN_LOCK:
+        out = dict(_FIRST_RUN_STATE)
+        # ``errors`` is a list — return a copy so the caller can
+        # mutate freely without racing the writer.
+        out["errors"] = list(out.get("errors", []))
+        return out
+
+
+def first_run_append_error(label: str, msg: str) -> None:
+    """Add a single warming-step failure to the error list."""
+    with _FIRST_RUN_LOCK:
+        _FIRST_RUN_STATE.setdefault("errors", []).append(
+            {"label": label, "message": msg}
+        )
+
 # V11.2 auto-retrain trigger:
 # Increments on every human annotation save; once it crosses
 # AUTO_RETRAIN_THRESHOLD, the next /annotation save will spawn a
@@ -1063,6 +1118,14 @@ class _Handler(BaseHTTPRequestHandler):
     # --- routes ------------------------------------------------------------
     def do_GET(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
+        # V14.6 — first-run setup endpoints. Available always (idempotent
+        # snapshot when no setup is running) so the launcher can spin
+        # up the server BEFORE warming starts and the browser can sit
+        # on /first_run polling status.
+        if path == "/first_run":
+            return self._serve_first_run_page()
+        if path == "/first_run_status":
+            return self._serve_first_run_status()
         if path == "/":
             return self._serve_upload_page()
         if path == "/admin":
@@ -2205,6 +2268,15 @@ class _Handler(BaseHTTPRequestHandler):
                 _dbg("retrain_status/meta", exc, str(meta_path))
         self._send_json(200, json.dumps(state, ensure_ascii=False).encode("utf-8"))
 
+    # --- V14.6 first-run page + status ------------------------------------
+    def _serve_first_run_page(self) -> None:
+        body = _FIRST_RUN_HTML.encode("utf-8")
+        self._send_html(200, body)
+
+    def _serve_first_run_status(self) -> None:
+        body = _safe_dumps(first_run_snapshot()).encode("utf-8")
+        self._send_json(200, body)
+
     # --- storage admin -----------------------------------------------------
     def _serve_admin_page(self) -> None:
         body = _ADMIN_HTML.encode("utf-8")
@@ -2474,10 +2546,241 @@ and other Lightroom metadata are untouched.
 
 
 # ---------------------------------------------------------------------------
-# HTML — kept inline for single-file shippability. Two pages:
-#   _UPLOAD_HTML   GET /          drag-drop + status panel
-#   _RESULTS_HTML  GET /results/  decision grid (data inlined as __PAYLOAD__)
+# HTML — kept inline for single-file shippability. Pages:
+#   _UPLOAD_HTML     GET /            drag-drop + status panel
+#   _RESULTS_HTML    GET /results/    decision grid (data inlined as __PAYLOAD__)
+#   _FIRST_RUN_HTML  GET /first_run   model-warming progress (V14.6)
+#   _ADMIN_HTML      GET /admin       storage / runs admin
 # ---------------------------------------------------------------------------
+
+# V14.6 — first-run progress page. Polls /first_run_status every
+# 1.5 s to drive a progress bar with per-step labels. On phase ==
+# "done" it celebrates briefly, then redirects to "/". On phase ==
+# "skipped" or "idle" (i.e. user opened this URL after first-run
+# already completed), it auto-redirects so the page is harmless.
+#
+# Visual style mirrors the upload page: same dark bg, same accent
+# blue, same Inter/SF stack — feels like the same app, not a
+# bootstrap loader.
+_FIRST_RUN_HTML = r"""<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <title>PixCull — 首次设置</title>
+  <style>
+    :root {
+      --bg: #0b0d10;
+      --bg-card: #14171c;
+      --fg: #e9ecf2;
+      --muted: #a8b2c1;
+      --accent: #3b82f6;
+      --accent-hi: #60a5fa;
+      --border: #232830;
+      --keep: #4ade80;
+      --maybe: #d9a30c;
+      --cull: #f87171;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font: 14px/1.5 -apple-system, "SF Pro Text", "Inter", "Segoe UI Variable",
+            "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      min-height: 100vh;
+      display: grid; place-items: center;
+      padding: 24px;
+    }
+    .stage {
+      width: 100%; max-width: 560px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 32px 36px;
+      box-shadow: 0 24px 60px rgba(0,0,0,0.4);
+    }
+    .stage h1 {
+      margin: 0 0 6px; font-size: 22px; font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+    .stage .subtitle {
+      color: var(--muted); font-size: 13px; margin-bottom: 24px;
+    }
+    .stage .step-label {
+      font-size: 13px; color: var(--fg); margin-bottom: 8px;
+      min-height: 19px;
+    }
+    .stage .progress-shell {
+      width: 100%; height: 8px;
+      background: rgba(255,255,255,0.06);
+      border-radius: 999px; overflow: hidden;
+      position: relative;
+    }
+    .stage .progress-bar {
+      height: 100%; background: linear-gradient(
+        90deg, var(--accent), var(--accent-hi)
+      );
+      border-radius: 999px;
+      transition: width 320ms cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 0 12px rgba(59,130,246,0.4);
+      width: 0%;
+    }
+    /* Indeterminate shimmer while a step is in flight (we know
+       the count of steps but each one is opaque to us — pyiqa
+       might take 30 s, U²-Net 90 s). */
+    .stage .progress-bar.indeterminate {
+      background: linear-gradient(
+        90deg, transparent, rgba(96,165,250,0.6), transparent
+      );
+      background-size: 200% 100%;
+      animation: shimmer 1.4s linear infinite;
+    }
+    @keyframes shimmer {
+      from { background-position: 200% 0; }
+      to   { background-position: -200% 0; }
+    }
+    .stage .meta {
+      display: flex; gap: 16px; align-items: center;
+      margin-top: 12px;
+      font-size: 12px; color: var(--muted);
+    }
+    .stage .meta .count { font-variant-numeric: tabular-nums; }
+    .stage .errors {
+      margin-top: 16px;
+      padding: 10px 12px;
+      background: rgba(248,113,113,0.08);
+      border-left: 3px solid var(--cull);
+      border-radius: 4px;
+      font-size: 12px; color: #fca5a5;
+      display: none;
+    }
+    .stage .errors.show { display: block; }
+    .stage .errors h4 { margin: 0 0 4px; font-size: 12px; color: #fca5a5; }
+    .stage .errors li { margin: 2px 0 0 16px; }
+    .stage .done {
+      display: none;
+      color: var(--keep);
+      font-size: 14px; margin-top: 16px;
+    }
+    .stage .done.show { display: block; }
+    .stage .footnote {
+      margin-top: 22px; padding-top: 18px;
+      border-top: 1px solid var(--border);
+      font-size: 11.5px; color: var(--muted);
+      line-height: 1.55;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .stage .progress-bar { transition-duration: 0.01ms; }
+      .stage .progress-bar.indeterminate { animation: none;
+        background: rgba(96,165,250,0.3); }
+    }
+  </style>
+</head>
+<body>
+  <main class="stage" role="status" aria-live="polite">
+    <h1>正在准备 PixCull</h1>
+    <div class="subtitle" id="subtitle">下载 ~2 GB 预训练模型(完成后所有功能离线可用)…</div>
+
+    <div class="step-label" id="stepLabel">连接 Hugging Face…</div>
+    <div class="progress-shell">
+      <div class="progress-bar indeterminate" id="progressBar"></div>
+    </div>
+    <div class="meta">
+      <span class="count" id="counter"></span>
+      <span id="elapsed"></span>
+    </div>
+
+    <div class="errors" id="errorsBox" role="alert">
+      <h4>部分模型下载失败,降级运行(影响有限)</h4>
+      <ul id="errorsList"></ul>
+    </div>
+
+    <div class="done" id="doneBox">
+      ✓ 准备完成 — 跳转至主界面…
+    </div>
+
+    <div class="footnote">
+      首次启动需要下载 CLIP / DINOv2 / U²-Net / pyiqa,大约 5–10 分钟。<br>
+      下载使用 Hugging Face 的全球 CDN — 如果速度异常慢,可以
+      <kbd>Ctrl+C</kbd> 后用国内代理重启。完成后 PixCull 全离线运行。
+    </div>
+  </main>
+
+  <script>
+    const startedAt = Date.now();
+    const stepLabel = document.getElementById("stepLabel");
+    const progressBar = document.getElementById("progressBar");
+    const counter = document.getElementById("counter");
+    const elapsed = document.getElementById("elapsed");
+    const errorsBox = document.getElementById("errorsBox");
+    const errorsList = document.getElementById("errorsList");
+    const doneBox = document.getElementById("doneBox");
+
+    function fmtElapsed(ms) {
+      const s = Math.round(ms / 1000);
+      if (s < 60) return s + "s";
+      const m = Math.floor(s / 60), r = s % 60;
+      return m + "m " + (r < 10 ? "0" + r : r) + "s";
+    }
+
+    let lastPhase = null;
+    async function poll() {
+      try {
+        const res = await fetch("/first_run_status");
+        const s = await res.json();
+        elapsed.textContent = fmtElapsed(Date.now() - startedAt);
+
+        if (s.phase === "warming") {
+          if (s.total > 0) {
+            const pct = Math.min(100, Math.round((s.current / s.total) * 100));
+            progressBar.style.width = pct + "%";
+            progressBar.classList.remove("indeterminate");
+            counter.textContent = `第 ${s.current} / ${s.total} 个`;
+          }
+          if (s.step_label) stepLabel.textContent = s.step_label;
+        } else if (s.phase === "done") {
+          progressBar.style.width = "100%";
+          progressBar.classList.remove("indeterminate");
+          counter.textContent = `完成 ${s.current} / ${s.total}`;
+          stepLabel.textContent = "全部就绪";
+          doneBox.classList.add("show");
+          if (s.errors && s.errors.length) {
+            errorsList.innerHTML = s.errors.map(
+              e => "<li>" + escapeHtml(e.label) + ": " + escapeHtml(e.message) + "</li>"
+            ).join("");
+            errorsBox.classList.add("show");
+          }
+          // Give the user 1.2 s to see "✓ 准备完成", then redirect.
+          if (lastPhase !== "done") {
+            lastPhase = "done";
+            setTimeout(() => { window.location.href = "/"; }, 1200);
+          }
+          return;  // stop polling
+        } else if (s.phase === "skipped" || s.phase === "idle") {
+          // First-run already completed (or was skipped); the
+          // launcher pointed us here by mistake or we were opened
+          // directly. Redirect immediately.
+          window.location.href = "/";
+          return;
+        }
+      } catch (e) {
+        // Server briefly unavailable — keep trying.
+        stepLabel.textContent = "重连中…";
+      }
+      setTimeout(poll, 1500);
+    }
+    function escapeHtml(s) {
+      return String(s == null ? "" : s).replace(/[&<>"']/g, c => (
+        {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
+      ));
+    }
+    poll();
+  </script>
+</body>
+</html>
+"""
+
+
 _UPLOAD_HTML = r"""<!DOCTYPE html>
 <html lang="zh">
 <head>
