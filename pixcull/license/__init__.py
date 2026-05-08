@@ -212,7 +212,15 @@ def usage_this_month() -> int:
 
 def increment_usage(n: int = 1) -> int:
     """Charge n images against the current month's quota.
-    Returns the new monthly count."""
+    Returns the new monthly count.
+
+    V15.1: when the dev-mode kill switch is on, return the existing
+    count without writing. Keeps real-world test runs from inflating
+    quota.json — when we flip the gate back on for a release build,
+    the file reflects only what was actually paid for.
+    """
+    if _quota_disabled():
+        return usage_this_month()
     p = quota_path()
     data: dict = {}
     if p.exists():
@@ -226,12 +234,33 @@ def increment_usage(n: int = 1) -> int:
     return data[key]
 
 
+# V15.1 — temporary kill switch for the commercial gate. We're still
+# in heavy real-world testing (large RAW batches off SD cards) where
+# the 100/月 free cap is in the way. Keeping all the license / quota
+# code intact so we can re-enable later without bisecting; this flag
+# is the single point of bypass.
+#
+# Set ``PIXCULL_DISABLE_QUOTA=0`` to re-arm the gate. Default is on.
+import os as _os
+_QUOTA_DISABLED_DEFAULT = "1"
+def _quota_disabled() -> bool:
+    return _os.environ.get("PIXCULL_DISABLE_QUOTA",
+                            _QUOTA_DISABLED_DEFAULT) not in ("0", "false", "")
+
+
 def check_quota(n_planned: int) -> tuple[bool, str]:
     """Decide whether a planned analysis of `n_planned` images is allowed.
 
     Returns (allowed, message). Message is a human-readable status line
     suitable for showing in the upload-page status bar.
+
+    V15.1: respects ``_quota_disabled()`` — when on (the current default
+    while we iterate on the product), every batch passes through with
+    a "dev mode" banner so frequent real-world tests aren't blocked
+    by the 100/月 free cap. License code path unchanged otherwise.
     """
+    if _quota_disabled():
+        return True, "开发模式 · 配额闸门已关闭"
     lic = load_license()
     if lic.is_unlimited:
         return True, f"Pro · 不限量 ({lic.tier})"
@@ -251,7 +280,13 @@ def check_quota(n_planned: int) -> tuple[bool, str]:
 
 
 def status_line() -> str:
-    """One-line status for the upload page footer."""
+    """One-line status for the upload page footer.
+
+    V15.1: dev-mode banner takes priority over license tier so the
+    footer doesn't keep showing "FREE 0/100" while the gate is off.
+    """
+    if _quota_disabled():
+        return "DEV · 不限量(配额闸门关闭)"
     lic = load_license()
     if lic.is_unlimited:
         days = lic.days_remaining

@@ -2189,21 +2189,30 @@ class _Handler(BaseHTTPRequestHandler):
         ).encode("utf-8"))
 
     def _serve_license_status(self) -> None:
-        """V12.0: GET license + quota status JSON."""
+        """V12.0: GET license + quota status JSON.
+
+        V15.1: when the dev-mode kill switch is on, advertise unlimited
+        + zero-used so the frontend badge stops rendering "FREE 0/100"
+        for the duration of testing. ``dev_mode: true`` lets a future
+        UI render a distinct chip ("DEV") if needed.
+        """
         from pixcull.license import (
             load_license, usage_this_month, status_line,
+            _quota_disabled,
         )
         lic = load_license()
+        dev = _quota_disabled()
         body = json.dumps({
-            "tier": lic.tier,
-            "is_pro": lic.is_pro,
-            "is_unlimited": lic.is_unlimited,
-            "monthly_quota": lic.monthly_quota,
-            "used_this_month": usage_this_month(),
-            "expires_at": lic.expires_at,
-            "days_remaining": lic.days_remaining,
+            "tier": "dev" if dev else lic.tier,
+            "is_pro": True if dev else lic.is_pro,
+            "is_unlimited": True if dev else lic.is_unlimited,
+            "monthly_quota": -1 if dev else lic.monthly_quota,
+            "used_this_month": 0 if dev else usage_this_month(),
+            "expires_at": None if dev else lic.expires_at,
+            "days_remaining": None if dev else lic.days_remaining,
             "email": lic.email,
             "status_line": status_line(),
+            "dev_mode": dev,
         }, ensure_ascii=False).encode("utf-8")
         self._send_json(200, body)
 
