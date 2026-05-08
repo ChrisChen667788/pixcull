@@ -4616,6 +4616,25 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
     .card:hover .annotate-btn { opacity: 1; }
     .annotate-btn:hover { background: var(--accent); }
     .card.has-human .annotate-btn { opacity: 1; background: rgba(74,222,128,0.5); }
+    /* V16.2 — manual rotate button on each card. Mirrors annotate-btn
+       but lives on the LEFT so it doesn't collide with 标注 / ✓ 已标.
+       Hidden until card hover (same affordance pattern). */
+    .card-rot-btn {
+      position: absolute; top: 6px; left: 6px;
+      width: 26px; height: 22px;
+      background: rgba(0,0,0,0.65); color: white; border: 0;
+      border-radius: 3px; font-size: 13px; line-height: 1;
+      cursor: pointer; opacity: 0; transition: opacity 0.15s;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    .card:hover .card-rot-btn { opacity: 1; }
+    .card-rot-btn:hover { background: var(--accent); }
+    /* Smooth thumbnail rotation — same easing as the lightbox img
+       so they feel like the same gesture. */
+    .card .thumb { transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1); }
+    @media (prefers-reduced-motion: reduce) {
+      .card .thumb { transition-duration: 0.01ms; }
+    }
     /* Annotation modal */
     .ann-modal {
       position: fixed; inset: 0; background: rgba(0,0,0,0.85);
@@ -5527,10 +5546,17 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
       // can contain quotes/angle brackets on macOS+APFS, and an injected
       // attribute would break the whole card.
       const fnEsc = esc(r.filename);
+      // V16.2 — read any persisted manual rotation override (set
+      // either from the lightbox or from the card hover button).
+      // Same localStorage key as lightbox (_lbRotKey), so the two
+      // views share state — rotate once, both update.
+      const rotDeg = _lbRotGet(r.filename);
+      const rotStyle = rotDeg ? `style="transform: rotate(${rotDeg}deg)"` : "";
       return `
         <div class="card ${cardCls}" data-fn="${fnEsc}">
-          <img class="thumb" src="${thumb}" data-full="${full}" loading="lazy" alt="${fnEsc}">
+          <img class="thumb" src="${thumb}" data-full="${full}" loading="lazy" alt="${fnEsc}" ${rotStyle}>
           <button class="annotate-btn" data-fn="${fnEsc}" title="人工标注 (rubric)">${r.rubric_human_labeled ? "✓ 已标" : "标注"}</button>
+          <button class="card-rot-btn" data-fn="${fnEsc}" type="button" title="顺时针旋转 90°(在放大窗中可继续微调)">↻</button>
           <div class="body">
             <div class="row1">
               <span class="badge ${r.decision}" title="${esc(r.decision)}">${esc(tr(r.decision, I18N_DECISION) || r.decision)}</span>
@@ -5755,11 +5781,25 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
     const next = _lbRotGet(_lbCurrentFn) + delta;
     _lbRotSet(_lbCurrentFn, next);
     _applyLbRotation();
+    // V16.2 — keep the matching grid card's thumbnail in sync.
+    _syncCardRotation(_lbCurrentFn);
   }
   function _lbRotateReset() {
     if (!_lbCurrentFn) return;
     _lbRotSet(_lbCurrentFn, 0);
     _applyLbRotation();
+    _syncCardRotation(_lbCurrentFn);
+  }
+  // V16.2 — push the current localStorage rotation onto every visible
+  // card matching this filename. Cheap query, runs only on rotate.
+  function _syncCardRotation(fn) {
+    const deg = _lbRotGet(fn);
+    if (!grid) return;
+    grid.querySelectorAll(`.card[data-fn]`).forEach(card => {
+      if (card.dataset.fn !== fn) return;
+      const img = card.querySelector("img.thumb");
+      if (img) img.style.transform = deg ? `rotate(${deg}deg)` : "";
+    });
   }
 
   // V14.2 — step within the visible card order. Wraps around the ends.
@@ -5917,12 +5957,43 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
 
   grid.addEventListener("click", e => {
     const t = e.target;
+    // V16.2 — card-hover rotate button. Bumps rotation by +90° and
+    // updates BOTH the inline transform on the matching <img.thumb>
+    // AND the localStorage state, so a subsequent lightbox open
+    // picks up the change. Stops propagation so the underlying
+    // thumb click (which would open lightbox) doesn't fire.
+    const rotBtn = t.closest(".card-rot-btn");
+    if (rotBtn) {
+      e.stopPropagation();
+      const fn = rotBtn.dataset.fn;
+      if (!fn) return;
+      _lbRotateCard(fn, +90);
+      return;
+    }
     if (t.tagName === "IMG" && t.classList.contains("thumb")) {
       // climb to find data-fn on the .card
       const card = t.closest(".card");
       if (card && card.dataset.fn) openLightbox(card.dataset.fn);
     }
   });
+
+  // V16.2 — card-side helper: rotate the thumbnail on a single card,
+  // share state with the lightbox via the same localStorage key.
+  function _lbRotateCard(fn, delta) {
+    const next = _lbRotGet(fn) + delta;
+    _lbRotSet(fn, next);
+    const deg = _lbRotGet(fn);
+    // Update every visible card matching this filename (cards may
+    // appear once per render; safe to query-all-and-set).
+    grid.querySelectorAll(`.card[data-fn]`).forEach(card => {
+      if (card.dataset.fn !== fn) return;
+      const img = card.querySelector("img.thumb");
+      if (img) img.style.transform = deg ? `rotate(${deg}deg)` : "";
+    });
+    // If the lightbox is currently showing this image, sync its
+    // rotation too — same state in both views.
+    if (_lbCurrentFn === fn) _applyLbRotation();
+  }
   lbClose.addEventListener("click", () => lb.classList.remove("show"));
   // V14.2 — wire chevron clicks for mouse users; keyboard already
   // covered by the document-level keydown handler above.
