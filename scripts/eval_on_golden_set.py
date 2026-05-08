@@ -238,7 +238,7 @@ def _render_html(report: dict, baseline_cmp: dict | None = None) -> str:
 <main>
   <h1>PixCull 评估报告</h1>
   <div class="subtitle">
-    数据集 <b>{report['label']}</b> · n = {s['n']} · 生成于 {report['generated_at']}
+    数据集 <b>{report['label']}</b>{f" · 垂类 <b>{report.get('vertical')}</b>" if report.get('vertical') else ""} · n = {s['n']} · 生成于 {report['generated_at']}
   </div>
 
   <div class="big-band">
@@ -289,6 +289,37 @@ def main(args: argparse.Namespace) -> int:
     gt = pd.read_csv(gt_path, comment="#")
     gt = gt[gt["manual_label"].isin(LABELS)]
 
+    # V17.1 — vertical slicing. When --vertical is passed, filter the GT
+    # rows to just that vertical's subset. Validates against the
+    # registry first so a typo (--vertical wedign) errors loudly
+    # instead of silently producing an empty report.
+    n_total_gt = len(gt)
+    if args.vertical:
+        try:
+            from pixcull.verticals import get_vertical
+        except Exception as exc:
+            print(f"ERROR: cannot import verticals registry: {exc}",
+                  file=sys.stderr)
+            return 4
+        if get_vertical(args.vertical) is None:
+            print(f"ERROR: --vertical {args.vertical!r} not in registry. "
+                  "Run `python -c 'from pixcull import verticals; "
+                  "print([v.key for v in verticals.VERTICALS])'` to list.",
+                  file=sys.stderr)
+            return 5
+        if "vertical" not in gt.columns:
+            print("ERROR: --vertical given but ground_truth.csv has no "
+                  "'vertical' column. Add one with values like "
+                  "'wedding' / 'bird' / 'kids' to enable slicing.",
+                  file=sys.stderr)
+            return 6
+        gt = gt[gt["vertical"] == args.vertical]
+        if gt.empty:
+            print(f"ERROR: 0 GT rows match vertical={args.vertical!r}",
+                  file=sys.stderr)
+            return 7
+        print(f"[vertical={args.vertical}] sliced GT: {len(gt)}/{n_total_gt} rows")
+
     output = golden_dir / "_eval_output"
     output.mkdir(parents=True, exist_ok=True)
 
@@ -333,10 +364,13 @@ def main(args: argparse.Namespace) -> int:
     if not args.report:
         return 0
 
-    # Full report mode — write JSON + HTML
+    # Full report mode — write JSON + HTML.
+    # V17.1: vertical baked into the report metadata so future
+    # analysis tools can group / filter without re-parsing filenames.
     report = {
         "schema":       "pixcull.eval.v1",
         "label":        args.label,
+        "vertical":     args.vertical or None,
         "generated_at": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S"),
         "decision":     summary,
         "axis_metrics": axis_metrics,
@@ -362,12 +396,16 @@ def main(args: argparse.Namespace) -> int:
                   f"({baseline_cmp['macro_f1']['delta']:+.3f})")
             print(f"  verdict:   {baseline_cmp['verdict']}")
 
-    json_path = output / f"eval_{args.label}.json"
+    # V17.1 — when --vertical is set, suffix the output filenames so a
+    # workflow that runs ``eval --label v2`` once per vertical doesn't
+    # clobber its own outputs.
+    suffix = f"_{args.vertical}" if args.vertical else ""
+    json_path = output / f"eval_{args.label}{suffix}.json"
     json_path.write_text(json.dumps(report, ensure_ascii=False, indent=2),
                           encoding="utf-8")
     print(f"\nJSON: {json_path}")
 
-    html_path = output / f"eval_{args.label}.html"
+    html_path = output / f"eval_{args.label}{suffix}.html"
     html_path.write_text(_render_html(report, baseline_cmp),
                           encoding="utf-8")
     print(f"HTML: {html_path}")
@@ -385,6 +423,11 @@ def _parse() -> argparse.Namespace:
                     help="Path to a prior eval_*.json to compute deltas against")
     p.add_argument("--skip-pipeline", action="store_true",
                     help="Don't re-run the pipeline; use existing _eval_output/scores.csv")
+    p.add_argument("--vertical",
+                    help="V17.1 — slice eval to one business vertical "
+                         "(landscape / wildlife / bird / wedding / travel / "
+                         "cosplay / kids / pet / event / sports). Requires "
+                         "the GT csv to have a 'vertical' column.")
     return p.parse_args()
 
 

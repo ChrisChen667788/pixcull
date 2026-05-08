@@ -1191,6 +1191,8 @@ class _Handler(BaseHTTPRequestHandler):
             return self._serve_verticals_page()
         if path == "/verticals.json":
             return self._serve_verticals_json()
+        if path.startswith("/verticals/list/"):
+            return self._serve_vertical_list(path[len("/verticals/list/"):])
         if path.startswith("/verticals/sample/"):
             return self._serve_vertical_sample(path[len("/verticals/sample/"):])
         if path == "/":
@@ -2390,6 +2392,42 @@ class _Handler(BaseHTTPRequestHandler):
         body = _safe_dumps(vmod.registry_with_progress()).encode("utf-8")
         self._send_json(200, body)
 
+    def _serve_vertical_list(self, rel: str) -> None:
+        """V17.1: GET /verticals/list/<key>/<bucket> → sample listing.
+
+        Drives the /verticals drawer's sample grid. Returns the same
+        shape verticals.list_samples produces ({filename, size, mtime})
+        plus the bucket counts so the UI can update the tab labels
+        ("好片 (12)" / "待剔除 (5)") without a second roundtrip.
+        """
+        from pixcull import verticals as vmod
+        rel = unquote(rel)
+        parts = rel.split("/", 1)
+        if len(parts) != 2:
+            self.send_error(404, "expected key/bucket")
+            return
+        key, bucket = parts
+        if vmod.get_vertical(key) is None:
+            self.send_error(404, f"unknown vertical: {key}")
+            return
+        if bucket not in vmod.ALLOWED_BUCKETS:
+            self.send_error(400, "bucket must be 'good' or 'bad'")
+            return
+        try:
+            samples = vmod.list_samples(key, bucket)
+        except ValueError as exc:
+            # Defensive — get_vertical already vetted the key, but if a
+            # future refactor diverges the two paths this catches it.
+            self.send_error(404, str(exc))
+            return
+        body = _safe_dumps({
+            "key":     key,
+            "bucket":  bucket,
+            "samples": samples,
+            "counts":  vmod.count_samples(key),
+        }).encode("utf-8")
+        self._send_json(200, body)
+
     def _serve_vertical_sample(self, rel: str) -> None:
         """GET /verticals/sample/<key>/<bucket>/<filename> → image bytes.
 
@@ -3308,6 +3346,28 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
     .sample:hover .rm { opacity: 1; }
     .sample .rm:hover { background: var(--cull); }
 
+    /* V17.1 — sample zoom overlay. Tiny lightbox-of-its-own for the
+       /verticals page, doesn't share the results-page lightbox JS. */
+    .sample-zoom {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.92);
+      display: none; align-items: center; justify-content: center;
+      z-index: 20; padding: 24px; cursor: zoom-out;
+      backdrop-filter: blur(6px);
+    }
+    .sample-zoom.show { display: flex; }
+    .sample-zoom img {
+      max-width: 100%; max-height: 100%; object-fit: contain;
+      border-radius: 8px; box-shadow: 0 12px 40px rgba(0,0,0,0.7);
+    }
+    .sample-zoom .caption {
+      position: absolute; bottom: 16px; left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.72); color: var(--fg);
+      padding: 6px 12px; border-radius: 4px; font-size: 12px;
+      max-width: 80%; overflow: hidden; text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
     .toast-stack {
       position: fixed; bottom: 16px; right: 16px; z-index: 10;
       display: flex; flex-direction: column; gap: 6px;
@@ -3341,6 +3401,10 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
 
     <div class="vlist" id="vlist"></div>
   </main>
+  <div class="sample-zoom" id="sampleZoom" role="dialog" aria-modal="true">
+    <img id="sampleZoomImg" alt="">
+    <div class="caption" id="sampleZoomCaption"></div>
+  </div>
   <div class="toast-stack" id="toastStack"></div>
 
   <script>
@@ -3364,6 +3428,27 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
       registry = await res.json();
       render();
     }
+
+    // V17.1 — sample-zoom overlay. Click any sample tile → fullscreen
+    // backdrop with the image, click again or Esc to close.
+    const sampleZoom = document.getElementById("sampleZoom");
+    const sampleZoomImg = document.getElementById("sampleZoomImg");
+    const sampleZoomCaption = document.getElementById("sampleZoomCaption");
+    function openSampleZoom(url, fn) {
+      sampleZoomImg.src = url;
+      sampleZoomCaption.textContent = fn || "";
+      sampleZoom.classList.add("show");
+    }
+    function closeSampleZoom() {
+      sampleZoom.classList.remove("show");
+      sampleZoomImg.src = "";
+    }
+    sampleZoom.addEventListener("click", closeSampleZoom);
+    document.addEventListener("keydown", e => {
+      if (e.key === "Escape" && sampleZoom.classList.contains("show")) {
+        closeSampleZoom();
+      }
+    });
 
     function render() {
       vlist.innerHTML = registry.map(v => `
@@ -3419,15 +3504,71 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
         loadSamples();
       }
 
+      // V17.1 — fetch the per-bucket sample list and render thumbnails.
+      // Hover ✕ deletes; click pops the full image in a lightbox.
       async function loadSamples() {
-        // Fetch sample list via dedicated endpoint? We keep it simple:
-        // counts are in the registry, sample names need a dedicated GET.
-        // For V17.0 we just hit the JSON registry to refresh counts.
-        // Filenames are exposed via window.__sampleListCache (not yet
-        // implemented — punted to the placeholder below).
-        grid.innerHTML = `<div style="grid-column: 1 / -1; padding: 8px; color: var(--muted); font-size: 11px">
-          (上传后此处显示缩略图列表 — V17.1 接入)
-        </div>`;
+        grid.innerHTML = `<div style="grid-column: 1 / -1; padding: 8px;
+          color: var(--muted); font-size: 11px">加载中…</div>`;
+        try {
+          const res = await fetch(
+            `/verticals/list/${encodeURIComponent(key)}/${currentBucket}`
+          );
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const d = await res.json();
+          // Update tab counts inline (no re-fetch of full registry)
+          tabs.forEach(t => {
+            const b = t.dataset.bucket;
+            t.textContent = (b === "good" ? "好片 " : "待剔除 ")
+              + `(${d.counts[b]})`;
+            t.classList.toggle("active", b === currentBucket);
+          });
+          if (!d.samples.length) {
+            grid.innerHTML = `<div style="grid-column: 1 / -1; padding: 8px;
+              color: var(--muted); font-size: 11px">
+              空 — 拖文件到上方区域开始
+            </div>`;
+            return;
+          }
+          grid.innerHTML = d.samples.map(s => {
+            const url = `/verticals/sample/${encodeURIComponent(key)}/${currentBucket}/${encodeURIComponent(s.filename)}`;
+            return `
+              <div class="sample" data-fn="${esc(s.filename)}">
+                <img src="${url}" alt="${esc(s.filename)}" loading="lazy">
+                <button class="rm" data-fn="${esc(s.filename)}"
+                  title="删除这张样本">✕</button>
+              </div>`;
+          }).join("");
+          // Wire each sample's delete + zoom
+          grid.querySelectorAll(".sample").forEach(s => {
+            const fn = s.dataset.fn;
+            const rmBtn = s.querySelector(".rm");
+            rmBtn.addEventListener("click", async (e) => {
+              e.stopPropagation();
+              if (!confirm("删除这张样本?(只删除你机上的样本库,不会动原图)")) return;
+              try {
+                const r = await fetch(
+                  `/verticals/sample/${encodeURIComponent(key)}/${currentBucket}/${encodeURIComponent(fn)}`,
+                  {method: "DELETE"}
+                );
+                if (r.ok) {
+                  toast("已删除", "success");
+                  loadSamples();
+                  loadRegistry();   // progress bar refresh
+                } else {
+                  toast("删除失败", "error");
+                }
+              } catch (err) { toast("删除出错: " + err, "error"); }
+            });
+            // Click anywhere else on the tile → zoom
+            s.addEventListener("click", () => {
+              const img = s.querySelector("img");
+              openSampleZoom(img.src, fn);
+            });
+          });
+        } catch (err) {
+          grid.innerHTML = `<div style="grid-column: 1 / -1; padding: 8px;
+            color: var(--cull); font-size: 11px">加载失败: ${esc(err.message || err)}</div>`;
+        }
       }
 
       tabs.forEach(t => {
@@ -3439,6 +3580,7 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
         btn.addEventListener("click", () => {
           const b = btn.dataset.bucket;
           if (b) setBucket(b);
+          else loadSamples();   // 管理… → just load current bucket
           detail.classList.toggle("show");
         });
       });

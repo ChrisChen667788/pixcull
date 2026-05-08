@@ -179,3 +179,31 @@ def test_registry_snapshot_shape(isolated_data_dir):
     for v in out:
         assert "zh" in v and "icon" in v and "counts" in v
         assert v["counts"]["total"] == v["counts"]["good"] + v["counts"]["bad"]
+
+
+# ---------------------------------------------------------------------------
+# V17.1 — list_samples shape used by the /verticals/list endpoint
+# ---------------------------------------------------------------------------
+
+def test_list_samples_returns_size_and_mtime(isolated_data_dir):
+    """Each entry must carry filename + size + mtime — the /verticals/list
+    endpoint and the drawer's grid both depend on this shape."""
+    info = verticals.save_sample("kids", "good", "x.jpg", b"abcdefg")
+    samples = verticals.list_samples("kids", "good")
+    assert len(samples) == 1
+    s = samples[0]
+    assert s["filename"] == info["filename"]
+    assert s["size"] == 7
+    assert isinstance(s["mtime"], float)
+
+
+def test_list_samples_empty_bucket(isolated_data_dir):
+    samples = verticals.list_samples("bird", "bad")
+    assert samples == []
+
+
+def test_list_samples_unknown_vertical_raises(isolated_data_dir):
+    """Unknown vertical → ValueError, not silent empty list (the
+    /verticals/list endpoint translates this to a 404)."""
+    with pytest.raises(ValueError):
+        verticals.list_samples("__not_real__", "good")

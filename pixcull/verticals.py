@@ -214,7 +214,13 @@ def _bucket_dir(key: str, bucket: str) -> Path:
 
 
 def list_samples(key: str, bucket: str) -> list[dict]:
-    """Return [{filename, size, mtime}, ...] for one bucket of one vertical."""
+    """Return [{filename, size, mtime}, ...] for one bucket of one vertical.
+
+    V17.1 — raises ValueError on unknown vertical, matching the
+    behavior of save_sample. Empty bucket → empty list.
+    """
+    if key not in _BY_KEY:
+        raise ValueError(f"unknown vertical: {key}")
     d = _bucket_dir(key, bucket)
     out = []
     for f in sorted(d.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True):
