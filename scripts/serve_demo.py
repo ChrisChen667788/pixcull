@@ -63,6 +63,7 @@ import io
 import json
 import shutil
 import socket
+import os
 import sys
 import threading
 import time
@@ -146,6 +147,60 @@ def first_run_append_error(label: str, msg: str) -> None:
         _FIRST_RUN_STATE.setdefault("errors", []).append(
             {"label": label, "message": msg}
         )
+
+
+# V14.7 — config helpers. The launcher's app_data_dir / config_path /
+# load_config also handle this (more robustly with corruption backups),
+# but we can't import from app/launcher.py here without creating a
+# circular import. Lightweight duplicates good enough for the
+# settings-toggle endpoints; first_read_config falls back to {} on
+# any error rather than corrupting the file.
+def _app_data_dir() -> Path:
+    if sys.platform == "darwin":
+        p = Path.home() / "Library" / "Application Support" / "PixCull"
+    else:
+        p = Path.home() / ".pixcull"
+    try:
+        p.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        _dbg("_app_data_dir", exc, str(p))
+    return p
+
+
+def _user_config_path() -> Path:
+    return _app_data_dir() / "config.json"
+
+
+def _load_user_config() -> dict:
+    p = _user_config_path()
+    if not p.exists():
+        return {}
+    try:
+        return json.loads(p.read_text("utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        _dbg("_load_user_config", exc, str(p))
+        return {}
+
+
+def _save_user_config(cfg: dict) -> None:
+    """Atomic write to config.json with 0600 perms.
+
+    Atomic via temp-file + rename so a crash mid-write can't leave a
+    half-truncated config that ``_load_user_config`` then has to
+    salvage.
+    """
+    p = _user_config_path()
+    tmp = p.with_suffix(".tmp")
+    try:
+        tmp.write_text(json.dumps(cfg, ensure_ascii=False, indent=2),
+                       encoding="utf-8")
+        try:
+            os.chmod(tmp, 0o600)
+        except OSError:
+            pass
+        tmp.replace(p)
+    except OSError as exc:
+        _dbg("_save_user_config", exc, str(p))
 
 # V11.2 auto-retrain trigger:
 # Increments on every human annotation save; once it crosses
@@ -1126,6 +1181,11 @@ class _Handler(BaseHTTPRequestHandler):
             return self._serve_first_run_page()
         if path == "/first_run_status":
             return self._serve_first_run_status()
+        # V14.7 — opt-in error reporting + privacy disclosure
+        if path == "/privacy":
+            return self._serve_privacy_page()
+        if path == "/settings/error_reports":
+            return self._serve_error_reports_settings()
         if path == "/":
             return self._serve_upload_page()
         if path == "/admin":
@@ -1185,6 +1245,11 @@ class _Handler(BaseHTTPRequestHandler):
             return self._handle_license_install()
         if path == "/sync/upload":
             return self._handle_sync_upload()
+        # V14.7 — opt-in error reporting
+        if path == "/settings/error_reports":
+            return self._handle_save_error_reports_settings()
+        if path == "/error_reports/submit":
+            return self._handle_submit_error_report()
         self.send_error(404, "not found")
 
     def do_DELETE(self) -> None:  # noqa: N802
@@ -2277,6 +2342,63 @@ class _Handler(BaseHTTPRequestHandler):
         body = _safe_dumps(first_run_snapshot()).encode("utf-8")
         self._send_json(200, body)
 
+    # --- V14.7 opt-in error reporting -------------------------------------
+    def _serve_privacy_page(self) -> None:
+        body = _PRIVACY_HTML.encode("utf-8")
+        self._send_html(200, body)
+
+    def _serve_error_reports_settings(self) -> None:
+        """GET — read current opt-in state from config.json. Default OFF."""
+        cfg = _load_user_config()
+        body = _safe_dumps({
+            "enabled":  bool(cfg.get("error_reports_enabled")),
+            "endpoint": str(cfg.get("error_reports_endpoint", "") or ""),
+        }).encode("utf-8")
+        self._send_json(200, body)
+
+    def _handle_save_error_reports_settings(self) -> None:
+        """POST {enabled, endpoint?} — persist opt-in toggle to config.json."""
+        clen = int(self.headers.get("Content-Length", "0") or "0")
+        try:
+            data = json.loads(self.rfile.read(clen).decode("utf-8") or "{}")
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            self._reject_upload(400, f"invalid JSON: {exc}")
+            return
+        enabled = bool(data.get("enabled"))
+        endpoint = str(data.get("endpoint", "") or "").strip()
+        cfg = _load_user_config()
+        cfg["error_reports_enabled"] = enabled
+        if endpoint:
+            cfg["error_reports_endpoint"] = endpoint
+        elif "error_reports_endpoint" in cfg:
+            # Clear stale endpoint when user blanks it
+            cfg["error_reports_endpoint"] = ""
+        _save_user_config(cfg)
+        body = _safe_dumps({
+            "ok": True, "enabled": enabled, "endpoint": endpoint,
+        }).encode("utf-8")
+        self._send_json(200, body)
+
+    def _handle_submit_error_report(self) -> None:
+        """POST — manually submit a redacted report payload now."""
+        clen = int(self.headers.get("Content-Length", "0") or "0")
+        try:
+            data = json.loads(self.rfile.read(clen).decode("utf-8") or "{}") if clen else {}
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            data = {}
+        from pixcull import error_reporting as er
+        cfg = _load_user_config()
+        result = er.submit_report(
+            cfg,
+            app_version="14.7.0",
+            log_dir=_app_data_dir() / "logs",
+            reason=str(data.get("reason", "manual")),
+            extra={"trigger": "user-clicked-submit"},
+        )
+        body = _safe_dumps(result).encode("utf-8")
+        # 200 even on dry-run / disabled — the result body explains.
+        self._send_json(200, body)
+
     # --- storage admin -----------------------------------------------------
     def _serve_admin_page(self) -> None:
         body = _ADMIN_HTML.encode("utf-8")
@@ -2776,6 +2898,121 @@ _FIRST_RUN_HTML = r"""<!DOCTYPE html>
     }
     poll();
   </script>
+</body>
+</html>
+"""
+
+
+# V14.7 — privacy disclosure page. Linked from the admin opt-in toggle
+# so the user knows EXACTLY what gets collected before flipping it on.
+# Hard-coded list mirrors the redaction patterns in
+# pixcull/error_reporting.py — keep them in sync if you add more.
+_PRIVACY_HTML = r"""<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <title>PixCull — 隐私 / 错误上报政策</title>
+  <style>
+    :root {
+      --bg: #0b0d10; --bg-card: #14171c; --fg: #e9ecf2;
+      --muted: #a8b2c1; --accent: #3b82f6; --border: #232830;
+      --keep: #4ade80; --cull: #f87171;
+    }
+    body {
+      margin: 0; min-height: 100vh; background: var(--bg); color: var(--fg);
+      font: 14px/1.65 -apple-system, "SF Pro Text", Inter,
+            "Segoe UI Variable", "PingFang SC", sans-serif;
+      padding: 32px 24px;
+    }
+    main { max-width: 720px; margin: 0 auto; }
+    h1 { font-size: 22px; font-weight: 600; margin: 0 0 6px; }
+    .subtitle { color: var(--muted); margin-bottom: 24px; }
+    h2 {
+      font-size: 14px; text-transform: uppercase; letter-spacing: 0.06em;
+      color: var(--muted); font-weight: 600;
+      margin: 28px 0 8px;
+    }
+    .card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 8px; padding: 16px 20px; margin-bottom: 14px;
+    }
+    .card.good { border-left: 3px solid var(--keep); }
+    .card.bad  { border-left: 3px solid var(--cull); }
+    ul { padding-left: 20px; margin: 6px 0; }
+    li { margin: 4px 0; }
+    code {
+      background: rgba(255,255,255,0.06); padding: 1px 5px;
+      border-radius: 3px; font-family: ui-monospace, monospace;
+      font-size: 12.5px;
+    }
+    .back {
+      display: inline-block; margin-top: 32px;
+      color: var(--accent); text-decoration: none;
+    }
+    .back:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>错误上报政策</h1>
+    <p class="subtitle">
+      默认<b>关闭</b>。开启后,只在你点 “立即提交一次错误报告”
+      或者(将来)程序崩溃时才会把数据外发。每次发送什么、发到哪里都对你透明。
+    </p>
+
+    <h2>会上报的内容</h2>
+    <div class="card good">
+      <ul>
+        <li>App 版本号</li>
+        <li>操作系统类别 / 版本(如 <code>Darwin · arm64 · 24.x</code>)</li>
+        <li>Python 版本</li>
+        <li>最近一次 stderr 日志的<b>末尾 200 行</b>(脱敏后)</li>
+      </ul>
+    </div>
+
+    <h2>脱敏规则(发送前自动应用)</h2>
+    <div class="card">
+      <ul>
+        <li><code>/Users/&lt;name&gt;</code> → <code>/Users/&lt;redacted&gt;</code></li>
+        <li><code>/home/&lt;name&gt;</code> → <code>/home/&lt;redacted&gt;</code></li>
+        <li><code>C:\Users\&lt;name&gt;</code> → <code>C:\Users\&lt;redacted&gt;</code></li>
+        <li><code>sk-...</code> DeepSeek / OpenAI API key → <code>sk-***</code></li>
+        <li><code>Bearer &lt;token&gt;</code> → <code>Bearer ***</code></li>
+        <li><code>hf_...</code> Hugging Face token → <code>hf_***</code></li>
+        <li><code>AKIA...</code> AWS access key → <code>AKIA***</code></li>
+        <li>邮箱地址 → <code>&lt;email&gt;</code></li>
+      </ul>
+    </div>
+
+    <h2>绝不会上报</h2>
+    <div class="card bad">
+      <ul>
+        <li>你的图片或图片路径</li>
+        <li>图片字节数据</li>
+        <li>License token</li>
+        <li>你写的 rubric 标注 / 评注文字</li>
+        <li><code>/annotation</code> 或 <code>/export</code> 的请求体</li>
+      </ul>
+    </div>
+
+    <h2>上报地址</h2>
+    <div class="card">
+      你在管理面板里自己填一个 endpoint URL。如果留空,即便 “开启” 也只是
+      dry-run(本地拼好 payload 但不发送),你能在浏览器里看到完整内容。
+      <br><br>
+      官方目前<b>没有共享 endpoint</b> — 这是骨架,等真正的 Sentry / PostHog
+      搭建好了才会启用。
+    </div>
+
+    <h2>关闭后</h2>
+    <div class="card">
+      改回开关或者把 endpoint 留空都立即生效。设置存在
+      <code>~/Library/Application Support/PixCull/config.json</code> 里,
+      你可以直接编辑或删除。
+    </div>
+
+    <a class="back" href="/admin">← 返回管理面板</a>
+  </main>
 </body>
 </html>
 """
@@ -6358,6 +6595,41 @@ _ADMIN_HTML = r"""<!DOCTYPE html>
         <tbody></tbody>
       </table>
     </div>
+
+    <!-- V14.7 — opt-in error reporting toggle. Defaults OFF. Hard
+         requirement: nothing leaves the user's machine until they
+         explicitly flip the switch + click "submit". -->
+    <div class="card">
+      <h2>错误上报(opt-in,默认关闭)</h2>
+      <div class="muted" style="margin-bottom: 10px">
+        开启后,只在你<b>主动点击</b>"立即提交"时会把日志(已脱敏)上传到指定 endpoint。
+        <a href="/privacy" target="_blank" style="color:var(--accent)">完整政策 →</a>
+      </div>
+      <div style="display:flex; align-items:center; gap:12px; margin-bottom:10px">
+        <label style="display:flex; align-items:center; gap:6px; font-size:13px; cursor:pointer">
+          <input type="checkbox" id="erEnabled"> 开启
+        </label>
+        <span style="color:var(--muted); font-size:11px" id="erStatusBadge"></span>
+      </div>
+      <div style="margin-bottom:10px">
+        <label style="display:block; font-size:11px; color:var(--muted); margin-bottom:4px">
+          Endpoint URL(留空则只 dry-run 不发送):
+        </label>
+        <input id="erEndpoint" type="url" placeholder="https://your-sentry-or-server.example/report"
+               style="width:100%; max-width:520px; background: rgba(0,0,0,0.3); color: var(--fg);
+                      border: 1px solid var(--border); padding: 6px 10px; border-radius: 4px;
+                      font: inherit; font-size:12px">
+      </div>
+      <div class="actions">
+        <button id="erSaveBtn">保存设置</button>
+        <button id="erSubmitBtn">立即提交一次报告</button>
+        <button id="erPreviewBtn">预览将发送的内容</button>
+      </div>
+      <pre id="erOut" style="margin-top:12px; padding:12px; background: rgba(0,0,0,0.3);
+            border: 1px solid var(--border); border-radius: 4px; font-size:11px;
+            max-height: 320px; overflow:auto; display:none; white-space: pre-wrap;
+            color: var(--muted)"></pre>
+    </div>
   </main>
   <div class="toast" id="toast"></div>
 
@@ -6555,6 +6827,105 @@ _ADMIN_HTML = r"""<!DOCTYPE html>
       refreshRetrain();
     }
   });
+
+  // V14.7 — opt-in error reporting toggle wiring
+  const erEnabled = document.getElementById("erEnabled");
+  const erEndpoint = document.getElementById("erEndpoint");
+  const erSaveBtn = document.getElementById("erSaveBtn");
+  const erSubmitBtn = document.getElementById("erSubmitBtn");
+  const erPreviewBtn = document.getElementById("erPreviewBtn");
+  const erStatusBadge = document.getElementById("erStatusBadge");
+  const erOut = document.getElementById("erOut");
+
+  async function loadErrorReportSettings() {
+    try {
+      const res = await fetch("/settings/error_reports");
+      const s = await res.json();
+      erEnabled.checked = !!s.enabled;
+      erEndpoint.value = s.endpoint || "";
+      erStatusBadge.textContent = s.enabled
+        ? (s.endpoint ? "状态:已开启 + 已配置" : "状态:已开启(dry-run)")
+        : "状态:关闭";
+    } catch (e) {
+      erStatusBadge.textContent = "状态:加载失败";
+    }
+  }
+
+  erSaveBtn.addEventListener("click", async () => {
+    erSaveBtn.disabled = true;
+    try {
+      const res = await fetch("/settings/error_reports", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+          enabled: erEnabled.checked,
+          endpoint: erEndpoint.value.trim(),
+        }),
+      });
+      const d = await res.json();
+      showToast(d.ok ? "已保存" : "保存失败");
+      loadErrorReportSettings();
+    } finally {
+      erSaveBtn.disabled = false;
+    }
+  });
+
+  async function callSubmit() {
+    const res = await fetch("/error_reports/submit", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({reason: "manual"}),
+    });
+    return await res.json();
+  }
+
+  erSubmitBtn.addEventListener("click", async () => {
+    erSubmitBtn.disabled = true;
+    try {
+      const d = await callSubmit();
+      erOut.style.display = "block";
+      erOut.textContent = JSON.stringify(d, null, 2);
+      showToast(d.sent ? `已发送 (HTTP ${d.status})` : (d.message || "未发送"));
+    } finally {
+      erSubmitBtn.disabled = false;
+    }
+  });
+
+  erPreviewBtn.addEventListener("click", async () => {
+    // Preview = same submit path, just shows the payload locally.
+    // If user is disabled, callSubmit returns no payload; flip on
+    // briefly to render preview, then restore.
+    const wasOff = !erEnabled.checked;
+    if (wasOff) {
+      // Don't actually toggle the persisted setting — call a
+      // "what would happen if enabled" by temporarily flipping
+      // and restoring. In the common case where there's no endpoint,
+      // submit_report does dry-run anyway.
+      erEnabled.checked = true;
+      await fetch("/settings/error_reports", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({enabled: true, endpoint: ""}),
+      });
+    }
+    try {
+      const d = await callSubmit();
+      erOut.style.display = "block";
+      erOut.textContent = JSON.stringify(d.payload || d, null, 2);
+    } finally {
+      if (wasOff) {
+        erEnabled.checked = false;
+        await fetch("/settings/error_reports", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({enabled: false, endpoint: erEndpoint.value.trim()}),
+        });
+        loadErrorReportSettings();
+      }
+    }
+  });
+
+  loadErrorReportSettings();
 
   refresh();
   refreshRetrain();
