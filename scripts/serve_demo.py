@@ -4068,6 +4068,142 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
       overflow-y: auto; padding: 20px;
     }
     .ann-modal.show { display: flex; }
+    /* V14.5 — cross-fade between save → next image. The .ann-card
+       briefly drops to ~40% opacity while the form is rebuilt and
+       the next thumbnail pre-loads, then fades back to full. Avoids
+       the "modal flashes blank then snaps in" feel of the old
+       hard-reset path. */
+    .ann-card {
+      transition: opacity 200ms ease-out, transform 200ms ease-out;
+    }
+    .ann-card.transitioning {
+      opacity: 0.4;
+      transform: translateY(2px) scale(0.998);
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .ann-card { transition-duration: 0.01ms; }
+      .ann-card.transitioning { opacity: 1; transform: none; }
+    }
+
+    /* V14.5 — shortcuts cheat sheet overlay */
+    .shortcuts-modal {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.78);
+      display: none; align-items: center; justify-content: center;
+      z-index: 13; backdrop-filter: blur(6px); padding: 20px;
+    }
+    .shortcuts-modal.show {
+      display: flex; animation: modalBackdropIn 160ms ease-out;
+    }
+    .shortcuts-modal.show .shortcuts-card {
+      animation: modalContentIn 200ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .shortcuts-modal.show, .shortcuts-modal.show .shortcuts-card {
+        animation-duration: 0.01ms;
+      }
+    }
+    .shortcuts-card {
+      background: var(--bg-card); border: 1px solid var(--border-hi);
+      border-radius: 12px; padding: 0;
+      max-width: 540px; width: 100%; max-height: 86vh;
+      overflow: hidden; display: flex; flex-direction: column;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.6);
+    }
+    .shortcuts-header {
+      padding: 16px 20px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 12px; flex-shrink: 0;
+    }
+    .shortcuts-header h3 {
+      margin: 0; font-size: 15px; font-weight: 600; flex: 1;
+    }
+    .shortcuts-header .close {
+      width: 28px; height: 28px; border-radius: 6px;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      color: var(--muted); cursor: pointer; font-size: 14px;
+    }
+    .shortcuts-header .close:hover {
+      color: var(--fg); border-color: var(--border-hi);
+    }
+    .shortcuts-body {
+      padding: 14px 20px; overflow-y: auto; flex: 1 1 auto;
+    }
+    .shortcut-section { margin-bottom: 14px; }
+    .shortcut-section:last-child { margin-bottom: 0; }
+    .shortcut-section-title {
+      font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+      color: var(--muted); margin-bottom: 6px; font-weight: 600;
+    }
+    .shortcut-row {
+      display: flex; align-items: center; gap: 16px;
+      padding: 5px 0; font-size: 13px;
+    }
+    .shortcut-row .keys {
+      flex: 0 0 130px; display: flex; gap: 4px; align-items: center;
+      font-size: 11px; color: var(--muted);
+    }
+    .shortcut-row .desc {
+      flex: 1 1 auto; color: var(--fg);
+    }
+    .shortcut-row kbd {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-width: 22px; height: 22px; padding: 0 6px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--border);
+      border-bottom-width: 2px;
+      border-radius: 4px;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 11px; color: var(--fg); font-weight: 500;
+    }
+    .shortcut-row .tag {
+      display: inline-block; padding: 1px 6px; border-radius: 3px;
+      font-size: 11px; font-weight: 500;
+      margin-left: 4px;
+    }
+    .shortcut-row .tag.keep  { background: rgba(74,222,128,0.15); color: var(--keep); }
+    .shortcut-row .tag.maybe { background: rgba(217,163,12,0.18); color: var(--maybe); }
+    .shortcut-row .tag.cull  { background: rgba(248,113,113,0.15); color: var(--cull); }
+    .shortcuts-foot {
+      padding: 10px 20px; border-top: 1px solid var(--border);
+      font-size: 11px; color: var(--muted);
+      flex-shrink: 0;
+    }
+
+    /* Floating "? 快捷键" discoverability pill */
+    .shortcuts-hint {
+      position: fixed; bottom: 16px; right: 16px;
+      background: rgba(0,0,0,0.55);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 6px 12px; border-radius: 20px;
+      font: inherit; font-size: 11px; line-height: 1;
+      cursor: pointer; user-select: none;
+      backdrop-filter: blur(8px);
+      z-index: 7;
+      transition: color 120ms, border-color 120ms, background 120ms;
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    .shortcuts-hint:hover {
+      color: var(--fg);
+      border-color: var(--border-hi);
+      background: rgba(0,0,0,0.7);
+    }
+    .shortcuts-hint kbd {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-width: 18px; height: 18px; padding: 0 4px;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 10px; color: var(--fg);
+    }
+    @media (max-width: 640px) {
+      .shortcuts-hint {
+        bottom: 12px; right: 12px;
+        padding: 8px 14px; font-size: 12px;
+      }
+    }
     .ann-card {
       background: var(--bg-card); border: 1px solid var(--border);
       border-radius: 8px; max-width: 920px; width: 100%; padding: 18px;
@@ -4362,6 +4498,53 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
       </div>
     </div>
   </div>
+
+  <!-- V14.5 shortcuts overlay — opens with `?`. Replaces a native
+       alert() that was ugly + non-dismissible-on-Esc. Auto-discoverable
+       via the floating "? 快捷键" pill in the bottom-right corner. -->
+  <div class="shortcuts-modal" id="shortcutsModal">
+    <div class="shortcuts-card">
+      <div class="shortcuts-header">
+        <h3 class="modal-title">键盘快捷键</h3>
+        <button class="close" id="shortcutsClose" aria-label="关闭快捷键面板">✕</button>
+      </div>
+      <div class="shortcuts-body">
+        <div class="shortcut-section">
+          <div class="shortcut-section-title">浏览</div>
+          <div class="shortcut-row"><span class="keys"><kbd>j</kbd> 或 <kbd>→</kbd></span><span class="desc">下一张</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>k</kbd> 或 <kbd>←</kbd></span><span class="desc">上一张</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>Space</kbd></span><span class="desc">放大查看完整评分</span></div>
+        </div>
+        <div class="shortcut-section">
+          <div class="shortcut-section-title">快速标注</div>
+          <div class="shortcut-row"><span class="keys"><kbd>1</kbd></span><span class="desc">标 <span class="tag keep">keep</span></span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>2</kbd></span><span class="desc">标 <span class="tag maybe">maybe</span></span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>3</kbd></span><span class="desc">标 <span class="tag cull">cull</span></span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>Enter</kbd></span><span class="desc">打开 rubric 详细标注</span></div>
+        </div>
+        <div class="shortcut-section">
+          <div class="shortcut-section-title">编辑</div>
+          <div class="shortcut-row"><span class="keys"><kbd>⌘</kbd>+<kbd>Z</kbd></span><span class="desc">撤销最近一次标注</span></div>
+        </div>
+        <div class="shortcut-section">
+          <div class="shortcut-section-title">通用</div>
+          <div class="shortcut-row"><span class="keys"><kbd>Esc</kbd></span><span class="desc">关闭当前面板</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>?</kbd></span><span class="desc">显示本面板</span></div>
+        </div>
+      </div>
+      <div class="shortcuts-foot">
+        <span class="muted">在输入框中输入时,这些快捷键会自动让位 — 安全粘贴文本不会触发标注</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- V14.5 floating "? 快捷键" hint — discoverability. Hidden in
+       the bottom-right corner, low contrast so it doesn't compete
+       with the main UI. -->
+  <button class="shortcuts-hint" id="shortcutsHint" type="button"
+          aria-label="打开键盘快捷键面板">
+    <kbd>?</kbd> 快捷键
+  </button>
 
 <script>
 (() => {
@@ -5126,22 +5309,31 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
       summary.n_human_labeled = (summary.n_human_labeled || 0) + 1;
     } catch (e) { /* ignore quick errors */ }
   }
-  // Help cheat-sheet
+  // V14.5 — shortcuts cheat sheet replaces the old alert(). The
+  // overlay HTML is statically rendered; JS just toggles .show
+  // and the registerModal observer handles ARIA + focus trap.
+  const shortcutsModal = document.getElementById("shortcutsModal");
+  const shortcutsClose = document.getElementById("shortcutsClose");
+  const shortcutsHint = document.getElementById("shortcutsHint");
+  if (shortcutsModal) registerModal(shortcutsModal);
+
   function showShortcuts() {
-    alert([
-      "PixCull · 键盘快捷键",
-      "",
-      "  j / →       下一张",
-      "  k / ←       上一张",
-      "  1           标 keep",
-      "  2           标 maybe",
-      "  3           标 cull",
-      "  space       放大 + 查看完整评分",
-      "  enter       打开标注 modal",
-      "  Cmd/Ctrl+Z  撤销最近一次标注操作",
-      "  Esc         关闭",
-      "  ?           本帮助",
-    ].join("\n"));
+    if (!shortcutsModal) return;
+    shortcutsModal.classList.add("show");
+  }
+  function hideShortcuts() {
+    if (shortcutsModal) shortcutsModal.classList.remove("show");
+  }
+  if (shortcutsClose) {
+    shortcutsClose.addEventListener("click", hideShortcuts);
+  }
+  if (shortcutsHint) {
+    shortcutsHint.addEventListener("click", showShortcuts);
+  }
+  if (shortcutsModal) {
+    shortcutsModal.addEventListener("click", e => {
+      if (e.target === shortcutsModal) hideShortcuts();
+    });
   }
 
   document.addEventListener("keydown", e => {
@@ -5155,13 +5347,19 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
       return;
     }
     if (e.metaKey || e.ctrlKey || e.altKey) return;
-    // Modal-aware: Esc closes any open modal first
+    // Modal-aware: Esc closes any open modal first. V14.5 also
+    // routes Esc to the shortcuts overlay; ordering matters because
+    // multiple modals can stack (e.g. shortcuts opened over the
+    // lightbox should close shortcuts first, leaving the lightbox).
     if (e.key === "Escape") {
+      if (shortcutsModal && shortcutsModal.classList.contains("show")) {
+        hideShortcuts(); return;
+      }
       if (lb.classList.contains("show")) { lb.classList.remove("show"); return; }
       const am = document.getElementById("annModal");
       if (am && am.classList.contains("show")) { am.classList.remove("show"); return; }
       const bm = document.getElementById("browserModal");
-      if (bm && bm.style.display !== "none") { bm.style.display = "none"; return; }
+      if (bm && bm.classList.contains("show")) { bm.classList.remove("show"); return; }
       return;
     }
     // Don't act when an annotation modal is open — let modal own input
@@ -5309,11 +5507,36 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
     annWhy.style.display = "none";
   }
 
-  async function openAnnotation(fn, why) {
+  // V14.5 — when openAnnotation is called via openNextToLabel right
+  // after a save, we want a smooth cross-fade rather than a jarring
+  // hard reset. Pre-loading the next thumbnail before the swap kills
+  // the broken-image flash; the .ann-card .transitioning class fades
+  // form fields during the rebuild.
+  async function openAnnotation(fn, why, opts = {}) {
+    const transition = !!opts.transition;
     await loadRubricMeta();
     currentFn = fn;
+
+    const annCard = annModal.querySelector(".ann-card");
+    if (transition && annCard) annCard.classList.add("transitioning");
+
     clearForm();
-    annThumb.src = `/full/${run_id}/${encodeURIComponent(fn)}`;
+
+    // Pre-load the next image so we never show a broken/empty <img>.
+    const nextSrc = `/full/${run_id}/${encodeURIComponent(fn)}`;
+    if (transition) {
+      try {
+        await new Promise((resolve) => {
+          const probe = new Image();
+          probe.onload = probe.onerror = resolve;
+          probe.src = nextSrc;
+          // Don't block forever if the image is huge / slow.
+          setTimeout(resolve, 800);
+        });
+      } catch (e) { /* fall through anyway */ }
+    }
+    annThumb.src = nextSrc;
+
     const r = rows.find(x => x.filename === fn);
     annTitle.textContent = `${fn}`;
     annMeta.innerHTML = r
@@ -5349,6 +5572,15 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
       if (rec.overall_rationale) annOverallRationale.value = rec.overall_rationale;
     } catch (e) { /* no prior — leave blank */ }
     annModal.classList.add("show");
+    // V14.5 — clear the cross-fade veil one frame after the modal
+    // is visible so the new content renders fully opaque.
+    if (transition && annCard) {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          annCard.classList.remove("transitioning");
+        });
+      });
+    }
   }
 
   async function saveAnnotation(thenAdvance) {
@@ -5397,8 +5629,13 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
       render(activeFilter);
       summary.n_human_labeled = (summary.n_human_labeled || 0) + (r && !rows._wasLabeled ? 1 : 0);
       if (thenAdvance) {
-        await openNextToLabel();
+        // V14.5 — toast confirmation + smooth cross-fade to next.
+        // The modal stays open the whole time; only the contents
+        // morph, so the user keeps their flow without a page-jump.
+        toast("已保存 ✓ — 加载下一张", "success", 1800);
+        await openNextToLabel({ transition: true });
       } else {
+        toast("已保存 ✓", "success", 1500);
         annModal.classList.remove("show");
       }
     } finally {
@@ -5406,16 +5643,16 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
     }
   }
 
-  async function openNextToLabel() {
+  async function openNextToLabel(opts = {}) {
     try {
       const res = await fetch(`/next_to_label/${run_id}`);
       const data = await res.json();
       if (data.done) {
         annModal.classList.remove("show");
-        toast(data.message || "已标完本批所有图片", "success");
+        toast(data.message || "已标完本批所有图片 ✓", "success");
         return;
       }
-      openAnnotation(data.filename, data.why);
+      openAnnotation(data.filename, data.why, opts);
     } catch (e) {
       annModal.classList.remove("show");
       toast("active learning 队列失败:" + e, "error");
