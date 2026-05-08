@@ -1697,7 +1697,13 @@ class _Handler(BaseHTTPRequestHandler):
 
         cache_dir = Path(run["output_dir"]) / "thumbs"
         cache_dir.mkdir(parents=True, exist_ok=True)
-        cache_path = cache_dir / f"{src.name}.{size}.jpg"
+        # V16.1 — cache key bumped to v2 so stale caches generated
+        # before EXIF auto-rotate (which displayed phone-shot portrait
+        # JPEGs in their on-disk landscape orientation) are invalidated
+        # without a manual ``rm -rf /tmp/pixcull_demo``. Old .jpg files
+        # remain on disk but aren't read; admin-page "清理" still
+        # cleans them.
+        cache_path = cache_dir / f"{src.name}.{size}.v2.jpg"
         if not cache_path.exists():
             from pixcull.io.loader import load_image  # local import
             img = load_image(src, max_side=size)
@@ -4954,9 +4960,35 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
     .lightbox .nav-btn:hover { background: rgba(0,0,0,0.85); }
     .lightbox .nav-prev { left: 18px; }
     .lightbox .nav-next { right: 18px; }
+    /* V16.1 — manual rotate group, sits to the LEFT of the close
+       button. Three buttons: ↺ (CCW), ↻ (CW), ⟲ (reset to EXIF). */
+    .lightbox .rotate-grp {
+      position: absolute; top: 18px; right: 452px;
+      display: flex; gap: 4px; z-index: 11;
+    }
+    .lightbox .rot-btn {
+      width: 32px; height: 32px; border-radius: 6px;
+      background: rgba(0,0,0,0.6); color: #fff;
+      border: 1px solid rgba(255,255,255,0.15);
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 16px; cursor: pointer;
+      transition: background 120ms;
+    }
+    .lightbox .rot-btn:hover { background: rgba(0,0,0,0.85); }
+    /* lbImg gets transformed via inline style; transition for the
+       rotation feel (ease-out, 220 ms — fast enough not to feel slow,
+       slow enough to read direction). */
+    .lightbox .img-pane img {
+      transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .lightbox .img-pane img { transition-duration: 0.01ms; }
+    }
     @media (max-width: 900px) {
       .lightbox .close-btn { right: 18px; }
       .lightbox .nav-btn { width: 38px; height: 50px; }
+      .lightbox .rotate-grp { top: 18px; right: 60px; }
+      .lightbox .rot-btn { width: 28px; height: 28px; font-size: 14px; }
     }
   </style>
 </head>
@@ -5004,6 +5036,19 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
     <!-- V14.2 — prev/next chevrons; keyboard ←→ also works -->
     <span class="nav-btn nav-prev" id="lbPrev" title="上一张 (← / k)" aria-label="上一张">‹</span>
     <span class="nav-btn nav-next" id="lbNext" title="下一张 (→ / j)" aria-label="下一张">›</span>
+    <!-- V16.1 — manual rotate buttons. Backend already runs
+         ImageOps.exif_transpose so most images come out right; these
+         are an override for the rare camera that wrote no EXIF tag,
+         or the user who specifically wants a different framing.
+         Override is persisted per (run_id, filename) in localStorage. -->
+    <div class="rotate-grp" role="group" aria-label="旋转">
+      <button class="rot-btn" id="lbRotL" type="button"
+              title="逆时针旋转 90°">↺</button>
+      <button class="rot-btn" id="lbRotR" type="button"
+              title="顺时针旋转 90°">↻</button>
+      <button class="rot-btn" id="lbRotReset" type="button"
+              title="恢复 EXIF 默认方向">⟲</button>
+    </div>
     <div class="img-pane"><img id="lbImg" alt=""></div>
     <div class="info-pane" id="lbInfo"></div>
   </div>
@@ -5074,6 +5119,11 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
         <div class="shortcut-section">
           <div class="shortcut-section-title">编辑</div>
           <div class="shortcut-row"><span class="keys"><kbd>⌘</kbd>+<kbd>Z</kbd></span><span class="desc">撤销最近一次标注</span></div>
+        </div>
+        <div class="shortcut-section">
+          <div class="shortcut-section-title">放大窗内</div>
+          <div class="shortcut-row"><span class="keys"><kbd>r</kbd></span><span class="desc">顺时针旋转 90°</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>R</kbd></span><span class="desc">逆时针旋转 90°</span></div>
         </div>
         <div class="shortcut-section">
           <div class="shortcut-section-title">通用</div>
@@ -5674,7 +5724,42 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
     const w = Math.round(Math.min(window.innerWidth || 1280, 2400) * dpr);
     lbImg.src = `/full/${run_id}/${encodeURIComponent(fn)}?w=${w}`;
     lbInfo.innerHTML = renderInfoPane(r);
+    // V16.1 — apply any persisted manual rotation override for this
+    // image. EXIF auto-rotate (server-side ImageOps.exif_transpose)
+    // already gets 99% of cases right; this is the fallback for
+    // images with no orientation tag, or rare cases where the user
+    // wants a different framing than EXIF intended.
+    _applyLbRotation();
     lb.classList.add("show");
+  }
+
+  // V16.1 — manual rotation override. Persisted per (run_id, filename)
+  // in localStorage as a degree value (0/90/180/270). 0 = honor EXIF.
+  function _lbRotKey(fn)   { return `pixcull-rot:${run_id}:${fn}`; }
+  function _lbRotGet(fn)   {
+    const v = parseInt(localStorage.getItem(_lbRotKey(fn)) || "0", 10);
+    return ((v % 360) + 360) % 360;
+  }
+  function _lbRotSet(fn, deg) {
+    deg = ((deg % 360) + 360) % 360;
+    if (deg === 0) localStorage.removeItem(_lbRotKey(fn));
+    else localStorage.setItem(_lbRotKey(fn), String(deg));
+  }
+  function _applyLbRotation() {
+    if (!_lbCurrentFn) return;
+    const deg = _lbRotGet(_lbCurrentFn);
+    lbImg.style.transform = deg ? `rotate(${deg}deg)` : "";
+  }
+  function _lbRotateBy(delta) {
+    if (!_lbCurrentFn) return;
+    const next = _lbRotGet(_lbCurrentFn) + delta;
+    _lbRotSet(_lbCurrentFn, next);
+    _applyLbRotation();
+  }
+  function _lbRotateReset() {
+    if (!_lbCurrentFn) return;
+    _lbRotSet(_lbCurrentFn, 0);
+    _applyLbRotation();
   }
 
   // V14.2 — step within the visible card order. Wraps around the ends.
@@ -5849,12 +5934,26 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
   if (lbNext) lbNext.addEventListener("click", e => {
     e.stopPropagation(); lightboxStep(+1);
   });
+  // V16.1 — manual rotate button handlers
+  const lbRotL = document.getElementById("lbRotL");
+  const lbRotR = document.getElementById("lbRotR");
+  const lbRotReset = document.getElementById("lbRotReset");
+  if (lbRotL) lbRotL.addEventListener("click", e => {
+    e.stopPropagation(); _lbRotateBy(-90);
+  });
+  if (lbRotR) lbRotR.addEventListener("click", e => {
+    e.stopPropagation(); _lbRotateBy(+90);
+  });
+  if (lbRotReset) lbRotReset.addEventListener("click", e => {
+    e.stopPropagation(); _lbRotateReset();
+  });
   lb.addEventListener("click", e => {
     // Only close on backdrop or img-pane click — not on info-pane,
-    // close button, or nav buttons.
+    // close button, or nav buttons, or rotate buttons.
     if (e.target.closest(".info-pane")) return;
     if (e.target === lbClose) return;
     if (e.target.closest(".nav-btn")) return;
+    if (e.target.closest(".rotate-grp")) return;
     lb.classList.remove("show");
   });
 
@@ -6034,6 +6133,9 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
       if (e.key === "k" || e.key === "ArrowLeft" || e.key === "PageUp") {
         e.preventDefault(); lightboxStep(-1); return;
       }
+      // V16.1 — r / R inside lightbox = rotate CW / CCW (manual override)
+      if (e.key === "r") { e.preventDefault(); _lbRotateBy(+90);  return; }
+      if (e.key === "R") { e.preventDefault(); _lbRotateBy(-90);  return; }
     }
 
     if (e.key === "j" || e.key === "ArrowRight") { e.preventDefault(); moveFocus(+1); }
