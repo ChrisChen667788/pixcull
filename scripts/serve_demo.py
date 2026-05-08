@@ -3516,7 +3516,7 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
       </div>
 
       <!-- Folder browser modal — V8.3 with sticky header + quick jumps -->
-      <div class="browser-modal" id="browserModal" style="display:none">
+      <div class="browser-modal" id="browserModal">
         <div class="browser-card">
           <div class="browser-header">
             <code id="browserPath" title="当前位置"></code>
