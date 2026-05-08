@@ -495,6 +495,9 @@ def _analyze_in_background(
     _set_run(run_id, state="running", started_at=time.time(),
              vlm_mode=vlm_mode, meta_mode=meta_mode)
     try:
+        # V17.2 — pass the run's vertical (set by /scan_local) into
+        # the pipeline so decide() can apply per-vertical thresholds
+        # + tolerated flags. None / unknown vertical = unchanged behavior.
         run_pipeline(
             source_dir,
             output_dir,
@@ -503,6 +506,7 @@ def _analyze_in_background(
             progress_cb=progress_cb,
             vlm_mode=vlm_mode,
             meta_mode=meta_mode,
+            vertical=run.get("vertical"),
         )
         _set_run(
             run_id,
@@ -692,6 +696,29 @@ def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
         vals = [r["rubric_stars"][name] for r in rows
                 if r["rubric_stars"].get(name) is not None]
         axis_means[name] = round(sum(vals) / len(vals), 2) if vals else None
+    # V17.2 — surface the vertical override + policy notes so the
+    # results page can render a small badge ("应用了垂类: kids ·
+    # keep -5pp / cull -5pp"). Falls back to None for runs that
+    # didn't pick a vertical (most existing runs).
+    vertical_key = run.get("vertical")
+    vertical_info: dict | None = None
+    if vertical_key:
+        try:
+            from pixcull.verticals import get_vertical
+            v = get_vertical(vertical_key)
+            if v is not None:
+                vertical_info = {
+                    "key":   v.key,
+                    "zh":    v.zh,
+                    "icon":  v.icon,
+                    "policy_notes": v.policy.notes,
+                    "keep_min_delta": v.policy.keep_min_delta,
+                    "cull_max_delta": v.policy.cull_max_delta,
+                    "tolerated_flags": sorted(v.policy.tolerated_flags),
+                }
+        except Exception:
+            vertical_info = None
+
     summary = {
         "n_total": len(rows),
         "n_keep": counts.get("keep", 0),
@@ -710,6 +737,7 @@ def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
             round(run["finished_at"] - run["started_at"], 1)
             if run.get("finished_at") and run.get("started_at") else None
         ),
+        "vertical": vertical_info,
     }
     return rows, summary
 
@@ -4930,6 +4958,18 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
            -webkit-text-fill-color: var(--muted); }
     h1 a:hover { color: var(--fg); -webkit-text-fill-color: var(--fg); }
     .stats { display: flex; gap: 18px; color: var(--muted); font-size: 12px; flex-wrap: wrap; }
+    /* V17.2 — vertical policy badge: small accent pill that hovers
+       to reveal the policy notes ("风光提高 keep 门槛 +3pp..."). */
+    .stats .vertical-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 2px 10px;
+      background: rgba(59,130,246,0.12);
+      border: 1px solid rgba(59,130,246,0.35);
+      border-radius: 999px;
+      color: var(--accent-hi);
+      font-size: 11.5px;
+      cursor: help;
+    }
     .stats b { color: var(--fg); font-weight: 600; }
     .stats .keep b { color: var(--keep); }
     .stats .maybe b { color: var(--maybe); }
@@ -6028,6 +6068,31 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
   // V2.0 rubric annotation progress
   if (summary.n_human_labeled != null) {
     stats.push(`<span title="人工 rubric 标注进度,这些标注会喂入下一轮 rescorer 训练">人工标注 <b>${summary.n_human_labeled}</b>/${summary.n_total}</span>`);
+  }
+  // V17.2 — vertical policy badge. Tells the user "you tagged this
+  // batch as <vertical>; here's how the thresholds were shifted vs
+  // the default rule stack." Hover for the human-readable rationale.
+  if (summary.vertical) {
+    const v = summary.vertical;
+    const deltaParts = [];
+    if (v.keep_min_delta) {
+      const sign = v.keep_min_delta > 0 ? "+" : "";
+      deltaParts.push(`keep ${sign}${(v.keep_min_delta*100).toFixed(0)}pp`);
+    }
+    if (v.cull_max_delta) {
+      const sign = v.cull_max_delta > 0 ? "+" : "";
+      deltaParts.push(`cull ${sign}${(v.cull_max_delta*100).toFixed(0)}pp`);
+    }
+    if (v.tolerated_flags && v.tolerated_flags.length) {
+      const tr = v.tolerated_flags.map(f => trFlag(f)).join("/");
+      deltaParts.push(`容忍 ${tr}`);
+    }
+    const deltaStr = deltaParts.length ? ` · ${deltaParts.join(" · ")}` : "";
+    stats.push(
+      `<span class="vertical-badge" title="${esc(v.policy_notes || '')}">`
+      + `${esc(v.icon)} 垂类 <b>${esc(v.zh)}</b>${esc(deltaStr)}`
+      + `</span>`
+    );
   }
   statsEl.innerHTML = stats.join("");
 

@@ -35,6 +35,7 @@ def decide(
     scene: str | None = None,
     *,
     rescorer_prob_keep: float | None = None,
+    vertical: str | None = None,
 ) -> tuple[Decision, list[str]]:
     """Map final score + blocking flags to Keep / Maybe / Cull with human-readable reasons.
 
@@ -52,11 +53,32 @@ def decide(
             ``prob_keep <= maybe_to_cull_threshold`` and no protective flags).
             Rule-keeps and rule-culls are never overridden — V1.2 deliberately
             only re-sorts the ambiguous middle bucket.
+        vertical: V17.2 — business vertical key (kids / wedding / bird /
+            sports / etc). When set and matches a registered vertical, its
+            ``policy`` shifts ``keep_min`` / ``cull_max`` thresholds and
+            adds tolerated flags. Unknown / empty vertical = no override
+            (back-compat with V1.x callers that don't pass this kwarg).
     """
     presets = config.fusion.get("strictness_presets", {})
     thr = presets.get(strictness) or config.fusion.get("decision", {})
     keep_min = float(thr.get("keep_min_score", 6.5)) / 10.0
     cull_max = float(thr.get("cull_max_score", 4.0)) / 10.0
+
+    # V17.2 — vertical policy override. Looked up at call time (cheap dict
+    # access on a registry of 10) so tests can monkey-patch the registry
+    # without orchestrator restarts.
+    vert_policy = None
+    if vertical:
+        try:
+            from pixcull.verticals import get_vertical
+            v = get_vertical(vertical)
+            if v is not None:
+                vert_policy = v.policy
+                keep_min = max(0.0, min(1.0, keep_min + vert_policy.keep_min_delta))
+                cull_max = max(0.0, min(1.0, cull_max + vert_policy.cull_max_delta))
+        except Exception:
+            # Verticals module is non-essential; never let it break decide().
+            vert_policy = None
 
     reasons: list[str] = []
     # Hard-cull flags: any of these forces CULL regardless of score.
@@ -82,6 +104,10 @@ def decide(
     # downstream tooling can inspect it.
     if scene in _BLUR_TOLERANT_SCENES:
         hard_cull = hard_cull - {"severely_blurry"}
+    # V17.2 — vertical-level tolerated flags (e.g. kids tolerates
+    # ``motion_blur_on_face``; wedding tolerates ``shadows_clipped``).
+    if vert_policy is not None and vert_policy.tolerated_flags:
+        hard_cull = hard_cull - set(vert_policy.tolerated_flags)
 
     triggered = set(flags) & hard_cull
     if triggered:

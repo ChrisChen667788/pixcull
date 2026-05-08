@@ -155,3 +155,108 @@ def test_other_hard_cull_flags_still_fire_on_landscape(config):
     for flag in ("closed_eyes", "severely_overexposed", "motion_blur_on_face"):
         dec, _ = decide(0.72, [flag], config, scene="landscape")
         assert dec is Decision.CULL, f"{flag} should still hard-cull on landscape"
+
+
+# ============================================================================
+# V17.2 — per-vertical policy override.  decide(vertical=...) reads the
+# registered VerticalPolicy and shifts thresholds + tolerated flags.
+# ============================================================================
+
+
+def test_vertical_unset_is_no_op(config):
+    """Calling decide() without ``vertical=`` must reproduce V1.x behavior."""
+    score = 0.60
+    dec_no_vert, _ = decide(score, [], config, scene="portrait")
+    dec_none, _   = decide(score, [], config, scene="portrait", vertical=None)
+    dec_empty, _  = decide(score, [], config, scene="portrait", vertical="")
+    assert dec_no_vert is dec_none is dec_empty
+
+
+def test_vertical_unknown_falls_through(config):
+    """Unknown vertical key shouldn't crash or change behavior — it's
+    treated as if the kwarg wasn't passed."""
+    score = 0.60
+    dec_a, _ = decide(score, [], config, scene="portrait")
+    dec_b, _ = decide(score, [], config, scene="portrait",
+                       vertical="__not_a_real_vertical__")
+    assert dec_a is dec_b
+
+
+def test_kids_keep_min_delta_promotes_marginal_score(config):
+    """Score that's MAYBE on the default 6.5 keep-line should land KEEP
+    on kids (which has keep_min_delta = -0.05)."""
+    # 0.61 is below default keep_min (0.65) → MAYBE without vertical.
+    dec_default, _ = decide(0.61, [], config, scene="portrait")
+    assert dec_default is Decision.MAYBE
+    # With kids vertical, threshold drops to ~0.60 → row tips to KEEP.
+    dec_kids, _ = decide(0.61, [], config, scene="portrait", vertical="kids")
+    assert dec_kids is Decision.KEEP
+
+
+def test_landscape_keep_min_delta_demotes_marginal_score(config):
+    """Score that's barely KEEP on the default 6.5 keep-line should land
+    MAYBE on landscape (which has keep_min_delta = +0.03 — stricter)."""
+    # 0.66 sits just above default keep_min (0.65) → KEEP without vertical.
+    dec_default, _ = decide(0.66, [], config, scene="landscape")
+    assert dec_default is Decision.KEEP
+    # With landscape vertical, threshold rises to ~0.68 → tips to MAYBE.
+    dec_landscape, _ = decide(0.66, [], config, scene="landscape",
+                                vertical="landscape")
+    assert dec_landscape is Decision.MAYBE
+
+
+def test_kids_tolerates_motion_blur_on_face(config):
+    """kids policy adds motion_blur_on_face to tolerated_flags. Without
+    vertical the flag hard-culls; with kids vertical the row falls
+    through to score-based decision."""
+    dec_default, _ = decide(0.72, ["motion_blur_on_face"], config,
+                              scene="portrait")
+    assert dec_default is Decision.CULL
+
+    dec_kids, _ = decide(0.72, ["motion_blur_on_face"], config,
+                           scene="portrait", vertical="kids")
+    assert dec_kids is Decision.KEEP   # 0.72 > kids keep_min (0.60)
+
+
+def test_kids_does_not_tolerate_severe_overexposure(config):
+    """tolerated_flags is scoped — kids tolerates motion_blur but NOT
+    severely_overexposed (which is always destructive)."""
+    dec_kids, _ = decide(0.72, ["severely_overexposed"], config,
+                           scene="portrait", vertical="kids")
+    assert dec_kids is Decision.CULL
+
+
+def test_landscape_tolerates_severely_blurry_via_vertical(config):
+    """The V0.8 scene-based exemption already lets landscape tolerate
+    severely_blurry. Vertical policy is independent and additive — pass
+    a different scene and the vertical-level exemption alone should
+    still demote."""
+    # scene=portrait wouldn't normally tolerate severely_blurry; but
+    # the landscape vertical's policy says it should.
+    dec_with_vert, _ = decide(0.72, ["severely_blurry"], config,
+                                scene="portrait", vertical="landscape")
+    assert dec_with_vert is Decision.KEEP
+
+
+def test_wedding_tolerates_shadow_clipping(config):
+    """Wedding's policy tolerates `shadows_clipped` (not in the default
+    hard_cull set anyway, but this confirms the vertical doesn't add
+    spurious cull conditions)."""
+    # shadows_clipped is NOT in default hard_cull so this is mostly a
+    # smoke check — high score should land KEEP regardless of flag.
+    dec_w, _ = decide(0.80, ["shadows_clipped"], config,
+                       scene="portrait", vertical="wedding")
+    assert dec_w is Decision.KEEP
+
+
+def test_threshold_clamps_to_unit_range(config):
+    """Pathologically large delta shouldn't push threshold past 1.0."""
+    # We don't actually have such a vertical, but the clamp logic in
+    # decide() should withstand one. Use ad-hoc monkeypatch via a
+    # custom Vertical fixture below if needed; this just smoke-tests
+    # that the existing clamp doesn't crash on the 10 real verticals.
+    for vkey in ("kids", "landscape", "wedding", "sports", "bird"):
+        # Score at extreme ends should still produce a valid decision.
+        for score in (0.0, 0.5, 1.0):
+            dec, _ = decide(score, [], config, scene="portrait", vertical=vkey)
+            assert dec in (Decision.KEEP, Decision.MAYBE, Decision.CULL)

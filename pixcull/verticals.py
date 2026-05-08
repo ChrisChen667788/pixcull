@@ -49,6 +49,37 @@ from typing import Iterable
 # -----------------------------------------------------------------------------
 
 @dataclass(frozen=True)
+class VerticalPolicy:
+    """V17.2 — scoring overrides applied when a run is tagged with a
+    vertical (via the scan dropdown / scan_local body).
+
+    Three knobs, deliberately small:
+
+    * ``keep_min_delta`` shifts ``decide()``'s ``keep_min`` threshold.
+      Negative = lower bar to keep (tolerant verticals — kids,
+      sports). Positive = raise the bar (风光 expects technical
+      perfection).
+    * ``cull_max_delta`` shifts the ``cull_max`` threshold the same
+      way. Negative = harder to outright cull (creative liberty
+      verticals — travel). Positive = harsher cull line.
+    * ``tolerated_flags`` are detector flags demoted from hard-cull
+      to advisory just for this vertical. ``severely_blurry`` for
+      风光 (intentional ICM / long-exposure), ``motion_blur_on_face``
+      for kids (capture the laugh, not the still).
+    * ``notes`` is a short rationale string surfaced in the results
+      page so users see WHY their vertical override changed things.
+
+    All deltas are in score units (0..1 scale, same as ``decide()``'s
+    internal thresholds — NOT 0..10 like the YAML). A 0.05 delta is
+    "half a star" worth of difference in the rule-keep gate.
+    """
+    keep_min_delta:  float = 0.0
+    cull_max_delta:  float = 0.0
+    tolerated_flags: frozenset[str] = frozenset()
+    notes:           str = ""
+
+
+@dataclass(frozen=True)
 class Vertical:
     """One business-facing photography vertical."""
     key:           str
@@ -65,10 +96,17 @@ class Vertical:
     # Axes the vertical historically cares about most. Used as a hint
     # in the per-vertical eval HTML report; not yet wired into scoring.
     primary_axes:  tuple[str, ...] = ()
+    # V17.2 — per-vertical scoring policy. Empty default = no override.
+    policy:        VerticalPolicy = field(default_factory=VerticalPolicy)
 
 
 # 10 verticals as named by the user. Ordering = display order on the
 # /verticals page (visually grouped by parent-genre cluster).
+#
+# V17.2 — each vertical gets a hand-tuned ``policy``. Tuning rationale
+# encoded in the ``notes`` field so users see why their selection
+# changed thresholds. These are *defaults*; V17.3 will let users
+# override per-vertical from the admin panel.
 VERTICALS: tuple[Vertical, ...] = (
     Vertical(
         key="landscape",  zh="风光摄影", icon="🏔",
@@ -76,6 +114,12 @@ VERTICALS: tuple[Vertical, ...] = (
         parent_genres=frozenset({"landscape", "astro"}),
         sample_target=25,
         primary_axes=("technical", "composition", "light", "aesthetic"),
+        policy=VerticalPolicy(
+            keep_min_delta=+0.03,    # 风光 judged stricter on tech quality
+            tolerated_flags=frozenset({"severely_blurry"}),
+                                     # ICM / long-exposure water/cloud are valid
+            notes="风光提高 keep 门槛 +3pp,容忍 long-exposure 软糊",
+        ),
     ),
     Vertical(
         key="wildlife",   zh="野生动物摄影", icon="🐅",
@@ -83,6 +127,12 @@ VERTICALS: tuple[Vertical, ...] = (
         parent_genres=frozenset({"wildlife"}),
         sample_target=20,
         primary_axes=("subject", "moment", "technical"),
+        policy=VerticalPolicy(
+            keep_min_delta=-0.04,    # animals are hard, give some slack
+            tolerated_flags=frozenset({"motion_blur_on_face"}),
+                                     # face detector trips on muzzle/eye area
+            notes="野生降低 keep 门槛 -4pp,容忍人脸检测器误判动物面部",
+        ),
     ),
     Vertical(
         key="bird",       zh="拍鸟", icon="🦅",
@@ -90,6 +140,11 @@ VERTICALS: tuple[Vertical, ...] = (
         parent_genres=frozenset({"wildlife"}),
         sample_target=20,
         primary_axes=("subject", "moment", "technical"),
+        policy=VerticalPolicy(
+            cull_max_delta=-0.03,    # bird shots are usually clearly good or clearly bad
+            tolerated_flags=frozenset({"motion_blur_on_face"}),
+            notes="拍鸟略提高 cull 门槛 -3pp,允许人脸检测器误判鸟头",
+        ),
     ),
     Vertical(
         key="wedding",    zh="婚纱摄影", icon="💒",
@@ -97,6 +152,12 @@ VERTICALS: tuple[Vertical, ...] = (
         parent_genres=frozenset({"portrait", "event", "fashion"}),
         sample_target=30,
         primary_axes=("subject", "light", "moment", "aesthetic"),
+        policy=VerticalPolicy(
+            keep_min_delta=-0.02,    # candid moments slightly more forgiving
+            tolerated_flags=frozenset({"shadows_clipped"}),
+                                     # low-key candid often crushes shadows on purpose
+            notes="婚纱降低 keep 门槛 -2pp,容忍低调阴影剪切",
+        ),
     ),
     Vertical(
         key="travel",     zh="旅拍写真", icon="🌅",
@@ -104,6 +165,11 @@ VERTICALS: tuple[Vertical, ...] = (
         parent_genres=frozenset({"portrait", "landscape", "street"}),
         sample_target=25,
         primary_axes=("composition", "light", "aesthetic"),
+        policy=VerticalPolicy(
+            keep_min_delta=-0.03,    # creative liberty
+            cull_max_delta=-0.05,    # rarely outright cull
+            notes="旅拍整体宽容 keep -3pp / cull -5pp,留更多氛围片",
+        ),
     ),
     Vertical(
         key="cosplay",    zh="cosplay", icon="🎭",
@@ -111,6 +177,13 @@ VERTICALS: tuple[Vertical, ...] = (
         parent_genres=frozenset({"portrait", "fashion"}),
         sample_target=20,
         primary_axes=("subject", "composition", "aesthetic"),
+        policy=VerticalPolicy(
+            keep_min_delta=-0.02,
+            tolerated_flags=frozenset({"shadows_clipped",
+                                         "severely_underexposed"}),
+                                     # 暗调氛围 is the genre
+            notes="cosplay 容忍低调 / 欠曝(角色氛围),keep -2pp",
+        ),
     ),
     Vertical(
         key="kids",       zh="儿童摄影", icon="👶",
@@ -118,6 +191,13 @@ VERTICALS: tuple[Vertical, ...] = (
         parent_genres=frozenset({"portrait"}),
         sample_target=25,
         primary_axes=("moment", "subject", "aesthetic"),
+        policy=VerticalPolicy(
+            keep_min_delta=-0.05,    # most tolerant — expression > sharpness
+            cull_max_delta=-0.05,
+            tolerated_flags=frozenset({"motion_blur_on_face",
+                                         "subject_blur"}),
+            notes="儿童最宽容:keep -5pp / cull -5pp,容忍主体微糊 + 脸部动态",
+        ),
     ),
     Vertical(
         key="pet",        zh="宠物摄影", icon="🐶",
@@ -125,6 +205,12 @@ VERTICALS: tuple[Vertical, ...] = (
         parent_genres=frozenset({"wildlife", "portrait"}),
         sample_target=20,
         primary_axes=("subject", "moment", "aesthetic"),
+        policy=VerticalPolicy(
+            keep_min_delta=-0.04,
+            tolerated_flags=frozenset({"motion_blur_on_face",
+                                         "subject_blur"}),
+            notes="宠物 keep -4pp,容忍人脸检测误判 + 主体微糊",
+        ),
     ),
     Vertical(
         key="event",      zh="活动摄影", icon="🎪",
@@ -132,6 +218,12 @@ VERTICALS: tuple[Vertical, ...] = (
         parent_genres=frozenset({"event", "documentary"}),
         sample_target=25,
         primary_axes=("moment", "composition", "subject"),
+        policy=VerticalPolicy(
+            keep_min_delta=-0.03,
+            tolerated_flags=frozenset({"closed_eyes"}),
+                                     # 20-人合影总有人在眨眼
+            notes="活动 keep -3pp,容忍多人合影中的闭眼",
+        ),
     ),
     Vertical(
         key="sports",     zh="运动摄影", icon="⚽",
@@ -139,6 +231,11 @@ VERTICALS: tuple[Vertical, ...] = (
         parent_genres=frozenset({"sports"}),
         sample_target=30,
         primary_axes=("moment", "technical", "subject"),
+        policy=VerticalPolicy(
+            keep_min_delta=-0.05,    # capture peak even with imperfections
+            tolerated_flags=frozenset({"closed_eyes"}),
+            notes="运动 keep -5pp,峰值动作优先于完美状态",
+        ),
     ),
 )
 

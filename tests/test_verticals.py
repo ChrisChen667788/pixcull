@@ -207,3 +207,70 @@ def test_list_samples_unknown_vertical_raises(isolated_data_dir):
     /verticals/list endpoint translates this to a 404)."""
     with pytest.raises(ValueError):
         verticals.list_samples("__not_real__", "good")
+
+
+# ---------------------------------------------------------------------------
+# V17.2 — VerticalPolicy + policy field on every Vertical
+# ---------------------------------------------------------------------------
+
+def test_every_vertical_has_a_policy():
+    """Default factory should give every entry a VerticalPolicy."""
+    for v in verticals.VERTICALS:
+        assert v.policy is not None
+        assert isinstance(v.policy, verticals.VerticalPolicy)
+
+
+def test_policy_default_is_no_op():
+    """A bare VerticalPolicy() must not change scoring."""
+    p = verticals.VerticalPolicy()
+    assert p.keep_min_delta == 0.0
+    assert p.cull_max_delta == 0.0
+    assert p.tolerated_flags == frozenset()
+
+
+def test_each_vertical_policy_within_sane_bounds():
+    """Deltas must stay within ±0.10 — anything bigger means we're
+    redesigning the rule stack, not "tuning"."""
+    for v in verticals.VERTICALS:
+        assert -0.10 <= v.policy.keep_min_delta <= 0.10, v.key
+        assert -0.10 <= v.policy.cull_max_delta <= 0.10, v.key
+
+
+def test_kids_is_most_tolerant():
+    """Kids should sit at the most-tolerant end of keep_min_delta —
+    "expression > sharpness" is the explicit V17.2 design."""
+    kids = verticals.get_vertical("kids")
+    assert kids.policy.keep_min_delta <= -0.04
+    # And it should tolerate motion blur on face (capture the laugh)
+    assert "motion_blur_on_face" in kids.policy.tolerated_flags
+
+
+def test_landscape_is_strictest():
+    """Landscape should sit at the strictest end (+keep_min_delta)
+    — pixel-peep technical perfection IS the genre."""
+    ls = verticals.get_vertical("landscape")
+    assert ls.policy.keep_min_delta >= +0.02
+
+
+def test_landscape_tolerates_intentional_blur():
+    """ICM / long-exposure water are valid landscape techniques."""
+    ls = verticals.get_vertical("landscape")
+    assert "severely_blurry" in ls.policy.tolerated_flags
+
+
+def test_wedding_tolerates_low_key_shadows():
+    wedding = verticals.get_vertical("wedding")
+    assert "shadows_clipped" in wedding.policy.tolerated_flags
+
+
+def test_policy_notes_are_human_readable():
+    """Every non-default policy should ship a notes string that
+    appears in the results-page tooltip."""
+    for v in verticals.VERTICALS:
+        is_default = (
+            v.policy.keep_min_delta == 0.0
+            and v.policy.cull_max_delta == 0.0
+            and not v.policy.tolerated_flags
+        )
+        if not is_default:
+            assert v.policy.notes, f"vertical {v.key} has policy but no notes"

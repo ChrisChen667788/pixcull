@@ -38,6 +38,7 @@ def run_pipeline(
     progress_cb: Callable[[int, int, str], None] | None = None,
     vlm_mode: str = "off",
     meta_mode: str = "off",
+    vertical: str | None = None,
 ) -> Path:
     """Run the full culling pipeline on `folder` and write `scores.csv`.
 
@@ -157,6 +158,7 @@ def run_pipeline(
             strictness,  # type: ignore[arg-type]
             scene=row["scene"],
             rescorer_prob_keep=r_prob,
+            vertical=vertical,           # V17.2 — per-batch override
         )
 
         # Rescorer's keep/maybe verdict is meaningless for rule-CULL rows
