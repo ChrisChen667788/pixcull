@@ -466,16 +466,21 @@ def registry_with_progress() -> list[dict]:
     whether an auto-tuned override is in effect; the UI shows a
     "🎯 已自动调参" badge based on that.
     """
-    # Lazy import — avoid cycle at module load.
+    # Lazy imports — avoid cycle at module load.
     try:
-        from pixcull.policy_tuner import load_override
+        from pixcull.policy_tuner import load_override as _load_pol_ov
     except Exception:
-        load_override = lambda _k: None  # noqa: E731
+        _load_pol_ov = lambda _k: None  # noqa: E731
+    try:
+        from pixcull.phrase_generator import load_phrase_override as _load_ph_ov
+    except Exception:
+        _load_ph_ov = lambda _k: None  # noqa: E731
     out = []
     for v in VERTICALS:
         c = count_samples(v.key)
         balanced = min(c["good"], c["bad"])
-        ov = load_override(v.key)
+        pol_ov = _load_pol_ov(v.key)
+        ph_ov  = _load_ph_ov(v.key)
         eff = get_effective_policy(v.key) or v.policy
         out.append({
             "key":           v.key,
@@ -492,10 +497,18 @@ def registry_with_progress() -> list[dict]:
                 "cull_max_delta":  eff.cull_max_delta,
                 "tolerated_flags": sorted(eff.tolerated_flags),
                 "notes":           eff.notes,
-                "is_override":     ov is not None,
-                "baseline_f1":     (ov or {}).get("baseline_f1"),
-                "tuned_f1":        (ov or {}).get("tuned_f1"),
-                "tuned_at":        (ov or {}).get("generated_at"),
+                "is_override":     pol_ov is not None,
+                "baseline_f1":     (pol_ov or {}).get("baseline_f1"),
+                "tuned_f1":        (pol_ov or {}).get("tuned_f1"),
+                "tuned_at":        (pol_ov or {}).get("generated_at"),
+            },
+            # V17.5 — DeepSeek phrase override status
+            "phrases": {
+                "is_override":      ph_ov is not None,
+                "n_samples_seen":   (ph_ov or {}).get("n_samples_seen"),
+                "generated_at":     (ph_ov or {}).get("generated_at"),
+                "model":            (ph_ov or {}).get("model"),
+                "axes_covered":     sorted(((ph_ov or {}).get("axes") or {}).keys()),
             },
         })
     return out

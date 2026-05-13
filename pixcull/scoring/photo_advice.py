@@ -1128,6 +1128,43 @@ def _pick_per_axis(
             vertical_pool = VERTICAL_STRENGTH_TEMPLATES.get(vertical, {})
         else:
             vertical_pool = VERTICAL_WEAKNESS_TEMPLATES.get(vertical, {})
+
+    # V17.5 — DeepSeek-generated phrase override. When present, its
+    # phrases REPLACE the hand-written vertical pool (per axis).
+    # Override is opt-in: user clicks "✨ AI 生成专属话术" on the
+    # /verticals card; the file lives at
+    # ``vertical_root(key)/phrase_override.json``. We only consult it
+    # for STRENGTHS (the LLM-generated phrasing has been less reliable
+    # for weakness fix-up advice; that may change in V17.7+).
+    if vertical and is_strength:
+        try:
+            from pixcull.phrase_generator import load_phrase_override
+            ov = load_phrase_override(vertical)
+            if ov and isinstance(ov.get("axes"), dict):
+                # Build a fresh pool that mirrors hand-written shape
+                # (each axis maps to a list of template dicts). Use
+                # a permissive metric ("any non-NaN final score
+                # qualifies") since the LLM phrases describe holistic
+                # vibe, not metric-specific gates — they're meant to
+                # win whenever the axis stars are high enough.
+                synthesized: dict[str, list[dict]] = {}
+                for axis, block in ov["axes"].items():
+                    phrases = (block or {}).get("phrases") or []
+                    if not phrases:
+                        continue
+                    synthesized[axis] = [{
+                        "metric":   "score_final",
+                        "thresh":   0.0,
+                        "op":       ">=",
+                        "phrases":  list(phrases)[:5],
+                        "source":   f"AI · 用户专属 ({vertical})",
+                    }]
+                if synthesized:
+                    vertical_pool = synthesized   # full replacement
+        except Exception:
+            # Override is non-essential — never block advice on a
+            # malformed file or missing dep.
+            pass
     for axis_name, stars in axis_stars.items():
         if stars is None:
             continue

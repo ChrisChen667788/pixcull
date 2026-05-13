@@ -1306,6 +1306,17 @@ class _Handler(BaseHTTPRequestHandler):
         if path.startswith("/verticals/revert_override/"):
             return self._handle_vertical_revert_override(
                 path[len("/verticals/revert_override/"):])
+        # V17.5 — DeepSeek phrase generation
+        if path.startswith("/verticals/llm_phrases/"):
+            return self._handle_vertical_llm_phrases(
+                path[len("/verticals/llm_phrases/"):])
+        if path.startswith("/verticals/revert_phrases/"):
+            return self._handle_vertical_revert_phrases(
+                path[len("/verticals/revert_phrases/"):])
+        # V17.6 — per-vertical eval report
+        if path.startswith("/verticals/eval/"):
+            return self._handle_vertical_eval(
+                path[len("/verticals/eval/"):])
         self.send_error(404, "not found")
 
     def do_DELETE(self) -> None:  # noqa: N802
@@ -2661,6 +2672,188 @@ class _Handler(BaseHTTPRequestHandler):
                               "had_override": ok}).encode("utf-8")
         self._send_json(200, body)
 
+    # ---------- V17.5 phrase generator ----------
+    def _handle_vertical_llm_phrases(self, key: str) -> None:
+        """POST /verticals/llm_phrases/<key>
+
+        Profile good samples → DeepSeek V4-Flash → save phrase override.
+        Returns the result so the UI can show what was generated for
+        review. Failure modes:
+          400 — no DeepSeek key, no samples, malformed LLM JSON
+          404 — unknown vertical
+          500 — unexpected DeepSeek/network error
+        """
+        from pixcull import verticals as vmod
+        key = unquote(key.strip("/"))
+        if vmod.get_vertical(key) is None:
+            self._reject_upload(404, f"unknown vertical: {key}")
+            return
+        try:
+            from pixcull import phrase_generator as pg
+            from dataclasses import asdict
+            result = pg.generate_phrases(key)
+            pg.save_phrase_override(key, result)
+            payload = asdict(result)
+            payload["ok"] = True
+        except ValueError as exc:
+            self._reject_upload(400, str(exc))
+            return
+        except Exception as exc:  # noqa: BLE001
+            traceback.print_exc(file=sys.stderr)
+            self._reject_upload(500,
+                f"DeepSeek 调用失败: {type(exc).__name__}: {exc}")
+            return
+        self._send_json(200, _safe_dumps(payload).encode("utf-8"))
+
+    def _handle_vertical_revert_phrases(self, key: str) -> None:
+        """POST /verticals/revert_phrases/<key> — delete phrase override."""
+        from pixcull import verticals as vmod
+        from pixcull import phrase_generator as pg
+        key = unquote(key.strip("/"))
+        if vmod.get_vertical(key) is None:
+            self._reject_upload(404, f"unknown vertical: {key}")
+            return
+        ok = pg.delete_phrase_override(key)
+        body = _safe_dumps({"ok": ok, "key": key,
+                              "had_override": ok}).encode("utf-8")
+        self._send_json(200, body)
+
+    # ---------- V17.6 per-vertical eval report ----------
+    def _handle_vertical_eval(self, key: str) -> None:
+        """POST /verticals/eval/<key>
+
+        Runs the rule pipeline + (effective) policy on every sample
+        of the vertical, returns:
+          * confusion matrix (good→keep/maybe/cull, bad→...)
+          * F1 / precision / recall / accuracy
+          * per-axis metric distributions
+          * lists of misclassified filenames (false-keep + false-cull)
+            so the user can click into them to investigate
+
+        Body is empty / ignored.
+        """
+        from pixcull import verticals as vmod
+        key = unquote(key.strip("/"))
+        v = vmod.get_vertical(key)
+        if v is None:
+            self._reject_upload(404, f"unknown vertical: {key}")
+            return
+        counts = vmod.count_samples(key)
+        if counts["total"] < 1:
+            self._reject_upload(400,
+                f"vertical '{key}' has no samples — upload some via /verticals first")
+            return
+        try:
+            from pixcull import policy_tuner as pt
+            from pixcull.scoring.decision import Decision
+            from pixcull.config import PixCullConfig
+
+            samples = pt.analyze_samples(key)
+            if not samples:
+                self._reject_upload(500,
+                    "0 samples could be analyzed — check launcher log for errors")
+                return
+
+            # Use the EFFECTIVE policy (override-merged) so the report
+            # reflects what `decide()` would actually do at scoring time.
+            config = PixCullConfig.load()
+            base_keep, base_cull = pt._baseline_thresholds(config)
+            eff = vmod.get_effective_policy(key)
+            kmin = max(0.0, min(1.0, base_keep + (eff.keep_min_delta if eff else 0)))
+            cmax = max(0.0, min(1.0, base_cull + (eff.cull_max_delta if eff else 0)))
+            tol = frozenset(eff.tolerated_flags) if eff else frozenset()
+
+            preds = [pt._apply_thresholds(
+                s.final_score, s.flags, s.scene,
+                keep_min=kmin, cull_max=cmax,
+                tolerated_flags=tol,
+            ) for s in samples]
+
+            # Confusion: (truth_bucket → {keep, maybe, cull})
+            confusion = {
+                "good": {"keep": 0, "maybe": 0, "cull": 0},
+                "bad":  {"keep": 0, "maybe": 0, "cull": 0},
+            }
+            misclassified_keep: list[dict] = []   # bad shots that survived
+            misclassified_cull: list[dict] = []   # good shots wrongly culled
+            for s, p in zip(samples, preds):
+                pname = "keep" if p is Decision.KEEP else \
+                        "maybe" if p is Decision.MAYBE else "cull"
+                confusion[s.bucket][pname] += 1
+                # Misclassifications: bad-shot kept = false-positive;
+                # good-shot culled = false-negative.
+                if s.bucket == "bad" and p is not Decision.CULL:
+                    misclassified_keep.append({
+                        "filename": s.filename,
+                        "score":    round(s.final_score, 3),
+                        "pred":     pname,
+                        "scene":    s.scene,
+                        "flags":    s.flags,
+                    })
+                elif s.bucket == "good" and p is Decision.CULL:
+                    misclassified_cull.append({
+                        "filename": s.filename,
+                        "score":    round(s.final_score, 3),
+                        "pred":     pname,
+                        "scene":    s.scene,
+                        "flags":    s.flags,
+                    })
+
+            metrics = pt.binary_metrics(preds, [s.bucket for s in samples])
+
+            # Per-axis metric averages — useful diagnostic ("user's good
+            # shots avg subject_fraction=0.18, low compared to default
+            # 0.30 threshold").
+            metric_names = ("subject_fraction", "canon_lead_room",
+                              "canon_thirds_concentration",
+                              "canon_figure_ground", "score_moment",
+                              "laion_aes", "laplacian_subject")
+            axis_distrib: dict[str, dict] = {}
+            # We only have final_score on SamplePoint; deeper metrics
+            # require re-fetching. For V17.6 we keep this lean — just
+            # the score distribution by bucket.
+            from statistics import mean, median
+            for bucket in ("good", "bad"):
+                vs = [s.final_score for s in samples if s.bucket == bucket]
+                axis_distrib[bucket] = {
+                    "n":      len(vs),
+                    "score_mean":   round(mean(vs), 3) if vs else 0.0,
+                    "score_median": round(median(vs), 3) if vs else 0.0,
+                    "score_min":    round(min(vs), 3) if vs else 0.0,
+                    "score_max":    round(max(vs), 3) if vs else 0.0,
+                }
+            payload = {
+                "ok":        True,
+                "vertical":  key,
+                "vertical_zh": v.zh,
+                "vertical_icon": v.icon,
+                "n_total":   len(samples),
+                "n_good":    sum(1 for s in samples if s.bucket == "good"),
+                "n_bad":     sum(1 for s in samples if s.bucket == "bad"),
+                "thresholds_used": {
+                    "keep_min":         round(kmin, 3),
+                    "cull_max":         round(cmax, 3),
+                    "tolerated_flags":  sorted(tol),
+                    "is_override":      bool(eff and (
+                        eff.keep_min_delta != v.policy.keep_min_delta
+                        or eff.cull_max_delta != v.policy.cull_max_delta
+                    )),
+                },
+                "confusion":     confusion,
+                "metrics":       metrics,
+                "score_distrib": axis_distrib,
+                "misclassified_keep": misclassified_keep[:20],
+                "misclassified_cull": misclassified_cull[:20],
+            }
+        except ValueError as exc:
+            self._reject_upload(400, str(exc))
+            return
+        except Exception as exc:  # noqa: BLE001
+            traceback.print_exc(file=sys.stderr)
+            self._reject_upload(500, f"评估失败: {type(exc).__name__}: {exc}")
+            return
+        self._send_json(200, _safe_dumps(payload).encode("utf-8"))
+
     def _handle_vertical_sample_delete(self, rel: str) -> None:
         from pixcull import verticals as vmod
         rel = unquote(rel)
@@ -3436,7 +3629,16 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
       background: rgba(59,130,246,0.10);
       cursor: help;
     }
+    /* V17.5 — AI phrase override pill */
+    .vstats .pill.phrased {
+      color: #c4b5fd;
+      border-color: rgba(168,85,247,0.40);
+      background: rgba(168,85,247,0.10);
+      cursor: help;
+    }
     .vactions button.tune:hover { border-color: var(--accent); }
+    .vactions button.llm-phrases:hover { border-color: #c4b5fd; }
+    .vactions button.eval:hover { border-color: var(--keep); }
     .vactions {
       display: flex; gap: 6px;
     }
@@ -3617,6 +3819,38 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
     <img id="sampleZoomImg" alt="">
     <div class="caption" id="sampleZoomCaption"></div>
   </div>
+  <!-- V17.5 — DeepSeek phrase generation result modal -->
+  <div class="tune-modal" id="llmPhrasesModal" role="dialog" aria-modal="true"
+       aria-labelledby="llmPhrasesTitle">
+    <div class="tune-card" style="max-width: 640px">
+      <h3 id="llmPhrasesTitle">AI 专属话术生成</h3>
+      <div id="llmPhrasesSubtitle" style="font-size: 12px;
+              color: var(--muted); margin-bottom: 12px"></div>
+      <div id="llmPhrasesBody" style="font-size: 13px; max-height: 50vh;
+              overflow-y: auto; padding-right: 4px"></div>
+      <div class="actions">
+        <button id="llmPhrasesClose">关闭</button>
+        <button id="llmPhrasesRevert" style="display: none">恢复默认话术</button>
+        <button class="primary" id="llmPhrasesRegen">再生成一次</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- V17.6 — per-vertical eval report modal -->
+  <div class="tune-modal" id="evalModal" role="dialog" aria-modal="true"
+       aria-labelledby="evalTitle">
+    <div class="tune-card" style="max-width: 720px">
+      <h3 id="evalTitle">本垂类评估报告</h3>
+      <div id="evalSubtitle" style="font-size: 12px;
+              color: var(--muted); margin-bottom: 12px"></div>
+      <div id="evalBody" style="font-size: 13px; max-height: 56vh;
+              overflow-y: auto; padding-right: 4px"></div>
+      <div class="actions">
+        <button id="evalClose">关闭</button>
+      </div>
+    </div>
+  </div>
+
   <!-- V17.4 — tune result modal -->
   <div class="tune-modal" id="tuneModal" role="dialog" aria-modal="true"
        aria-labelledby="tuneTitle">
@@ -3830,6 +4064,251 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
       }
     });
 
+    // ─────────────────────── V17.5 LLM phrases ──────────────────────
+    const llmPhrasesModal    = document.getElementById("llmPhrasesModal");
+    const llmPhrasesTitle    = document.getElementById("llmPhrasesTitle");
+    const llmPhrasesSubtitle = document.getElementById("llmPhrasesSubtitle");
+    const llmPhrasesBody     = document.getElementById("llmPhrasesBody");
+    const llmPhrasesClose    = document.getElementById("llmPhrasesClose");
+    const llmPhrasesRegen    = document.getElementById("llmPhrasesRegen");
+    const llmPhrasesRevert   = document.getElementById("llmPhrasesRevert");
+    let _currentLlm = null;
+
+    document.addEventListener("keydown", e => {
+      if (e.key === "Escape") {
+        if (llmPhrasesModal.classList.contains("show")) closeLlm();
+        if (evalModal.classList.contains("show")) closeEval();
+      }
+    });
+
+    function closeLlm() {
+      llmPhrasesModal.classList.remove("show");
+      _currentLlm = null;
+    }
+    llmPhrasesClose.addEventListener("click", closeLlm);
+    llmPhrasesModal.addEventListener("click", e => {
+      if (e.target === llmPhrasesModal) closeLlm();
+    });
+
+    function renderLlmPhrases(vert, result) {
+      llmPhrasesTitle.textContent =
+        `${vert.icon}  ${vert.zh} · AI 专属话术`;
+      const tokens = (result.prompt_tokens || 0)
+                   + (result.completion_tokens || 0);
+      llmPhrasesSubtitle.innerHTML =
+        `基于 <b>${result.n_samples_seen}</b> 张好样本生成 · ` +
+        `主场景 <b>${esc(result.scene_mode||'(混合)')}</b> · ` +
+        `top 风格 ${(result.style_modes||[]).slice(0,3).map(esc).join(' / ') || '(无)'} · ` +
+        `${tokens} tokens · ${result.elapsed_s}s`;
+      const axisLabels = {
+        subject:     '主体', composition: '构图',
+        light:       '光线', moment:      '瞬间',
+        aesthetic:   '美感', technical:   '技术',
+      };
+      const blocks = Object.entries(result.axes || {}).map(([axis, phrases]) => `
+        <div style="margin-bottom: 14px; padding: 10px;
+                background: rgba(255,255,255,0.03);
+                border: 1px solid var(--border); border-radius: 6px">
+          <div style="font-size: 11px; text-transform: uppercase;
+                  letter-spacing: 0.05em; color: var(--muted);
+                  margin-bottom: 6px;">
+            ${axisLabels[axis] || axis}
+          </div>
+          <ul style="margin: 0; padding-left: 18px; color: var(--fg);">
+            ${phrases.map(p => `<li style="line-height: 1.8">${esc(p)}</li>`).join("")}
+          </ul>
+        </div>
+      `).join("");
+      llmPhrasesBody.innerHTML = blocks
+        || `<div style="color: var(--muted)">LLM 没生成有效短语,重试一次?</div>`;
+      llmPhrasesRevert.style.display =
+        (vert.phrases && vert.phrases.is_override) ? "" : "none";
+      _currentLlm = {key: vert.key, vert, result};
+      llmPhrasesModal.classList.add("show");
+    }
+
+    async function llmPhrasesFor(key) {
+      const v = registry.find(x => x.key === key);
+      if (!v) return;
+      if ((v.counts.good || 0) < 3) {
+        toast(`${v.zh} 至少需要 3 张好样本才能生成 AI 话术`, "error");
+        return;
+      }
+      toast(`正在用 DeepSeek 分析 ${v.counts.good} 张好样本…`, "");
+      try {
+        const res = await fetch(
+          `/verticals/llm_phrases/${encodeURIComponent(key)}`,
+          {method: "POST"});
+        if (!res.ok) {
+          const e = await res.json().catch(() => ({}));
+          toast(`生成失败: ${e.error || res.status}`, "error");
+          return;
+        }
+        const result = await res.json();
+        renderLlmPhrases(v, result);
+        loadRegistry();
+        toast("AI 话术已应用,下次跑该垂类 batch 时生效", "success");
+      } catch (e) {
+        toast(`出错: ${e}`, "error");
+      }
+    }
+    llmPhrasesRegen.addEventListener("click", () => {
+      if (!_currentLlm) return;
+      llmPhrasesFor(_currentLlm.key);
+    });
+    llmPhrasesRevert.addEventListener("click", async () => {
+      if (!_currentLlm) return;
+      if (!confirm("恢复 V17.3 默认 phrase 池?")) return;
+      try {
+        const res = await fetch(
+          `/verticals/revert_phrases/${encodeURIComponent(_currentLlm.key)}`,
+          {method: "POST"});
+        if (res.ok) {
+          toast("已恢复默认话术", "success");
+          closeLlm();
+          loadRegistry();
+        }
+      } catch (e) { toast(`撤销出错: ${e}`, "error"); }
+    });
+
+    // ─────────────────────── V17.6 eval report ──────────────────────
+    const evalModal    = document.getElementById("evalModal");
+    const evalTitle    = document.getElementById("evalTitle");
+    const evalSubtitle = document.getElementById("evalSubtitle");
+    const evalBody     = document.getElementById("evalBody");
+    const evalCloseBtn = document.getElementById("evalClose");
+    function closeEval() { evalModal.classList.remove("show"); }
+    evalCloseBtn.addEventListener("click", closeEval);
+    evalModal.addEventListener("click", e => {
+      if (e.target === evalModal) closeEval();
+    });
+
+    function renderEval(report) {
+      evalTitle.textContent =
+        `${esc(report.vertical_icon)}  ${esc(report.vertical_zh)} · 评估报告`;
+      const thr = report.thresholds_used;
+      const m = report.metrics;
+      const isOv = thr.is_override ? "(已应用 V17.4 自动调参 override)" : "(V17.2 默认 policy)";
+      evalSubtitle.innerHTML =
+        `分析了 <b>${report.n_total}</b> 张样本(👍 ${report.n_good} · 👎 ${report.n_bad}) ` +
+        `· keep ≥ <b>${thr.keep_min}</b> / cull ≤ <b>${thr.cull_max}</b> ` +
+        `<span style="color: var(--muted)">${esc(isOv)}</span>`;
+
+      const confRows = ["good","bad"].map(b => {
+        const c = report.confusion[b];
+        const total = c.keep + c.maybe + c.cull;
+        const pct = v => total ? Math.round(100 * v / total) + "%" : "0%";
+        return `<tr>
+          <th style="text-align: left; padding: 4px 8px">${b === "good" ? "👍 好片" : "👎 待剔除"} (${total})</th>
+          <td style="padding: 4px 8px; color: var(--keep)">${c.keep} <span class="muted">${pct(c.keep)}</span></td>
+          <td style="padding: 4px 8px; color: var(--maybe)">${c.maybe} <span class="muted">${pct(c.maybe)}</span></td>
+          <td style="padding: 4px 8px; color: var(--cull)">${c.cull} <span class="muted">${pct(c.cull)}</span></td>
+        </tr>`;
+      }).join("");
+
+      const f1Color = m.f1 >= 0.85 ? "var(--keep)" :
+                       m.f1 >= 0.70 ? "var(--maybe)" : "var(--cull)";
+
+      const fp = report.misclassified_keep || [];
+      const fn = report.misclassified_cull || [];
+      const renderList = (list, color) => list.length
+        ? list.map(x => `<li style="line-height: 1.6">
+            <code style="color: ${color}">${esc(x.filename)}</code>
+            <span class="muted"> · score ${x.score} · pred <b>${esc(x.pred)}</b> · scene ${esc(x.scene||'?')} ${(x.flags||[]).length ? '· flags: ' + x.flags.map(esc).join(',') : ''}</span>
+          </li>`).join("")
+        : `<li style="color: var(--muted)">无</li>`;
+
+      evalBody.innerHTML = `
+        <!-- F1 banner -->
+        <div style="background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+                border-radius: 6px; padding: 12px 16px; margin-bottom: 14px;">
+          <div style="font-size: 11px; color: var(--muted); margin-bottom: 4px">F1 (positive class = "kept")</div>
+          <div style="font-size: 28px; font-weight: 600; color: ${f1Color}; font-variant-numeric: tabular-nums">
+            ${(m.f1 || 0).toFixed(3)}
+          </div>
+          <div style="font-size: 12px; color: var(--muted); margin-top: 4px;
+                  font-variant-numeric: tabular-nums">
+            precision <b>${(m.precision||0).toFixed(2)}</b> ·
+            recall <b>${(m.recall||0).toFixed(2)}</b> ·
+            accuracy <b>${(m.accuracy||0).toFixed(2)}</b> ·
+            tp/fp/tn/fn <b>${m.tp}/${m.fp}/${m.tn}/${m.fn}</b>
+          </div>
+        </div>
+
+        <!-- Confusion -->
+        <div style="font-size: 11px; text-transform: uppercase;
+                letter-spacing: 0.05em; color: var(--muted);
+                margin-bottom: 6px;">混淆矩阵</div>
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px;
+                background: var(--bg-card); border: 1px solid var(--border);
+                border-radius: 6px; overflow: hidden;">
+          <thead><tr style="background: rgba(255,255,255,0.04)">
+            <th style="text-align: left; padding: 6px 8px">真实 \\ 预测</th>
+            <th style="text-align: left; padding: 6px 8px">keep</th>
+            <th style="text-align: left; padding: 6px 8px">maybe</th>
+            <th style="text-align: left; padding: 6px 8px">cull</th>
+          </tr></thead>
+          <tbody>${confRows}</tbody>
+        </table>
+
+        <!-- Misclassified -->
+        ${fp.length || fn.length ? `
+          <div style="font-size: 11px; text-transform: uppercase;
+                  letter-spacing: 0.05em; color: var(--muted);
+                  margin-bottom: 6px;">误判样本(点击文件名可在 Finder 中查看)</div>
+          ${fp.length ? `
+            <div style="margin-bottom: 8px">
+              <div style="color: var(--cull); font-size: 12px; margin-bottom: 4px">
+                ✗ 应该 cull 但被保留 (${fp.length})
+              </div>
+              <ul style="margin: 0; padding-left: 18px; font-size: 11.5px">
+                ${renderList(fp, 'var(--cull)')}
+              </ul>
+            </div>
+          ` : ''}
+          ${fn.length ? `
+            <div>
+              <div style="color: var(--keep); font-size: 12px; margin-bottom: 4px">
+                ✗ 应该 keep 但被 cull (${fn.length})
+              </div>
+              <ul style="margin: 0; padding-left: 18px; font-size: 11.5px">
+                ${renderList(fn, 'var(--keep)')}
+              </ul>
+            </div>
+          ` : ''}
+        ` : `<div style="color: var(--keep); font-size: 12px">✓ 所有样本分类正确</div>`}
+
+        <div style="margin-top: 14px; padding-top: 10px;
+                border-top: 1px solid var(--border);
+                font-size: 11px; color: var(--muted)">
+          score 分布:好片 ${report.score_distrib.good.score_mean} (${report.score_distrib.good.score_min}~${report.score_distrib.good.score_max}) ·
+          待剔除 ${report.score_distrib.bad.score_mean} (${report.score_distrib.bad.score_min}~${report.score_distrib.bad.score_max})
+        </div>
+      `;
+      evalModal.classList.add("show");
+    }
+
+    async function evalFor(key) {
+      const v = registry.find(x => x.key === key);
+      if (!v) return;
+      if ((v.counts.total || 0) < 1) {
+        toast(`${v.zh} 没有样本可以评估`, "error");
+        return;
+      }
+      toast(`正在评估 ${v.zh} 的 ${v.counts.total} 张样本…`, "");
+      try {
+        const res = await fetch(`/verticals/eval/${encodeURIComponent(key)}`,
+                                  {method: "POST"});
+        if (!res.ok) {
+          const e = await res.json().catch(() => ({}));
+          toast(`评估失败: ${e.error || res.status}`, "error");
+          return;
+        }
+        const report = await res.json();
+        renderEval(report);
+      } catch (e) { toast(`评估出错: ${e}`, "error"); }
+    }
+
     function render() {
       vlist.innerHTML = registry.map(v => `
         <div class="vcard" data-key="${esc(v.key)}">
@@ -3847,12 +4326,17 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
             ${v.policy && v.policy.is_override ?
               `<span class="pill tuned" title="已自动调参 · F1 ${(v.policy.baseline_f1||0).toFixed(2)} → ${(v.policy.tuned_f1||0).toFixed(2)}">🎯 已调参</span>`
               : ''}
+            ${v.phrases && v.phrases.is_override ?
+              `<span class="pill phrased" title="已生成 AI 专属话术,样本 n=${v.phrases.n_samples_seen||0}">✨ AI 话术</span>`
+              : ''}
             <span style="margin-left:auto">目标各 ${v.sample_target} 张</span>
           </div>
           <div class="vactions">
             <button class="good" data-key="${esc(v.key)}" data-bucket="good">+ 好片</button>
             <button class="bad"  data-key="${esc(v.key)}" data-bucket="bad">+ 待剔除</button>
             <button class="tune" data-key="${esc(v.key)}" title="用收集的好/坏样本自动调阈值">🎯 自动调参</button>
+            <button class="llm-phrases" data-key="${esc(v.key)}" title="用 DeepSeek 基于好样本生成业务话术">✨ AI 话术</button>
+            <button class="eval" data-key="${esc(v.key)}" title="看当前 policy 在你样本上的 F1 / 混淆矩阵">📊 看报告</button>
             <button class="manage" data-key="${esc(v.key)}">管理…</button>
           </div>
           <div class="vdetail" data-key="${esc(v.key)}">
@@ -3959,12 +4443,21 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
         t.addEventListener("click", () => setBucket(t.dataset.bucket));
       });
 
-      // Action buttons (+ 好片 / + 待剔除 / 🎯 自动调参 / 管理…)
+      // Action buttons (+ 好片 / + 待剔除 / 🎯 自动调参 /
+      //  ✨ AI 话术 / 📊 看报告 / 管理…)
       card.querySelectorAll(".vactions button").forEach(btn => {
         btn.addEventListener("click", () => {
-          // V17.4 — tune button intercepts before the drawer toggle
+          // V17.4-7 — non-drawer buttons intercept first
           if (btn.classList.contains("tune")) {
             tuneFor(btn.dataset.key);
+            return;
+          }
+          if (btn.classList.contains("llm-phrases")) {
+            llmPhrasesFor(btn.dataset.key);
+            return;
+          }
+          if (btn.classList.contains("eval")) {
+            evalFor(btn.dataset.key);
             return;
           }
           const b = btn.dataset.bucket;
