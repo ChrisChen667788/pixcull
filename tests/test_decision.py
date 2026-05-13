@@ -20,6 +20,16 @@ def config() -> PixCullConfig:
     return PixCullConfig.load()
 
 
+@pytest.fixture(autouse=True)
+def _isolate_vertical_overrides(tmp_path, monkeypatch):
+    """V18 — isolate vertical-data root so any policy_override.json or
+    phrase_override.json files written during real usage don't pollute
+    decide() tests that exercise the V17.2 baseline policies."""
+    from pixcull import verticals as vmod
+    monkeypatch.setattr(vmod, "_data_root", lambda: tmp_path)
+    yield
+
+
 def test_no_clear_subject_is_hard_cull_for_portrait(config):
     """Portraits without a clear subject really are broken — cull must stick."""
     dec, reasons = decide(0.72, ["no_clear_subject"], config, scene="portrait")
@@ -61,14 +71,46 @@ def test_missing_scene_uses_strict_interpretation(config):
 
 
 def test_tolerant_scene_set_matches_templates():
-    """Doc-tie: these three scenes are where we demoted the flag."""
+    """V18 doc-tie: wildlife + astro joined the tolerant set after the
+    100CANON scan revealed 22 false-cull wildlife shots (small/distant
+    subjects shot on telephoto — birds across a lake, monkeys at
+    canopy distance — where the small subject IS the genre)."""
     assert "landscape" in _TINY_SUBJECT_TOLERANT_SCENES
     assert "architecture" in _TINY_SUBJECT_TOLERANT_SCENES
     assert "street" in _TINY_SUBJECT_TOLERANT_SCENES
-    # Portraits / stilllife / wildlife should NOT be tolerant.
+    assert "wildlife" in _TINY_SUBJECT_TOLERANT_SCENES   # V18 addition
+    assert "astro" in _TINY_SUBJECT_TOLERANT_SCENES      # V18 addition
+    # Portraits + stilllife still should NOT be tolerant.
     assert "portrait" not in _TINY_SUBJECT_TOLERANT_SCENES
     assert "stilllife" not in _TINY_SUBJECT_TOLERANT_SCENES
-    assert "wildlife" not in _TINY_SUBJECT_TOLERANT_SCENES
+
+
+def test_v18_wildlife_tolerates_no_clear_subject(config):
+    """V18: wildlife shots with small/distant subjects are valid (genre
+    norm). Before V18, no_clear_subject hard-culled them.
+
+    Verified on the V17.13 100CANON scan: 22 wildlife shots flipped
+    from cull → 17 keep + 5 maybe. The flips were all shots that
+    scored ≥0.5 (high-quality shots killed only by this one flag)."""
+    dec, _ = decide(0.85, ["no_clear_subject"], config, scene="wildlife")
+    assert dec is Decision.KEEP
+
+
+def test_v18_astro_tolerates_no_clear_subject(config):
+    """V18: starfield / milky-way shots don't have a "clear subject" by
+    the detector's measure. Tolerate."""
+    dec, _ = decide(0.75, ["no_clear_subject"], config, scene="astro")
+    assert dec is Decision.KEEP
+
+
+def test_v18_wildlife_still_hard_culls_other_flags(config):
+    """The V18 exemption is scoped to no_clear_subject. Closed eyes,
+    motion blur on face, severely overexposed still hard-cull a
+    wildlife shot."""
+    for flag in ("closed_eyes", "motion_blur_on_face",
+                  "severely_overexposed"):
+        dec, _ = decide(0.85, [flag], config, scene="wildlife")
+        assert dec is Decision.CULL, f"{flag} should still cull wildlife"
 
 
 def test_score_based_decisions_still_work(config):

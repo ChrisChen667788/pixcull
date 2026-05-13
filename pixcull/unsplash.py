@@ -132,25 +132,17 @@ class SearchHit:
     color:        str                # average hex color
 
 
-def search(query: str, *, per_page: int = 15,
-            orientation: str = "landscape",
-            access_key: str | None = None) -> list[SearchHit]:
-    """Search Unsplash. Sorted by Unsplash's relevance — top-liked
-    photos tend to rank high.
+def _search_page(query: str, *, page: int, per_page: int,
+                   orientation: str, access_key: str) -> dict:
+    """One paginated search call. Returns the raw decoded JSON.
 
-    ``orientation`` ∈ {landscape, portrait, squarish}. Anything else
-    gets normalised to landscape.
+    Each call costs 1 request against Unsplash's ``api.unsplash.com``
+    rate limit (50/hr demo tier, 1000/hr production). Image bytes
+    downloads from ``images.unsplash.com`` don't count.
     """
-    access_key = access_key or _access_key()
-    per_page = max(1, min(MAX_PER_PAGE, per_page))
-    if orientation not in ("landscape", "portrait", "squarish"):
-        if orientation == "square":
-            orientation = "squarish"
-        else:
-            orientation = "landscape"
-
     qs = urllib.parse.urlencode({
         "query":       query,
+        "page":        page,
         "per_page":    per_page,
         "orientation": orientation,
         "order_by":    "relevant",
@@ -165,7 +157,7 @@ def search(query: str, *, per_page: int = 15,
     )
     try:
         with urllib.request.urlopen(req, timeout=DEFAULT_TIMEOUT_S) as resp:
-            data = json.loads(resp.read())
+            return json.loads(resp.read())
     except urllib.error.HTTPError as exc:
         msg = exc.read().decode("utf-8", errors="replace")[:200]
         raise ValueError(
@@ -174,38 +166,95 @@ def search(query: str, *, per_page: int = 15,
     except (urllib.error.URLError, OSError, json.JSONDecodeError) as exc:
         raise ValueError(f"Unsplash request failed: {exc}") from exc
 
-    hits = []
-    for r in data.get("results", []):
-        try:
-            hits.append(SearchHit(
-                id=str(r.get("id", "")),
-                description=str(r.get("description") or r.get("alt_description") or ""),
-                url_regular=str(r["urls"]["regular"]),
-                url_full=str(r["urls"]["full"]),
-                download_url=str((r.get("links") or {}).get("download_location") or ""),
-                photographer=str((r.get("user") or {}).get("name", "")),
-                photographer_url=str((r.get("user") or {}).get("links", {}).get("html", "")),
-                width=int(r.get("width") or 0),
-                height=int(r.get("height") or 0),
-                likes=int(r.get("likes") or 0),
-                color=str(r.get("color") or ""),
-            ))
-        except (KeyError, TypeError, ValueError):
-            continue
-    return hits
+
+def _hit_from_json(r: dict) -> SearchHit | None:
+    try:
+        return SearchHit(
+            id=str(r.get("id", "")),
+            description=str(r.get("description") or r.get("alt_description") or ""),
+            url_regular=str(r["urls"]["regular"]),
+            url_full=str(r["urls"]["full"]),
+            download_url=str((r.get("links") or {}).get("download_location") or ""),
+            photographer=str((r.get("user") or {}).get("name", "")),
+            photographer_url=str((r.get("user") or {}).get("links", {}).get("html", "")),
+            width=int(r.get("width") or 0),
+            height=int(r.get("height") or 0),
+            likes=int(r.get("likes") or 0),
+            color=str(r.get("color") or ""),
+        )
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def search(query: str, *, per_page: int = 15,
+            orientation: str = "landscape",
+            access_key: str | None = None,
+            count: int | None = None) -> list[SearchHit]:
+    """Search Unsplash, paginated.
+
+    V17.14 — when ``count`` exceeds ``per_page`` (or the hard 30 cap),
+    we transparently fetch additional pages until ``count`` hits are
+    accumulated or the result stream dries up. Each search page is
+    1 ``api.unsplash.com`` request — 2 pages of 30 = 60 hits = 2 reqs.
+
+    Returns at most ``count`` (or ``per_page`` if count not given) hits.
+    """
+    access_key = access_key or _access_key()
+    if orientation not in ("landscape", "portrait", "squarish"):
+        if orientation == "square":
+            orientation = "squarish"
+        else:
+            orientation = "landscape"
+
+    target = count if count is not None else per_page
+    target = max(1, min(150, target))   # sanity bound
+    page_size = max(1, min(MAX_PER_PAGE, per_page))
+
+    hits: list[SearchHit] = []
+    page = 1
+    while len(hits) < target:
+        data = _search_page(
+            query, page=page, per_page=page_size,
+            orientation=orientation, access_key=access_key,
+        )
+        results = data.get("results") or []
+        if not results:
+            break    # ran out of matching photos
+        for r in results:
+            h = _hit_from_json(r)
+            if h is not None:
+                hits.append(h)
+                if len(hits) >= target:
+                    break
+        # Total_pages tells us when we've walked the entire result set
+        total_pages = int(data.get("total_pages") or 0)
+        if page >= total_pages:
+            break
+        page += 1
+    return hits[:target]
 
 
 # -----------------------------------------------------------------------------
 # Download
 # -----------------------------------------------------------------------------
 
-def download(hit: SearchHit) -> bytes:
-    """Fetch the regular-size image bytes. The Unsplash terms ask us
-    to ALSO hit the download_url (analytics ping) — we do that fire-
-    and-forget so failure doesn't block the actual bytes fetch.
+def download(hit: SearchHit, *, ping_download: bool | None = None) -> bytes:
+    """Fetch the regular-size image bytes from ``images.unsplash.com``.
+
+    V17.14 — the analytics ping is now opt-in via env var
+    ``PIXCULL_UNSPLASH_PING=1`` (or explicit ``ping_download=True``).
+    The ping hits ``api.unsplash.com/photos/<id>/download`` which
+    COSTS 1 request against the 50/hr demo tier. For seeding 50+
+    samples we'd blow through the limit in seconds. Production-tier
+    apps (1000/hr) or anything user-facing should enable it via env.
+
+    Image bytes from ``images.unsplash.com`` do NOT count toward
+    the rate limit.
     """
-    # Best-effort analytics ping to honour Unsplash API guidelines.
-    if hit.download_url:
+    if ping_download is None:
+        ping_download = os.environ.get("PIXCULL_UNSPLASH_PING") == "1"
+
+    if ping_download and hit.download_url:
         try:
             access_key = _access_key()
             req = urllib.request.Request(
@@ -213,18 +262,18 @@ def download(hit: SearchHit) -> bytes:
                 headers={
                     "Authorization": f"Client-ID {access_key}",
                     "Accept-Version": "v1",
-                    "User-Agent": "PixCull/17.13",
+                    "User-Agent": "PixCull/17.14",
                 },
             )
             urllib.request.urlopen(req, timeout=4)
         except Exception:
             pass
 
-    # Actual bytes
+    # Actual bytes — these don't count against rate limit
     try:
         req = urllib.request.Request(
             hit.url_regular,
-            headers={"User-Agent": "PixCull/17.13"},
+            headers={"User-Agent": "PixCull/17.14"},
         )
         with urllib.request.urlopen(req, timeout=DOWNLOAD_TIMEOUT_S) as resp:
             return resp.read()
@@ -273,11 +322,13 @@ def populate_vertical(
     if not query:
         query = DEFAULT_QUERIES.get(key, {"query": key})["query"]
 
-    # Bound count to a reasonable per-call window — Unsplash search
-    # returns up to 30 per page, we don't paginate in v1.
-    count = max(1, min(MAX_PER_PAGE, count))
+    # V17.14 — count can exceed per_page now; search() paginates.
+    # Sane upper bound 150 (5 search pages) — anything bigger is
+    # asking for trouble on the demo tier and the result quality
+    # tail-offs anyway.
+    count = max(1, min(150, count))
 
-    hits = search(query, per_page=count,
+    hits = search(query, per_page=MAX_PER_PAGE, count=count,
                     orientation=orientation, access_key=access_key)
 
     result = PopulateResult(

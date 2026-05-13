@@ -17,7 +17,19 @@ Strictness = Literal["strict", "standard", "lenient"]
 # wide landscapes, architectural wide-angles). For these, `no_clear_subject`
 # becomes an advisory flag rather than a hard cull — otherwise we wrongly cull
 # 4-5 keep photos per eval. See eval_findings.md §V0.5.
-_TINY_SUBJECT_TOLERANT_SCENES = frozenset({"landscape", "street", "architecture"})
+#
+# V18: ``wildlife`` + ``astro`` added based on the V17.13 100CANON scan
+# (1858 real RAW shots). The flag fired on 27 wildlife shots (telephoto
+# of small/distant subjects — birds across a lake, monkeys at canopy
+# distance) where the small subject IS the genre's defining trait. F1
+# improved on the user's wildlife pool from 0.40 → 0.65 in offline
+# replay. Astro inherits this for the same reason: a starfield with
+# the milky way doesn't have a "clear subject" in the rule-detector
+# sense.
+_TINY_SUBJECT_TOLERANT_SCENES = frozenset({
+    "landscape", "street", "architecture",
+    "wildlife", "astro",
+})
 
 # V0.8: Scenes where global sharpness is not a quality gate. Long-exposure
 # water / clouds / ICM (intentional camera movement) are legitimate landscape

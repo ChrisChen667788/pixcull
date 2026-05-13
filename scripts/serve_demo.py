@@ -4833,7 +4833,7 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
         <div style="width: 90px">
           <label style="display: block; font-size: 11px; color: var(--muted);
                   margin-bottom: 4px">张数</label>
-          <input id="unsplashCount" type="number" value="15" min="1" max="30"
+          <input id="unsplashCount" type="number" value="15" min="1" max="100"
                  style="width: 100%; padding: 7px;
                          background: rgba(0,0,0,0.3); color: var(--fg);
                          border: 1px solid var(--border); border-radius: 4px;
