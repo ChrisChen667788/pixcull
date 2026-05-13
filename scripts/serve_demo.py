@@ -4356,6 +4356,16 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
     .empty-hint b { color: var(--fg); font-weight: 600; }
     .vstats .pill.good { color: var(--keep); border-color: rgba(74,222,128,0.3); }
     .vstats .pill.bad  { color: var(--cull); border-color: rgba(248,113,113,0.3); }
+    /* V17.15 — counts pills are now clickable shortcuts to the
+       sample drawer. Hover state reveals the affordance. */
+    .vstats .pill.clickable {
+      cursor: pointer;
+      transition: background 120ms, transform 80ms;
+    }
+    .vstats .pill.clickable:hover {
+      background: rgba(255,255,255,0.08);
+      transform: scale(1.05);
+    }
     /* V17.4 — auto-tuned indicator */
     .vstats .pill.tuned {
       color: var(--accent-hi);
@@ -5568,8 +5578,10 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
             <div class="progress-bar" style="width: ${(v.progress*100).toFixed(0)}%"></div>
           </div>
           <div class="vstats">
-            <span class="pill good">👍 ${v.counts.good}</span>
-            <span class="pill bad">👎 ${v.counts.bad}</span>
+            <span class="pill good clickable" data-bucket="good" data-key="${esc(v.key)}"
+                  title="点击查看好片样本">👍 ${v.counts.good}</span>
+            <span class="pill bad clickable" data-bucket="bad" data-key="${esc(v.key)}"
+                  title="点击查看待剔除样本">👎 ${v.counts.bad}</span>
             ${v.policy && v.policy.is_override ?
               `<span class="pill tuned" title="已自动调参 · F1 ${(v.policy.baseline_f1||0).toFixed(2)} → ${(v.policy.tuned_f1||0).toFixed(2)}">🎯 已调参</span>`
               : ''}
@@ -5728,6 +5740,22 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
 
       tabs.forEach(t => {
         t.addEventListener("click", () => setBucket(t.dataset.bucket));
+      });
+
+      // V17.15 — counts pills double as drawer-shortcuts. Click the
+      // 👍 N pill to see the good-bucket grid, 👎 N for bad.
+      card.querySelectorAll(".vstats .pill.clickable").forEach(pill => {
+        pill.addEventListener("click", () => {
+          const b = pill.dataset.bucket;
+          if (b) {
+            setBucket(b);
+            // Always show drawer on pill click (don't toggle —
+            // user pressed the pill to look at samples)
+            if (!detail.classList.contains("show")) {
+              detail.classList.add("show");
+            }
+          }
+        });
       });
 
       // Action buttons (+ 好片 / + 待剔除 / 🎯 自动调参 /
