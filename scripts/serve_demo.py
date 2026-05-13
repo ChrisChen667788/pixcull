@@ -4680,7 +4680,7 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
     .sample-zoom {
       position: fixed; inset: 0; background: rgba(0,0,0,0.92);
       display: none; align-items: center; justify-content: center;
-      z-index: 20; padding: 24px; cursor: zoom-out;
+      z-index: 20; padding: 24px;
       backdrop-filter: blur(6px);
     }
     .sample-zoom.show { display: flex; }
@@ -4692,9 +4692,41 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
       position: absolute; bottom: 16px; left: 50%;
       transform: translateX(-50%);
       background: rgba(0,0,0,0.72); color: var(--fg);
-      padding: 6px 12px; border-radius: 4px; font-size: 12px;
+      padding: 6px 14px; border-radius: 4px; font-size: 12px;
       max-width: 80%; overflow: hidden; text-overflow: ellipsis;
       white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+    /* V17.16 — chevron + close buttons */
+    .sample-zoom .sz-nav, .sample-zoom .sz-close {
+      position: absolute;
+      background: rgba(0,0,0,0.55); color: #fff;
+      border: 1px solid rgba(255,255,255,0.15);
+      cursor: pointer; user-select: none;
+      transition: background 120ms, transform 80ms;
+    }
+    .sample-zoom .sz-nav:hover, .sample-zoom .sz-close:hover {
+      background: rgba(0,0,0,0.85); transform: scale(1.06);
+    }
+    .sample-zoom .sz-nav {
+      top: 50%; transform: translateY(-50%);
+      width: 44px; height: 60px; border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 26px; z-index: 21;
+    }
+    .sample-zoom .sz-nav:hover { transform: translateY(-50%) scale(1.06); }
+    .sample-zoom .sz-prev { left: 24px; }
+    .sample-zoom .sz-next { right: 24px; }
+    .sample-zoom .sz-close {
+      top: 24px; right: 24px;
+      width: 32px; height: 32px; border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+    }
+    @media (max-width: 640px) {
+      .sample-zoom .sz-nav { width: 36px; height: 50px; font-size: 22px; }
+      .sample-zoom .sz-prev { left: 12px; }
+      .sample-zoom .sz-next { right: 12px; }
     }
 
     .toast-stack {
@@ -4757,7 +4789,13 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
     </div>
   </main>
   <div class="sample-zoom" id="sampleZoom" role="dialog" aria-modal="true">
+    <button class="sz-nav sz-prev" id="szPrev"
+            title="上一张 (←)" aria-label="上一张">‹</button>
     <img id="sampleZoomImg" alt="">
+    <button class="sz-nav sz-next" id="szNext"
+            title="下一张 (→)" aria-label="下一张">›</button>
+    <button class="sz-close" id="szClose"
+            title="关闭 (Esc)" aria-label="关闭">×</button>
     <div class="caption" id="sampleZoomCaption"></div>
   </div>
 
@@ -4978,24 +5016,67 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
       return out;
     }
 
-    // V17.1 — sample-zoom overlay. Click any sample tile → fullscreen
-    // backdrop with the image, click again or Esc to close.
+    // V17.1 + V17.16 — sample-zoom overlay. Click any sample tile →
+    // fullscreen image. V17.16: ← / → navigate within the same
+    // bucket; "12 / 55" position indicator; chevron + close buttons;
+    // backdrop-click closes but image-click doesn't.
     const sampleZoom = document.getElementById("sampleZoom");
     const sampleZoomImg = document.getElementById("sampleZoomImg");
     const sampleZoomCaption = document.getElementById("sampleZoomCaption");
-    function openSampleZoom(url, fn) {
-      sampleZoomImg.src = url;
-      sampleZoomCaption.textContent = fn || "";
+    const szPrev = document.getElementById("szPrev");
+    const szNext = document.getElementById("szNext");
+    const szClose = document.getElementById("szClose");
+
+    let _zoomState = null;   // {samples, index, urlBuilder}
+
+    function openSampleZoom(samples, idx, urlBuilder) {
+      if (!samples || !samples.length) return;
+      _zoomState = {samples, index: idx, urlBuilder};
+      _paintZoom();
       sampleZoom.classList.add("show");
+    }
+    function _paintZoom() {
+      if (!_zoomState) return;
+      const {samples, index, urlBuilder} = _zoomState;
+      const s = samples[index];
+      sampleZoomImg.src = urlBuilder(s.filename);
+      sampleZoomCaption.textContent =
+        `${s.filename} · ${index + 1} / ${samples.length}`;
+      // Hide chevrons when only 1 image to avoid noise
+      szPrev.style.display = samples.length > 1 ? "" : "none";
+      szNext.style.display = samples.length > 1 ? "" : "none";
+    }
+    function zoomStep(delta) {
+      if (!_zoomState) return;
+      const n = _zoomState.samples.length;
+      _zoomState.index = (_zoomState.index + delta + n) % n;   // wrap
+      _paintZoom();
     }
     function closeSampleZoom() {
       sampleZoom.classList.remove("show");
       sampleZoomImg.src = "";
+      _zoomState = null;
     }
-    sampleZoom.addEventListener("click", closeSampleZoom);
+
+    // Wire controls
+    szClose.addEventListener("click", e => { e.stopPropagation(); closeSampleZoom(); });
+    szPrev.addEventListener("click", e => { e.stopPropagation(); zoomStep(-1); });
+    szNext.addEventListener("click", e => { e.stopPropagation(); zoomStep(+1); });
+    // V17.16 — only close on backdrop click. Click on img / nav / close
+    // (handled above) doesn't bubble to here.
+    sampleZoom.addEventListener("click", e => {
+      if (e.target === sampleZoom) closeSampleZoom();
+    });
+
     document.addEventListener("keydown", e => {
-      if (e.key === "Escape" && sampleZoom.classList.contains("show")) {
-        closeSampleZoom();
+      if (sampleZoom.classList.contains("show")) {
+        if (e.key === "Escape") { closeSampleZoom(); return; }
+        if (e.key === "ArrowLeft" || e.key === "k") {
+          e.preventDefault(); zoomStep(-1); return;
+        }
+        if (e.key === "ArrowRight" || e.key === "j") {
+          e.preventDefault(); zoomStep(+1); return;
+        }
       }
       if (e.key === "Escape" && tuneModal.classList.contains("show")) {
         closeTune();
@@ -5727,9 +5808,15 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
               } catch (err) { toast("删除出错: " + err, "error"); }
             });
             // Click anywhere else on the tile → zoom
+            // V17.16 — pass the full samples list so ← / → navigates
+            // within the bucket without closing + re-opening.
             s.addEventListener("click", () => {
-              const img = s.querySelector("img");
-              openSampleZoom(img.src, fn);
+              const idx = d.samples.findIndex(x => x.filename === fn);
+              openSampleZoom(
+                d.samples, Math.max(0, idx),
+                (filename) =>
+                  `/verticals/sample/${encodeURIComponent(key)}/${currentBucket}/${encodeURIComponent(filename)}`
+              );
             });
           });
         } catch (err) {
