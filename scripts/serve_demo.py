@@ -149,6 +149,35 @@ def first_run_append_error(label: str, msg: str) -> None:
         )
 
 
+# V17.7 — bulk-classify whitelist. The bulk-classify endpoint scans
+# a user-supplied folder; subsequent /verticals/bulk_thumb requests
+# need to validate the requested path against what we just saw so
+# users can't probe arbitrary parts of the filesystem via the
+# thumbnail server. Keyed by abs-path string; value is the (mtime,
+# size) we measured at scan time so a swapped-out file is rejected.
+_BULK_PATHS: dict[str, tuple[float, int]] = {}
+_BULK_LOCK = threading.Lock()
+
+
+def _bulk_register_paths(paths: list[Path]) -> None:
+    with _BULK_LOCK:
+        for p in paths:
+            try:
+                st = p.stat()
+                _BULK_PATHS[str(p.resolve())] = (st.st_mtime, st.st_size)
+            except OSError:
+                continue
+
+
+def _bulk_path_allowed(p: Path) -> bool:
+    try:
+        rp = str(p.resolve())
+    except OSError:
+        return False
+    with _BULK_LOCK:
+        return rp in _BULK_PATHS
+
+
 # V14.7 — config helpers. The launcher's app_data_dir / config_path /
 # load_config also handle this (more robustly with corruption backups),
 # but we can't import from app/launcher.py here without creating a
@@ -1230,6 +1259,13 @@ class _Handler(BaseHTTPRequestHandler):
             return self._serve_vertical_list(path[len("/verticals/list/"):])
         if path.startswith("/verticals/sample/"):
             return self._serve_vertical_sample(path[len("/verticals/sample/"):])
+        # V17.7 — bulk-classify page + on-the-fly thumbnail for the
+        # original-folder paths (constrained to the in-process whitelist
+        # built by the most recent bulk_classify call).
+        if path.startswith("/verticals/bulk/"):
+            return self._serve_vertical_bulk_page(path[len("/verticals/bulk/"):])
+        if path == "/verticals/bulk_thumb":
+            return self._serve_vertical_bulk_thumb()
         if path == "/":
             return self._serve_upload_page()
         if path == "/admin":
@@ -1317,6 +1353,13 @@ class _Handler(BaseHTTPRequestHandler):
         if path.startswith("/verticals/eval/"):
             return self._handle_vertical_eval(
                 path[len("/verticals/eval/"):])
+        # V17.7 — bulk-classify-from-folder
+        if path.startswith("/verticals/bulk_classify/"):
+            return self._handle_vertical_bulk_classify(
+                path[len("/verticals/bulk_classify/"):])
+        if path.startswith("/verticals/bulk_commit/"):
+            return self._handle_vertical_bulk_commit(
+                path[len("/verticals/bulk_commit/"):])
         self.send_error(404, "not found")
 
     def do_DELETE(self) -> None:  # noqa: N802
@@ -2858,6 +2901,263 @@ class _Handler(BaseHTTPRequestHandler):
             return
         self._send_json(200, _safe_dumps(payload).encode("utf-8"))
 
+    # ---------- V17.7 bulk classify from folder ----------
+    def _serve_vertical_bulk_page(self, key: str) -> None:
+        """GET /verticals/bulk/<key> — full-page bulk classifier UI."""
+        from pixcull import verticals as vmod
+        key = unquote(key.strip("/"))
+        v = vmod.get_vertical(key)
+        if v is None:
+            self.send_error(404, f"unknown vertical: {key}")
+            return
+        html = _VERTICAL_BULK_HTML.replace(
+            "__VKEY__", key
+        ).replace(
+            "__VICON__", v.icon
+        ).replace(
+            "__VZH__", v.zh
+        )
+        self._send_html(200, html.encode("utf-8"))
+
+    def _serve_vertical_bulk_thumb(self) -> None:
+        """GET /verticals/bulk_thumb?path=<abs>&size=<px>
+
+        Serves a JPEG thumbnail of a file the user just scanned via
+        bulk_classify. Path is whitelisted against the in-process
+        scan registry so this can't be used to probe random parts
+        of the filesystem.
+        """
+        from urllib.parse import parse_qs, urlsplit
+        full = urlsplit(self.path)
+        qs = parse_qs(full.query) if full.query else {}
+        raw_path = (qs.get("path", [""])[0] or "").strip()
+        try:
+            size = int(qs.get("size", ["240"])[0])
+        except (TypeError, ValueError):
+            size = 240
+        size = max(80, min(800, size))
+        if not raw_path:
+            self.send_error(400, "missing path")
+            return
+        p = Path(unquote(raw_path))
+        if not _bulk_path_allowed(p):
+            self.send_error(403, "path not in scan whitelist")
+            return
+        if not p.is_file():
+            self.send_error(404, "no such file")
+            return
+        try:
+            from pixcull.io.loader import load_image
+            img = load_image(p, max_side=size)
+        except Exception as exc:
+            _dbg("bulk_thumb/load_image", exc, str(p))
+            img = None
+        if img is None:
+            self.send_error(500, "decode failed")
+            return
+        from io import BytesIO
+        buf = BytesIO()
+        img.save(buf, "JPEG", quality=78, optimize=True)
+        data = buf.getvalue()
+        self.send_response(200)
+        self.send_header("Content-Type", "image/jpeg")
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "public, max-age=3600")
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _handle_vertical_bulk_classify(self, key: str) -> None:
+        """POST /verticals/bulk_classify/<key>
+
+        Body: {folder: "/abs/path", limit?: int (default 100)}
+
+        Walks the folder, runs the rule pipeline (analyze_one +
+        fuse_score + decide with the vertical's effective policy),
+        returns one row per image with the SUGGESTED bucket so the
+        user can review + adjust before committing.
+
+        Capped at ``limit`` images to keep the response time bounded
+        (~1-5s per image for the heavy detectors).
+        """
+        from pixcull import verticals as vmod
+        key = unquote(key.strip("/"))
+        v = vmod.get_vertical(key)
+        if v is None:
+            self._reject_upload(404, f"unknown vertical: {key}")
+            return
+        clen = int(self.headers.get("Content-Length", "0") or "0")
+        if clen <= 0 or clen > 65536:
+            self._reject_upload(400, "expected JSON body with {folder, limit?}")
+            return
+        try:
+            params = json.loads(self.rfile.read(clen).decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            self._reject_upload(400, f"JSON parse failed: {exc}")
+            return
+        folder_str = (params.get("folder") or "").strip()
+        if not folder_str:
+            self._reject_upload(400, "需要 folder 字段")
+            return
+        folder = Path(folder_str).expanduser()
+        try:
+            folder = folder.resolve()
+        except OSError as exc:
+            self._reject_upload(400, f"路径解析失败: {exc}")
+            return
+        if not folder.is_dir():
+            self._reject_upload(400, f"不是文件夹: {folder}")
+            return
+        try:
+            limit = int(params.get("limit", 100))
+        except (TypeError, ValueError):
+            limit = 100
+        limit = max(1, min(500, limit))
+
+        try:
+            from pixcull.io.loader import list_images
+            from pixcull.pipeline.worker import analyze_one
+            from pixcull.scoring.fusion import fuse_score
+            from pixcull.scoring.decision import decide, Decision
+            from pixcull.scoring.style_modes import detect_style_modes
+            from pixcull.config import PixCullConfig
+
+            paths = list_images(folder)[:limit]
+            if not paths:
+                self._reject_upload(
+                    400, f"在 {folder} 找不到可分析图片(支持 jpg/png/cr3/cr2/nef/arw)")
+                return
+
+            # Register the paths in the bulk whitelist so the
+            # subsequent /verticals/bulk_thumb calls can resolve them.
+            _bulk_register_paths(paths)
+
+            config = PixCullConfig.load()
+            items: list[dict] = []
+            for p in paths:
+                try:
+                    row = analyze_one(p)
+                except Exception as exc:
+                    _dbg("bulk_classify/analyze", exc, str(p))
+                    continue
+                if row is None:
+                    continue
+                scene = str(row.get("scene") or "")
+                flags = list(row.get("flags") or [])
+                try:
+                    dims = fuse_score(row, flags, scene, config)
+                except Exception:
+                    continue
+                dec, _r = decide(
+                    dims["final"], flags, config,
+                    scene=scene, vertical=key,
+                )
+                # Suggested bucket — keep → good, cull → bad,
+                # maybe → skip (user decides).
+                suggested = "good" if dec is Decision.KEEP \
+                       else "bad"  if dec is Decision.CULL \
+                       else "skip"
+                try:
+                    sp = detect_style_modes(row)
+                    styles = sorted(sp.modes)
+                except Exception:
+                    styles = []
+                items.append({
+                    "src_path":      str(p),
+                    "filename":      p.name,
+                    "score":         round(float(dims["final"]), 3),
+                    "decision":      dec.value,
+                    "suggested":     suggested,
+                    "scene":         scene,
+                    "styles":        styles,
+                    "flags":         flags,
+                })
+            # Sort by score desc so highest-confidence keeps land first
+            items.sort(key=lambda x: -x["score"])
+        except Exception as exc:  # noqa: BLE001
+            traceback.print_exc(file=sys.stderr)
+            self._reject_upload(500, f"分析失败: {type(exc).__name__}: {exc}")
+            return
+
+        body = _safe_dumps({
+            "ok":           True,
+            "key":          key,
+            "folder":       str(folder),
+            "n_total":      len(items),
+            "items":        items,
+        }).encode("utf-8")
+        self._send_json(200, body)
+
+    def _handle_vertical_bulk_commit(self, key: str) -> None:
+        """POST /verticals/bulk_commit/<key>
+
+        Body: {assignments: [{src_path, bucket}, ...]}
+        Where bucket ∈ {good, bad}. Anything else is silently skipped
+        (the frontend uses "skip" to mean "don't commit this one").
+
+        Each assignment's src_path must be in the bulk whitelist set
+        by the most recent bulk_classify call. Bytes are READ from
+        disk and saved into the vertical's good/bad dir via the
+        existing ``save_sample`` helper (which hashes filenames to
+        avoid collisions).
+        """
+        from pixcull import verticals as vmod
+        key = unquote(key.strip("/"))
+        v = vmod.get_vertical(key)
+        if v is None:
+            self._reject_upload(404, f"unknown vertical: {key}")
+            return
+        clen = int(self.headers.get("Content-Length", "0") or "0")
+        if clen <= 0 or clen > 4 * 1024 * 1024:
+            self._reject_upload(400, "expected JSON body with assignments[]")
+            return
+        try:
+            params = json.loads(self.rfile.read(clen).decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            self._reject_upload(400, f"JSON parse failed: {exc}")
+            return
+        assigns = params.get("assignments")
+        if not isinstance(assigns, list):
+            self._reject_upload(400, "assignments must be a list")
+            return
+
+        saved: list[dict] = []
+        skipped: list[dict] = []
+        for a in assigns:
+            if not isinstance(a, dict):
+                continue
+            src = (a.get("src_path") or "").strip()
+            bucket = (a.get("bucket") or "").strip().lower()
+            if bucket not in vmod.ALLOWED_BUCKETS:
+                skipped.append({"src_path": src, "reason": f"bad bucket={bucket}"})
+                continue
+            p = Path(src)
+            if not _bulk_path_allowed(p):
+                skipped.append({"src_path": src, "reason": "not in whitelist"})
+                continue
+            if not p.is_file():
+                skipped.append({"src_path": src, "reason": "no such file"})
+                continue
+            try:
+                # Cap individual files at 32 MB (same as direct upload)
+                data = p.read_bytes()
+                if len(data) > 32 * 1024 * 1024:
+                    skipped.append({"src_path": src, "reason": "file > 32 MB"})
+                    continue
+                info = vmod.save_sample(key, bucket, p.name, data)
+                saved.append({"src_path": src, "bucket": bucket, **info})
+            except Exception as exc:
+                skipped.append({"src_path": src,
+                                  "reason": f"{type(exc).__name__}: {exc}"})
+
+        body = _safe_dumps({
+            "ok":      True,
+            "key":     key,
+            "saved":   saved,
+            "skipped": skipped,
+            "counts":  vmod.count_samples(key),
+        }).encode("utf-8")
+        self._send_json(200, body)
+
     def _handle_vertical_sample_delete(self, rel: str) -> None:
         from pixcull import verticals as vmod
         rel = unquote(rel)
@@ -3751,6 +4051,20 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
     .vactions .row.secondary button.eval:hover {
       border-color: var(--keep); color: var(--keep);
     }
+    /* V17.7 — bulk-import link styled to match secondary buttons */
+    .vactions .row.secondary .bulk-link {
+      flex: 1; padding: 5px 6px; font-size: 11.5px;
+      color: var(--muted); background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border); border-radius: 5px;
+      text-decoration: none; white-space: nowrap;
+      display: inline-flex; align-items: center; justify-content: center;
+      gap: 4px;
+      transition: border-color 120ms, color 120ms;
+    }
+    .vactions .row.secondary .bulk-link:hover {
+      border-color: var(--accent-hi); color: var(--accent-hi);
+    }
+    .vactions .row.secondary .bulk-link .ic { font-size: 13px; }
     /* Disabled state — when there are no samples, secondary tools
        can't do anything useful. Make that obvious. */
     .vactions button:disabled {
@@ -4457,6 +4771,10 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
             </div>
             <!-- Row 2: secondary tools — disabled until samples exist -->
             <div class="row secondary">
+              <a class="bulk-link" href="/verticals/bulk/${encodeURIComponent(v.key)}"
+                 title="选个文件夹 → pipeline 自动分类 → 一键灌入 sample bank">
+                <span class="ic">📥</span>批量导入
+              </a>
               <button class="tune" data-key="${esc(v.key)}"
                       title="用收集的好/坏样本自动调阈值"
                       ${(v.counts.good < 1 || v.counts.bad < 1) ? 'disabled' : ''}>
@@ -4645,6 +4963,345 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
     }
 
     loadRegistry();
+  </script>
+</body>
+</html>
+"""
+
+
+# V17.7 — bulk-classify-from-folder UI. Placeholders __VKEY__,
+# __VICON__, __VZH__ are substituted server-side per vertical.
+_VERTICAL_BULK_HTML = r"""<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <title>PixCull — 批量分类 · __VZH__</title>
+  <style>
+    :root {
+      --bg: #0b0d10; --bg-card: #14171c; --bg-card-hi: #1a1e25;
+      --fg: #e9ecf2; --muted: #a8b2c1; --accent: #3b82f6;
+      --accent-hi: #60a5fa; --border: #232830;
+      --keep: #4ade80; --maybe: #d9a30c; --cull: #f87171;
+      --focus-ring: rgba(96,165,250,0.55);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; background: var(--bg); color: var(--fg);
+      font: 14px/1.55 -apple-system, "SF Pro Text", Inter,
+            "Segoe UI Variable", "PingFang SC", sans-serif;
+    }
+    *:focus-visible {
+      outline: 2px solid var(--focus-ring); outline-offset: 2px; border-radius: 4px;
+    }
+    header {
+      padding: 16px 24px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: baseline; gap: 16px;
+    }
+    header h1 { margin: 0; font-size: 17px; font-weight: 600; }
+    header a { color: var(--muted); text-decoration: none; font-size: 13px; }
+    header a:hover { color: var(--fg); }
+    main { padding: 18px 24px 60px; max-width: 1280px; margin: 0 auto; }
+
+    .controls {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 8px; padding: 14px 16px; margin-bottom: 18px;
+      display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+    }
+    .controls input[type=text] {
+      flex: 1; min-width: 320px;
+      padding: 8px 12px; background: rgba(0,0,0,0.3); color: var(--fg);
+      border: 1px solid var(--border); border-radius: 4px;
+      font: inherit; font-size: 13px;
+    }
+    .controls input[type=number] {
+      width: 80px; padding: 8px 10px;
+      background: rgba(0,0,0,0.3); color: var(--fg);
+      border: 1px solid var(--border); border-radius: 4px;
+      font: inherit; font-size: 13px;
+    }
+    .controls button {
+      padding: 8px 16px; font-size: 13px; border-radius: 5px;
+      border: 1px solid var(--accent); background: var(--accent);
+      color: #fff; cursor: pointer; font: inherit;
+    }
+    .controls button.secondary {
+      background: rgba(255,255,255,0.04); color: var(--fg);
+      border-color: var(--border);
+    }
+    .controls button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .summary {
+      display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 14px;
+      font-size: 12px; color: var(--muted);
+    }
+    .summary .chip {
+      padding: 4px 10px; border-radius: 999px;
+      border: 1px solid var(--border); background: rgba(255,255,255,0.04);
+      font-variant-numeric: tabular-nums;
+    }
+    .summary .chip.good {
+      color: var(--keep); border-color: rgba(74,222,128,0.30);
+    }
+    .summary .chip.bad {
+      color: var(--cull); border-color: rgba(248,113,113,0.25);
+    }
+    .summary .chip.skip { color: var(--muted); }
+
+    .bulk-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 12px;
+    }
+    .bulk-card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 8px; overflow: hidden;
+      transition: border-color 120ms;
+      display: flex; flex-direction: column;
+    }
+    .bulk-card.good   { border-color: rgba(74,222,128,0.40); }
+    .bulk-card.bad    { border-color: rgba(248,113,113,0.35); }
+    .bulk-card.skip   { opacity: 0.55; }
+    .bulk-card .thumb-wrap {
+      aspect-ratio: 1/1; background: #000; position: relative;
+    }
+    .bulk-card .thumb-wrap img {
+      width: 100%; height: 100%; object-fit: cover;
+    }
+    .bulk-card .badge {
+      position: absolute; top: 6px; left: 6px;
+      padding: 2px 7px; border-radius: 3px; font-size: 10.5px;
+      background: rgba(0,0,0,0.75); font-weight: 500;
+    }
+    .bulk-card .badge.keep  { color: var(--keep); }
+    .bulk-card .badge.maybe { color: var(--maybe); }
+    .bulk-card .badge.cull  { color: var(--cull); }
+    .bulk-card .score {
+      position: absolute; top: 6px; right: 6px;
+      padding: 2px 7px; border-radius: 3px; font-size: 10.5px;
+      background: rgba(0,0,0,0.75); color: var(--fg);
+      font-variant-numeric: tabular-nums;
+    }
+    .bulk-card .meta {
+      padding: 6px 8px; font-size: 10.5px; color: var(--muted);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .bulk-card .vote-row {
+      display: flex; gap: 0; border-top: 1px solid var(--border);
+    }
+    .bulk-card .vote-row button {
+      flex: 1; padding: 6px 0; font-size: 12px;
+      background: transparent; color: var(--muted);
+      border: 0; border-right: 1px solid var(--border);
+      cursor: pointer; font: inherit; transition: all 120ms;
+    }
+    .bulk-card .vote-row button:last-child { border-right: 0; }
+    .bulk-card .vote-row button:hover { background: rgba(255,255,255,0.04); }
+    .bulk-card .vote-row button.active {
+      color: var(--fg); font-weight: 600;
+    }
+    .bulk-card.good .vote-row button.active.v-good {
+      background: rgba(74,222,128,0.18); color: var(--keep);
+    }
+    .bulk-card.bad .vote-row button.active.v-bad {
+      background: rgba(248,113,113,0.18); color: var(--cull);
+    }
+    .bulk-card.skip .vote-row button.active.v-skip {
+      background: rgba(255,255,255,0.05);
+    }
+
+    .empty {
+      padding: 40px; text-align: center; color: var(--muted);
+    }
+    .toast-stack {
+      position: fixed; bottom: 16px; right: 16px; z-index: 10;
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .toast {
+      background: var(--bg-card); color: var(--fg);
+      border: 1px solid var(--border); border-left: 3px solid var(--accent);
+      padding: 8px 14px; border-radius: 4px; font-size: 12px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+    }
+    .toast.error   { border-left-color: var(--cull); }
+    .toast.success { border-left-color: var(--keep); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1><span style="font-size: 22px; margin-right: 6px">__VICON__</span>批量分类 · __VZH__</h1>
+    <a href="/verticals">← 返回垂类</a>
+  </header>
+  <main>
+    <div class="controls">
+      <input type="text" id="folder" placeholder="例如 ~/摄影/上海赛艇公开赛 或 /Volumes/SSD/RAW">
+      <label style="font-size:12px;color:var(--muted)">最多:
+        <input type="number" id="limit" value="100" min="1" max="500">
+      </label>
+      <button id="scan">扫描 + 自动分类</button>
+    </div>
+    <div class="summary" id="summary" style="display:none">
+      <span class="chip">共 <b id="sumTotal">0</b></span>
+      <span class="chip good">👍 好片 <b id="sumGood">0</b></span>
+      <span class="chip bad">👎 待剔除 <b id="sumBad">0</b></span>
+      <span class="chip skip">跳过 <b id="sumSkip">0</b></span>
+      <span style="margin-left: auto">
+        <button class="secondary" id="setAllGood">全部 👍</button>
+        <button class="secondary" id="setAllBad">全部 👎</button>
+        <button class="secondary" id="setAllSkip">全部跳过</button>
+        <button id="commit" style="margin-left:6px">导入 sample bank</button>
+      </span>
+    </div>
+    <div id="grid" class="bulk-grid"></div>
+    <div id="empty" class="empty" style="display:none">
+      没找到可分析的图片(支持 jpg/png/cr3/cr2/nef/arw)
+    </div>
+  </main>
+  <div class="toast-stack" id="toastStack"></div>
+
+  <script>
+    const VKEY = "__VKEY__";
+    const folderEl = document.getElementById("folder");
+    const limitEl  = document.getElementById("limit");
+    const scanBtn  = document.getElementById("scan");
+    const commitBtn = document.getElementById("commit");
+    const grid = document.getElementById("grid");
+    const summary = document.getElementById("summary");
+    const emptyEl = document.getElementById("empty");
+    const sumTotal = document.getElementById("sumTotal");
+    const sumGood = document.getElementById("sumGood");
+    const sumBad = document.getElementById("sumBad");
+    const sumSkip = document.getElementById("sumSkip");
+    const toastStack = document.getElementById("toastStack");
+
+    const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => (
+      {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
+    ));
+    function toast(message, kind="") {
+      const el = document.createElement("div");
+      el.className = "toast " + kind;
+      el.textContent = message;
+      toastStack.appendChild(el);
+      setTimeout(() => el.remove(), 3500);
+    }
+
+    let items = [];   // each: {src_path, filename, score, decision, suggested, scene, styles, flags, _bucket}
+
+    function updateSummary() {
+      const g = items.filter(x => x._bucket === "good").length;
+      const b = items.filter(x => x._bucket === "bad").length;
+      const s = items.filter(x => x._bucket === "skip").length;
+      sumTotal.textContent = items.length;
+      sumGood.textContent = g;
+      sumBad.textContent = b;
+      sumSkip.textContent = s;
+      commitBtn.disabled = !(g || b);
+      commitBtn.textContent = `导入 sample bank (${g}+${b})`;
+    }
+
+    function render() {
+      if (!items.length) {
+        summary.style.display = "none";
+        grid.innerHTML = "";
+        emptyEl.style.display = "block";
+        return;
+      }
+      emptyEl.style.display = "none";
+      summary.style.display = "flex";
+      grid.innerHTML = items.map((it, i) => {
+        const thumbUrl = `/verticals/bulk_thumb?path=${encodeURIComponent(it.src_path)}&size=300`;
+        return `
+          <div class="bulk-card ${it._bucket}" data-i="${i}">
+            <div class="thumb-wrap">
+              <img src="${esc(thumbUrl)}" alt="${esc(it.filename)}" loading="lazy">
+              <span class="badge ${it.decision}">${esc(it.decision)}</span>
+              <span class="score">${it.score.toFixed(2)}</span>
+            </div>
+            <div class="meta" title="${esc(it.filename)}">
+              ${esc(it.filename)}
+            </div>
+            <div class="vote-row">
+              <button class="v-good ${it._bucket === 'good' ? 'active' : ''}" data-i="${i}" data-bucket="good">👍 好</button>
+              <button class="v-skip ${it._bucket === 'skip' ? 'active' : ''}" data-i="${i}" data-bucket="skip">跳过</button>
+              <button class="v-bad ${it._bucket === 'bad' ? 'active' : ''}" data-i="${i}" data-bucket="bad">👎 坏</button>
+            </div>
+          </div>`;
+      }).join("");
+      grid.querySelectorAll(".vote-row button").forEach(b => {
+        b.addEventListener("click", () => {
+          const i = parseInt(b.dataset.i);
+          items[i]._bucket = b.dataset.bucket;
+          render();   // re-render to update color
+        });
+      });
+      updateSummary();
+    }
+
+    function setAll(bucket) {
+      items.forEach(it => it._bucket = bucket);
+      render();
+    }
+    document.getElementById("setAllGood").addEventListener("click", () => setAll("good"));
+    document.getElementById("setAllBad").addEventListener("click", () => setAll("bad"));
+    document.getElementById("setAllSkip").addEventListener("click", () => setAll("skip"));
+
+    scanBtn.addEventListener("click", async () => {
+      const folder = folderEl.value.trim();
+      if (!folder) { toast("请输入文件夹路径", "error"); return; }
+      const limit = parseInt(limitEl.value) || 100;
+      scanBtn.disabled = true;
+      scanBtn.textContent = "分析中…(每张 1-5s)";
+      try {
+        const res = await fetch(`/verticals/bulk_classify/${encodeURIComponent(VKEY)}`, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({folder, limit}),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          toast(`扫描失败: ${data.error || res.status}`, "error");
+          return;
+        }
+        // Default _bucket to the server's suggestion
+        items = (data.items || []).map(x => ({...x, _bucket: x.suggested}));
+        render();
+        toast(`完成 · ${data.n_total} 张已分类`, "success");
+      } catch (e) {
+        toast(`扫描出错: ${e}`, "error");
+      } finally {
+        scanBtn.disabled = false;
+        scanBtn.textContent = "扫描 + 自动分类";
+      }
+    });
+
+    commitBtn.addEventListener("click", async () => {
+      const assigns = items
+        .filter(it => it._bucket === "good" || it._bucket === "bad")
+        .map(it => ({src_path: it.src_path, bucket: it._bucket}));
+      if (!assigns.length) { toast("没有要导入的图片", "error"); return; }
+      if (!confirm(`确认把 ${assigns.length} 张图导入 __VZH__ sample bank?`)) return;
+      commitBtn.disabled = true;
+      try {
+        const res = await fetch(`/verticals/bulk_commit/${encodeURIComponent(VKEY)}`, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({assignments: assigns}),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          toast(`导入失败: ${data.error || res.status}`, "error");
+          return;
+        }
+        toast(`导入 ${data.saved.length} 张 · 当前 sample bank: 👍 ${data.counts.good} · 👎 ${data.counts.bad}`, "success");
+        if (data.skipped && data.skipped.length) {
+          toast(`跳过 ${data.skipped.length} 张(详见控制台)`, "");
+          console.log("skipped:", data.skipped);
+        }
+      } catch (e) {
+        toast(`导入出错: ${e}`, "error");
+      } finally {
+        commitBtn.disabled = false;
+        updateSummary();
+      }
+    });
   </script>
 </body>
 </html>

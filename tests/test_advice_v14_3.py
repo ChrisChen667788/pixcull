@@ -263,6 +263,17 @@ def test_landscape_vertical_uses_landscape_phrases():
                  "蓝调时刻", "云海", "壁纸级"))
 
 
+@pytest.fixture(autouse=True)
+def _isolate_vertical_data_root(tmp_path, monkeypatch):
+    """V17.5 isolation — any override JSONs that exist on the
+    developer's machine (e.g. from live testing) must not leak
+    into the vertical-pool tests, which check the V17.3 hand-written
+    fallback behavior."""
+    from pixcull import verticals as vmod
+    monkeypatch.setattr(vmod, "_data_root", lambda: tmp_path)
+    yield
+
+
 def test_sports_vertical_uses_sports_phrases():
     sp_row = {
         "filename": "sp.jpg", "scene": "sports",
