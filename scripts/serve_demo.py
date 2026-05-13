@@ -2523,12 +2523,16 @@ class _Handler(BaseHTTPRequestHandler):
 
         Multipart upload — same machinery as /analyze, but persists into
         the vertical sample bank instead of /tmp.
+
+        V17.5 fix — ``key`` is delivered already path-stripped (do_POST
+        called urlparse(self.path).path). To read ``?bucket=...`` we go
+        back to ``self.path`` itself, not the ``key`` slice.
         """
         from pixcull import verticals as vmod
         from urllib.parse import parse_qs, urlsplit
-        sp = urlsplit("/" + key)
-        key = unquote(sp.path.lstrip("/"))
-        qs = parse_qs(sp.query) if sp.query else {}
+        key = unquote(key.strip("/"))
+        full = urlsplit(self.path)
+        qs = parse_qs(full.query) if full.query else {}
         bucket = (qs.get("bucket", ["good"])[0] or "good").lower()
         if bucket not in vmod.ALLOWED_BUCKETS:
             self._reject_upload(400, "bucket must be 'good' or 'bad'")
@@ -3036,7 +3040,33 @@ class _Handler(BaseHTTPRequestHandler):
 # ---------------------------------------------------------------------------
 # Server bootstrap.
 # ---------------------------------------------------------------------------
+def _load_app_config_into_env() -> None:
+    """V17.5 — when serve_demo is launched directly (not via the .app),
+    ``DEEPSEEK_API_KEY`` won't be set even if the user previously
+    configured it via the launcher menu. Read the same config.json the
+    launcher writes to so dev-mode runs match production behavior.
+    """
+    if os.environ.get("DEEPSEEK_API_KEY"):
+        return  # already set, don't override
+    import sys as _sys
+    if _sys.platform == "darwin":
+        cfg_path = Path.home() / "Library" / "Application Support" / "PixCull" / "config.json"
+    else:
+        cfg_path = Path.home() / ".pixcull" / "config.json"
+    if not cfg_path.exists():
+        return
+    try:
+        cfg = json.loads(cfg_path.read_text("utf-8"))
+        if cfg.get("deepseek_api_key"):
+            os.environ["DEEPSEEK_API_KEY"] = cfg["deepseek_api_key"]
+            print(f"  config: loaded DeepSeek key from {cfg_path}",
+                  file=sys.stderr)
+    except (OSError, json.JSONDecodeError) as exc:
+        _dbg("load_app_config", exc, str(cfg_path))
+
+
 def main() -> None:
+    _load_app_config_into_env()
     parser = argparse.ArgumentParser(
         description="PixCull web demo — upload images and see decisions."
     )
