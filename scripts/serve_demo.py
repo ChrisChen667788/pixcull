@@ -727,6 +727,17 @@ def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
     # stars per axis (auto+human pooled). Surfaces "did the human
     # contribute signal yet" at a glance.
     n_human_labeled = sum(1 for r in rows if r["rubric_human_labeled"])
+    # V17.8 — count of human annotations with overall_label in
+    # (keep, cull) — these are the candidates the "📥 灌入 sample
+    # bank" button promotes. We surface only when the run also
+    # carries a vertical tag (set by /scan_local from the dropdown).
+    n_promotable = 0
+    if run.get("vertical"):
+        for r in rows:
+            rec = human_by_fn.get(r["filename"]) or {}
+            lbl = (rec.get("overall_label") or "").strip().lower()
+            if lbl in ("keep", "cull"):
+                n_promotable += 1
     axis_means: dict[str, float | None] = {}
     for name in rubric_axis_names:
         vals = [r["rubric_stars"][name] for r in rows
@@ -764,6 +775,7 @@ def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
         "rescorer_n_scored": len(rescored),
         "rescorer_n_disagrees": len(disagrees),
         "n_human_labeled": n_human_labeled,
+        "n_promotable": n_promotable,    # V17.8 — promote-to-bank count
         "rubric_axis_means": axis_means,
         "mode": run.get("mode", "upload"),
         "origin_folder": run.get("origin_folder"),
@@ -1360,6 +1372,11 @@ class _Handler(BaseHTTPRequestHandler):
         if path.startswith("/verticals/bulk_commit/"):
             return self._handle_vertical_bulk_commit(
                 path[len("/verticals/bulk_commit/"):])
+        # V17.8 — auto-promote human-annotated keep/cull from a
+        # vertical-tagged batch into that vertical's sample bank.
+        if path.startswith("/verticals/promote_run/"):
+            return self._handle_vertical_promote_run(
+                path[len("/verticals/promote_run/"):])
         self.send_error(404, "not found")
 
     def do_DELETE(self) -> None:  # noqa: N802
@@ -3155,6 +3172,124 @@ class _Handler(BaseHTTPRequestHandler):
             "saved":   saved,
             "skipped": skipped,
             "counts":  vmod.count_samples(key),
+        }).encode("utf-8")
+        self._send_json(200, body)
+
+    # ---------- V17.8 auto-promote run's human keep/cull ----------
+    def _handle_vertical_promote_run(self, run_id: str) -> None:
+        """POST /verticals/promote_run/<run_id>
+
+        Reads the run's annotations.jsonl, picks every entry whose
+        ``overall_label`` is keep / cull (the user's human verdict),
+        looks up the run's ``vertical`` tag, then copies each
+        annotated file's bytes into that vertical's good/bad bank.
+
+        Why this matters
+        ----------------
+        The annotation flow (rubric modal → save → next-to-label)
+        produces a high-signal dataset every time the user labels a
+        batch. Without V17.8 those labels live only in the run's
+        ``annotations.jsonl`` and never feed back into the vertical's
+        sample bank — so the V17.4 tuner / V17.5 LLM never see them.
+        Promoting closes the loop: run → label → sample bank → next
+        run's policy is shaped by what the user just taught us.
+
+        Idempotency
+        -----------
+        ``save_sample`` names files by SHA-256 of the content. Re-
+        promoting the same run silently overwrites with identical
+        bytes; no duplicates.
+
+        Body is empty / ignored.
+        """
+        from pixcull import verticals as vmod
+        run_id = unquote(run_id.strip("/"))
+        run = _get_run(run_id) or _reload_run_from_disk(run_id)
+        if run is None:
+            self._reject_upload(404, f"unknown run: {run_id}")
+            return
+        vertical_key = run.get("vertical")
+        if not vertical_key:
+            self._reject_upload(
+                400,
+                "this run wasn't tagged with a vertical — "
+                "rerun the batch with the vertical dropdown set",
+            )
+            return
+        v = vmod.get_vertical(vertical_key)
+        if v is None:
+            self._reject_upload(404, f"unknown vertical: {vertical_key}")
+            return
+
+        # Walk annotations.jsonl, build {filename: overall_label}
+        output_dir = Path(run["output_dir"])
+        ann_path = output_dir / "annotations.jsonl"
+        if not ann_path.exists():
+            self._reject_upload(400,
+                "this run has no human annotations to promote")
+            return
+        human_by_fn: dict[str, str] = {}   # filename → keep/cull
+        try:
+            for line in ann_path.read_text("utf-8").splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                fn = rec.get("filename")
+                lbl = (rec.get("overall_label") or "").strip().lower()
+                if fn and lbl in ("keep", "cull"):
+                    human_by_fn[fn] = lbl   # latest line wins
+        except OSError as exc:
+            self._reject_upload(500, f"无法读 annotations.jsonl: {exc}")
+            return
+
+        if not human_by_fn:
+            self._reject_upload(
+                400,
+                "no human keep/cull annotations found — label some "
+                "images with overall_label first",
+            )
+            return
+
+        # Resolve filename → original-bytes source path. In scan mode
+        # we have a manifest.json; in upload mode files live under
+        # the run's input dir. Use the existing helper.
+        saved: list[dict] = []
+        skipped: list[dict] = []
+        for fn, lbl in human_by_fn.items():
+            src = _resolve_image_source(run, Path(fn).name)
+            if src is None or not src.exists():
+                skipped.append({"filename": fn, "reason": "source missing"})
+                continue
+            bucket = "good" if lbl == "keep" else "bad"
+            try:
+                data = src.read_bytes()
+                if len(data) > 32 * 1024 * 1024:
+                    skipped.append({"filename": fn, "reason": "> 32 MB"})
+                    continue
+                info = vmod.save_sample(vertical_key, bucket, src.name, data)
+                saved.append({
+                    "filename": fn, "bucket": bucket, **info,
+                })
+            except Exception as exc:  # noqa: BLE001
+                skipped.append({
+                    "filename": fn,
+                    "reason": f"{type(exc).__name__}: {exc}",
+                })
+
+        body = _safe_dumps({
+            "ok":           True,
+            "run_id":       run_id,
+            "vertical":     vertical_key,
+            "vertical_zh":  v.zh,
+            "n_promoted":   len(saved),
+            "n_skipped":    len(skipped),
+            "saved":        saved,
+            "skipped":      skipped,
+            "counts":       vmod.count_samples(vertical_key),
         }).encode("utf-8")
         self._send_json(200, body)
 
@@ -6620,6 +6755,26 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
       font-size: 11.5px;
       cursor: help;
     }
+    /* V17.8 — promote-to-bank button. Lives in the header stats row
+       next to the vertical badge, but stands out as actionable. */
+    .stats .promote-btn {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 3px 12px;
+      background: rgba(74,222,128,0.10);
+      border: 1px solid rgba(74,222,128,0.40);
+      border-radius: 999px;
+      color: var(--keep);
+      font: inherit; font-size: 11.5px;
+      cursor: pointer;
+      transition: background 120ms, border-color 120ms;
+    }
+    .stats .promote-btn:hover {
+      background: rgba(74,222,128,0.20);
+      border-color: var(--keep);
+    }
+    .stats .promote-btn:disabled {
+      opacity: 0.5; cursor: wait;
+    }
     .stats b { color: var(--fg); font-weight: 600; }
     .stats .keep b { color: var(--keep); }
     .stats .maybe b { color: var(--maybe); }
@@ -7743,8 +7898,48 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
       + `${esc(v.icon)} 垂类 <b>${esc(v.zh)}</b>${esc(deltaStr)}`
       + `</span>`
     );
+    // V17.8 — promote-to-sample-bank button. Only when the run has
+    // a vertical AND ≥1 human keep/cull annotation. Closes the
+    // feedback loop: label here → next batch's policy uses it.
+    if (summary.n_promotable && summary.n_promotable > 0) {
+      stats.push(
+        `<button class="promote-btn" id="promoteBtn"`
+        + ` title="把你刚才标的 keep/cull 写入 ${esc(v.zh)} 的 sample bank,`
+        + `下次该垂类调参/AI 话术就能看到这批数据">`
+        + `📥 灌入 sample bank (<b>${summary.n_promotable}</b>)`
+        + `</button>`
+      );
+    }
   }
   statsEl.innerHTML = stats.join("");
+
+  // V17.8 — wire the promote-to-bank button if it rendered
+  const promoteBtn = document.getElementById("promoteBtn");
+  if (promoteBtn) {
+    promoteBtn.addEventListener("click", async () => {
+      const vzh = (summary.vertical && summary.vertical.zh) || "vertical";
+      if (!confirm(`把这次的 ${summary.n_promotable} 张人工标注 keep/cull 灌入 ${vzh} sample bank?\n(下次跑该垂类的 batch 就会用上这些数据)`)) return;
+      promoteBtn.disabled = true;
+      try {
+        const res = await fetch(`/verticals/promote_run/${encodeURIComponent(run_id)}`, {method: "POST"});
+        const d = await res.json();
+        if (!res.ok) {
+          toast(`灌入失败: ${d.error || res.status}`, "error");
+          promoteBtn.disabled = false;
+          return;
+        }
+        toast(`已灌入 ${d.n_promoted} 张 (${d.vertical_zh} bank: 👍 ${d.counts.good} · 👎 ${d.counts.bad})`, "success");
+        if (d.n_skipped > 0) {
+          console.log("V17.8 skipped:", d.skipped);
+          toast(`(${d.n_skipped} 张跳过,详见 console)`, "");
+        }
+        promoteBtn.textContent = `✓ 已灌入 ${d.n_promoted}`;
+      } catch (e) {
+        toast(`灌入出错: ${e}`, "error");
+        promoteBtn.disabled = false;
+      }
+    });
+  }
 
   // V9.0 — sort + scene filter + style filter + cluster grouping
   // Active filter state. activeDecision is one of all/keep/maybe/cull.
