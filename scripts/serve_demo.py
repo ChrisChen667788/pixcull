@@ -3621,18 +3621,22 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
     }
     .vcard {
       background: var(--bg-card); border: 1px solid var(--border);
-      border-radius: 10px; padding: 16px;
+      border-radius: 10px; padding: 14px 14px 12px;
       transition: border-color 120ms;
+      display: flex; flex-direction: column;
     }
     .vcard:hover { border-color: var(--accent); }
     .vcard .vhead {
-      display: flex; align-items: center; gap: 10px; margin-bottom: 4px;
+      display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px;
     }
-    .vcard .vicon { font-size: 22px; line-height: 1; }
-    .vcard .vname { font-size: 15px; font-weight: 600; }
+    .vcard .vicon { font-size: 20px; line-height: 1; }
+    .vcard .vname { font-size: 14.5px; font-weight: 600; letter-spacing: -0.01em; }
     .vcard .vdesc {
-      font-size: 12px; color: var(--muted); line-height: 1.5;
-      margin-bottom: 12px;
+      font-size: 11.5px; color: var(--muted); line-height: 1.55;
+      margin-bottom: 10px;
+      /* clamp to 2 lines so cards align consistently */
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+      overflow: hidden;
     }
     .progress-shell {
       width: 100%; height: 4px; background: rgba(255,255,255,0.06);
@@ -3644,12 +3648,28 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
     }
     .vstats {
       display: flex; gap: 8px; align-items: center;
+      flex-wrap: wrap;
       font-size: 11px; color: var(--muted); margin-bottom: 10px;
     }
     .vstats .pill {
       background: rgba(255,255,255,0.04); border: 1px solid var(--border);
       padding: 2px 8px; border-radius: 999px; font-variant-numeric: tabular-nums;
     }
+    .vstats .target-label {
+      margin-left: auto;
+      font-size: 10.5px; color: var(--muted);
+    }
+    /* V17.7 — empty-state hint shown when 0/0 samples. Subtle prompt
+       so empty cards don't just look broken. */
+    .empty-hint {
+      font-size: 11.5px; color: var(--muted);
+      padding: 8px 12px; margin-bottom: 10px;
+      background: rgba(255,255,255,0.025);
+      border: 1px dashed var(--border);
+      border-radius: 6px;
+      line-height: 1.5;
+    }
+    .empty-hint b { color: var(--fg); font-weight: 600; }
     .vstats .pill.good { color: var(--keep); border-color: rgba(74,222,128,0.3); }
     .vstats .pill.bad  { color: var(--cull); border-color: rgba(248,113,113,0.3); }
     /* V17.4 — auto-tuned indicator */
@@ -3666,23 +3686,80 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
       background: rgba(168,85,247,0.10);
       cursor: help;
     }
-    .vactions button.tune:hover { border-color: var(--accent); }
-    .vactions button.llm-phrases:hover { border-color: #c4b5fd; }
-    .vactions button.eval:hover { border-color: var(--keep); }
+    /* V17.7 — two-row button layout. The previous flex:1 / 6-buttons
+       single row crushed every label to single-char vertical wrap on
+       320px cards. Now: primary uploads on row 1 (green/red coded),
+       tool actions on row 2 (icon-led, smaller). */
     .vactions {
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .vactions .row {
       display: flex; gap: 6px;
     }
     .vactions button {
-      flex: 1; background: rgba(255,255,255,0.04); border: 1px solid var(--border);
-      color: var(--fg); padding: 6px 10px; border-radius: 4px;
+      flex: 1; background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      color: var(--fg); padding: 6px 10px; border-radius: 5px;
       font: inherit; font-size: 12px; cursor: pointer;
-      transition: border-color 120ms, background 120ms;
+      white-space: nowrap;
+      display: inline-flex; align-items: center; justify-content: center;
+      gap: 4px;
+      transition: border-color 120ms, background 120ms, color 120ms;
     }
     .vactions button:hover {
       border-color: var(--accent); background: rgba(59,130,246,0.08);
     }
-    .vactions button.good:hover { border-color: var(--keep); }
-    .vactions button.bad:hover  { border-color: var(--cull); }
+    /* Row 1 — primary action buttons. Coded green / red so the user
+       immediately reads "add good / add bad" from color alone. */
+    .vactions .row.primary button {
+      padding: 8px 12px; font-size: 13px; font-weight: 500;
+    }
+    .vactions .row.primary button.good {
+      background: rgba(74,222,128,0.08);
+      border-color: rgba(74,222,128,0.30);
+      color: var(--keep);
+    }
+    .vactions .row.primary button.good:hover {
+      background: rgba(74,222,128,0.16);
+      border-color: var(--keep);
+    }
+    .vactions .row.primary button.bad {
+      background: rgba(248,113,113,0.06);
+      border-color: rgba(248,113,113,0.25);
+      color: var(--cull);
+    }
+    .vactions .row.primary button.bad:hover {
+      background: rgba(248,113,113,0.14);
+      border-color: var(--cull);
+    }
+    /* Row 2 — secondary tools. Icon-led, smaller. Each gets a
+       distinct hover-color hint matching its function. */
+    .vactions .row.secondary button {
+      padding: 5px 6px; font-size: 11.5px;
+      color: var(--muted);
+    }
+    .vactions .row.secondary button .ic {
+      font-size: 13px;
+    }
+    .vactions .row.secondary button:hover { color: var(--fg); }
+    .vactions .row.secondary button.tune:hover {
+      border-color: var(--accent); color: var(--accent-hi);
+    }
+    .vactions .row.secondary button.llm-phrases:hover {
+      border-color: #c4b5fd; color: #c4b5fd;
+    }
+    .vactions .row.secondary button.eval:hover {
+      border-color: var(--keep); color: var(--keep);
+    }
+    /* Disabled state — when there are no samples, secondary tools
+       can't do anything useful. Make that obvious. */
+    .vactions button:disabled {
+      opacity: 0.4; cursor: not-allowed;
+    }
+    .vactions button:disabled:hover {
+      border-color: var(--border); background: rgba(255,255,255,0.04);
+      color: var(--muted);
+    }
 
     /* Per-vertical detail drawer (opens inside the card) */
     .vdetail {
@@ -4359,15 +4436,47 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
             ${v.phrases && v.phrases.is_override ?
               `<span class="pill phrased" title="已生成 AI 专属话术,样本 n=${v.phrases.n_samples_seen||0}">✨ AI 话术</span>`
               : ''}
-            <span style="margin-left:auto">目标各 ${v.sample_target} 张</span>
+            <span class="target-label">目标各 ${v.sample_target} 张</span>
           </div>
+          ${v.counts.total === 0 ? `
+            <div class="empty-hint">
+              先点 <b>+ 好片</b> 上传几张你欣赏的 <b>${esc(v.zh)}</b> 样片 → 自动获得专属评分
+            </div>
+          ` : ''}
           <div class="vactions">
-            <button class="good" data-key="${esc(v.key)}" data-bucket="good">+ 好片</button>
-            <button class="bad"  data-key="${esc(v.key)}" data-bucket="bad">+ 待剔除</button>
-            <button class="tune" data-key="${esc(v.key)}" title="用收集的好/坏样本自动调阈值">🎯 自动调参</button>
-            <button class="llm-phrases" data-key="${esc(v.key)}" title="用 DeepSeek 基于好样本生成业务话术">✨ AI 话术</button>
-            <button class="eval" data-key="${esc(v.key)}" title="看当前 policy 在你样本上的 F1 / 混淆矩阵">📊 看报告</button>
-            <button class="manage" data-key="${esc(v.key)}">管理…</button>
+            <!-- Row 1: primary upload actions, green/red coded -->
+            <div class="row primary">
+              <button class="good" data-key="${esc(v.key)}" data-bucket="good"
+                      title="上传一张这个垂类的好片(参考样本)">
+                <span class="ic">👍</span>+ 好片
+              </button>
+              <button class="bad" data-key="${esc(v.key)}" data-bucket="bad"
+                      title="上传一张该被剔除的样本(反例)">
+                <span class="ic">👎</span>+ 待剔除
+              </button>
+            </div>
+            <!-- Row 2: secondary tools — disabled until samples exist -->
+            <div class="row secondary">
+              <button class="tune" data-key="${esc(v.key)}"
+                      title="用收集的好/坏样本自动调阈值"
+                      ${(v.counts.good < 1 || v.counts.bad < 1) ? 'disabled' : ''}>
+                <span class="ic">🎯</span>调参
+              </button>
+              <button class="llm-phrases" data-key="${esc(v.key)}"
+                      title="用 DeepSeek 基于好样本生成业务话术"
+                      ${v.counts.good < 3 ? 'disabled' : ''}>
+                <span class="ic">✨</span>AI 话术
+              </button>
+              <button class="eval" data-key="${esc(v.key)}"
+                      title="看当前 policy 在你样本上的 F1 / 混淆矩阵"
+                      ${v.counts.total < 1 ? 'disabled' : ''}>
+                <span class="ic">📊</span>报告
+              </button>
+              <button class="manage" data-key="${esc(v.key)}"
+                      title="管理已上传的样本(查看/删除)">
+                <span class="ic">⋯</span>管理
+              </button>
+            </div>
           </div>
           <div class="vdetail" data-key="${esc(v.key)}">
             <div class="vdetail-tabs">
