@@ -4050,6 +4050,44 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
       font-size: 13px; color: var(--muted);
     }
     .intro b { color: var(--fg); }
+    /* V17.9 — filter + sort toolbar */
+    .vtoolbar {
+      display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+      margin-bottom: 14px; padding: 10px 12px;
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    .vtabs { display: flex; gap: 4px; flex-wrap: wrap; }
+    .vtab {
+      background: transparent; color: var(--muted);
+      border: 1px solid transparent; padding: 5px 12px;
+      border-radius: 999px; font: inherit; font-size: 12px;
+      cursor: pointer; transition: all 120ms;
+    }
+    .vtab:hover { color: var(--fg); background: rgba(255,255,255,0.04); }
+    .vtab.active {
+      color: var(--accent-hi); background: rgba(59,130,246,0.12);
+      border-color: rgba(59,130,246,0.30);
+    }
+    .vsort { display: inline-flex; align-items: center; gap: 6px;
+              font-size: 12px; color: var(--muted); }
+    .vsort select {
+      padding: 5px 8px; background: rgba(0,0,0,0.3); color: var(--fg);
+      border: 1px solid var(--border); border-radius: 4px;
+      font: inherit; font-size: 12px;
+    }
+    #vsearch {
+      margin-left: auto;
+      padding: 5px 12px; min-width: 200px;
+      background: rgba(0,0,0,0.3); color: var(--fg);
+      border: 1px solid var(--border); border-radius: 999px;
+      font: inherit; font-size: 12px;
+    }
+    .vempty {
+      text-align: center; color: var(--muted);
+      padding: 40px; font-size: 13px;
+    }
+
     .vlist {
       display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
       gap: 14px;
@@ -4369,7 +4407,32 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
       <code>~/Library/Application Support/PixCull/verticals/</code>。
     </div>
 
+    <!-- V17.9 — filter + sort toolbar -->
+    <div class="vtoolbar" id="vtoolbar">
+      <div class="vtabs" id="vtabs" role="tablist">
+        <button class="vtab active" data-filter="all" role="tab">全部</button>
+        <button class="vtab" data-filter="has-samples" role="tab">已有样本</button>
+        <button class="vtab" data-filter="tuned" role="tab">🎯 已调参</button>
+        <button class="vtab" data-filter="phrased" role="tab">✨ 有 AI 话术</button>
+        <button class="vtab" data-filter="empty" role="tab">未开始</button>
+      </div>
+      <label class="vsort">
+        <span>排序:</span>
+        <select id="vsort">
+          <option value="default">默认</option>
+          <option value="progress-desc">进度高 → 低</option>
+          <option value="progress-asc">进度低 → 高</option>
+          <option value="samples-desc">样本数多 → 少</option>
+          <option value="samples-asc">样本数少 → 多</option>
+          <option value="zh">中文名 A-Z</option>
+        </select>
+      </label>
+      <input type="search" id="vsearch" placeholder="搜索 (婚纱 / bird / 风光 …)">
+    </div>
     <div class="vlist" id="vlist"></div>
+    <div class="vempty" id="vempty" style="display:none">
+      没有符合筛选条件的垂类。
+    </div>
   </main>
   <div class="sample-zoom" id="sampleZoom" role="dialog" aria-modal="true">
     <img id="sampleZoomImg" alt="">
@@ -4452,10 +4515,47 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
     ));
 
     let registry = [];
+    // V17.9 — filter / sort / search state.
+    const viewState = {
+      filter: "all", sort: "default", search: ""
+    };
     async function loadRegistry() {
       const res = await fetch("/verticals.json");
       registry = await res.json();
       render();
+    }
+
+    // V17.9 — apply filter + sort + search to the registry view
+    function applyView(reg) {
+      let out = reg.slice();
+      // Filter
+      if (viewState.filter === "has-samples") {
+        out = out.filter(v => v.counts.total > 0);
+      } else if (viewState.filter === "tuned") {
+        out = out.filter(v => v.policy && v.policy.is_override);
+      } else if (viewState.filter === "phrased") {
+        out = out.filter(v => v.phrases && v.phrases.is_override);
+      } else if (viewState.filter === "empty") {
+        out = out.filter(v => v.counts.total === 0);
+      }
+      // Search — match against key / zh / description
+      if (viewState.search.trim()) {
+        const q = viewState.search.trim().toLowerCase();
+        out = out.filter(v =>
+          v.key.toLowerCase().includes(q)
+          || v.zh.toLowerCase().includes(q)
+          || (v.description||"").toLowerCase().includes(q)
+        );
+      }
+      // Sort
+      const s = viewState.sort;
+      if (s === "progress-desc") out.sort((a,b) => b.progress - a.progress);
+      else if (s === "progress-asc")  out.sort((a,b) => a.progress - b.progress);
+      else if (s === "samples-desc")  out.sort((a,b) => b.counts.total - a.counts.total);
+      else if (s === "samples-asc")   out.sort((a,b) => a.counts.total - b.counts.total);
+      else if (s === "zh") out.sort((a,b) => a.zh.localeCompare(b.zh, "zh"));
+      // "default" = original registry order
+      return out;
     }
 
     // V17.1 — sample-zoom overlay. Click any sample tile → fullscreen
@@ -4866,7 +4966,15 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
     }
 
     function render() {
-      vlist.innerHTML = registry.map(v => `
+      const filtered = applyView(registry);
+      const vempty = document.getElementById("vempty");
+      if (!filtered.length) {
+        vlist.innerHTML = "";
+        if (vempty) vempty.style.display = "block";
+        return;
+      }
+      if (vempty) vempty.style.display = "none";
+      vlist.innerHTML = filtered.map(v => `
         <div class="vcard" data-key="${esc(v.key)}">
           <div class="vhead">
             <span class="vicon">${esc(v.icon)}</span>
@@ -5095,6 +5203,32 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
           toast(`上传出错: ${e}`, "error");
         }
       }
+    }
+
+    // V17.9 — wire filter / sort / search controls
+    document.querySelectorAll(".vtab").forEach(tab => {
+      tab.addEventListener("click", () => {
+        document.querySelectorAll(".vtab").forEach(t =>
+          t.classList.toggle("active", t === tab));
+        viewState.filter = tab.dataset.filter;
+        render();
+      });
+    });
+    const vsort = document.getElementById("vsort");
+    if (vsort) vsort.addEventListener("change", () => {
+      viewState.sort = vsort.value;
+      render();
+    });
+    const vsearch = document.getElementById("vsearch");
+    if (vsearch) {
+      let _searchTimer;
+      vsearch.addEventListener("input", () => {
+        clearTimeout(_searchTimer);
+        _searchTimer = setTimeout(() => {
+          viewState.search = vsearch.value;
+          render();
+        }, 150);
+      });
     }
 
     loadRegistry();
