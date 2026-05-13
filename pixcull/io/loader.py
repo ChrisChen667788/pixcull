@@ -66,4 +66,21 @@ def read_exif_orientation(path: Path) -> int:
 
 
 def list_images(folder: Path) -> list[Path]:
-    return sorted(p for p in folder.rglob("*") if p.suffix.lower() in ALL_EXTS)
+    """Walk ``folder`` recursively, return image files only.
+
+    V17.13 — filter out hidden files (``.DS_Store`` etc) AND macOS
+    AppleDouble sidecars (``._*``) which appear on non-HFS+ external
+    drives like exFAT/NTFS. These match ``.jpg`` extension but
+    aren't real images; decoding them returns None silently and was
+    causing bulk_classify to "lose" most of a folder's images
+    (556 paths found in a 67-image folder → only 11 successfully
+    analyzed because the rest were ``._*.jpg`` AppleDouble metadata).
+    """
+    out = []
+    for p in folder.rglob("*"):
+        if p.suffix.lower() not in ALL_EXTS:
+            continue
+        if p.name.startswith("."):       # .DS_Store, ._foo.jpg, .hidden
+            continue
+        out.append(p)
+    return sorted(out)
