@@ -2654,12 +2654,13 @@ class _Handler(BaseHTTPRequestHandler):
             from dataclasses import asdict
             result = pt.tune_vertical(key)
             payload = asdict(result)
-            # Trim grid to top 12 rows by F1 — full 121 entries make
-            # the response huge with little marginal value for the UI.
-            grid = sorted(payload.get("grid", []),
-                            key=lambda x: -x["f1"])[:12]
-            payload["grid_top12"] = grid
-            payload["grid"] = []   # drop full grid from wire
+            # V17.10 — keep the FULL grid (~5KB for 121 cells) so the
+            # tune modal can render the F1 heatmap. Also expose
+            # ``grid_top12`` sorted-by-F1 for tabular display.
+            full_grid = payload.get("grid", [])
+            payload["grid_top12"] = sorted(full_grid,
+                                              key=lambda x: -x["f1"])[:12]
+            # ``grid`` stays as-is (full 11×11)
         except ValueError as exc:
             # Predictable user errors (no samples / unknown key) → 400
             self._reject_upload(400, str(exc))
@@ -4354,6 +4355,43 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
     .tune-card .actions button.primary:hover { opacity: 0.9; }
     .tune-card .actions button:hover { border-color: var(--accent); }
 
+    /* V17.10 — F1 surface heatmap inside the tune modal */
+    .heatmap-wrap[open] summary { color: var(--fg); }
+    .heatmap-grid {
+      display: grid; grid-template-columns: 36px repeat(11, 1fr);
+      gap: 2px;
+      font-variant-numeric: tabular-nums;
+    }
+    .heatmap-grid .hcorner,
+    .heatmap-grid .haxis-x,
+    .heatmap-grid .haxis-y {
+      display: flex; align-items: center; justify-content: center;
+      font-size: 9.5px; color: var(--muted); padding: 2px;
+    }
+    .heatmap-grid .haxis-x { font-size: 9px; }
+    .heatmap-grid .haxis-y { justify-content: flex-end; padding-right: 6px; }
+    .heatmap-grid .hcell {
+      aspect-ratio: 1/1; min-height: 16px;
+      border-radius: 2px; cursor: help;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 9px; color: rgba(255,255,255,0.85);
+      transition: transform 80ms;
+    }
+    .heatmap-grid .hcell:hover { transform: scale(1.15); z-index: 2;
+                                   box-shadow: 0 0 0 1px var(--fg); }
+    .heatmap-grid .hcell.best {
+      outline: 2px solid var(--keep);
+      outline-offset: -2px;
+    }
+    .heatmap-grid .hcell.current {
+      outline: 2px dashed var(--accent);
+      outline-offset: -2px;
+    }
+    .heatmap-axis-label {
+      margin-top: 6px; font-size: 9.5px; color: var(--muted);
+      text-align: center;
+    }
+
     /* V17.1 — sample zoom overlay. Tiny lightbox-of-its-own for the
        /verticals page, doesn't share the results-page lightbox JS. */
     .sample-zoom {
@@ -4490,6 +4528,19 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
         </div>
       </div>
       <div class="deltas" id="tuneDeltas">--</div>
+      <!-- V17.10 — F1 surface heatmap. Y-axis is keep_min_delta
+           (-0.10 top to +0.10 bottom in 0.02 steps), X-axis is
+           cull_max_delta. Cell color = F1 (red→yellow→green). The
+           current "best" cell is outlined. -->
+      <details class="heatmap-wrap" id="tuneHeatmapWrap"
+                style="margin-top: 14px; display: none">
+        <summary style="cursor: pointer; font-size: 11.5px;
+                color: var(--muted); padding: 4px 0">
+          📈 F1 surface — keep_min_delta × cull_max_delta
+        </summary>
+        <div id="tuneHeatmap" style="margin-top: 8px;
+                font-size: 10px; color: var(--muted)"></div>
+      </details>
       <div class="actions">
         <button id="tuneCancel">关闭</button>
         <button id="tuneRevert" style="display: none">恢复默认</button>
@@ -4633,8 +4684,88 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
       tuneApply.disabled = dF1 < 0;
       tuneApply.textContent = dF1 >= 0 ? "应用建议" : "建议反而变差,不应用";
 
+      // V17.10 — F1 surface heatmap.
+      renderHeatmap(result);
+
       _currentTune = {key, vert, result};
       tuneModal.classList.add("show");
+    }
+
+    // V17.10 — render the F1 surface as an 11×11 grid. Color scale
+    // is red(0) → amber(0.5) → green(1.0). Hover any cell to see
+    // the exact (Δk, Δc) → F1 / P / R / acc. Best cell outlined
+    // green; current registry default outlined blue dashed.
+    function renderHeatmap(result) {
+      const wrap = document.getElementById("tuneHeatmapWrap");
+      const grid = document.getElementById("tuneHeatmap");
+      if (!wrap || !grid) return;
+      const cells = result.grid || [];
+      if (cells.length < 9) {   // tuner couldn't run (no samples)
+        wrap.style.display = "none";
+        return;
+      }
+      wrap.style.display = "";
+
+      // Build the [-0.10..+0.10 step 0.02] axis.
+      const axis = [];
+      for (let i = 0; i < 11; i++) axis.push(Math.round((-0.10 + i * 0.02) * 100) / 100);
+
+      // Map cells into 11×11 dict for O(1) lookup
+      const byKey = {};
+      let maxF1 = 0, bestKey = null;
+      for (const c of cells) {
+        const k = `${c.keep_delta.toFixed(2)},${c.cull_delta.toFixed(2)}`;
+        byKey[k] = c;
+        if (c.f1 > maxF1) { maxF1 = c.f1; bestKey = k; }
+      }
+      const tunedKey = `${result.tuned_delta_keep.toFixed(2)},${result.tuned_delta_cull.toFixed(2)}`;
+      const baselineKey = `${result.baseline_delta_keep.toFixed(2)},${result.baseline_delta_cull.toFixed(2)}`;
+
+      function f1Color(f1) {
+        if (f1 == null) return "rgb(40,40,40)";
+        // Red→Yellow→Green linear in HSL hue
+        const hue = Math.max(0, Math.min(120, f1 * 120));
+        const sat = 60 + f1 * 20;
+        const lig = 30 + f1 * 25;
+        return `hsl(${hue}, ${sat}%, ${lig}%)`;
+      }
+
+      const parts = [`<div class="heatmap-grid">`];
+      // Header row: corner + cull_delta axis
+      parts.push(`<div class="hcorner">Δkeep \\ Δcull</div>`);
+      for (const cd of axis) {
+        const sign = cd > 0 ? "+" : "";
+        parts.push(`<div class="haxis-x">${sign}${(cd*100).toFixed(0)}</div>`);
+      }
+      // Body rows
+      for (const kd of axis) {
+        const sign = kd > 0 ? "+" : "";
+        parts.push(`<div class="haxis-y">${sign}${(kd*100).toFixed(0)}</div>`);
+        for (const cd of axis) {
+          const key = `${kd.toFixed(2)},${cd.toFixed(2)}`;
+          const c = byKey[key];
+          if (!c) {
+            parts.push(`<div class="hcell" style="background: rgba(255,255,255,0.02)"
+                             title="跳过 (keep_min ≤ cull_max,非法)"></div>`);
+            continue;
+          }
+          const isBest = key === bestKey;
+          const isBaseline = key === baselineKey;
+          const cls = ["hcell"];
+          if (isBest) cls.push("best");
+          if (isBaseline && !isBest) cls.push("current");
+          const f1txt = (c.f1 * 100).toFixed(0);
+          parts.push(
+            `<div class="${cls.join(' ')}" style="background: ${f1Color(c.f1)}"`
+            + ` title="Δk=${sign}${(kd*100).toFixed(0)}pp · Δc=${cd > 0 ? '+' : ''}${(cd*100).toFixed(0)}pp\nF1=${c.f1.toFixed(3)} · P=${c.precision.toFixed(2)} · R=${c.recall.toFixed(2)} · acc=${c.accuracy.toFixed(2)}">${f1txt}</div>`
+          );
+        }
+      }
+      parts.push(`</div>`);
+      parts.push(`<div class="heatmap-axis-label">F1 = 颜色(红 0 → 绿 1) · `
+        + `数字 = F1×100 · <span style="color:var(--keep)">绿框</span>=最优 · `
+        + `<span style="color:var(--accent-hi)">蓝虚框</span>=V17.2 默认 · hover 看详情</div>`);
+      grid.innerHTML = parts.join("");
     }
 
     function closeTune() {
