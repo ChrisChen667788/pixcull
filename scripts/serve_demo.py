@@ -1497,6 +1497,10 @@ class _Handler(BaseHTTPRequestHandler):
         if path.startswith("/verticals/promote_run/"):
             return self._handle_vertical_promote_run(
                 path[len("/verticals/promote_run/"):])
+        # V17.13 — Unsplash CC0 reference fetcher
+        if path.startswith("/verticals/unsplash_fetch/"):
+            return self._handle_vertical_unsplash_fetch(
+                path[len("/verticals/unsplash_fetch/"):])
         self.send_error(404, "not found")
 
     def do_DELETE(self) -> None:  # noqa: N802
@@ -3301,6 +3305,65 @@ class _Handler(BaseHTTPRequestHandler):
         }).encode("utf-8")
         self._send_json(200, body)
 
+    # ---------- V17.13 Unsplash CC0 reference fetcher ----------
+    def _handle_vertical_unsplash_fetch(self, key: str) -> None:
+        """POST /verticals/unsplash_fetch/<key>
+
+        Body: {query?, bucket? (default "good"), count? (default 15,
+        cap 30), orientation? (landscape/portrait/squarish)}
+
+        Pulls top-relevant CC0 photos from Unsplash for the requested
+        query, downloads them into the vertical's sample bank.
+        Photographer credits saved to ``unsplash_attributions.json``
+        sidecar.
+        """
+        from pixcull import verticals as vmod
+        key = unquote(key.strip("/"))
+        v = vmod.get_vertical(key)
+        if v is None:
+            self._reject_upload(404, f"unknown vertical: {key}")
+            return
+        clen = int(self.headers.get("Content-Length", "0") or "0")
+        params: dict = {}
+        if clen > 0 and clen < 8192:
+            try:
+                params = json.loads(self.rfile.read(clen).decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                self._reject_upload(400, f"JSON parse failed: {exc}")
+                return
+        try:
+            from pixcull import unsplash as up
+            from dataclasses import asdict
+            # Resolve defaults — let the caller override piecewise.
+            defaults = up.default_query_for(key)
+            query = (params.get("query") or defaults["query"]).strip()
+            orientation = (params.get("orientation")
+                              or defaults.get("orientation") or "landscape")
+            bucket = (params.get("bucket") or "good").strip().lower()
+            try:
+                count = int(params.get("count", 15))
+            except (TypeError, ValueError):
+                count = 15
+            result = up.populate_vertical(
+                key, query=query, bucket=bucket,
+                count=count, orientation=orientation,
+            )
+            payload = asdict(result)
+            payload["counts"] = vmod.count_samples(key)
+            payload["ok"] = True
+        except ValueError as exc:
+            # Predictable user errors: no key, no vertical, bad bucket
+            self._reject_upload(400, str(exc))
+            return
+        except Exception as exc:  # noqa: BLE001
+            traceback.print_exc(file=sys.stderr)
+            _capture_exception("verticals.unsplash_fetch", exc,
+                                 {"key": key})
+            self._reject_upload(500,
+                f"Unsplash 拉取失败: {type(exc).__name__}: {exc}")
+            return
+        self._send_json(200, _safe_dumps(payload).encode("utf-8"))
+
     # ---------- V17.8 auto-promote run's human keep/cull ----------
     def _handle_vertical_promote_run(self, run_id: str) -> None:
         """POST /verticals/promote_run/<run_id>
@@ -4386,6 +4449,10 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
       border-color: var(--accent-hi); color: var(--accent-hi);
     }
     .vactions .row.secondary .bulk-link .ic { font-size: 13px; }
+    /* V17.13 — Unsplash button uses Unsplash-y warm-orange accent */
+    .vactions .row.secondary button.unsplash:hover {
+      border-color: #f59e0b; color: #fbbf24;
+    }
     /* Disabled state — when there are no samples, secondary tools
        can't do anything useful. Make that obvious. */
     .vactions button:disabled {
@@ -4715,6 +4782,69 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
         <button id="llmPhrasesClose">关闭</button>
         <button id="llmPhrasesRevert" style="display: none">恢复默认话术</button>
         <button class="primary" id="llmPhrasesRegen">再生成一次</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- V17.13 — Unsplash fetch modal: query + count + bucket -->
+  <div class="tune-modal" id="unsplashModal" role="dialog" aria-modal="true"
+       aria-labelledby="unsplashTitle">
+    <div class="tune-card" style="max-width: 560px">
+      <h3 id="unsplashTitle">从 Unsplash 拉取 CC0 参考样本</h3>
+      <div style="font-size: 12px; color: var(--muted); margin-bottom: 14px;
+              line-height: 1.55">
+        Unsplash License 允许任意商用 / ML 训练用,
+        无需署名(我们仍会保存摄影师 credit 到 sidecar)。
+        免费 API 限额 50 次/小时。
+      </div>
+      <div style="margin-bottom: 10px">
+        <label style="display: block; font-size: 11px; color: var(--muted);
+                margin-bottom: 4px">搜索词</label>
+        <input id="unsplashQuery" type="text"
+               style="width: 100%; padding: 7px 10px;
+                       background: rgba(0,0,0,0.3); color: var(--fg);
+                       border: 1px solid var(--border); border-radius: 4px;
+                       font: inherit; font-size: 13px;">
+      </div>
+      <div style="display: flex; gap: 10px; margin-bottom: 10px">
+        <div style="flex: 1">
+          <label style="display: block; font-size: 11px; color: var(--muted);
+                  margin-bottom: 4px">朝向</label>
+          <select id="unsplashOrient" style="width: 100%; padding: 7px;
+                  background: rgba(0,0,0,0.3); color: var(--fg);
+                  border: 1px solid var(--border); border-radius: 4px;
+                  font: inherit; font-size: 13px">
+            <option value="landscape">横向</option>
+            <option value="portrait">竖向</option>
+            <option value="squarish">方形</option>
+          </select>
+        </div>
+        <div style="flex: 1">
+          <label style="display: block; font-size: 11px; color: var(--muted);
+                  margin-bottom: 4px">桶</label>
+          <select id="unsplashBucket" style="width: 100%; padding: 7px;
+                  background: rgba(0,0,0,0.3); color: var(--fg);
+                  border: 1px solid var(--border); border-radius: 4px;
+                  font: inherit; font-size: 13px">
+            <option value="good">👍 好片(参考)</option>
+            <option value="bad">👎 待剔除</option>
+          </select>
+        </div>
+        <div style="width: 90px">
+          <label style="display: block; font-size: 11px; color: var(--muted);
+                  margin-bottom: 4px">张数</label>
+          <input id="unsplashCount" type="number" value="15" min="1" max="30"
+                 style="width: 100%; padding: 7px;
+                         background: rgba(0,0,0,0.3); color: var(--fg);
+                         border: 1px solid var(--border); border-radius: 4px;
+                         font: inherit; font-size: 13px">
+        </div>
+      </div>
+      <div id="unsplashResult" style="font-size: 12px; color: var(--muted);
+              margin: 14px 0; min-height: 24px"></div>
+      <div class="actions">
+        <button id="unsplashClose">关闭</button>
+        <button class="primary" id="unsplashFetch">拉取</button>
       </div>
     </div>
   </div>
@@ -5304,6 +5434,99 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
       evalModal.classList.add("show");
     }
 
+    // V17.13 — Unsplash CC0 fetcher
+    const unsplashModal    = document.getElementById("unsplashModal");
+    const unsplashQuery    = document.getElementById("unsplashQuery");
+    const unsplashOrient   = document.getElementById("unsplashOrient");
+    const unsplashBucket   = document.getElementById("unsplashBucket");
+    const unsplashCount    = document.getElementById("unsplashCount");
+    const unsplashResult   = document.getElementById("unsplashResult");
+    const unsplashCloseBtn = document.getElementById("unsplashClose");
+    const unsplashFetchBtn = document.getElementById("unsplashFetch");
+    const UNSPLASH_DEFAULTS = {
+      wedding:   {query: "wedding bride groom",   orientation: "portrait"},
+      bird:      {query: "bird in flight nature", orientation: "landscape"},
+      wildlife:  {query: "wildlife animal nature",orientation: "landscape"},
+      kids:      {query: "happy child portrait",  orientation: "portrait"},
+      pet:       {query: "dog cat portrait pet",  orientation: "squarish"},
+      cosplay:   {query: "cosplay anime costume", orientation: "portrait"},
+      landscape: {query: "landscape mountains",   orientation: "landscape"},
+      travel:    {query: "travel destination",    orientation: "landscape"},
+      event:     {query: "concert event crowd",   orientation: "landscape"},
+      sports:    {query: "sports action peak",    orientation: "landscape"},
+    };
+    let _currentUnsplashKey = null;
+    function closeUnsplash() { unsplashModal.classList.remove("show"); }
+    unsplashCloseBtn.addEventListener("click", closeUnsplash);
+    unsplashModal.addEventListener("click", e => {
+      if (e.target === unsplashModal) closeUnsplash();
+    });
+    function unsplashFor(key) {
+      const v = registry.find(x => x.key === key);
+      if (!v) return;
+      _currentUnsplashKey = key;
+      const d = UNSPLASH_DEFAULTS[key] || {query: key, orientation: "landscape"};
+      unsplashQuery.value = d.query;
+      unsplashOrient.value = d.orientation;
+      unsplashBucket.value = "good";
+      unsplashCount.value = "15";
+      unsplashResult.innerHTML = `<span style="color:var(--muted)">点 "拉取" → Unsplash API 搜索 → 下载入桶</span>`;
+      unsplashFetchBtn.disabled = false;
+      document.getElementById("unsplashTitle").textContent =
+        `${v.icon}  ${v.zh} · 从 Unsplash 拉取`;
+      unsplashModal.classList.add("show");
+      setTimeout(() => unsplashQuery.focus(), 50);
+    }
+    unsplashFetchBtn.addEventListener("click", async () => {
+      if (!_currentUnsplashKey) return;
+      const query = unsplashQuery.value.trim();
+      if (!query) { toast("请输入搜索词", "error"); return; }
+      const body = {
+        query,
+        orientation: unsplashOrient.value,
+        bucket: unsplashBucket.value,
+        count: parseInt(unsplashCount.value) || 15,
+      };
+      unsplashFetchBtn.disabled = true;
+      unsplashResult.innerHTML = `<span style="color:var(--muted)">正在搜索 + 下载…(每张 1-3s,可能要等一会)</span>`;
+      try {
+        const res = await fetch(
+          `/verticals/unsplash_fetch/${encodeURIComponent(_currentUnsplashKey)}`,
+          {method: "POST",
+           headers: {"Content-Type": "application/json"},
+           body: JSON.stringify(body)});
+        const d = await res.json();
+        if (!res.ok) {
+          unsplashResult.innerHTML =
+            `<span style="color:var(--cull)">失败: ${esc(d.error || res.status)}</span>`;
+          unsplashFetchBtn.disabled = false;
+          return;
+        }
+        unsplashResult.innerHTML =
+          `<div style="color:var(--keep)">已下载 <b>${d.saved.length}</b> 张到
+            ${esc(d.bucket)} 桶 · 跳过 ${d.skipped.length}</div>
+          <div style="margin-top:8px;font-size:11px;color:var(--muted)">
+            当前 sample bank: 👍 ${d.counts.good} · 👎 ${d.counts.bad}<br>
+            credit (示例 3 位):
+            ${d.saved.slice(0,3).map(s =>
+              `<a href="${esc(s.url)}" target="_blank" style="color:var(--accent-hi)">${esc(s.photographer)}</a>`
+            ).join(" · ")}
+          </div>`;
+        loadRegistry();
+        toast(`已从 Unsplash 拉取 ${d.saved.length} 张`, "success");
+      } catch (e) {
+        unsplashResult.innerHTML =
+          `<span style="color:var(--cull)">网络错误: ${esc(e)}</span>`;
+      } finally {
+        unsplashFetchBtn.disabled = false;
+      }
+    });
+    document.addEventListener("keydown", e => {
+      if (e.key === "Escape" && unsplashModal.classList.contains("show")) {
+        closeUnsplash();
+      }
+    });
+
     async function evalFor(key) {
       const v = registry.find(x => x.key === key);
       if (!v) return;
@@ -5378,6 +5601,10 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
                  title="选个文件夹 → pipeline 自动分类 → 一键灌入 sample bank">
                 <span class="ic">📥</span>批量导入
               </a>
+              <button class="unsplash" data-key="${esc(v.key)}"
+                      title="从 Unsplash (CC0) 拉取参考样本(婚纱/拍鸟/cosplay/儿童 这些没有第一方素材时用)">
+                <span class="ic">🌐</span>Unsplash
+              </button>
               <button class="tune" data-key="${esc(v.key)}"
                       title="用收集的好/坏样本自动调阈值"
                       ${(v.counts.good < 1 || v.counts.bad < 1) ? 'disabled' : ''}>
@@ -5504,10 +5731,10 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
       });
 
       // Action buttons (+ 好片 / + 待剔除 / 🎯 自动调参 /
-      //  ✨ AI 话术 / 📊 看报告 / 管理…)
+      //  ✨ AI 话术 / 📊 看报告 / 🌐 Unsplash / 管理…)
       card.querySelectorAll(".vactions button").forEach(btn => {
         btn.addEventListener("click", () => {
-          // V17.4-7 — non-drawer buttons intercept first
+          // V17.4-13 — non-drawer buttons intercept first
           if (btn.classList.contains("tune")) {
             tuneFor(btn.dataset.key);
             return;
@@ -5518,6 +5745,10 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
           }
           if (btn.classList.contains("eval")) {
             evalFor(btn.dataset.key);
+            return;
+          }
+          if (btn.classList.contains("unsplash")) {
+            unsplashFor(btn.dataset.key);
             return;
           }
           const b = btn.dataset.bucket;
