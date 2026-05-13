@@ -5884,7 +5884,7 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
           你的审美 — 而不是我手写的"通用 sport 模板"。`
       },
       {
-        title: "三个层次的"定制"",
+        title: "三个层次的\"定制\"",
         body: `每个垂类卡有 3 个工具:<br><br>
           <b>🎯 调参</b> · 用你的好/坏样本网格搜索最优 keep/cull 阈值,
             实时显示 F1 提升<br>
