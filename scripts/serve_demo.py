@@ -231,6 +231,123 @@ def _save_user_config(cfg: dict) -> None:
     except OSError as exc:
         _dbg("_save_user_config", exc, str(p))
 
+
+# V17.12 — global error capture. Two entry points:
+#
+#   _capture_exception(label, exc, extra)
+#       Wrap server-side handler's broad except blocks. Submits the
+#       redacted traceback + label to the V14.7 reporter on a daemon
+#       thread (must never block / re-raise — error path must stay
+#       errorless).
+#
+#   _capture_client_event(payload)
+#       Receives the browser-side window.onerror payload, fires
+#       through the same submit pipeline.
+#
+# Both respect the V14.7 opt-in: if ``error_reports_enabled`` is
+# False in config.json, both no-op silently. Even on opt-in, an
+# empty / missing endpoint means dry-run (the report is built +
+# redacted but not sent over the network) — useful for debugging.
+def _capture_exception(label: str, exc: BaseException,
+                         extra: dict | None = None) -> None:
+    """Server-side hook for unexpected handler failures.
+
+    Designed to be called from inside a broad ``except`` block:
+
+        try:
+            ...
+        except Exception as exc:
+            _capture_exception("verticals.tune", exc, {"key": key})
+            traceback.print_exc(file=sys.stderr)
+            self._reject_upload(500, ...)
+
+    Never raises. Fire-and-forget on a daemon thread so the user's
+    HTTP response isn't blocked by a slow reporter endpoint.
+    """
+    try:
+        from pixcull import error_reporting as er
+        cfg = _load_user_config()
+        if not er.is_enabled(cfg):
+            return
+        import traceback as _tb
+        full_extra = {
+            "label":          label,
+            "exception_type": type(exc).__name__,
+            "exception_msg":  er.redact(str(exc)),
+            "traceback":      er.redact(_tb.format_exc()),
+        }
+        if extra:
+            # Redact every string value in caller-supplied extra fields
+            # so a careless extra={"path": "/Users/alice/photos"} can't
+            # leak.
+            for k, v in extra.items():
+                if isinstance(v, str):
+                    full_extra[k] = er.redact(v)
+                else:
+                    full_extra[k] = v
+
+        def _submit_worker():
+            try:
+                er.submit_report(
+                    cfg, app_version=str(cfg.get("app_version", "dev")),
+                    log_dir=_app_data_dir() / "logs",
+                    reason="auto_exception",
+                    extra=full_extra,
+                )
+            except Exception:
+                pass   # reporter MUST be silent on its own failures
+
+        threading.Thread(target=_submit_worker, daemon=True,
+                          name="pixcull-error-reporter").start()
+    except Exception:
+        # Capture path itself must never raise.
+        pass
+
+
+def _capture_client_event(payload: dict) -> None:
+    """Receive a window.onerror / unhandledrejection event from the
+    browser, route through the V14.7 reporter.
+
+    Caller-supplied fields are bounded + redacted (filenames in
+    stack traces, /Users/<name> in source URLs, etc).
+    """
+    try:
+        from pixcull import error_reporting as er
+        cfg = _load_user_config()
+        if not er.is_enabled(cfg):
+            return
+        # Bound payload sizes — a runaway page could spam giant stacks.
+        def _clip(s, n=2000):
+            s = str(s or "")
+            return s[:n] if len(s) > n else s
+        full_extra = {
+            "kind":     _clip(payload.get("kind"), 64),
+            "message":  er.redact(_clip(payload.get("message"))),
+            "source":   er.redact(_clip(payload.get("source"), 200)),
+            "lineno":   payload.get("lineno"),
+            "colno":    payload.get("colno"),
+            "stack":    er.redact(_clip(payload.get("stack"), 4000)),
+            "url":      er.redact(_clip(payload.get("url"), 200)),
+            "ua":       _clip(payload.get("ua"), 200),
+        }
+
+        def _submit_worker():
+            try:
+                er.submit_report(
+                    cfg, app_version=str(cfg.get("app_version", "dev")),
+                    log_dir=_app_data_dir() / "logs",
+                    reason="client_event",
+                    extra=full_extra,
+                )
+            except Exception:
+                pass
+
+        threading.Thread(target=_submit_worker, daemon=True,
+                          name="pixcull-client-error-reporter").start()
+    except Exception:
+        pass
+
+
 # V11.2 auto-retrain trigger:
 # Increments on every human annotation save; once it crosses
 # AUTO_RETRAIN_THRESHOLD, the next /annotation save will spawn a
@@ -1342,6 +1459,9 @@ class _Handler(BaseHTTPRequestHandler):
             return self._handle_save_error_reports_settings()
         if path == "/error_reports/submit":
             return self._handle_submit_error_report()
+        # V17.12 — browser-side window.onerror / unhandledrejection
+        if path == "/error_reports/client_event":
+            return self._handle_client_error_event()
         # V17.0 — vertical sample upload
         if path.startswith("/verticals/upload/"):
             return self._handle_vertical_upload(path[len("/verticals/upload/"):])
@@ -2667,6 +2787,7 @@ class _Handler(BaseHTTPRequestHandler):
             return
         except Exception as exc:  # noqa: BLE001
             traceback.print_exc(file=sys.stderr)
+            _capture_exception("verticals.tune", exc, {"key": key})  # V17.12
             self._reject_upload(500, f"调参失败: {type(exc).__name__}: {exc}")
             return
         self._send_json(200, _safe_dumps(payload).encode("utf-8"))
@@ -2765,6 +2886,7 @@ class _Handler(BaseHTTPRequestHandler):
             return
         except Exception as exc:  # noqa: BLE001
             traceback.print_exc(file=sys.stderr)
+            _capture_exception("verticals.llm_phrases", exc, {"key": key})  # V17.12
             self._reject_upload(500,
                 f"DeepSeek 调用失败: {type(exc).__name__}: {exc}")
             return
@@ -2915,6 +3037,7 @@ class _Handler(BaseHTTPRequestHandler):
             return
         except Exception as exc:  # noqa: BLE001
             traceback.print_exc(file=sys.stderr)
+            _capture_exception("verticals.eval", exc, {"key": key})  # V17.12
             self._reject_upload(500, f"评估失败: {type(exc).__name__}: {exc}")
             return
         self._send_json(200, _safe_dumps(payload).encode("utf-8"))
@@ -3093,6 +3216,8 @@ class _Handler(BaseHTTPRequestHandler):
             items.sort(key=lambda x: -x["score"])
         except Exception as exc:  # noqa: BLE001
             traceback.print_exc(file=sys.stderr)
+            _capture_exception("verticals.bulk_classify", exc,
+                                 {"key": key, "folder": str(folder)})  # V17.12
             self._reject_upload(500, f"分析失败: {type(exc).__name__}: {exc}")
             return
 
@@ -3365,6 +3490,28 @@ class _Handler(BaseHTTPRequestHandler):
         body = _safe_dumps(result).encode("utf-8")
         # 200 even on dry-run / disabled — the result body explains.
         self._send_json(200, body)
+
+    def _handle_client_error_event(self) -> None:
+        """V17.12 — POST /error_reports/client_event
+
+        Browser-side window.onerror / unhandledrejection hits this.
+        Captured fields are bounded + redacted before going through
+        the V14.7 submit pipeline. Respects opt-in (200 always; body
+        explains).
+
+        Body: {message, source, lineno, colno, stack?, kind?,
+               url?, ua?}
+        """
+        clen = int(self.headers.get("Content-Length", "0") or "0")
+        if clen > 32 * 1024:
+            self._reject_upload(400, "client-event payload too large")
+            return
+        try:
+            data = json.loads(self.rfile.read(clen).decode("utf-8") or "{}") if clen else {}
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            data = {}
+        _capture_client_event(data)
+        self._send_json(200, _safe_dumps({"ok": True}).encode("utf-8"))
 
     # --- storage admin -----------------------------------------------------
     def _serve_admin_page(self) -> None:
@@ -5422,6 +5569,50 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
     // core flow: pick a vertical → upload reference shots →
     // benefit. Dismissable; "已看过" stored in localStorage so it
     // never returns after the user has been onboarded.
+    // V17.12 — browser-side error capture. Best-effort POST to
+    // /error_reports/client_event for window.onerror +
+    // unhandledrejection. The server respects the V14.7 opt-in so
+    // this is a no-op when error reporting is disabled. We bound
+    // payloads so a runaway page can't spam huge stacks.
+    (function() {
+      const _seen = new Set();   // de-dup within a page life
+      function _capture(payload) {
+        // De-dup by message + source + lineno to avoid 100 toasts
+        // when the same broken loop fires every frame.
+        const key = (payload.message||"") + "|"
+                  + (payload.source||"") + "|"
+                  + (payload.lineno||"");
+        if (_seen.has(key)) return;
+        _seen.add(key);
+        if (_seen.size > 20) return;   // hard cap per page
+        try {
+          fetch("/error_reports/client_event", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({
+              ...payload,
+              url: location.pathname,
+              ua: navigator.userAgent.slice(0, 200),
+            }),
+            keepalive: true,   // survive page unload
+          }).catch(() => {});
+        } catch (e) {}
+      }
+      window.addEventListener("error", e => _capture({
+        kind: "error",
+        message: e.message || "",
+        source: e.filename || "",
+        lineno: e.lineno || 0,
+        colno: e.colno || 0,
+        stack: (e.error && e.error.stack) || "",
+      }));
+      window.addEventListener("unhandledrejection", e => _capture({
+        kind: "unhandledrejection",
+        message: String((e.reason && e.reason.message) || e.reason || ""),
+        stack: (e.reason && e.reason.stack) || "",
+      }));
+    })();
+
     const GUIDE_KEY = "pixcull.verticals_guide_seen.v1";
     const GUIDE_STEPS = [
       {
@@ -6604,6 +6795,38 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
   const resultsLink = document.getElementById("resultsLink");
 
   let pickedFiles = [];
+
+  // V17.12 — browser-side error capture (same as /verticals page).
+  // Best-effort POST; server respects V14.7 opt-in.
+  (function() {
+    const _seen = new Set();
+    function _capture(payload) {
+      const key = (payload.message||"") + "|" + (payload.source||"") + "|" + (payload.lineno||"");
+      if (_seen.has(key)) return;
+      _seen.add(key);
+      if (_seen.size > 20) return;
+      try {
+        fetch("/error_reports/client_event", {
+          method: "POST", headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({...payload,
+            url: location.pathname,
+            ua: navigator.userAgent.slice(0, 200)}),
+          keepalive: true,
+        }).catch(() => {});
+      } catch (e) {}
+    }
+    window.addEventListener("error", e => _capture({
+      kind: "error", message: e.message || "",
+      source: e.filename || "", lineno: e.lineno || 0,
+      colno: e.colno || 0,
+      stack: (e.error && e.error.stack) || "",
+    }));
+    window.addEventListener("unhandledrejection", e => _capture({
+      kind: "unhandledrejection",
+      message: String((e.reason && e.reason.message) || e.reason || ""),
+      stack: (e.reason && e.reason.stack) || "",
+    }));
+  })();
 
   // V14.4 — modal a11y. Each modal registered with ``registerModal``
   // gets ARIA role=dialog, aria-modal, aria-labelledby (auto-derived),
@@ -8083,6 +8306,39 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
 <script>
 (() => {
   const PAYLOAD = __PAYLOAD__;
+
+  // V17.12 — browser-side error capture (same shape as /verticals
+  // and upload pages). Best-effort POST; server respects V14.7
+  // opt-in so this is a no-op when reporting is disabled.
+  (function() {
+    const _seen = new Set();
+    function _capture(payload) {
+      const key = (payload.message||"") + "|" + (payload.source||"") + "|" + (payload.lineno||"");
+      if (_seen.has(key)) return;
+      _seen.add(key);
+      if (_seen.size > 20) return;
+      try {
+        fetch("/error_reports/client_event", {
+          method: "POST", headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({...payload,
+            url: location.pathname,
+            ua: navigator.userAgent.slice(0, 200)}),
+          keepalive: true,
+        }).catch(() => {});
+      } catch (e) {}
+    }
+    window.addEventListener("error", e => _capture({
+      kind: "error", message: e.message || "",
+      source: e.filename || "", lineno: e.lineno || 0,
+      colno: e.colno || 0,
+      stack: (e.error && e.error.stack) || "",
+    }));
+    window.addEventListener("unhandledrejection", e => _capture({
+      kind: "unhandledrejection",
+      message: String((e.reason && e.reason.message) || e.reason || ""),
+      stack: (e.reason && e.reason.stack) || "",
+    }));
+  })();
   const { run_id, rows, summary } = PAYLOAD;
 
   // V14.0 — shared HTML escape. Used everywhere a server-supplied
