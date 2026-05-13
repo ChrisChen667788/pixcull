@@ -4394,6 +4394,65 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
 
     /* V17.1 — sample zoom overlay. Tiny lightbox-of-its-own for the
        /verticals page, doesn't share the results-page lightbox JS. */
+    /* V17.11 — first-run guide overlay */
+    .guide-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.78);
+      display: none; align-items: center; justify-content: center;
+      z-index: 30; padding: 24px; backdrop-filter: blur(8px);
+    }
+    .guide-overlay.show { display: flex;
+      animation: guideIn 240ms cubic-bezier(0.16, 1, 0.3, 1); }
+    @keyframes guideIn {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+    .guide-card {
+      background: var(--bg-card); border: 1px solid var(--border-hi);
+      border-radius: 14px; padding: 28px 32px;
+      max-width: 540px; width: 100%;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.6);
+    }
+    .guide-step {
+      font-size: 11px; color: var(--accent-hi);
+      text-transform: uppercase; letter-spacing: 0.08em;
+      margin-bottom: 8px;
+    }
+    .guide-title {
+      margin: 0 0 12px; font-size: 20px; font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+    .guide-body {
+      font-size: 13.5px; line-height: 1.65;
+      color: var(--fg); margin-bottom: 18px;
+      min-height: 100px;
+    }
+    .guide-body b { color: var(--accent-hi); }
+    .guide-body code {
+      background: rgba(255,255,255,0.06);
+      padding: 1px 6px; border-radius: 3px;
+      font-family: ui-monospace, monospace; font-size: 12px;
+    }
+    .guide-progress {
+      display: flex; gap: 6px; margin-bottom: 16px;
+    }
+    .guide-dot {
+      width: 28px; height: 3px; border-radius: 999px;
+      background: rgba(255,255,255,0.10);
+    }
+    .guide-dot.active { background: var(--accent); }
+    .guide-actions {
+      display: flex; gap: 10px; justify-content: flex-end;
+    }
+    .guide-actions button {
+      padding: 8px 18px; font-size: 13px; border-radius: 6px;
+      border: 1px solid var(--border); background: rgba(255,255,255,0.04);
+      color: var(--fg); font: inherit; cursor: pointer;
+    }
+    .guide-actions button.primary {
+      background: var(--accent); border-color: var(--accent); color: #fff;
+    }
+    .guide-actions button.primary:hover { opacity: 0.9; }
+
     .sample-zoom {
       position: fixed; inset: 0; background: rgba(0,0,0,0.92);
       display: none; align-items: center; justify-content: center;
@@ -4433,6 +4492,7 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
     <h1>垂类样本采集</h1>
     <a href="/">← 返回上传</a>
     <a href="/admin">管理面板 →</a>
+    <a href="#" onclick="window._pcShowGuide(); return false;">📖 再看教程</a>
   </header>
   <main>
     <div class="intro">
@@ -4475,6 +4535,25 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
   <div class="sample-zoom" id="sampleZoom" role="dialog" aria-modal="true">
     <img id="sampleZoomImg" alt="">
     <div class="caption" id="sampleZoomCaption"></div>
+  </div>
+
+  <!-- V17.11 — first-run guide overlay. 3 steps, dismissable. -->
+  <div class="guide-overlay" id="guideOverlay" role="dialog" aria-modal="true"
+       aria-labelledby="guideTitle">
+    <div class="guide-card">
+      <div class="guide-step" id="guideStepCount">第 1 / 3 步</div>
+      <h2 id="guideTitle" class="guide-title">为常拍的题材定制评分</h2>
+      <div class="guide-body" id="guideBody"></div>
+      <div class="guide-progress">
+        <div class="guide-dot active"></div>
+        <div class="guide-dot"></div>
+        <div class="guide-dot"></div>
+      </div>
+      <div class="guide-actions">
+        <button id="guideSkip">跳过</button>
+        <button class="primary" id="guideNext">下一步</button>
+      </div>
+    </div>
   </div>
   <!-- V17.5 — DeepSeek phrase generation result modal -->
   <div class="tune-modal" id="llmPhrasesModal" role="dialog" aria-modal="true"
@@ -4574,6 +4653,9 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
       const res = await fetch("/verticals.json");
       registry = await res.json();
       render();
+      // V17.11 — show first-run guide once registry has loaded so
+      // the user sees what verticals exist behind the overlay.
+      if (typeof maybeShowGuide === "function") maybeShowGuide();
     }
 
     // V17.9 — apply filter + sort + search to the registry view
@@ -5335,6 +5417,95 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
         }
       }
     }
+
+    // V17.11 — first-run guide. 3 steps walk the user through the
+    // core flow: pick a vertical → upload reference shots →
+    // benefit. Dismissable; "已看过" stored in localStorage so it
+    // never returns after the user has been onboarded.
+    const GUIDE_KEY = "pixcull.verticals_guide_seen.v1";
+    const GUIDE_STEPS = [
+      {
+        title: "为常拍的题材定制评分",
+        body: `PixCull 默认有 14 类内置题材识别 — 但 <b>婚纱</b> /
+          <b>拍鸟</b> / <b>儿童</b> / <b>风光</b> 这些<b>业务垂类</b>
+          的评分标准非常不同。<br><br>
+          这页面让你为 <b>10 个垂类</b>各上传一批参考样片(👍 好片 /
+          👎 待剔除),PixCull 学完之后,你下次跑这类批次会用上
+          你的审美 — 而不是我手写的"通用 sport 模板"。`
+      },
+      {
+        title: "三个层次的"定制"",
+        body: `每个垂类卡有 3 个工具:<br><br>
+          <b>🎯 调参</b> · 用你的好/坏样本网格搜索最优 keep/cull 阈值,
+            实时显示 F1 提升<br>
+          <b>✨ AI 话术</b> · DeepSeek 根据你的样本生成<b>专属点评</b>,
+            告别"主体占画 30%+"这种通用句<br>
+          <b>📊 报告</b> · 看当前 policy 在你样本上的混淆矩阵 + 误判清单`
+      },
+      {
+        title: "三种灌样本的方式",
+        body: `<b>📥 批量导入</b> · 选一个文件夹(<code>~/摄影/某次拍摄</code>)
+            → PixCull 自动分类 → 你确认后一键灌入<br>
+          <b>+ 好片 / + 待剔除</b> · 手动拖拽单张<br>
+          <b>跑完批次自动 promote</b> · 在主页扫描时选了垂类 + 标注过
+            keep/cull,结果页有"📥 灌入 sample bank"按钮一键写入<br><br>
+          所有样本都<b>留在你本机</b> · 不上云。`
+      },
+    ];
+    let _guideIdx = 0;
+    const guideOverlay = document.getElementById("guideOverlay");
+    const guideStepCount = document.getElementById("guideStepCount");
+    const guideTitle = document.getElementById("guideTitle");
+    const guideBody = document.getElementById("guideBody");
+    const guideNext = document.getElementById("guideNext");
+    const guideSkip = document.getElementById("guideSkip");
+    const guideDots = document.querySelectorAll(".guide-dot");
+    function paintGuide() {
+      const s = GUIDE_STEPS[_guideIdx];
+      guideStepCount.textContent = `第 ${_guideIdx + 1} / ${GUIDE_STEPS.length} 步`;
+      guideTitle.textContent = s.title;
+      guideBody.innerHTML = s.body;
+      guideNext.textContent = (_guideIdx === GUIDE_STEPS.length - 1)
+        ? "开始使用" : "下一步";
+      guideDots.forEach((d, i) => {
+        d.classList.toggle("active", i <= _guideIdx);
+      });
+    }
+    function dismissGuide() {
+      guideOverlay.classList.remove("show");
+      try { localStorage.setItem(GUIDE_KEY, "1"); } catch (e) {}
+    }
+    function maybeShowGuide() {
+      try {
+        if (localStorage.getItem(GUIDE_KEY)) return;
+      } catch (e) {}
+      _guideIdx = 0;
+      paintGuide();
+      guideOverlay.classList.add("show");
+    }
+    guideNext.addEventListener("click", () => {
+      if (_guideIdx >= GUIDE_STEPS.length - 1) {
+        dismissGuide();
+      } else {
+        _guideIdx++;
+        paintGuide();
+      }
+    });
+    guideSkip.addEventListener("click", dismissGuide);
+    guideOverlay.addEventListener("click", e => {
+      if (e.target === guideOverlay) dismissGuide();
+    });
+    document.addEventListener("keydown", e => {
+      if (e.key === "Escape" && guideOverlay.classList.contains("show")) {
+        dismissGuide();
+      }
+    });
+
+    // Expose a re-launcher for the header link "再看一次"
+    window._pcShowGuide = () => {
+      try { localStorage.removeItem(GUIDE_KEY); } catch (e) {}
+      maybeShowGuide();
+    };
 
     // V17.9 — wire filter / sort / search controls
     document.querySelectorAll(".vtab").forEach(tab => {
