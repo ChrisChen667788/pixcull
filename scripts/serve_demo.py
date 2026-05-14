@@ -9444,10 +9444,15 @@ _RESULTS_HTML = r"""<!DOCTYPE html>
     const weaknessesDetail = (r.advice && r.advice.weaknesses_detail) || null;
     const rationale = (r.advice && r.advice.rationale) || "";
 
-    // Esc-safe HTML escape
-    const esc = s => String(s || '').replace(/[&<>"']/g, c => (
-      {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
-    ));
+    // V19.4 (bug-fix) — there used to be a local `const esc = ...`
+    // here, shadowing the outer IIFE-scope `esc` (declared once near
+    // the top of the script, line ~8694). Because `const` hoists into
+    // the TDZ, every `esc(...)` reference EARLIER in this function —
+    // the `styleChips = (r.style_modes || []).map(s => ${esc(s)})`
+    // assignment, in particular — threw a ReferenceError on rows
+    // that had any style_modes attached. Symptom: clicking those
+    // cards silently did nothing (lightbox never showed). Removed the
+    // duplicate; the outer `esc` works just as well here.
 
     return `
       <h2>${esc(r.filename)}</h2>
