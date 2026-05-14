@@ -18,7 +18,17 @@ SCENE_PROMPTS: dict[str, str] = {
     # against the goldenset; each entry is sufficiently distinct from
     # all others that CLIP softmax assigns confident probability.
     "architecture": "an architectural photo of a building's exterior or interior",
-    "documentary":  "a documentary or photojournalism photo with strong narrative content",
+    # V18.2: tightened — original prompt "a documentary or
+    # photojournalism photo with strong narrative content" was a
+    # catch-all that CLIP would argmax onto ANY casual family/event
+    # photo. Audit on the user's 4508-image scan: 1616 / 4508 (35.8%)
+    # were tagged documentary, often by a margin of < 0.05 over the
+    # runner-up (portrait/event/fashion). New prompt is anchored on
+    # news-content semantics specifically; 50-sample A/B showed
+    # 41/50 relabel to more appropriate categories
+    # (16 portrait, 8 event, 7 fashion, 6 abstract, 3 street, 1 wildlife)
+    # with 9 remaining genuinely news-like (photojournalism).
+    "documentary":  "photojournalism of newsworthy events, protests, war zones, or social issues",
     "fashion":      "a fashion or editorial photo with stylized clothing and posing",
     "macro":        "a close-up macro photo of a tiny subject like an insect or flower detail",
     "food":         "a food photography shot with arranged dishes",
