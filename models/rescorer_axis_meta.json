@@ -1,49 +1,49 @@
 {
-  "created_at": "2026-05-14T06:02:29.086524+00:00Z",
+  "created_at": "2026-05-14T07:57:14.858723+00:00Z",
   "training_csv": "/Users/chenhaorui/Downloads/zero-basics-python/2/pixcull-restored/pixcull/training_axis.csv",
-  "n_rows_in_csv": 554,
+  "n_rows_in_csv": 3046,
   "axes": [
     {
       "axis": "technical",
-      "rows": 554,
+      "rows": 3046,
       "n_human": 0,
-      "cv_r2": 0.977,
-      "cv_mae": 0.117
+      "cv_r2": 0.958,
+      "cv_mae": 0.086
     },
     {
       "axis": "subject",
-      "rows": 554,
+      "rows": 3046,
       "n_human": 0,
-      "cv_r2": 0.946,
-      "cv_mae": 0.155
+      "cv_r2": 0.955,
+      "cv_mae": 0.088
     },
     {
       "axis": "composition",
-      "rows": 554,
+      "rows": 3046,
       "n_human": 0,
-      "cv_r2": 0.964,
-      "cv_mae": 0.154
+      "cv_r2": 0.952,
+      "cv_mae": 0.099
     },
     {
       "axis": "light",
-      "rows": 554,
+      "rows": 3046,
       "n_human": 0,
-      "cv_r2": 0.971,
-      "cv_mae": 0.108
+      "cv_r2": 0.962,
+      "cv_mae": 0.09
     },
     {
       "axis": "moment",
-      "rows": 504,
+      "rows": 2996,
       "n_human": 0,
-      "cv_r2": 0.792,
-      "cv_mae": 0.436
+      "cv_r2": 0.915,
+      "cv_mae": 0.142
     },
     {
       "axis": "aesthetic",
-      "rows": 554,
+      "rows": 3046,
       "n_human": 0,
-      "cv_r2": 0.983,
-      "cv_mae": 0.081
+      "cv_r2": 0.966,
+      "cv_mae": 0.08
     }
   ],
   "seed": 42,
