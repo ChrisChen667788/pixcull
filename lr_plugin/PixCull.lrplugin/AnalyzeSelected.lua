@@ -191,6 +191,11 @@ LrTasks.startAsyncTask(function()
         return
     end
 
+    -- V21.2 — remember the first run_id so 'PixCull · 写回 LR 星级'
+    -- can default to it without prompting the user to paste it from
+    -- the browser URL. Stored in plugin prefs (per-user, persistent).
+    prefs.lastRunId = runIds[1]
+
     -- Open first run's results page
     LrShell.openPathsInApp({SERVER_URL .. "/results/" .. runIds[1]}, "")
 

@@ -822,6 +822,11 @@ def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
         dt_str = str(r.get("datetime", "") or "")
         rows.append({
             "filename": fn,
+            # V21.2 — surface the absolute source path so the LR plugin
+            # write-back (GET /decisions/<run_id>) can match photos by
+            # path rather than basename (different shoots reuse the same
+            # IMG_NNNN.jpg filename — basename matching is ambiguous).
+            "src_path": str(r.get("path", "") or ""),
             "scene": str(r.get("scene", "") or ""),
             "decision": str(r.get("decision", "") or ""),
             "score_final": _f(r.get("score_final")),
@@ -1489,6 +1494,11 @@ class _Handler(BaseHTTPRequestHandler):
             return self._serve_status(path[len("/status/"):])
         if path.startswith("/results/"):
             return self._serve_results(path[len("/results/"):])
+        if path.startswith("/decisions/"):
+            # V21.2 — Lightroom plugin write-back endpoint. Returns
+            # {filename: decision} for a run so the LR Lua script can
+            # propagate decisions to star ratings / reject flags.
+            return self._serve_decisions(path[len("/decisions/"):])
         if path.startswith("/thumb/"):
             return self._serve_image(path[len("/thumb/"):], _THUMB_SIZE)
         if path.startswith("/full/"):
@@ -1984,6 +1994,73 @@ class _Handler(BaseHTTPRequestHandler):
             _safe_dumps(payload).replace("</", "<\\/"),
         )
         self._send_html(200, html.encode("utf-8"))
+
+    def _serve_decisions(self, run_id: str) -> None:
+        """V21.2 — minimal JSON for the Lightroom plugin write-back.
+
+        Lightroom Lua plugins want as little to parse as possible; this
+        endpoint returns ``{filename: decision, ...}`` plus a small
+        summary block. The Lr ``WriteBackDecisions.lua`` script reads
+        it, maps decisions to star ratings + reject flags
+        (keep → 5★, maybe → 3★, cull → reject), and applies them via
+        ``LrPhoto:setRawMetadata``.
+
+        Schema:
+            {
+              "run_id":   str,
+              "schema":   "pixcull.decisions.v1",
+              "decisions": {filename: "keep"|"maybe"|"cull", ...},
+              "summary":  {keep: N, maybe: N, cull: N, total: N},
+              "src_paths": {filename: "/abs/path", ...}   # optional
+            }
+
+        ``src_paths`` is included so the Lr plugin can match its
+        catalog photos by absolute path rather than basename (basename
+        collisions across folders are real: every Canon shoot has
+        an IMG_0001.jpg). The plugin falls back to basename matching
+        if abs paths don't appear in the catalog.
+        """
+        result = _build_results(run_id)
+        if result is None:
+            run = _get_run(run_id) or _reload_run_from_disk(run_id)
+            if run is None:
+                self.send_error(404, "no such run")
+                return
+            self.send_error(425, "results not ready — pipeline still running")
+            return
+        rows, summary = result
+        decisions: dict[str, str] = {}
+        src_paths: dict[str, str] = {}
+        for r in rows:
+            fn = r.get("filename")
+            dec = r.get("decision")
+            if not fn or not dec:
+                continue
+            decisions[fn] = dec
+            # Read src_path from the run's scores.csv if available — we
+            # already have it in the row builder via ``path``.
+            p = r.get("src_path") or r.get("path")
+            if p:
+                src_paths[fn] = p
+        payload = {
+            "run_id":    run_id,
+            "schema":    "pixcull.decisions.v1",
+            "decisions": decisions,
+            "summary":   {
+                "keep":  sum(1 for v in decisions.values() if v == "keep"),
+                "maybe": sum(1 for v in decisions.values() if v == "maybe"),
+                "cull":  sum(1 for v in decisions.values() if v == "cull"),
+                "total": len(decisions),
+            },
+            "src_paths": src_paths,
+        }
+        body = _safe_dumps(payload).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
 
     def _serve_image(self, rel: str, size: int) -> None:
         # Format: <run_id>/<filename>[?w=N]

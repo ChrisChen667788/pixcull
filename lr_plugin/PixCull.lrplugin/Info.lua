@@ -30,6 +30,14 @@ return {
             title = "PixCull · 打开结果页",
             file = "OpenResults.lua",
         },
+        -- V21.2 — write PixCull keep/maybe/cull verdicts back to
+        -- LR star ratings + reject flags. Uses prefs.lastRunId
+        -- (populated by AnalyzeSelected.lua) by default; prompts
+        -- if not set.
+        {
+            title = "PixCull · 写回 LR 星级",
+            file = "WriteBackDecisions.lua",
+        },
         {
             title = "PixCull · 设置",
             file = "Settings.lua",
@@ -44,8 +52,13 @@ return {
         },
     },
 
-    VERSION = { major = 19, minor = 0, revision = 0, build = 0 },
-    -- V19 (this rev): vertical picker in the analyze dialog so the
+    VERSION = { major = 21, minor = 2, revision = 0, build = 0 },
+    -- V21.2 (this rev): Bidirectional loop closes. New
+    --   "写回 LR 星级" menu calls /decisions/<run_id> and applies
+    --   keep→5★, maybe→3★, cull→reject flag via setRawMetadata.
+    --   AnalyzeSelected.lua now stores the run_id in prefs so the
+    --   write-back action picks the right run by default.
+    -- V19: vertical picker in the analyze dialog so the
     --   server applies per-business-type policy + AI話術. Inherits
     --   V18 face/scene/rescorer fixes for free since it just calls
     --   /scan_local on the local server.

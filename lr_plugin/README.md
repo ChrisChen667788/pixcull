@@ -19,6 +19,16 @@
    - tolerated_flags(V17.2 — 比如儿童容忍 motion_blur_on_face)
    插件记住你上次选的,下次默认勾上。
 5. 弹窗确认后,浏览器自动打开 PixCull 结果页
+6. **V21.2 新增**:回到 LR,Library 菜单 → "PixCull · 写回 LR 星级"
+   - 把刚分析完的 run 决策写回 LR 星级:
+     - **keep** → 5★ + 标记(flag = pick)
+     - **maybe** → 3★ + 无标记
+     - **cull** → 1★ + 排除(flag = reject)
+   - 通过文件绝对路径匹配(不依赖文件名),DSC_0001.jpg 跨 shoot
+     重名时也准确
+   - 整批操作走 catalog:withWriteAccessDo,**⌘Z 一键撤销**
+   - 默认用最近一次分析的 run_id(AnalyzeSelected 自动记)。
+     要写回更早的 run 时插件会弹窗让你粘贴 run_id
 
 ## 设置
 
