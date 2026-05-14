@@ -8,6 +8,15 @@ This script walks multiple folders in a single process, sharing
 the model singletons via the existing ``@cache`` on _detectors().
 Writes one JSON per folder + a combined index pointing to them.
 
+V19.2 — also writes a sister ``<basename>.features.csv`` per folder
+containing the full numeric feature vector (laplacian_*, mean_luma,
+clipiqa, face_*, score_*, ...) that ``train_axis_rescorers.py``
+expects. The original V17.16 JSON dropped the feature vector to keep
+output small, which made the scan output unusable for retraining the
+rescorer. The CSV is opt-in via ``--dump-features`` (default True
+from V19.2 onward) so existing callers that only want the slim JSON
+can pass ``--no-dump-features``.
+
 Usage:
   PYTHONPATH=. python scripts/scan_multi.py --output-dir /tmp/scan_2025 \\
       "/Volumes/One Touch/佳能JPG原片/2025/2025-10" \\
@@ -26,14 +35,47 @@ processing later.
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import sys
 import time
 from pathlib import Path
 
+# Mirror of FEATURE_COLS_NUMERIC from scripts/build_axis_training_set.py,
+# kept verbatim so the CSV emitted here can be appended to training_axis.csv
+# without column-shape drift. Also include 'scene' (categorical) since
+# the rescorer one-hot-encodes it.
+_FEATURE_COLS_NUMERIC = [
+    # sharpness
+    "laplacian_global", "laplacian_subject", "face_region_lap_var",
+    # exposure
+    "mean_luma", "highlight_clip_pct", "shadow_clip_pct",
+    # aesthetic
+    "laion_aes", "clipiqa",
+    # scene confidence
+    "scene_confidence",
+    # face
+    "face_count", "face_max_blink", "face_min_ear",
+    # composition
+    "horizon_tilt_deg", "rule_of_thirds_offset", "composition_score",
+    # subject
+    "subject_fraction",
+    # fusion outputs
+    "score_sharpness", "score_composition", "score_exposure",
+    "score_aesthetic", "score_moment", "score_final",
+]
 
-def scan_folder(folder: Path, output: Path, config) -> dict:
-    """Walk + analyze + fuse one folder. Returns summary dict."""
+
+def scan_folder(folder: Path, output: Path, config,
+                  features_csv: Path | None = None) -> dict:
+    """Walk + analyze + fuse one folder. Returns summary dict.
+
+    If ``features_csv`` is given, additionally writes a CSV with one
+    row per analyzed image containing the full _FEATURE_COLS_NUMERIC
+    vector + scene + decision. That CSV is what
+    train_axis_rescorers.py consumes once the rows are appended to
+    training_axis.csv (with a coarse decision→stars mapping).
+    """
     from pixcull.io.loader import list_images
     from pixcull.pipeline.worker import analyze_one
     from pixcull.scoring.fusion import fuse_score
@@ -47,6 +89,7 @@ def scan_folder(folder: Path, output: Path, config) -> dict:
         return {"folder": str(folder), "n": 0, "items": []}
 
     results: list[dict] = []
+    feature_rows: list[dict] = []
     t0 = time.time()
     last_print = t0
     for i, fp in enumerate(paths, start=1):
@@ -69,6 +112,22 @@ def scan_folder(folder: Path, output: Path, config) -> dict:
                 # filtering downstream is one less JSON pass.
                 "face_count": int(row.get("face_count") or 0),
             })
+            if features_csv is not None:
+                # Build a row matching training_axis.csv's feature columns.
+                # Merge row (detector metrics) with dims (score_* + final).
+                merged: dict = dict(row)
+                for k, v in dims.items():
+                    merged[f"score_{k}"] = v
+                # 'score_final' = dims['final'] for naming consistency
+                merged["score_final"] = dims["final"]
+                feat: dict = {
+                    "filename": fp.name,
+                    "scene":    scene,
+                    "decision": dec.value,
+                }
+                for col in _FEATURE_COLS_NUMERIC:
+                    feat[col] = merged.get(col)
+                feature_rows.append(feat)
         except Exception as exc:  # noqa: BLE001
             print(f"  {fp.name}: {type(exc).__name__}: {exc}",
                   file=sys.stderr)
@@ -92,10 +151,20 @@ def scan_folder(folder: Path, output: Path, config) -> dict:
     }
     output.write_text(json.dumps(out, ensure_ascii=False, indent=2),
                       encoding="utf-8")
+    if features_csv is not None and feature_rows:
+        cols = ["filename", "scene", "decision"] + _FEATURE_COLS_NUMERIC
+        with features_csv.open("w", encoding="utf-8", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=cols)
+            w.writeheader()
+            for fr in feature_rows:
+                w.writerow({c: fr.get(c) for c in cols})
+        print(f"[{folder.name}] features → {features_csv}",
+              file=sys.stderr)
     print(f"[{folder.name}] done · {len(results)} rows → {output}",
           file=sys.stderr)
     return {"folder": str(folder), "n": len(results),
-            "output": str(output)}
+            "output": str(output),
+            "features_csv": str(features_csv) if features_csv else None}
 
 
 def main() -> int:
@@ -104,6 +173,16 @@ def main() -> int:
                     help="One or more folders to scan (in order)")
     p.add_argument("--output-dir", default="/tmp/pixcull_scan_multi",
                     help="Where to write per-folder JSONs")
+    # V19.2 — default ON; pass --no-dump-features to skip if you only
+    # want the slim JSON (e.g. for the bad-sample router, which only
+    # reads decision/score/scene/flags/face_count).
+    p.add_argument("--dump-features", dest="dump_features",
+                    action="store_true", default=True,
+                    help="Also write <basename>.features.csv with the "
+                         "full feature vector (default: on)")
+    p.add_argument("--no-dump-features", dest="dump_features",
+                    action="store_false",
+                    help="Skip per-folder features.csv (slim JSON only)")
     args = p.parse_args()
 
     from pixcull.config import PixCullConfig
@@ -124,7 +203,8 @@ def main() -> int:
         # disambiguate "2025-07" across 佳能JPG/佳能RAW siblings.
         slug = "_".join(folder.parts[-2:]).replace("/", "_")
         out_p = out_dir / f"{slug}.json"
-        summary = scan_folder(folder, out_p, config)
+        feat_csv = (out_dir / f"{slug}.features.csv") if args.dump_features else None
+        summary = scan_folder(folder, out_p, config, features_csv=feat_csv)
         index.append(summary)
 
     (out_dir / "_index.json").write_text(
