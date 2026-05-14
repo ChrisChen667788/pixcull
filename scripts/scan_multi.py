@@ -120,6 +120,27 @@ def scan_folder(folder: Path, output: Path, config,
         paths, workers=workers, progress_cb=_progress, desc=f"[{folder.name}]",
     )
 
+    # V22.0 — cross-photo face clustering. Adds ``face_clusters`` to
+    # each row (list of int cluster IDs, one per meaningful face);
+    # drops the raw 512-dim embeddings after to keep the features CSV
+    # from ballooning. No-op when no faces.
+    from pixcull.pipeline.face_clustering import (
+        cluster_faces_across_rows, cluster_summary,
+    )
+    rows = cluster_faces_across_rows(rows, drop_embeddings=True)
+    if rows:
+        cs = cluster_summary(rows)
+        real_clusters = {k: v for k, v in cs.items() if k >= 0}
+        if real_clusters:
+            top = sorted(real_clusters.items(),
+                         key=lambda kv: -kv[1]["n_photos"])[:5]
+            print(f"  face clusters: {len(real_clusters)} found, top:",
+                  file=sys.stderr)
+            for cid, d in top:
+                print(f"    cluster {cid}: {d['n_photos']} photos "
+                      f"(samples: {', '.join(d['sample_filenames'][:3])})",
+                      file=sys.stderr)
+
     results: list[dict] = []
     feature_rows: list[dict] = []
     for row in rows:
@@ -137,6 +158,9 @@ def scan_folder(folder: Path, output: Path, config,
                 "scene":     scene,
                 "flags":     flags,
                 "face_count": int(row.get("face_count") or 0),
+                # V22.0 — per-face cluster IDs. Empty list when no
+                # meaningful faces; -1 means "noise / unique-ish face".
+                "face_clusters": list(row.get("face_clusters") or []),
             })
             if features_csv is not None:
                 merged: dict = dict(row)

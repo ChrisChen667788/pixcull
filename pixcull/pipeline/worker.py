@@ -86,6 +86,32 @@ def analyze_one(path: Path) -> Optional[dict]:
         metrics.update(r.metrics)
         flags.extend(r.flags)
 
+    # V22 — face embedding for cross-photo clustering. CLIP is already
+    # loaded for SceneDetector above; reuse it. Only run when there are
+    # "meaningful" face bboxes (the threshold the rest of the face
+    # detector also uses), so background bystanders don't pollute the
+    # clustering. Output is a list of 512-dim L2-normalized vectors;
+    # the clustering pass in orchestrator runs DBSCAN over the flattened
+    # set across rows. Embeddings are in-memory only — dropped before
+    # scores.csv write to keep the CSV from ballooning.
+    face_bboxes = face.extras.get("face_bboxes") or []
+    face_embeddings: list[list[float]] = []
+    if face_bboxes:
+        from pixcull.pipeline.face_clustering import (
+            _clip_embed_batch, _crop_face_with_margin,
+        )
+        crops = []
+        for bb in face_bboxes:
+            c = _crop_face_with_margin(img, bb)
+            if c is not None:
+                crops.append(c)
+        if crops:
+            embs = _clip_embed_batch(crops)
+            # Convert to plain Python lists so the row pickles cleanly
+            # across the multiprocess boundary (numpy arrays pickle fine
+            # but lists are cheaper + safer for the spawn-fork wire).
+            face_embeddings = [e.tolist() for e in embs]
+
     return {
         "path": str(path),
         "filename": path.name,
@@ -93,6 +119,12 @@ def analyze_one(path: Path) -> Optional[dict]:
         "scene": scene_name,
         "scene_probs": scene.extras["scene_probs"],
         "embedding": dup.extras["embedding"],
+        # V22 — face data for downstream clustering. ``face_bboxes`` is
+        # the per-face (x1,y1,x2,y2,conf) tuples from FaceDetector;
+        # ``face_embeddings`` is the matching CLIP image features.
+        # ``face_clusters`` gets populated by the post-pass.
+        "face_bboxes": face_bboxes,
+        "face_embeddings": face_embeddings,
         "flags": flags,
         "elapsed_s": time.time() - t0,
         **metrics,

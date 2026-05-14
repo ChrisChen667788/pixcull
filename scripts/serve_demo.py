@@ -844,6 +844,11 @@ def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
             "flags": _clean_csv_string(r.get("flags")),
             "reason": str(r.get("reason", "") or ""),
             "advice": advice,
+            # V22.0 — per-face cluster IDs (list[int], one per
+            # meaningful face). -1 = noise / unique-ish face. Empty
+            # list = no faces in this photo. The CSV stores this as
+            # a string repr; parse it back if non-empty.
+            "face_clusters": _parse_int_list(r.get("face_clusters")),
             # V9.0 sort/filter/group fields
             "cluster_id": cluster_id,
             "datetime": dt_str,
@@ -993,6 +998,35 @@ def _clean_csv_string(v: object) -> str:
     if not s or s.lower() == "nan":
         return ""
     return s
+
+
+def _parse_int_list(v: object) -> list[int]:
+    """V22.0 — parse a CSV cell that round-tripped a Python list of ints
+    back into a list.
+
+    pandas writes ``[0, 1, -1]`` as the string ``"[0, 1, -1]"`` and reads
+    it back as that same string. We use ``ast.literal_eval`` for safe
+    parsing (only accepts literal Python expressions — no code
+    execution) and fall through to empty list for any malformed input.
+    """
+    if v is None:
+        return []
+    if isinstance(v, list):
+        # Already-parsed (e.g. when called inline before CSV write)
+        return [int(x) for x in v if x is not None]
+    if isinstance(v, float) and v != v:
+        return []
+    s = str(v).strip()
+    if not s or s.lower() == "nan" or s in ("[]", "()"):
+        return []
+    try:
+        import ast
+        parsed = ast.literal_eval(s)
+        if isinstance(parsed, (list, tuple)):
+            return [int(x) for x in parsed]
+    except (ValueError, SyntaxError, TypeError):
+        pass
+    return []
 
 
 # ---------------------------------------------------------------------------

@@ -15,6 +15,7 @@ from tqdm import tqdm
 from pixcull.config import PixCullConfig
 from pixcull.detectors.duplicate import cluster_bursts, demote_mediocre_bursts
 from pixcull.io.loader import list_images
+from pixcull.pipeline.face_clustering import cluster_faces_across_rows
 from pixcull.pipeline.parallel import parallel_analyze
 from pixcull.pipeline.worker import analyze_one
 from pixcull.scoring.decision import Decision, decide
@@ -89,6 +90,16 @@ def run_pipeline(
     if scene_override:
         for r in records:
             r["scene"] = scene_override
+
+    # V22.0 — face clustering across the batch. Each row carries
+    # ``face_embeddings`` from the worker; we DBSCAN them in the main
+    # process and write back ``face_clusters`` (list of int cluster IDs
+    # per face). Drops the raw embeddings after to keep scores.csv lean.
+    # No-op when no row has any face — DBSCAN is skipped, all rows
+    # get ``face_clusters = []``.
+    if progress_cb is not None:
+        progress_cb(total, total, "跨照片人脸聚类…")
+    records = cluster_faces_across_rows(records, drop_embeddings=True)
 
     df = pd.DataFrame(records)
     if df.empty:

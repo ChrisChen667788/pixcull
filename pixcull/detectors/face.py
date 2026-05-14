@@ -154,6 +154,11 @@ class FaceDetector(Detector):
 
         largest_meaningful_area = 0.0
         largest_meaningful_lap = None
+        # V22 — collect face bboxes for the downstream face clustering
+        # step. Only "meaningful" faces (area + confidence above the
+        # cull-flag threshold) are surfaced so the clusterer doesn't
+        # cluster bystander silhouettes / partial back-of-head crops.
+        meaningful_bboxes: list[tuple[int, int, int, int, float]] = []
 
         for det in detections:
             bb = det.bounding_box
@@ -171,6 +176,7 @@ class FaceDetector(Detector):
             )
             if is_meaningful:
                 meaningful_saw_face = True
+                meaningful_bboxes.append((x1, y1, x2, y2, det_conf))
 
             # Pad the crop to 1.5× because landmarker wants some context around the face.
             cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
@@ -241,5 +247,9 @@ class FaceDetector(Detector):
         # Laplacian; fusion can use face_count to strengthen portrait scene
         # classification).
         result.extras["face_count"] = len(detections)
+        # V22 — meaningful face bboxes for the post-pass clusterer. Each
+        # tuple is (x1, y1, x2, y2, det_conf) in absolute pixel coords.
+        # Empty list when no faces met the meaningful threshold.
+        result.extras["face_bboxes"] = meaningful_bboxes
 
         return result
