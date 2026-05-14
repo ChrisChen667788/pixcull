@@ -67,7 +67,8 @@ _FEATURE_COLS_NUMERIC = [
 
 
 def scan_folder(folder: Path, output: Path, config,
-                  features_csv: Path | None = None) -> dict:
+                  features_csv: Path | None = None,
+                  workers: int | None = None) -> dict:
     """Walk + analyze + fuse one folder. Returns summary dict.
 
     If ``features_csv`` is given, additionally writes a CSV with one
@@ -75,53 +76,75 @@ def scan_folder(folder: Path, output: Path, config,
     vector + scene + decision. That CSV is what
     train_axis_rescorers.py consumes once the rows are appended to
     training_axis.csv (with a coarse decision→stars mapping).
+
+    V21 — ``workers`` controls multiprocess parallelism. When None,
+    defaults to ``min(4, cpu-1)`` (override via ``PIXCULL_WORKERS``).
+    Pre-V21 this was a serial loop; the V19.3 scan of 2492 photos
+    across 4 folders took 71 min. With 4 workers the same scan
+    should finish in ~18-20 min on an M1 Max.
     """
     from pixcull.io.loader import list_images
-    from pixcull.pipeline.worker import analyze_one
+    from pixcull.pipeline.parallel import parallel_analyze
     from pixcull.scoring.fusion import fuse_score
     from pixcull.scoring.decision import decide
 
     paths = list_images(folder)
     n = len(paths)
-    print(f"\n[{folder.name}] {n} images · est ~{n*2/60:.0f} min",
+    print(f"\n[{folder.name}] {n} images · est ~{n*2/60:.0f} min serial "
+          f"(parallel: ~{max(1, n*2/60/4):.0f} min)",
           file=sys.stderr)
     if n == 0:
         return {"folder": str(folder), "n": 0, "items": []}
 
+    def _progress(done: int, total: int, msg: str) -> None:
+        # Throttled progress — every 50 images or every 30 seconds,
+        # same cadence as the V17.16 serial loop.
+        nonlocal _last_print
+        now = time.time()
+        if done % 50 == 0 or now - _last_print > 30:
+            pct = done * 100 / max(1, total)
+            elapsed = now - t0
+            eta = elapsed * (total - done) / max(1, done)
+            print(f"  {done}/{total} ({pct:.1f}%) · "
+                  f"elapsed {elapsed/60:.1f}m · ETA {eta/60:.1f}m",
+                  file=sys.stderr)
+            _last_print = now
+
+    t0 = time.time()
+    _last_print = t0
+    # V21 parallel pass. ``parallel_analyze`` returns row dicts for
+    # successfully analyzed images. We then run fuse_score + decide
+    # back in the main process — those are sub-millisecond per row
+    # so no benefit to pushing them into workers.
+    rows = parallel_analyze(
+        paths, workers=workers, progress_cb=_progress, desc=f"[{folder.name}]",
+    )
+
     results: list[dict] = []
     feature_rows: list[dict] = []
-    t0 = time.time()
-    last_print = t0
-    for i, fp in enumerate(paths, start=1):
+    for row in rows:
         try:
-            row = analyze_one(fp)
-            if row is None:
-                continue
             scene = str(row.get("scene") or "")
             flags = list(row.get("flags") or [])
             dims = fuse_score(row, flags, scene, config)
             dec, _ = decide(dims["final"], flags, config, scene=scene)
+            fn = row.get("filename", "")
             results.append({
-                "filename":  fp.name,
-                "src_path":  str(fp),
+                "filename":  fn,
+                "src_path":  row.get("path", ""),
                 "score":     round(float(dims["final"]), 3),
                 "decision":  dec.value,
                 "scene":     scene,
                 "flags":     flags,
-                # V17.16 — also surface face_count so portrait/kids
-                # filtering downstream is one less JSON pass.
                 "face_count": int(row.get("face_count") or 0),
             })
             if features_csv is not None:
-                # Build a row matching training_axis.csv's feature columns.
-                # Merge row (detector metrics) with dims (score_* + final).
                 merged: dict = dict(row)
                 for k, v in dims.items():
                     merged[f"score_{k}"] = v
-                # 'score_final' = dims['final'] for naming consistency
                 merged["score_final"] = dims["final"]
                 feat: dict = {
-                    "filename": fp.name,
+                    "filename": fn,
                     "scene":    scene,
                     "decision": dec.value,
                 }
@@ -129,17 +152,10 @@ def scan_folder(folder: Path, output: Path, config,
                     feat[col] = merged.get(col)
                 feature_rows.append(feat)
         except Exception as exc:  # noqa: BLE001
-            print(f"  {fp.name}: {type(exc).__name__}: {exc}",
+            print(f"  fuse/decide failed for "
+                  f"{row.get('filename', '?')}: "
+                  f"{type(exc).__name__}: {exc}",
                   file=sys.stderr)
-        now = time.time()
-        if i % 50 == 0 or now - last_print > 30:
-            pct = i * 100 / n
-            elapsed = now - t0
-            eta = elapsed * (n - i) / max(1, i)
-            print(f"  {i}/{n} ({pct:.1f}%) · "
-                  f"elapsed {elapsed/60:.1f}m · ETA {eta/60:.1f}m",
-                  file=sys.stderr)
-            last_print = now
 
     results.sort(key=lambda r: r["score"])
     out = {
@@ -183,6 +199,10 @@ def main() -> int:
     p.add_argument("--no-dump-features", dest="dump_features",
                     action="store_false",
                     help="Skip per-folder features.csv (slim JSON only)")
+    p.add_argument("--workers", type=int, default=None,
+                    help="V21 — multiprocess worker count. Default: "
+                         "min(4, cpu-1). Override via PIXCULL_WORKERS "
+                         "env var. Pass 1 to force serial fallback.")
     args = p.parse_args()
 
     from pixcull.config import PixCullConfig
@@ -204,7 +224,8 @@ def main() -> int:
         slug = "_".join(folder.parts[-2:]).replace("/", "_")
         out_p = out_dir / f"{slug}.json"
         feat_csv = (out_dir / f"{slug}.features.csv") if args.dump_features else None
-        summary = scan_folder(folder, out_p, config, features_csv=feat_csv)
+        summary = scan_folder(folder, out_p, config, features_csv=feat_csv,
+                               workers=args.workers)
         index.append(summary)
 
     (out_dir / "_index.json").write_text(
