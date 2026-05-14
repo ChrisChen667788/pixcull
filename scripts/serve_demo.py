@@ -829,7 +829,14 @@ def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
             "score_exposure": _f(r.get("score_exposure")),
             "score_aesthetic": _f(r.get("score_aesthetic")),
             "score_composition": _f(r.get("score_composition")),
-            "flags": str(r.get("flags", "") or ""),
+            # V20 — flags was emitting the literal string "nan" whenever
+            # the underlying CSV cell was empty / pandas-NaN. The lightbox
+            # template renders the "检测器旗标" section as ${r.flags ?
+            # … : ''}, so "nan" (truthy non-empty string) showed up as
+            # a useless "nan" line on tens of thousands of clean photos.
+            # Coerce to empty so the section is hidden when there's
+            # nothing to report.
+            "flags": _clean_csv_string(r.get("flags")),
             "reason": str(r.get("reason", "") or ""),
             "advice": advice,
             # V9.0 sort/filter/group fields
@@ -957,6 +964,30 @@ def _f(v: object) -> float | None:
         return round(x, 3)
     except (TypeError, ValueError):
         return None
+
+
+def _clean_csv_string(v: object) -> str:
+    """V20 — return empty string for CSV cells that round-tripped through
+    pandas as NaN.
+
+    pandas reads an empty CSV cell as ``float('nan')``, and ``str(NaN)``
+    returns the literal string ``"nan"``. Naive ``str(r.get(col, "") or "")``
+    therefore emits ``"nan"`` for missing values, which the JS template
+    happily renders as a real-looking "nan" line.
+
+    Treats the following as empty:
+      * ``None``
+      * ``float('nan')`` (and any value whose ``str`` is exactly ``"nan"``)
+      * empty string / whitespace
+    """
+    if v is None:
+        return ""
+    if isinstance(v, float) and v != v:
+        return ""
+    s = str(v).strip()
+    if not s or s.lower() == "nan":
+        return ""
+    return s
 
 
 # ---------------------------------------------------------------------------

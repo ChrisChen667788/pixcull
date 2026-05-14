@@ -89,28 +89,36 @@ STRENGTH_TEMPLATES: dict[str, list[dict[str, Any]]] = {
             "source": "Adams · Zone System",
         },
         {
+            # V20 — {value} resolves to canon_midgray_offset (0..1, where
+            # 0 = perfect Zone V anchor, 0.05 = 5pp deviation from 50%
+            # luma). Format as percent so the user reads "偏差 1.8%"
+            # instead of seeing 0.018.
             "metric": "canon_midgray_offset", "thresh": 0.05, "op": "<=",
             "phrases": [
-                "Zone V 中灰锚定准确",
-                "中灰位置标准,整体曝光基调对",
-                "测光精准,中性灰落在 50% luma",
+                "Zone V 中灰锚定准确(偏差 {value:.1%})",
+                "中灰位置标准,整体曝光基调对(偏 50% luma {value:.1%})",
+                "测光精准,中性灰锁住 Zone V(偏差 {value:.1%})",
             ],
             "source": "Adams · Zone System",
         },
         {
+            # V20 — {value} = laplacian variance on subject crop. >200
+            # is sharp, 500+ is razor-sharp. Round to whole number.
             "metric": "laplacian_subject", "thresh": 200, "op": ">=",
             "phrases": [
-                "主体锐利,焦平面到位",
-                "焦点扎实,主体细节清晰可辨",
-                "对焦精准,跑焦 / 抖动均无",
+                "主体锐利,焦平面到位(σ²={value:.0f})",
+                "焦点扎实,主体细节清晰可辨(laplacian {value:.0f})",
+                "对焦精准,跑焦 / 抖动均无(锐度 σ²={value:.0f})",
             ],
         },
         {
+            # V20 — {value} = score_sharpness (0..1, fused sharpness score
+            # combining global + subject + face-region laplacian)
             "metric": "score_sharpness", "thresh": 0.9, "op": ">=",
             "phrases": [
-                "整体锐度极佳",
-                "锐度顶级,堪比 f/64 派要求",
-                "全画面锐度都到位",
+                "整体锐度极佳(得分 {value:.2f})",
+                "锐度顶级,堪比 f/64 派要求(综合 {value:.2f})",
+                "全画面锐度都到位(综合 {value:.2f})",
             ],
             "source": "f/64 Group · 全画面景深",
         },
@@ -122,11 +130,13 @@ STRENGTH_TEMPLATES: dict[str, list[dict[str, Any]]] = {
         # where it's tonally wrong; the macro figure-ground template
         # (further down) is the right fit instead.
         {
+            # V20 — {value} = subject_fraction (0..1, portion of frame
+            # occupied by the segmented subject). Format as percent.
             "metric": "subject_fraction", "thresh": 0.25, "op": ">=",
             "phrases": [
-                "主体占画 30%+,视觉锚点稳",
-                "主体比例舒适,不会过小或淹没",
-                "主体在画面中分量足够",
+                "主体占画 {value:.0%},视觉锚点稳",
+                "主体比例舒适,不会过小或淹没(占比 {value:.0%})",
+                "主体在画面中分量足够(占 {value:.0%})",
             ],
             "anti_genres": {"macro", "wildlife", "landscape",
                               "architecture", "abstract", "astro"},
@@ -215,10 +225,12 @@ STRENGTH_TEMPLATES: dict[str, list[dict[str, Any]]] = {
             ],
         },
         {
+            # V20 — {value} = canon_balance (0..1, 1 = perfectly even
+            # weight distribution across the rule-of-thirds 3×3 grid)
             "metric": "canon_balance", "thresh": 0.75, "op": ">=",
             "phrases": [
-                "九宫格视觉权重均衡",
-                "画面元素分布平衡,无堆积偏重",
+                "九宫格视觉权重均衡(平衡度 {value:.2f})",
+                "画面元素分布平衡,无堆积偏重(平衡度 {value:.2f})",
             ],
         },
     ],
@@ -1087,6 +1099,36 @@ def _template_matches(t: dict, genre: str, styles: set[str],
     return True
 
 
+def _format_phrase(phrase: str, value: float | None) -> str:
+    """V20 — substitute ``{value}`` / ``{value:fmt}`` placeholders in a
+    phrase template with the actual measured metric value.
+
+    The point of this hook: phrases like "Zone V 中灰锚定准确" were the
+    same generic line on every photo that crossed the
+    canon_midgray_offset gate. Adding "{value:.1%}" to the template
+    lets it render as "Zone V 中灰锚定准确 (偏差 0.8%)" — same praise,
+    but the user knows the model actually looked at THIS image's
+    number. Phrases that don't include ``{value`` are unchanged, so
+    upgrading happens template-by-template, no big-bang rewrite.
+
+    Format strings follow standard Python ``str.format`` semantics:
+
+        ``{value:.0%}``    → "23%"
+        ``{value:.2f}``    → "0.74"
+        ``{value:.0f}``    → "200"   (e.g. laplacian variance)
+        ``{value}``        → repr(value)
+
+    Failures fall through to the unformatted phrase rather than raising
+    so a malformed template doesn't kill the whole card.
+    """
+    if "{value" not in phrase or value is None:
+        return phrase
+    try:
+        return phrase.format(value=value)
+    except (ValueError, KeyError, TypeError, IndexError):
+        return phrase
+
+
 def _pick_per_axis(
     templates: dict[str, list[dict]],
     row: dict,
@@ -1188,6 +1230,10 @@ def _pick_per_axis(
             phrase = _stable_pick(t["phrases"], anchor, axis_name + t["metric"])
             if not phrase:
                 continue
+            # V20 — interpolate measured value into phrase if the
+            # template opts in via "{value}" / "{value:fmt}". Falls
+            # through unchanged when no placeholder is present.
+            phrase = _format_phrase(phrase, v)
             entry: dict[str, Any] = {
                 "phrase": phrase,
                 "source": t.get("source"),
@@ -1218,6 +1264,148 @@ _AXIS_LABEL_ZH = {
     "moment":      "瞬间",
     "aesthetic":   "美感",
 }
+
+
+# V20 — flag → (zh label, suggestion) lookup for fallback weakness/fix
+# synthesis when WEAKNESS_TEMPLATES yields no match for a maybe/cull row.
+# Kept narrow on purpose: only the flags the rule stack acts on as
+# hard-culls + a couple of common advisory ones. Extending this is cheap
+# but the existing template system is the right place for nuanced advice.
+_FLAG_WEAKNESS_ZH: dict[str, tuple[str, str]] = {
+    "closed_eyes":          ("主体闭眼,瞬间错过",
+                              "看连拍组其他帧,选眼神到位的那张"),
+    "motion_blur_on_face":  ("脸部有动态模糊,焦点没扎住",
+                              "提高快门速度(≥ 1/250),或换连拍中静止的一帧"),
+    "severely_overexposed": ("高光区严重剪切,信息丢失",
+                              "降 EV -1.0 / -1.3 重拍,或用 RAW 推回"),
+    "severely_blurry":      ("整体明显糊,焦点没在主体上",
+                              "确认对焦点、稳定相机,或抛弃此帧"),
+    "no_clear_subject":     ("缺少明显视觉主体,画面发散",
+                              "重构图聚焦单一主体,或换更紧的取景"),
+    # advisory (don't trigger cull but worth surfacing)
+    "shadows_clipped":      ("阴影区剪切,暗部细节丢失",
+                              "增加曝光 / 提阴影,或后期推回暗部"),
+    "highlight_clip":       ("局部高光剪切",
+                              "减曝光或后期压高光"),
+    "subject_blur":         ("主体微糊",
+                              "下次提高快门速度 / 改用更小光圈守景深"),
+    "horizon_tilt":         ("地平线倾斜超过 3°",
+                              "后期拉直一下"),
+    "blink":                ("主体疑似眨眼",
+                              "看连拍组里其他帧"),
+}
+
+
+def _synthesize_fallback_weakness(
+    row: dict[str, Any],
+    final_stars: dict[str, float | None],
+    decision: str,
+    flags_str: str,
+) -> list[dict[str, Any]]:
+    """V20 — guarantee maybe/cull rows surface at least one weakness +
+    suggestion, even when the curated WEAKNESS_TEMPLATES didn't fire.
+
+    Before V20 the UI would show e.g. ``decision=cull · score=0.95 ·
+    strengths=[3 items] · weaknesses=[] · suggestions=[]`` — a confusing
+    black box ("why was a 0.95 photo culled?"). The fix: derive a
+    weakness from whichever of the following is the strongest signal:
+
+      1. Hard-cull flags present in ``flags_str`` (closed_eyes,
+         motion_blur_on_face, severely_overexposed, severely_blurry,
+         no_clear_subject) — these are the deterministic reasons
+         ``decide()`` rule-culls high-score photos.
+      2. The weakest axis when its star is ≤ 2.5★ — surface "技术
+         2.1★ — 推荐 ≥3.5" plus a generic axis-specific tip.
+      3. Genre/score-floor fallback — "综合分 0.65 低于 keep 门槛".
+
+    Returns a list of ``{phrase, fix, source?, axis?}`` dicts in the
+    same shape ``_pick_per_axis`` produces, so the downstream
+    ``strengths_detail`` / ``weaknesses_detail`` UI consumes them
+    without special-casing.
+
+    Empty list when no signal is strong enough — caller's responsibility
+    to handle (only happens on keep / unrated runs).
+    """
+    out: list[dict[str, Any]] = []
+    fl = (flags_str or "").lower()
+
+    # 1) Hard-cull flag explanations come first — these are the reasons
+    #    ``decide()`` actually pushed the row to cull. Cap at 2 so the
+    #    UI stays readable; the most photographic-quality-impacting
+    #    flags lead.
+    flag_priority = (
+        "closed_eyes", "motion_blur_on_face", "severely_blurry",
+        "severely_overexposed", "no_clear_subject",
+        # advisory tail
+        "subject_blur", "shadows_clipped", "highlight_clip",
+        "blink", "horizon_tilt",
+    )
+    for flag in flag_priority:
+        if flag in fl and len(out) < 2:
+            phrase, fix = _FLAG_WEAKNESS_ZH[flag]
+            out.append({
+                "phrase":  phrase,
+                "fix":     fix,
+                "axis":    None,
+                "source":  f"flag:{flag}",
+            })
+
+    # 2) Weakest-axis fallback. Skip if we already have ≥2 flag bits
+    #    OR if the weakest axis is still ≥ 3★ (a maybe-row with no
+    #    real low-axis genuinely doesn't have an axis-level weakness).
+    if len(out) < 2:
+        rated = [(n, s) for n, s in (final_stars or {}).items() if s is not None]
+        if rated:
+            rated.sort(key=lambda x: x[1])
+            ax, stars = rated[0]
+            if stars <= 2.5:
+                axis_zh = _AXIS_LABEL_ZH.get(ax, ax)
+                # Axis-specific generic suggestion. Intentionally
+                # non-overlapping with the rich WEAKNESS_TEMPLATES
+                # so we never duplicate when both fire.
+                axis_fix = {
+                    "technical":   "确认对焦 + 快门速度 + ISO 噪点裕度",
+                    "subject":     "重构图让主体更清晰、占比更大",
+                    "composition": "考虑改用三分法 / 引导线 / 留 lead-room",
+                    "light":       "改时段或补光,避开正午硬顶光",
+                    "moment":      "等表情/动作到位再按快门,或翻连拍组",
+                    "aesthetic":   "调色、后期或重新审美这张是否符合作品风格",
+                }.get(ax, "复盘这一轴,看是否能在后期或重拍中改善")
+                out.append({
+                    "phrase":  f"{axis_zh} {stars:.1f}★ — 低于 keep 推荐线 3.5★",
+                    "fix":     axis_fix,
+                    "axis":    ax,
+                    "source":  "axis-fallback",
+                })
+
+    # 3) Score-floor fallback for cull rows that didn't match a flag or
+    #    a weak axis — the rule stack pushed them under cull_max=0.4
+    #    purely on score_final. Surface that directly so the user can
+    #    correlate the cull decision with the visible score.
+    if not out and decision == "cull":
+        score = row.get("score_final")
+        try:
+            score_f = float(score) if score is not None else None
+        except (TypeError, ValueError):
+            score_f = None
+        if score_f is not None and score_f <= 0.5:
+            out.append({
+                "phrase":  f"综合分 {score_f:.2f} 低于 keep/maybe 门槛",
+                "fix":     "整体素质不够,考虑剔除或大幅后期",
+                "axis":    None,
+                "source":  "score-floor",
+            })
+
+    # 4) Last-resort generic for maybe — at least say something useful.
+    if not out and decision == "maybe":
+        out.append({
+            "phrase":  "处在 keep 与 cull 边缘,建议人工二审",
+            "fix":     "对比连拍组其他帧,或参考同场景标定样片",
+            "axis":    None,
+            "source":  "edge-case",
+        })
+
+    return out
 
 
 def _synthesize_maybe_rationale(
@@ -1324,6 +1512,18 @@ def build_advice(
         star_max=3.0, max_total=3, is_strength=False, anchor=anchor,
         vertical=vertical,
     )
+
+    # V20 — guarantee maybe/cull always gets at least one weakness +
+    # suggestion. The curated WEAKNESS_TEMPLATES misses a lot of cases:
+    # cull rows where score_final is high but a hard flag fired
+    # (e.g. closed_eyes on a 0.95 portrait), and maybe rows on the
+    # edge of keep/cull that don't trip any per-axis template. Without
+    # this fallback the UI shows "decision: cull" with zero weaknesses
+    # and zero suggestions — meaningless to the user.
+    if decision in ("maybe", "cull") and not weak_detail:
+        weak_detail = _synthesize_fallback_weakness(
+            row, final_stars, decision, str(row.get("flags", "") or ""),
+        )
 
     # Flat string lists for V5.2-shape callers (card row, JS templates,
     # XMP exporter — none of them care about sources)

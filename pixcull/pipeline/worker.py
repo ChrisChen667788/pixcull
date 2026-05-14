@@ -48,6 +48,35 @@ def analyze_one(path: Path) -> Optional[dict]:
     dup = d["duplicate"].analyze(img)
     aes = d["aesthetic"].analyze(img)
     face = d["face"].analyze(img)
+    # V20 — scene correction with face evidence.
+    #
+    # CLIP's stilllife prompt ("a product or still life photo, indoor
+    # studio setup") softmaxes onto a non-trivial fraction of indoor
+    # portrait / event photos — anything with a centered subject, a
+    # uniform indoor background, and warm tungsten light reads as
+    # "studio product shot" to CLIP. The user's recent kid-on-highchair
+    # shot is the canonical example: 1+ face but scene=stilllife.
+    #
+    # Fix: when the face detector found ≥ 1 face AND the scene came back
+    # stilllife, walk scene_probs in descending order and pick the
+    # highest-ranked NON-stilllife class. We only re-rank stilllife
+    # because it's the consistent CLIP failure mode; other categories
+    # behave fine when face_count >= 1.
+    face_count = int(face.metrics.get("face_count") or 0)
+    if face_count >= 1 and scene_name == "stilllife":
+        ranked = sorted(
+            scene.extras["scene_probs"].items(),
+            key=lambda kv: kv[1], reverse=True,
+        )
+        for name, _p in ranked:
+            if name != "stilllife":
+                scene_name = name
+                scene.extras["scene"] = name
+                # Also bump scene_confidence to the chosen class's prob
+                # so downstream consumers (rescorer, advice picker) see
+                # the corrected number, not the original stilllife max.
+                scene.metrics["scene_confidence"] = float(_p)
+                break
     comp = d["composition"].analyze(img, mask=mask, scene=scene_name)
     canon = d["canon"].analyze(img, mask=mask)
 

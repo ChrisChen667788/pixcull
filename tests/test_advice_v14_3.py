@@ -63,11 +63,24 @@ def test_same_idx_same_salt_is_deterministic():
 # 2. Generic subject phrase no longer leaks into specialty genres
 # ---------------------------------------------------------------------------
 
-GENERIC_SUBJECT_PHRASES = {
-    "主体占画 30%+,视觉锚点稳",
-    "主体比例舒适,不会过小或淹没",
+# V20 — the generic subject phrases gained ``{value:.0%}`` interpolation
+# ("主体占画 30%+, 视觉锚点稳" → "主体占画 50%, 视觉锚点稳"). Match by
+# substring instead of equality so the test stays stable across phrase
+# wording / format-string tweaks. Each fragment uniquely identifies the
+# generic subject template (none of the specialty-genre templates use
+# the words 占画 / 比例舒适 / 分量足够).
+GENERIC_SUBJECT_FRAGMENTS = (
+    "主体占画",
+    "主体比例舒适",
     "主体在画面中分量足够",
-}
+)
+
+
+def _has_generic_subject_phrase(strengths: list[str]) -> list[str]:
+    """True iff ``strengths`` contains any phrase derived from the
+    generic subject template (regardless of post-V20 value-suffix)."""
+    return [s for s in strengths
+            if any(frag in s for frag in GENERIC_SUBJECT_FRAGMENTS)]
 
 
 @pytest.mark.parametrize("genre", [
@@ -84,7 +97,7 @@ def test_generic_subject_excluded_from_specialty_genres(genre):
     final = {"subject": 5.0, "technical": 3.0, "composition": 3.0,
              "light": 3.0, "moment": 3.0, "aesthetic": 3.0}
     ad = build_advice(row, final, "keep", idx=0)
-    leaked = [s for s in ad["strengths"] if s in GENERIC_SUBJECT_PHRASES]
+    leaked = _has_generic_subject_phrase(ad["strengths"])
     assert not leaked, (
         f"genre={genre} got generic subject phrase {leaked} — should be filtered"
     )
@@ -101,8 +114,11 @@ def test_portrait_still_gets_generic_subject_phrase():
     final = {"subject": 5.0, "technical": 3.0, "composition": 3.0,
              "light": 3.0, "moment": 3.0, "aesthetic": 3.0}
     ad = build_advice(row, final, "keep", idx=0)
-    matched = [s for s in ad["strengths"] if s in GENERIC_SUBJECT_PHRASES]
-    assert matched, "portrait should still pick up the generic subject phrase"
+    matched = _has_generic_subject_phrase(ad["strengths"])
+    assert matched, (
+        f"portrait should still pick up a generic subject phrase, "
+        f"got strengths={ad['strengths']}"
+    )
 
 
 # ---------------------------------------------------------------------------
