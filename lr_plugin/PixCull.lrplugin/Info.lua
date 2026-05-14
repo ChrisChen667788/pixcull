@@ -44,5 +44,10 @@ return {
         },
     },
 
-    VERSION = { major = 11, minor = 3, revision = 0, build = 0 },
+    VERSION = { major = 19, minor = 0, revision = 0, build = 0 },
+    -- V19 (this rev): vertical picker in the analyze dialog so the
+    --   server applies per-business-type policy + AI話術. Inherits
+    --   V18 face/scene/rescorer fixes for free since it just calls
+    --   /scan_local on the local server.
+    -- V11.3: original release.
 }

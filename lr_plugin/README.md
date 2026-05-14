@@ -13,7 +13,12 @@
 1. 启动 PixCull.app(顶部菜单栏出现 PixCull 图标 = 服务在跑)
 2. 在 LR 的 Library 选若干照片
 3. Library 菜单 → "PixCull · 分析选中照片"
-4. 弹窗确认后,浏览器自动打开 PixCull 结果页
+4. **V19 新增**:弹窗里选业务垂类 — 婚纱 / 拍鸟 / 儿童 等(或留"自动检测")。选了之后服务端会用该垂类的:
+   - 调过的 keep/cull 阈值(V17.4 自动调参产物)
+   - AI 生成的专属点评话术(V17.5 DeepSeek 产物)
+   - tolerated_flags(V17.2 — 比如儿童容忍 motion_blur_on_face)
+   插件记住你上次选的,下次默认勾上。
+5. 弹窗确认后,浏览器自动打开 PixCull 结果页
 
 ## 设置
 
