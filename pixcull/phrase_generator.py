@@ -324,16 +324,26 @@ def _call_deepseek(prompt: str, *, api_key: str | None = None,
 
 
 def _validate_phrases(payload: dict) -> dict[str, list[str]]:
-    """Return {axis: [phrases]} sanitized + bounded; raise on broken shape."""
+    """Return {axis: [phrases]} sanitized + bounded; raise on broken shape.
+
+    V17.17: accept BOTH shapes DeepSeek emits depending on its mood:
+        {"axes": {"subject": {"phrases": [...]}, ...}}   (prompt-shape)
+        {"axes": {"subject": [...], ...}}                (lazy-shape)
+    Picking the right block: dict.get("phrases") if dict, else use as-is.
+    """
     axes_raw = payload.get("axes")
     if not isinstance(axes_raw, dict):
         raise ValueError("LLM payload missing 'axes' object")
     out: dict[str, list[str]] = {}
     for axis in _REQUIRED_AXES:
         block = axes_raw.get(axis)
-        if not isinstance(block, dict):
+        # V17.17 — accept both {phrases: [...]} and bare [...]
+        if isinstance(block, dict):
+            phrases_raw = block.get("phrases")
+        elif isinstance(block, list):
+            phrases_raw = block
+        else:
             continue
-        phrases_raw = block.get("phrases")
         if not isinstance(phrases_raw, list):
             continue
         cleaned: list[str] = []
