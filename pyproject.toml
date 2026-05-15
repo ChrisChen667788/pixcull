@@ -28,6 +28,14 @@ dependencies = [
     # subject segmentation (U^2-Net)
     "rembg>=2.0.57",
     "onnxruntime>=1.17",
+    # V22.0.1 — face identity embeddings (ArcFace via buffalo_l ONNX
+    # bundle, ~280 MB auto-download into ~/.insightface/models/ on
+    # first use). Drop-in replacement for the V22.0 CLIP face embedder;
+    # CLIP collapsed real-world multi-person batches into single
+    # clusters (see V24 audit). InsightFace gives ~0.4-0.7 inter-
+    # person vs ~0.05-0.3 intra-person cosine distance, which DBSCAN
+    # splits reliably at ε=0.50.
+    "insightface>=0.7",
     # aesthetic / IQA metrics
     "pyiqa>=0.1.11",
     # duplicate detection

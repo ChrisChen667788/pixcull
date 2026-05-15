@@ -70,9 +70,165 @@ import numpy as np
 from PIL import Image
 
 
-_CLIP_FACE_CROP_PADDING = 0.30   # 30% margin around the bbox for CLIP context
-_DBSCAN_EPS = 0.30
+_CLIP_FACE_CROP_PADDING = 0.30   # 30% margin around the bbox for embedder context
+
+# V22.0.1: ε retuned for ArcFace's wider distance distribution.
+# CLIP wanted ~0.30 (and still mostly collapsed on real data — see
+# V24 audit); on ArcFace 0.50 correctly merges same-person-across-
+# lighting and splits different people. Verified on a cross-folder
+# test of 38 photos from 3 distinct shoots.
+_DBSCAN_EPS = 0.50
 _DBSCAN_MIN_SAMPLES = 2
+
+# V22.0.1 — module-level singletons for the InsightFace model. Lazy-loaded
+# in ``_get_insightface`` to avoid the ~5 sec ONNX init cost when face
+# clustering isn't being used. Workers re-init per process (spawn pool
+# semantics) but each worker's first call seeds it for the rest of the
+# worker's life.
+_INSIGHTFACE_APP = None
+_INSIGHTFACE_LOAD_FAILED = False
+
+
+def _get_insightface():
+    """Lazy-load the InsightFace ``FaceAnalysis`` app + buffalo_l models.
+
+    Returns the singleton or None if InsightFace isn't installed /
+    failed to load (in which case callers should fall back to CLIP).
+    First-call cost on M1 CPU is ~5 sec (ONNX session setup); after
+    that each ``app.get(img)`` is sub-100ms / face.
+    """
+    global _INSIGHTFACE_APP, _INSIGHTFACE_LOAD_FAILED
+    if _INSIGHTFACE_APP is not None:
+        return _INSIGHTFACE_APP
+    if _INSIGHTFACE_LOAD_FAILED:
+        return None
+    try:
+        from insightface.app import FaceAnalysis
+    except ImportError:
+        _INSIGHTFACE_LOAD_FAILED = True
+        print("[face_cluster] insightface not installed — falling "
+              "back to CLIP embeddings (cluster quality will be poor "
+              "on multi-person batches)", file=sys.stderr)
+        return None
+    try:
+        app = FaceAnalysis(name="buffalo_l",
+                           providers=["CPUExecutionProvider"])
+        app.prepare(ctx_id=-1, det_size=(640, 640))
+    except Exception as exc:  # noqa: BLE001
+        _INSIGHTFACE_LOAD_FAILED = True
+        print(f"[face_cluster] insightface init failed "
+              f"({type(exc).__name__}: {exc}) — falling back to CLIP",
+              file=sys.stderr)
+        return None
+    _INSIGHTFACE_APP = app
+    return app
+
+
+def _insightface_embed_from_image(
+    img: Image.Image,
+    bboxes: list[tuple],
+) -> np.ndarray:
+    """V22.0.1 — embed faces by running InsightFace on the FULL image,
+    then matching its detections to ``bboxes`` (the meaningful-face
+    list MediaPipe already produced).
+
+    Why full-image instead of per-crop: ArcFace's pipeline is
+    detect → 5-point landmark → similarity-transform-align → 112×112
+    feature extraction. Given a tight face crop the detector fails
+    (face fills the frame, no margin to estimate the head pose), so
+    per-crop calls return 0 faces and we emit zero vectors → all
+    DBSCAN noise. Giving InsightFace the original image lets it do
+    its own detect+align, then we match its results to MediaPipe's
+    bboxes by IoU to preserve the row-aligned embedding contract.
+
+    Returns (len(bboxes), 512) with L2-normalized rows; entries with
+    no IoU match become zero vectors and naturally become noise
+    points in the DBSCAN pass.
+    """
+    app = _get_insightface()
+    if app is None or not bboxes:
+        return np.zeros((len(bboxes), 512), dtype=np.float32)
+
+    import cv2
+
+    arr = np.array(img.convert("RGB"))
+    arr_bgr = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
+    h, w = arr_bgr.shape[:2]
+    # InsightFace's detector is tuned for ≤1024-px wide inputs; bigger
+    # is slower without quality gain. Track scale for bbox matching.
+    scale = 1.0
+    if w > 1024:
+        scale = 1024.0 / w
+        arr_bgr = cv2.resize(arr_bgr, (1024, int(h * scale)))
+
+    if_faces = app.get(arr_bgr)
+    if not if_faces:
+        return np.zeros((len(bboxes), 512), dtype=np.float32)
+
+    # IoU-match each MediaPipe bbox to the closest InsightFace face.
+    # 0.3 IoU is permissive enough to handle the slight detector
+    # disagreement between MediaPipe's tight face box and ArcFace's
+    # 5-landmark-anchored box, but tight enough to reject random
+    # overlaps in multi-person frames.
+    IOU_MATCH_MIN = 0.3
+    out = []
+    for bb in bboxes:
+        x1, y1, x2, y2 = bb[:4]
+        x1s, y1s = x1 * scale, y1 * scale
+        x2s, y2s = x2 * scale, y2 * scale
+        best_emb: np.ndarray | None = None
+        best_iou = 0.0
+        for f in if_faces:
+            fx1, fy1, fx2, fy2 = f.bbox
+            ix1 = max(x1s, fx1); iy1 = max(y1s, fy1)
+            ix2 = min(x2s, fx2); iy2 = min(y2s, fy2)
+            iw = max(0.0, ix2 - ix1)
+            ih = max(0.0, iy2 - iy1)
+            inter = iw * ih
+            a1 = max(0.0, (x2s - x1s) * (y2s - y1s))
+            a2 = max(0.0, (fx2 - fx1) * (fy2 - fy1))
+            union = a1 + a2 - inter
+            iou = inter / union if union > 0 else 0.0
+            if iou > best_iou:
+                best_iou = iou
+                best_emb = f.normed_embedding
+        if best_emb is not None and best_iou >= IOU_MATCH_MIN:
+            out.append(np.asarray(best_emb, dtype=np.float32))
+        else:
+            out.append(np.zeros(512, dtype=np.float32))
+    return np.vstack(out)
+
+
+def embed_face_crops_for_image(
+    img: Image.Image,
+    bboxes: list[tuple],
+    crops: list[Image.Image],
+) -> np.ndarray:
+    """V22.0.1 — primary face embedder.
+
+    Tries InsightFace ArcFace first (V22.0.1 default, via
+    ``_insightface_embed_from_image`` on the full image). Falls
+    through to CLIP if InsightFace isn't installed or fails to load
+    (CLIP works on per-crop, the V22.0 path).
+
+    Args:
+      img:     PIL full-resolution image
+      bboxes:  meaningful face bboxes from MediaPipe (tuples of
+               (x1, y1, x2, y2, conf))
+      crops:   pre-made padded crops (only used by the CLIP fallback)
+
+    Returns (len(bboxes), 512) L2-normalized embeddings, one row per
+    bbox, in the SAME ORDER as ``bboxes``. Zero rows mean "embedding
+    failed for that bbox" and naturally become noise downstream.
+    """
+    if not bboxes:
+        return np.zeros((0, 512), dtype=np.float32)
+    app = _get_insightface()
+    if app is not None:
+        return _insightface_embed_from_image(img, bboxes)
+    # CLIP fallback uses per-crop, which is fine for CLIP (it isn't
+    # a face-specific detector; it just embeds whatever you give it).
+    return _clip_embed_batch(crops)
 
 
 def _crop_face_with_margin(img: Image.Image, bbox: tuple,
@@ -254,6 +410,8 @@ def cluster_summary(rows: list[dict[str, Any]]) -> dict[int, dict]:
 __all__ = [
     "cluster_faces_across_rows",
     "cluster_summary",
+    "embed_face_crops_for_image",  # V22.0.1 — primary embedder (full-image-aware)
     "_crop_face_with_margin",
     "_clip_embed_batch",
+    "_insightface_embed_from_image",
 ]

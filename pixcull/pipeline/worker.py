@@ -86,31 +86,25 @@ def analyze_one(path: Path) -> Optional[dict]:
         metrics.update(r.metrics)
         flags.extend(r.flags)
 
-    # V22 — face embedding for cross-photo clustering. CLIP is already
-    # loaded for SceneDetector above; reuse it. Only run when there are
-    # "meaningful" face bboxes (the threshold the rest of the face
-    # detector also uses), so background bystanders don't pollute the
-    # clustering. Output is a list of 512-dim L2-normalized vectors;
-    # the clustering pass in orchestrator runs DBSCAN over the flattened
-    # set across rows. Embeddings are in-memory only — dropped before
-    # scores.csv write to keep the CSV from ballooning.
+    # V22 — face embedding for cross-photo clustering. V22.0.1 prefers
+    # InsightFace ArcFace (much stronger face-identity signal than
+    # CLIP), falling back to CLIP if InsightFace isn't installed.
+    # The embedder takes the FULL image + bboxes (so ArcFace can do
+    # its own detect+align on the original instead of failing on a
+    # tight crop), plus pre-made crops as the CLIP fallback input.
     face_bboxes = face.extras.get("face_bboxes") or []
     face_embeddings: list[list[float]] = []
     if face_bboxes:
         from pixcull.pipeline.face_clustering import (
-            _clip_embed_batch, _crop_face_with_margin,
+            _crop_face_with_margin, embed_face_crops_for_image,
         )
-        crops = []
-        for bb in face_bboxes:
-            c = _crop_face_with_margin(img, bb)
-            if c is not None:
-                crops.append(c)
-        if crops:
-            embs = _clip_embed_batch(crops)
-            # Convert to plain Python lists so the row pickles cleanly
-            # across the multiprocess boundary (numpy arrays pickle fine
-            # but lists are cheaper + safer for the spawn-fork wire).
-            face_embeddings = [e.tolist() for e in embs]
+        crops = [_crop_face_with_margin(img, bb) for bb in face_bboxes]
+        crops = [c for c in crops if c is not None]
+        embs = embed_face_crops_for_image(img, face_bboxes, crops)
+        # Convert to plain Python lists so the row pickles cleanly
+        # across the multiprocess boundary (numpy arrays pickle fine
+        # but lists are cheaper + safer for the spawn wire).
+        face_embeddings = [e.tolist() for e in embs]
 
     # V23 — EXIF GPS for the location-cluster post-pass. Returns
     # ``None`` cleanly when the camera had no GPS or the photo is
