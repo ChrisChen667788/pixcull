@@ -8,7 +8,13 @@ authors = [{ name = "PixCull Team" }]
 
 dependencies = [
     # core
-    "numpy>=1.26",
+    # numpy upper bound: mediapipe 0.10.x is built against numpy 1.x;
+    # importing it under numpy 2.x silently fails to load the face
+    # detector (V18.1 + V22.0.1 both bit us). Also: rescorer joblibs
+    # serialized under numpy 2.x use ``numpy.random._pcg64.PCG64``
+    # paths that 1.x can't unpickle (V18.3 ABI break). Until mediapipe
+    # ships numpy-2-compatible wheels, pin to <2.
+    "numpy>=1.26,<2",
     "pandas>=2.2",
     "Pillow>=10.2",
     "tqdm>=4.66",

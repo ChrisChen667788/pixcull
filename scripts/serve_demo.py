@@ -1141,6 +1141,10 @@ def _build_face_clusters_info(run_id: str, rows: list[dict]) -> dict:
         n_faces      total face count across the batch with this id
         sample_filenames  up to 5 filenames for thumbnail samples
         label        user-supplied label (may be "")
+        suggested_label   V22.2 — auto-inherited from prior runs when
+                          this cluster's centroid matches a labeled
+                          library entry. Shape: {label, similarity}
+                          or None.
     """
     labels = _load_face_labels(run_id)
     # Build distinct-photo + total-face counts per cluster.
@@ -1173,10 +1177,43 @@ def _build_face_clusters_info(run_id: str, rows: list[dict]) -> dict:
             if fn and len(d["sample_filenames"]) < 5:
                 d["sample_filenames"].append(fn)
 
+    # V22.2 — attempt cross-run label inheritance via centroid match.
+    # Loads this run's per-cluster centroids (saved by face_clustering
+    # post-pass), compares against the active user's face library,
+    # and emits a suggested_label when sim >= SUGGEST_THRESHOLD.
+    suggestions: dict[int, dict] = {}
+    try:
+        from pixcull.pipeline.face_library import (
+            load_run_centroids, suggest_labels,
+        )
+        from pixcull.users import get_active_user, user_root
+        run = _get_run(run_id) or _reload_run_from_disk(run_id)
+        if run and run.get("output_dir"):
+            run_centroids = load_run_centroids(Path(run["output_dir"]))
+            if run_centroids is not None:
+                cluster_ids_arr, centroids = run_centroids
+                ulib = user_root(get_active_user())
+                suggs = suggest_labels(centroids, ulib)
+                for cid_int, sugg in zip(cluster_ids_arr.tolist(), suggs):
+                    if sugg is not None:
+                        suggestions[int(cid_int)] = {
+                            "label":      sugg[0],
+                            "similarity": float(round(sugg[1], 3)),
+                        }
+    except Exception as exc:  # noqa: BLE001
+        # Non-essential. Surface but don't fail the request.
+        print(f"[face_clusters_info] V22.2 suggest skipped: "
+              f"{type(exc).__name__}: {exc}", file=sys.stderr)
+
     # Attach labels + sort by n_photos desc (noise/-1 always last).
     out: list[dict] = []
     for cid, d in cluster_counts.items():
         d["label"] = labels.get(cid, "")
+        # V22.2 — suggested_label from cross-run centroid match.
+        # Only shown when there's no user-set label for this cluster
+        # (user override always wins).
+        if cid >= 0 and not d["label"] and cid in suggestions:
+            d["suggested_label"] = suggestions[cid]
         out.append(d)
     out.sort(key=lambda d: (d["id"] < 0, -d["n_photos"]))
     return {
@@ -2826,6 +2863,36 @@ class _Handler(BaseHTTPRequestHandler):
         if not _save_face_labels(run_id, labels):
             self.send_error(500, "failed to persist labels")
             return
+
+        # V22.2 — when a cluster gets a non-empty label, promote its
+        # centroid into the active user's global face library so the
+        # label can be auto-inherited in future runs. Unsubscribe
+        # (empty label) is a no-op on the library — we don't try to
+        # remove past centroids, since the user might re-label later.
+        if label:
+            try:
+                from pixcull.pipeline.face_library import (
+                    load_run_centroids, add_to_library,
+                )
+                from pixcull.users import get_active_user, user_root
+                run_dir = Path(run["output_dir"])
+                cents = load_run_centroids(run_dir)
+                if cents is not None:
+                    cluster_ids_arr, centroids = cents
+                    # Find the centroid for this specific cluster id
+                    matches = (cluster_ids_arr == cid).nonzero()[0]
+                    if len(matches) > 0:
+                        idx = int(matches[0])
+                        add_to_library(
+                            user_root(get_active_user()),
+                            label,
+                            centroids[idx],
+                        )
+            except Exception as exc:  # noqa: BLE001
+                # Library promotion failed — log but don't error the
+                # label save (the label is still saved per-run).
+                print(f"[label_post] library promotion skipped: "
+                      f"{type(exc).__name__}: {exc}", file=sys.stderr)
         out_body = _safe_dumps({
             "ok":     True,
             "run_id": run_id,

@@ -303,6 +303,7 @@ def cluster_faces_across_rows(
     eps: float = _DBSCAN_EPS,
     min_samples: int = _DBSCAN_MIN_SAMPLES,
     drop_embeddings: bool = True,
+    output_dir=None,
 ) -> list[dict[str, Any]]:
     """Run DBSCAN over the per-row face embeddings, write cluster IDs
     back into each row's ``face_clusters`` field.
@@ -363,6 +364,21 @@ def cluster_faces_across_rows(
 
     for (ri, fi), lab in zip(flat_index, labels):
         rows[ri]["face_clusters"][fi] = int(lab)
+
+    # V22.2 — persist per-cluster centroids BEFORE dropping the raw
+    # embeddings. Centroids enable cross-run label inheritance and
+    # cost ~2 KB per cluster on disk.
+    if output_dir is not None:
+        try:
+            from pixcull.pipeline.face_library import save_run_centroids
+            # flat_emb is in row-major order matching flat_index; rows
+            # has the same shape now that face_clusters is populated.
+            flat_emb_np = [np.asarray(e, dtype=np.float32) for e in flat_emb]
+            save_run_centroids(output_dir, rows, flat_emb_np)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[face_cluster] centroid save failed "
+                  f"({type(exc).__name__}: {exc}) — cross-run inheritance "
+                  f"will be unavailable for this run", file=sys.stderr)
 
     if drop_embeddings:
         for r in rows:

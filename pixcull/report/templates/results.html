@@ -1407,10 +1407,17 @@
     divider.style.display = "block";
     el.innerHTML = real.map(c => {
       const isActive = filterState.faceClusters.has(c.id);
-      const display = c.label || ("Person " + (c.id + 1));
-      // Hover tooltip lists the sample filenames so the user can recall
-      // who this cluster is before clicking.
-      const tip = `${c.n_photos} 张照片 · ${c.n_faces} 张人脸\\n样本: ${(c.sample_filenames || []).join(', ')}`;
+      // V22.2 — when there's no user label but the centroid matched
+      // a labeled cluster from a previous run, display the suggestion
+      // with a "≈" marker so the user can see + accept it.
+      let display = c.label;
+      let suggestionHint = "";
+      if (!display && c.suggested_label) {
+        display = "≈ " + c.suggested_label.label;
+        suggestionHint = ` (跨 run 推测,相似度 ${c.suggested_label.similarity.toFixed(2)})`;
+      }
+      if (!display) display = "Person " + (c.id + 1);
+      const tip = `${c.n_photos} 张照片 · ${c.n_faces} 张人脸${suggestionHint}\\n样本: ${(c.sample_filenames || []).join(', ')}`;
       return `<span class="pill face-pill${isActive ? ' active' : ''}" data-cid="${c.id}" title="${esc(tip)}">`
            + `👤 <span class="face-pill-label" data-cid="${c.id}">${esc(display)}</span>`
            + ` <span style="opacity:0.5">${c.n_photos}</span>`

@@ -101,7 +101,10 @@ def run_pipeline(
     # get ``face_clusters = []``.
     if progress_cb is not None:
         progress_cb(total, total, "跨照片人脸聚类…")
-    records = cluster_faces_across_rows(records, drop_embeddings=True)
+    # V22.2 — pass output_dir so face_clustering can persist per-cluster
+    # centroids; cross-run label inheritance reads them back.
+    records = cluster_faces_across_rows(records, drop_embeddings=True,
+                                          output_dir=output)
 
     # V23 — GPS clustering for the travel-persona "one per location"
     # picker. haversine DBSCAN with radius=100m. Photos without EXIF
