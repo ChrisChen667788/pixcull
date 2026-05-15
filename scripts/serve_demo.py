@@ -2105,6 +2105,9 @@ class _Handler(BaseHTTPRequestHandler):
         if path.startswith("/face_clusters/"):
             # V22.1 — face cluster summary + labels for a run.
             return self._serve_face_clusters(path[len("/face_clusters/"):])
+        if path.startswith("/face_avatar/"):
+            # V22.3 — mini-avatar JPEG for a (run_id, cluster_id) pair.
+            return self._serve_face_avatar(path[len("/face_avatar/"):])
         if path.startswith("/locations/"):
             # V23 — GPS location cluster summary for a run.
             return self._serve_locations(path[len("/locations/"):])
@@ -2813,6 +2816,42 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(out)
         return True
+
+    def _serve_face_avatar(self, rel: str) -> None:
+        """V22.3 — serve a per-cluster face crop JPEG.
+
+        URL: /face_avatar/<run_id>/<cluster_id>
+        File: <output_dir>/face_avatars/cluster_<cluster_id>.jpg
+
+        Returns 404 if the avatar doesn't exist (no faces in run, or
+        run pre-dates V22.3 — UI falls back to text-only pill).
+        """
+        parts = unquote(rel).split("/", 1)
+        if len(parts) != 2:
+            self.send_error(400, "expected /<run_id>/<cluster_id>")
+            return
+        run_id, cid_str = parts
+        try:
+            cid = int(cid_str)
+        except ValueError:
+            self.send_error(400, "cluster_id must be int")
+            return
+        run = _get_run(run_id) or _reload_run_from_disk(run_id)
+        if run is None:
+            self.send_error(404, "no such run")
+            return
+        p = Path(run["output_dir"]) / "face_avatars" / f"cluster_{cid}.jpg"
+        if not p.exists():
+            self.send_error(404, "no avatar for this cluster")
+            return
+        data = p.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", "image/jpeg")
+        self.send_header("Content-Length", str(len(data)))
+        # Long cache — avatars are content-stable per (run_id, cluster_id)
+        self.send_header("Cache-Control", "public, max-age=86400")
+        self.end_headers()
+        self.wfile.write(data)
 
     def _serve_face_clusters(self, run_id: str) -> None:
         """V22.1 — face cluster summary + labels for a run.

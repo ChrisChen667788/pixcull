@@ -1434,8 +1434,17 @@
       }
       if (!display) display = "Person " + (c.id + 1);
       const tip = `${c.n_photos} 张照片 · ${c.n_faces} 张人脸${suggestionHint}\\n样本: ${(c.sample_filenames || []).join(', ')}`;
+      // V22.3 — mini-avatar. ``/face_avatar/<run>/<cid>`` returns the
+      // best-representative face crop. ``onerror`` swaps in the 👤
+      // glyph if the file doesn't exist (older runs without avatars).
+      const avatarUrl = `/face_avatar/${run_id}/${c.id}`;
+      const avatarImg = `<img src="${avatarUrl}" class="face-pill-avatar" `
+        + `onerror="this.outerHTML='👤'" `
+        + `alt="" style="width:18px;height:18px;border-radius:50%;`
+        + `object-fit:cover;vertical-align:middle;margin-right:4px">`;
       return `<span class="pill face-pill${isActive ? ' active' : ''}" data-cid="${c.id}" title="${esc(tip)}">`
-           + `👤 <span class="face-pill-label" data-cid="${c.id}">${esc(display)}</span>`
+           + avatarImg
+           + `<span class="face-pill-label" data-cid="${c.id}">${esc(display)}</span>`
            + ` <span style="opacity:0.5">${c.n_photos}</span>`
            + ` <span class="face-pill-edit" data-cid="${c.id}" title="重命名这一组" style="margin-left:4px;opacity:0.4;cursor:text">✎</span>`
            + `</span>`;

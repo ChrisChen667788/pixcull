@@ -380,6 +380,17 @@ def cluster_faces_across_rows(
                   f"({type(exc).__name__}: {exc}) — cross-run inheritance "
                   f"will be unavailable for this run", file=sys.stderr)
 
+        # V22.3 — also save per-cluster avatar crops for the UI's
+        # face-pill mini-avatars. Picks the highest-score_final photo
+        # in each cluster as the representative + crops its face
+        # bbox to 200×200. Saved before dropping bboxes below.
+        try:
+            _save_cluster_avatars(rows, output_dir)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[face_cluster] avatar save failed "
+                  f"({type(exc).__name__}: {exc}) — UI will fall back "
+                  f"to text-only face pills", file=sys.stderr)
+
     if drop_embeddings:
         for r in rows:
             r.pop("face_embeddings", None)
@@ -392,6 +403,90 @@ def cluster_faces_across_rows(
           f"(eps={eps}, min_samples={min_samples})",
           file=sys.stderr)
     return rows
+
+
+def _save_cluster_avatars(rows: list[dict[str, Any]],
+                              output_dir) -> None:
+    """V22.3 — write one face-crop JPEG per cluster to
+    ``<output_dir>/face_avatars/cluster_<id>.jpg``.
+
+    Representative photo per cluster: the highest score_final row that
+    actually contains a face in this cluster. Tie-broken by lowest
+    face_max_blink (avoid blinking representatives).
+
+    Crops are 200×200 padded square centered on the largest face bbox
+    in the row that matches this cluster id (the bbox order matches
+    ``face_clusters`` order — index parity preserved from worker).
+
+    Idempotent — re-runs overwrite cluster_<id>.jpg with whatever the
+    current best representative is.
+    """
+    from pathlib import Path
+
+    AVATAR_SIZE = 200
+    avatar_dir = Path(output_dir) / "face_avatars"
+
+    # Group rows that belong to each cluster + their per-face index
+    # within the row's face_clusters list (so we know which bbox to crop).
+    by_cluster: dict[int, list[tuple[dict, int]]] = {}
+    for r in rows:
+        clusters = r.get("face_clusters") or []
+        for face_idx, cid in enumerate(clusters):
+            if cid < 0:
+                continue
+            by_cluster.setdefault(int(cid), []).append((r, face_idx))
+
+    if not by_cluster:
+        return
+
+    # Lazy imports — only pull PIL when there's something to crop.
+    from PIL import Image, ImageOps
+
+    avatar_dir.mkdir(parents=True, exist_ok=True)
+
+    for cid, members in by_cluster.items():
+        # Pick the best representative: highest score_final, with
+        # blink as a tiebreaker (lower = eyes open).
+        def _rep_key(item):
+            r, _ = item
+            return (
+                -(float(r.get("score_final") or 0.0)),
+                float(r.get("face_max_blink") or 0.0),
+            )
+        best_row, best_idx = sorted(members, key=_rep_key)[0]
+        bboxes = best_row.get("face_bboxes") or []
+        if best_idx >= len(bboxes):
+            continue
+        bbox = bboxes[best_idx]
+        path = best_row.get("path")
+        if not path:
+            continue
+        try:
+            with Image.open(path) as src:
+                # exif_transpose so the crop reflects on-screen orientation
+                src = ImageOps.exif_transpose(src).convert("RGB")
+                w, h = src.size
+                x1, y1, x2, y2 = (int(v) for v in bbox[:4])
+                # Pad to square with 20% margin
+                cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
+                side = max(x2 - x1, y2 - y1) * 1.4
+                half = side / 2
+                cx1 = max(0, int(cx - half))
+                cy1 = max(0, int(cy - half))
+                cx2 = min(w, int(cx + half))
+                cy2 = min(h, int(cy + half))
+                if cx2 - cx1 < 16 or cy2 - cy1 < 16:
+                    continue
+                face = src.crop((cx1, cy1, cx2, cy2))
+                # Resize to square
+                face.thumbnail((AVATAR_SIZE, AVATAR_SIZE),
+                               Image.Resampling.LANCZOS)
+                face.save(avatar_dir / f"cluster_{cid}.jpg",
+                          "JPEG", quality=84, optimize=True)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[face_avatar] cluster {cid}: {type(exc).__name__}: {exc}",
+                  file=sys.stderr)
+            continue
 
 
 def cluster_summary(rows: list[dict[str, Any]]) -> dict[int, dict]:
