@@ -1831,6 +1831,9 @@ class _Handler(BaseHTTPRequestHandler):
             self._serve_storage_info(); return True
         if sub == "/rubric_meta":
             self._serve_rubric_meta(); return True
+        # INFRA-4 — daily LLM spend ledger
+        if sub == "/llm_budget":
+            return self._serve_llm_budget()
         # V28 — user / team profile endpoints
         if sub == "/users":
             return self._serve_users_list()
@@ -1963,6 +1966,10 @@ class _Handler(BaseHTTPRequestHandler):
                  "doc":    "disk usage + run count summary"},
                 {"method": "GET",  "path": "/api/v1/rubric_meta",
                  "doc":    "rubric axes definition (for annotation UI)"},
+                # INFRA-4 — LLM cost ledger
+                {"method": "GET",  "path": "/api/v1/llm_budget",
+                 "doc":    "daily LLM spend (yuan) + cap from "
+                          "PIXCULL_LLM_BUDGET_YUAN env (default 10)"},
                 # P2.4 — active-learning queue
                 {"method": "GET",  "path": "/api/v1/runs/<run_id>/next_to_label",
                  "params": {"n": "1 (default) | N for batch queue"},
@@ -2867,6 +2874,23 @@ class _Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     # --- V28 multi-user / team endpoints ----------------------------------
+    def _serve_llm_budget(self) -> bool:
+        """INFRA-4 — daily LLM spend ledger snapshot.
+
+        Returns ``{date_utc, today_yuan, cap_yuan, remaining_yuan,
+        calls_today, over_cap, by_model, all_dates[:30]}``. Cap is
+        from ``PIXCULL_LLM_BUDGET_YUAN`` env (default 10 yuan/day).
+        """
+        from pixcull.llm_budget import snapshot
+        body = _safe_dumps(snapshot()).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+        return True
+
     def _serve_users_list(self) -> bool:
         """V28 — list all user profiles + which one is active."""
         from pixcull.users import list_users, get_active_user

@@ -257,6 +257,26 @@ class DeepseekMetaJudge:
             axes={a.name: VlmAxisScore(stars=None) for a in RUBRIC_AXES},
             model_name=self.model_name,
         )
+        # INFRA-4 — gate the call on the daily LLM budget. Pre-call
+        # check uses a rough estimate (typical meta prompt ~600 input
+        # tokens + 200 output); the real cost is recorded post-call.
+        try:
+            from pixcull.llm_budget import (
+                check_budget, estimate_cost, record_call,
+            )
+            est = estimate_cost(self._model, 600, 200)
+            if not check_budget(est):
+                verdict.elapsed_s = 0.0
+                verdict.error = (
+                    f"LLM budget exhausted (today >= "
+                    f"PIXCULL_LLM_BUDGET_YUAN cap); "
+                    f"skipping meta-judge for this photo"
+                )
+                return verdict
+        except Exception:  # noqa: BLE001
+            # Budget module unavailable for some reason — don't block.
+            pass
+
         t0 = time.time()
         try:
             # V4-Pro defaults to thinking mode which empties the
@@ -284,6 +304,14 @@ class DeepseekMetaJudge:
                     timeout=self._timeout,
                 )
             text = resp.choices[0].message.content or ""
+            # INFRA-4 — record actual token usage in the daily ledger.
+            try:
+                usage = getattr(resp, "usage", None)
+                pt = int(getattr(usage, "prompt_tokens", 0) or 0)
+                ct = int(getattr(usage, "completion_tokens", 0) or 0)
+                record_call(self._model, pt, ct)
+            except Exception:  # noqa: BLE001
+                pass
         except Exception as exc:  # noqa: BLE001
             verdict.elapsed_s = time.time() - t0
             verdict.error = f"{type(exc).__name__}: {exc}"
