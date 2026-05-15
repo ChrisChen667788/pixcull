@@ -2277,6 +2277,12 @@ class _Handler(BaseHTTPRequestHandler):
             return self._handle_export(path[len("/export/"):])
         if path == "/runs/cleanup":
             return self._handle_runs_cleanup()
+        # P0.4 — re-run SceneDetector on a run's cached scores.csv,
+        # applying V20's "face_count > 0 → not stilllife" correction
+        # to existing rows without re-running the full pipeline.
+        if path.startswith("/runs/") and path.endswith("/rescan_scene"):
+            mid = path[len("/runs/"):-len("/rescan_scene")]
+            return self._handle_rescan_scene(mid)
         if path.startswith("/annotation/"):
             return self._handle_save_annotation(path[len("/annotation/"):])
         if path.startswith("/face_clusters/") and path.endswith("/label"):
@@ -5040,6 +5046,116 @@ class _Handler(BaseHTTPRequestHandler):
         body = json.dumps({"ok": ok, "message": msg, "run_id": run_id},
                           ensure_ascii=False).encode("utf-8")
         self._send_json(status, body)
+
+    def _handle_rescan_scene(self, run_id: str) -> None:
+        """P0.4 — re-run SceneDetector on the cached scores.csv rows
+        of a run, applying V20's face-aware stilllife correction.
+
+        Pre-V20 SceneDetector mis-tagged a meaningful fraction of
+        indoor portrait / event shots as ``stilllife`` (CLIP's
+        "product in studio" prompt is a magnet for warm indoor lighting
+        with a centered subject). V20's worker.py added a correction
+        path — "if face_count > 0 and scene == stilllife, walk
+        scene_probs in descending order and pick the next non-
+        stilllife class". That fix only takes effect on NEW scans;
+        existing cached runs still carry the bad tags.
+
+        This endpoint applies the correction to cached scores.csv
+        rows IN-PLACE without re-running the full pipeline. Only
+        rows with face_count > 0 are touched; the corrected scene
+        is whichever non-stilllife class scored second-best in
+        scene_probs. When ``scene_probs`` isn't preserved on disk
+        (pre-V8.2 scans), we fall back to "portrait" as a safe
+        default since face_count > 0 strongly suggests that scene.
+
+        Method: POST so the action is deliberate (admin button only).
+        """
+        run = _get_run(run_id) or _reload_run_from_disk(run_id)
+        if run is None:
+            self.send_error(404, "no such run")
+            return
+        scores_path = Path(run["output_dir"]) / "scores.csv"
+        if not scores_path.exists():
+            self.send_error(404, "no scores.csv to re-scene")
+            return
+        import pandas as pd
+        df = pd.read_csv(scores_path)
+        if "scene" not in df.columns or "face_count" not in df.columns:
+            self.send_error(
+                400,
+                "scores.csv schema doesn't have scene + face_count — "
+                "this run is too old to re-scene cheaply. Re-scan the "
+                "folder instead.",
+            )
+            return
+
+        # Backup the existing scores.csv before mutating
+        backup = scores_path.with_suffix(
+            f".csv.bak.{int(time.time())}"
+        )
+        try:
+            scores_path.rename(backup)
+        except OSError as exc:
+            self.send_error(500, f"backup failed: {exc}")
+            return
+
+        # The set of "bad" stilllife tags we want to correct
+        mask = (
+            (df["scene"].astype(str) == "stilllife")
+            & (df["face_count"].fillna(0).astype(float) > 0)
+        )
+        n_candidates = int(mask.sum())
+
+        # Try to read the per-row scene_probs (a JSON string column
+        # since V8.2). When present, parse it and pick the
+        # highest-probability non-stilllife class. Otherwise default
+        # to "portrait" since face_count > 0 strongly suggests that.
+        corrected: list[tuple[int, str]] = []
+        if "scene_probs" in df.columns:
+            import ast
+            for idx in df.index[mask].tolist():
+                raw = df.at[idx, "scene_probs"]
+                pick = "portrait"
+                if isinstance(raw, str) and raw:
+                    try:
+                        probs = ast.literal_eval(raw)
+                        if isinstance(probs, dict):
+                            ranked = sorted(
+                                probs.items(), key=lambda kv: -float(kv[1]),
+                            )
+                            for name, _p in ranked:
+                                if name != "stilllife":
+                                    pick = name
+                                    break
+                    except (ValueError, SyntaxError, TypeError):
+                        pass
+                corrected.append((idx, pick))
+        else:
+            for idx in df.index[mask].tolist():
+                corrected.append((idx, "portrait"))
+
+        for idx, new_scene in corrected:
+            df.at[idx, "scene"] = new_scene
+        df.to_csv(scores_path, index=False)
+
+        body = _safe_dumps({
+            "ok":         True,
+            "run_id":     run_id,
+            "n_total":    int(len(df)),
+            "n_corrected": len(corrected),
+            "scene_redistribution":
+                {k: int(v) for k, v in
+                 pd.Series([c[1] for c in corrected]).value_counts().items()}
+                if corrected else {},
+            "backup_path": str(backup),
+            "note": "scores.csv 已更新;刷新结果页即可看到新的 scene 分布。",
+        }).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
 
     def _handle_runs_cleanup(self) -> None:
         """Bulk delete by policy. Body: {older_than_hours?, keep_last?}.
@@ -9599,6 +9715,7 @@ PYTHONPATH=. python scripts/eval_on_golden_set.py golden/ \
           <td class="muted">${fmtAge(r.age_seconds)}</td>
           <td>
             <a class="btn" href="/results/${r.run_id}">查看</a>
+            <button class="btn rescan-scene" ${isRunning ? "disabled title='running 中'" : "title='重判 stilllife → portrait 等(face_count>0 校正)'"}>重判场景</button>
             <button class="danger del" ${isRunning ? "disabled title='running 中,等完成再删'" : ""}>删除</button>
           </td>
         </tr>`;
@@ -9659,6 +9776,32 @@ PYTHONPATH=. python scripts/eval_on_golden_set.py golden/ \
     () => cleanup({ keep_last: 3 }, "保留最近 3 次,删除其余"));
   document.getElementById("cleanupAll").addEventListener("click",
     () => cleanup({ keep_last: 0 }, "全部清空(不含正在运行)"));
+
+  // P0.4 — re-judge scenes via /runs/<id>/rescan_scene. Targets the
+  // V20 stilllife-with-face mistag in older cached runs.
+  document.querySelector("#runsTable tbody").addEventListener("click", async e => {
+    const btn = e.target.closest(".rescan-scene");
+    if (!btn) return;
+    const row = btn.closest("tr");
+    const rid = row && row.dataset.id;
+    if (!rid) return;
+    if (!confirm(`重判 ${rid} 的场景? (face_count>0 的 stilllife → 改为次高概率类)`)) return;
+    btn.disabled = true; btn.textContent = "…";
+    try {
+      const res = await fetch(`/runs/${rid}/rescan_scene`, {method: "POST"});
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || ("HTTP " + res.status));
+      const redistro = data.scene_redistribution
+        ? Object.entries(data.scene_redistribution)
+            .map(([k, v]) => `${k}:${v}`).join(", ")
+        : "(无)";
+      toast(`已修正 ${data.n_corrected}/${data.n_total} 张 · 新分布: ${redistro}`);
+    } catch (e) {
+      toast("重判失败: " + e.message, true);
+    } finally {
+      btn.disabled = false; btn.textContent = "重判场景";
+    }
+  });
 
   // V2.1 retrain panel
   const retrainBtn = document.getElementById("retrainBtn");
