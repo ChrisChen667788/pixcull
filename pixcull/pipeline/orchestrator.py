@@ -15,6 +15,7 @@ from tqdm import tqdm
 from pixcull.config import PixCullConfig
 from pixcull.detectors.duplicate import cluster_bursts, demote_mediocre_bursts
 from pixcull.io.loader import list_images
+from pixcull.pipeline.burst_peak import rank_burst_peaks
 from pixcull.pipeline.face_clustering import cluster_faces_across_rows
 from pixcull.pipeline.location_clustering import cluster_locations_across_rows
 from pixcull.pipeline.parallel import parallel_analyze
@@ -214,6 +215,15 @@ def run_pipeline(
     df["score_final"] = [d["final"] for d in dim_scores]
     for dim in ("sharpness", "composition", "exposure", "aesthetic", "moment"):
         df[f"score_{dim}"] = [d[dim] for d in dim_scores]
+
+    # V27 — rank action peaks within each burst cluster. Needs
+    # score_final + score_sharpness + face_max_blink + face_min_ear,
+    # all of which exist on df at this point. Adds ``peak_rank`` and
+    # ``is_burst_peak`` columns. No-op when all clusters are size 1
+    # (no recurring frames → nothing to rank against).
+    if progress_cb is not None:
+        progress_cb(total, total, "连拍峰值排名…")
+    df = rank_burst_peaks(df)
 
     # V1.2: rescorer columns — always emitted when mode != off so downstream
     # tooling (scripts/pick_next_to_label.py, the review viewer, future

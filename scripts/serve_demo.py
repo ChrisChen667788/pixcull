@@ -856,6 +856,16 @@ def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
             "gps_lat":        _f(r.get("gps_lat")),
             "gps_lon":        _f(r.get("gps_lon")),
             "gps_cluster_id": _opt_int(r.get("gps_cluster_id")),
+            # V27 — per-burst peak rank. peak_rank=0 means "THE peak"
+            # in this row's burst cluster; is_burst_peak is the same
+            # signal as a bool for cheaper JS access. Singleton
+            # clusters (no real burst) all get rank=0 + is_peak=True
+            # but the UI ignores them by checking cluster size.
+            "peak_rank":      _opt_int(r.get("peak_rank")),
+            "is_burst_peak":  bool(r.get("is_burst_peak"))
+                              if r.get("is_burst_peak") not in
+                                 (None, "", float("nan"))
+                              else False,
             # V9.0 sort/filter/group fields
             "cluster_id": cluster_id,
             "datetime": dt_str,

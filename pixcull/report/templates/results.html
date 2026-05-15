@@ -837,6 +837,13 @@
       <span class="filter-divider" id="locationFiltersDivider" style="display:none"></span>
       <span class="filter-group" id="locationFilters"></span>
 
+      <!-- V27: per-burst peak ranking. One toggle button "🎯 每连拍
+           峰值" — when active, only the top-ranked frame in each
+           burst cluster passes the filter. Shown only when the run
+           actually has clusters of size ≥ 2 (real bursts). -->
+      <span class="filter-divider" id="burstPeakDivider" style="display:none"></span>
+      <span class="filter-group" id="burstPeakFilter"></span>
+
       <span style="flex:1"></span>
 
       <!-- V9.0: sort + group dropdowns -->
@@ -1330,6 +1337,10 @@
     // V23 — toggle: when true, only the highest-score-final photo
     // in each location cluster passes. Off by default.
     locationBestOnly: false,
+    // V27 — toggle: when true, only the top-ranked frame per burst
+    // cluster passes. Off by default. Pairs with the "🎯 每连拍峰值"
+    // button populated by buildBurstPeakFilter().
+    burstPeakOnly: false,
     sort: "default",
   };
 
@@ -1376,6 +1387,8 @@
     buildFaceFilters();
     // V23 — GPS location cluster filter chips.
     buildLocationFilters();
+    // V27 — burst peak toggle (sports/event "THE shot" picker).
+    buildBurstPeakFilter();
   }
   buildDynamicFilters();
 
@@ -1560,6 +1573,43 @@
     return m;
   }
 
+  // V27 — burst peak filter. Compute the set of burst cluster_ids that
+  // actually have >1 frames (the only ones where "peak" is meaningful)
+  // ONCE up front; the toggle button shows the count.
+  const _BURST_CLUSTER_SIZES = (() => {
+    const s = new Map();
+    for (const r of rows) {
+      const cid = r.cluster_id;
+      if (cid == null) continue;
+      s.set(cid, (s.get(cid) || 0) + 1);
+    }
+    return s;
+  })();
+  const _REAL_BURSTS = [..._BURST_CLUSTER_SIZES.entries()].filter(([_, n]) => n >= 2);
+  function buildBurstPeakFilter() {
+    const divider = document.getElementById("burstPeakDivider");
+    const el = document.getElementById("burstPeakFilter");
+    if (_REAL_BURSTS.length === 0) {
+      divider.style.display = "none";
+      el.innerHTML = "";
+      return;
+    }
+    divider.style.display = "block";
+    const totalBurstPhotos = _REAL_BURSTS.reduce((s, [_, n]) => s + n, 0);
+    el.innerHTML =
+      `<span class="pill burst-peak-toggle${filterState.burstPeakOnly ? ' active' : ''}" ` +
+      `title="${_REAL_BURSTS.length} 个连拍组,共 ${totalBurstPhotos} 张 — ` +
+      `打开后只保留每组的最佳一张">` +
+      `🎯 每连拍峰值 <span style="opacity:0.5">${_REAL_BURSTS.length}</span></span>`;
+    el.querySelectorAll(".burst-peak-toggle").forEach(b => {
+      b.addEventListener("click", () => {
+        filterState.burstPeakOnly = !filterState.burstPeakOnly;
+        b.classList.toggle("active");
+        render();
+      });
+    });
+  }
+
   // Sort key function
   function sortRows(arr) {
     const order = { keep: 0, maybe: 1, cull: 2, "": 3 };
@@ -1628,6 +1678,16 @@
         const cid = r.gps_cluster_id;
         if (cid == null) return false;   // unknown-location photos hidden
         return bestMap.get(cid) === r.filename;
+      });
+    }
+    // V27 — "每连拍峰值" toggle. Keep only the photo with
+    // is_burst_peak=true in each burst cluster of size ≥ 2 (singletons
+    // pass-through since they're not real bursts).
+    if (filterState.burstPeakOnly) {
+      filtered = filtered.filter(r => {
+        const size = _BURST_CLUSTER_SIZES.get(r.cluster_id) || 0;
+        if (size < 2) return true;       // singleton cluster: keep
+        return r.is_burst_peak === true;
       });
     }
     const sorted = sortRows(filtered);
