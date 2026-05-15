@@ -11,7 +11,7 @@ from pixcull.detectors.exposure import ExposureDetector
 from pixcull.detectors.face import FaceDetector
 from pixcull.detectors.scene import SceneDetector
 from pixcull.detectors.subject import SubjectDetector
-from pixcull.io.exif import read_exif_time
+from pixcull.io.exif import read_exif_gps, read_exif_time
 from pixcull.io.loader import load_image
 from pixcull.scoring.aesthetic import AestheticScorer
 
@@ -112,6 +112,13 @@ def analyze_one(path: Path) -> Optional[dict]:
             # but lists are cheaper + safer for the spawn-fork wire).
             face_embeddings = [e.tolist() for e in embs]
 
+    # V23 — EXIF GPS for the location-cluster post-pass. Returns
+    # ``None`` cleanly when the camera had no GPS or the photo is
+    # indoor / lock failed.
+    gps = read_exif_gps(path)
+    gps_lat = gps[0] if gps else None
+    gps_lon = gps[1] if gps else None
+
     return {
         "path": str(path),
         "filename": path.name,
@@ -125,6 +132,11 @@ def analyze_one(path: Path) -> Optional[dict]:
         # ``face_clusters`` gets populated by the post-pass.
         "face_bboxes": face_bboxes,
         "face_embeddings": face_embeddings,
+        # V23 — raw GPS in decimal degrees (positive N/E, negative S/W).
+        # ``gps_cluster_id`` gets filled by ``cluster_locations_across_rows``
+        # in the main process post-pass; None means "no GPS / unknown".
+        "gps_lat": gps_lat,
+        "gps_lon": gps_lon,
         "flags": flags,
         "elapsed_s": time.time() - t0,
         **metrics,

@@ -128,6 +128,24 @@ def scan_folder(folder: Path, output: Path, config,
         cluster_faces_across_rows, cluster_summary,
     )
     rows = cluster_faces_across_rows(rows, drop_embeddings=True)
+
+    # V23 — GPS clustering for the travel persona. Photos without
+    # GPS get gps_cluster_id=None and stay grouped under "未知位置"
+    # in the UI; photos within 100m of each other share a cluster id.
+    from pixcull.pipeline.location_clustering import (
+        cluster_locations_across_rows, location_summary,
+    )
+    rows = cluster_locations_across_rows(rows)
+    loc_cs = location_summary(rows)
+    if loc_cs:
+        print(f"  location clusters: {len(loc_cs)} found, top:",
+              file=sys.stderr)
+        for cid, d in sorted(loc_cs.items(),
+                              key=lambda kv: -kv[1]["n_photos"])[:5]:
+            print(f"    cluster {cid}: {d['n_photos']} photos "
+                  f"@ ({d['center_lat']:.4f}, {d['center_lon']:.4f}) "
+                  f"best={d['best_filename']}",
+                  file=sys.stderr)
     if rows:
         cs = cluster_summary(rows)
         real_clusters = {k: v for k, v in cs.items() if k >= 0}
@@ -161,6 +179,11 @@ def scan_folder(folder: Path, output: Path, config,
                 # V22.0 — per-face cluster IDs. Empty list when no
                 # meaningful faces; -1 means "noise / unique-ish face".
                 "face_clusters": list(row.get("face_clusters") or []),
+                # V23 — GPS cluster + raw coords. None when no EXIF
+                # GPS / failed lock.
+                "gps_lat":        row.get("gps_lat"),
+                "gps_lon":        row.get("gps_lon"),
+                "gps_cluster_id": row.get("gps_cluster_id"),
             })
             if features_csv is not None:
                 merged: dict = dict(row)

@@ -16,6 +16,7 @@ from pixcull.config import PixCullConfig
 from pixcull.detectors.duplicate import cluster_bursts, demote_mediocre_bursts
 from pixcull.io.loader import list_images
 from pixcull.pipeline.face_clustering import cluster_faces_across_rows
+from pixcull.pipeline.location_clustering import cluster_locations_across_rows
 from pixcull.pipeline.parallel import parallel_analyze
 from pixcull.pipeline.worker import analyze_one
 from pixcull.scoring.decision import Decision, decide
@@ -100,6 +101,13 @@ def run_pipeline(
     if progress_cb is not None:
         progress_cb(total, total, "跨照片人脸聚类…")
     records = cluster_faces_across_rows(records, drop_embeddings=True)
+
+    # V23 — GPS clustering for the travel-persona "one per location"
+    # picker. haversine DBSCAN with radius=100m. Photos without EXIF
+    # GPS get ``gps_cluster_id=None`` (UI shows them under "未知位置").
+    if progress_cb is not None:
+        progress_cb(total, total, "按 GPS 地点聚类…")
+    records = cluster_locations_across_rows(records)
 
     df = pd.DataFrame(records)
     if df.empty:

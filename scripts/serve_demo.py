@@ -849,6 +849,13 @@ def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
             # list = no faces in this photo. The CSV stores this as
             # a string repr; parse it back if non-empty.
             "face_clusters": _parse_int_list(r.get("face_clusters")),
+            # V23 — GPS coords + location cluster id. None when EXIF
+            # had no GPS / failed lock; the UI groups those under
+            # "未知位置". gps_lat/lon are surfaced so the UI can show
+            # a map pin in the lightbox info pane (V23.1+).
+            "gps_lat":        _f(r.get("gps_lat")),
+            "gps_lon":        _f(r.get("gps_lon")),
+            "gps_cluster_id": _opt_int(r.get("gps_cluster_id")),
             # V9.0 sort/filter/group fields
             "cluster_id": cluster_id,
             "datetime": dt_str,
@@ -1000,6 +1007,28 @@ def _clean_csv_string(v: object) -> str:
     return s
 
 
+def _opt_int(v: object) -> int | None:
+    """V23 — coerce a CSV cell to int-or-None, NaN-safe.
+
+    pandas reads missing CSV cells as ``float('nan')``. Naive
+    ``int(NaN)`` raises ValueError; naive ``int(v) if v is not None``
+    converts NaN to a junk integer on some platforms (NaN → 0 or
+    -9223372036854775808 depending on libc). This helper rejects
+    NaN explicitly.
+    """
+    if v is None:
+        return None
+    if isinstance(v, float) and v != v:
+        return None
+    s = str(v).strip()
+    if not s or s.lower() == "nan":
+        return None
+    try:
+        return int(float(s))
+    except (TypeError, ValueError):
+        return None
+
+
 def _parse_int_list(v: object) -> list[int]:
     """V22.0 — parse a CSV cell that round-tripped a Python list of ints
     back into a list.
@@ -1143,6 +1172,86 @@ def _build_face_clusters_info(run_id: str, rows: list[dict]) -> dict:
     return {
         "clusters": out,
         "n_noise":  cluster_counts.get(-1, {}).get("n_photos", 0),
+    }
+
+
+# ---------------------------------------------------------------------------
+# V23 — location cluster summary for the travel-persona UI.
+# Reads gps_cluster_id from already-loaded rows, computes centroid +
+# n_photos + per-cluster "best" filename. No persistence layer yet
+# (location labels — "Notre Dame" / "我家" — are V23.1 work; reverse
+# geocoding goes beyond V23 scope).
+# ---------------------------------------------------------------------------
+
+def _build_locations_info(rows: list[dict]) -> dict:
+    """Build the {clusters: [...], n_no_gps} block for the results
+    payload + the /locations endpoint.
+
+    Each cluster entry:
+        id              run-scoped int
+        n_photos        photos in this cluster
+        center_lat,
+        center_lon      unweighted mean of member coords
+        best_filename   highest score_final photo in the cluster
+        best_score      that photo's final score
+        sample_filenames first up-to-5 filenames (for thumbnails)
+    """
+    cluster_acc: dict[int, dict] = {}
+    n_no_gps = 0
+    for r in rows:
+        cid = r.get("gps_cluster_id")
+        if cid is None:
+            n_no_gps += 1
+            continue
+        try:
+            cid_int = int(cid)
+        except (TypeError, ValueError):
+            n_no_gps += 1
+            continue
+        d = cluster_acc.setdefault(cid_int, {
+            "id":               cid_int,
+            "n_photos":         0,
+            "lats":             [],
+            "lons":             [],
+            "sample_filenames": [],
+            "best_score":       -1.0,
+            "best_filename":    "",
+        })
+        d["n_photos"] += 1
+        lat = r.get("gps_lat")
+        lon = r.get("gps_lon")
+        if lat is not None and lon is not None:
+            d["lats"].append(float(lat))
+            d["lons"].append(float(lon))
+        fn = r.get("filename", "")
+        if fn and len(d["sample_filenames"]) < 5:
+            d["sample_filenames"].append(fn)
+        sf = r.get("score_final")
+        if sf is not None:
+            try:
+                sf_f = float(sf)
+            except (TypeError, ValueError):
+                sf_f = -1.0
+            if sf_f > d["best_score"]:
+                d["best_score"] = sf_f
+                d["best_filename"] = fn
+
+    clusters: list[dict] = []
+    for d in cluster_acc.values():
+        if d["lats"]:
+            d["center_lat"] = sum(d["lats"]) / len(d["lats"])
+            d["center_lon"] = sum(d["lons"]) / len(d["lons"])
+        else:
+            d["center_lat"] = None
+            d["center_lon"] = None
+        d.pop("lats", None)
+        d.pop("lons", None)
+        clusters.append(d)
+    clusters.sort(key=lambda d: -d["n_photos"])
+    return {
+        "clusters":  clusters,
+        "n_no_gps":  n_no_gps,
+        "n_total":   len(rows),
     }
 
 
@@ -1653,6 +1762,9 @@ class _Handler(BaseHTTPRequestHandler):
         if path.startswith("/face_clusters/"):
             # V22.1 — face cluster summary + labels for a run.
             return self._serve_face_clusters(path[len("/face_clusters/"):])
+        if path.startswith("/locations/"):
+            # V23 — GPS location cluster summary for a run.
+            return self._serve_locations(path[len("/locations/"):])
         if path.startswith("/thumb/"):
             return self._serve_image(path[len("/thumb/"):], _THUMB_SIZE)
         if path.startswith("/full/"):
@@ -2146,11 +2258,14 @@ class _Handler(BaseHTTPRequestHandler):
         # so they survive server restarts (V22.0's clusters are
         # run-scoped; V22.2+ will add cross-run inheritance).
         face_clusters_info = _build_face_clusters_info(run_id, rows)
+        # V23 — GPS location clusters + per-cluster "best" picker.
+        locations_info = _build_locations_info(rows)
         payload = {
             "run_id": run_id,
             "rows": rows,
             "summary": summary,
             "face_clusters": face_clusters_info,
+            "locations": locations_info,
         }
         # _safe_dumps strips NaN/Infinity (V14.0) so JS JSON.parse never
         # blows up on a stray inf in score_final or a NaN in axis stars.
@@ -2223,6 +2338,34 @@ class _Handler(BaseHTTPRequestHandler):
             "src_paths": src_paths,
         }
         body = _safe_dumps(payload).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _serve_locations(self, run_id: str) -> None:
+        """V23 — GPS location cluster summary for a run.
+
+        Returns the same block we inline into the results-page payload,
+        but available as a standalone JSON endpoint for refresh after
+        the user picks "select per-location best" so the UI can show
+        an updated decision summary.
+        """
+        result = _build_results(run_id)
+        if result is None:
+            run = _get_run(run_id) or _reload_run_from_disk(run_id)
+            if run is None:
+                self.send_error(404, "no such run")
+                return
+            self.send_error(425, "results not ready")
+            return
+        rows, _summary = result
+        info = _build_locations_info(rows)
+        info["run_id"] = run_id
+        info["schema"] = "pixcull.locations.v1"
+        body = _safe_dumps(info).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))

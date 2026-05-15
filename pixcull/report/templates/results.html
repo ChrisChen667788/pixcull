@@ -829,6 +829,14 @@
       <span class="filter-divider" id="faceFiltersDivider" style="display:none"></span>
       <span class="filter-group" id="faceFilters"></span>
 
+      <!-- V23: GPS location filter chips. One pill per location
+           cluster (~100 m radius haversine DBSCAN). Each pill:
+           "📍 <lat,lon-or-label> <count>". Click toggles filter.
+           "选每地点一张" button highlights the highest-score photo
+           in each location. -->
+      <span class="filter-divider" id="locationFiltersDivider" style="display:none"></span>
+      <span class="filter-group" id="locationFilters"></span>
+
       <span style="flex:1"></span>
 
       <!-- V9.0: sort + group dropdowns -->
@@ -1308,6 +1316,14 @@
     // V22.1 — set of face cluster ids active in the filter. Empty
     // set = no face filter (all photos pass).
     faceClusters: new Set(),
+    // V23 — set of GPS location cluster ids; empty = no filter.
+    // The special value -2 means "未知位置 / no GPS" — distinct
+    // from -1 (which DBSCAN noise would use, but we use min_samples=1
+    // so -1 never appears on the GPS side).
+    locationClusters: new Set(),
+    // V23 — toggle: when true, only the highest-score-final photo
+    // in each location cluster passes. Off by default.
+    locationBestOnly: false,
     sort: "default",
   };
 
@@ -1352,6 +1368,8 @@
     // (computed server-side from row.face_clusters). Hidden when no
     // clusters were found (run has no recurring faces).
     buildFaceFilters();
+    // V23 — GPS location cluster filter chips.
+    buildLocationFilters();
   }
   buildDynamicFilters();
 
@@ -1462,6 +1480,80 @@
     input.addEventListener("blur", commit);
   }
 
+  // V23 — GPS location cluster filter chips + "每地点选一张" toggle.
+  // Driven by PAYLOAD.locations.clusters (computed server-side from
+  // row.gps_cluster_id). Hidden when the run has no GPS at all.
+  let locationsState = (PAYLOAD.locations && PAYLOAD.locations.clusters) || [];
+  const locationsNoGps = (PAYLOAD.locations && PAYLOAD.locations.n_no_gps) || 0;
+  function buildLocationFilters() {
+    const divider = document.getElementById("locationFiltersDivider");
+    const el = document.getElementById("locationFilters");
+    if (!locationsState.length) {
+      divider.style.display = "none";
+      el.innerHTML = "";
+      return;
+    }
+    divider.style.display = "block";
+    // Each pill: "📍 lat,lon (or short label) n_photos 🏆 best_fn"
+    const pills = locationsState.map(c => {
+      const isActive = filterState.locationClusters.has(c.id);
+      const lat = c.center_lat != null ? c.center_lat.toFixed(3) : "?";
+      const lon = c.center_lon != null ? c.center_lon.toFixed(3) : "?";
+      const tip = `${c.n_photos} 张照片\\n中心: (${lat}, ${lon})\\n` +
+                  `🏆 当地最佳: ${c.best_filename} (${c.best_score?.toFixed(2)})\\n` +
+                  `样本: ${(c.sample_filenames || []).join(', ')}`;
+      return `<span class="pill location-pill${isActive ? ' active' : ''}" `
+           + `data-loc="${c.id}" title="${esc(tip)}">`
+           + `📍 ${lat},${lon} `
+           + `<span style="opacity:0.5">${c.n_photos}</span>`
+           + `</span>`;
+    });
+    // Unknown-location bucket if any photos lack GPS
+    if (locationsNoGps > 0) {
+      const isActive = filterState.locationClusters.has(-2);
+      pills.push(`<span class="pill location-pill${isActive ? ' active' : ''}" `
+        + `data-loc="-2" title="无 EXIF GPS 的照片">📍 未知位置 `
+        + `<span style="opacity:0.5">${locationsNoGps}</span></span>`);
+    }
+    // V23 "选每地点最佳" toggle
+    pills.push(`<span class="pill location-best-toggle${filterState.locationBestOnly ? ' active' : ''}" `
+      + `title="每个地点只显示分数最高的一张" data-best="1">🏆 每地点一张</span>`);
+    el.innerHTML = pills.join("");
+
+    el.querySelectorAll(".location-pill").forEach(pill => {
+      pill.addEventListener("click", () => {
+        const cid = parseInt(pill.dataset.loc, 10);
+        if (filterState.locationClusters.has(cid)) {
+          filterState.locationClusters.delete(cid);
+          pill.classList.remove("active");
+        } else {
+          filterState.locationClusters.add(cid);
+          pill.classList.add("active");
+        }
+        render();
+      });
+    });
+    el.querySelectorAll(".location-best-toggle").forEach(b => {
+      b.addEventListener("click", () => {
+        filterState.locationBestOnly = !filterState.locationBestOnly;
+        b.classList.toggle("active");
+        render();
+      });
+    });
+  }
+
+  // V23 — "best filename per cluster" lookup, used by the location-best
+  // filter. Computed once from locationsState; if filterState changes
+  // we don't need to recompute since the cluster->best mapping is
+  // a property of the run, not the filter.
+  function bestFilenamePerLocation() {
+    const m = new Map();
+    for (const c of locationsState) {
+      if (c.best_filename) m.set(c.id, c.best_filename);
+    }
+    return m;
+  }
+
   // Sort key function
   function sortRows(arr) {
     const order = { keep: 0, maybe: 1, cull: 2, "": 3 };
@@ -1510,6 +1602,27 @@
       filtered = filtered.filter(r =>
         (r.face_clusters || []).some(cid => filterState.faceClusters.has(cid))
       );
+    }
+    // V23 — GPS location filter. -2 = "未知位置" (no GPS). A row
+    // passes if its gps_cluster_id is selected OR (gps_cluster_id
+    // is null AND -2 is selected).
+    if (filterState.locationClusters.size > 0) {
+      filtered = filtered.filter(r => {
+        const cid = r.gps_cluster_id;
+        if (cid != null && filterState.locationClusters.has(cid)) return true;
+        if (cid == null && filterState.locationClusters.has(-2)) return true;
+        return false;
+      });
+    }
+    // V23 — "每地点最佳" toggle. Keep one row per location cluster
+    // (the highest score_final one, precomputed server-side).
+    if (filterState.locationBestOnly) {
+      const bestMap = bestFilenamePerLocation();
+      filtered = filtered.filter(r => {
+        const cid = r.gps_cluster_id;
+        if (cid == null) return false;   // unknown-location photos hidden
+        return bestMap.get(cid) === r.filename;
+      });
     }
     const sorted = sortRows(filtered);
 
