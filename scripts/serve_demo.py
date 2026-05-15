@@ -2776,10 +2776,23 @@ class _Handler(BaseHTTPRequestHandler):
         # without a manual ``rm -rf /tmp/pixcull_demo``. Old .jpg files
         # remain on disk but aren't read; admin-page "清理" still
         # cleans them.
-        cache_path = cache_dir / f"{src.name}.{size}.v2.jpg"
+        # V26 — cache key bumped to v3 because the loader logic
+        # changed: for RAW files at sizes ≥ 1600 we now use
+        # ``load_image_for_display`` (quality-preserving full
+        # postprocess when the embedded JPEG is too small) instead
+        # of the fast ``load_image`` (which always took the
+        # embedded thumbnail). Existing v2 caches for RAW would
+        # serve a soft preview where the user expects a sharp one.
+        cache_path = cache_dir / f"{src.name}.{size}.v3.jpg"
         if not cache_path.exists():
-            from pixcull.io.loader import load_image  # local import
-            img = load_image(src, max_side=size)
+            # V26: large requests get the display loader, small
+            # ones (thumbnail grid) keep the fast path.
+            if size >= 1600:
+                from pixcull.io.loader import load_image_for_display
+                img = load_image_for_display(src, max_side=size)
+            else:
+                from pixcull.io.loader import load_image
+                img = load_image(src, max_side=size)
             if img is None:
                 self.send_error(500, "image decode failed")
                 return

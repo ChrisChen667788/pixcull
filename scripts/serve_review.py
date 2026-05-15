@@ -421,10 +421,18 @@ class _Handler(BaseHTTPRequestHandler):
         if src is None:
             self.send_error(404, f"not in index: {fn}")
             return
-        cache_name = f"{fn}.{size}.jpg"
+        # V26 — cache key bump (v2) parallels serve_demo: the display
+        # loader gives sharper RAW previews at sizes ≥ 1600, so old
+        # caches built from the analysis loader are invalidated.
+        cache_name = f"{fn}.{size}.v2.jpg"
         cache_path = self.cache_dir / cache_name
         if not cache_path.exists():
-            img = load_image(src, max_side=size)
+            # V26: route large requests to the quality-preserving loader.
+            if size >= 1600:
+                from pixcull.io.loader import load_image_for_display
+                img = load_image_for_display(src, max_side=size)
+            else:
+                img = load_image(src, max_side=size)
             if img is None:
                 self.send_error(500, "image decode failed")
                 return

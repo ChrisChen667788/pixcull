@@ -188,17 +188,32 @@ def _resize_jpeg(src_path: Path, target_width: int, quality: int) -> bytes:
     Resize is "fit width" — the height adjusts to preserve aspect.
     Photos narrower than ``target_width`` are NOT upscaled (clients
     don't want stretched pixels in their delivered gallery).
+
+    V26 — uses ``load_image_for_display`` so RAW (CR3/DNG/etc) gets a
+    quality-preserving decode (full rawpy postprocess if the embedded
+    JPEG is too small) instead of the soft camera-thumbnail preview.
+    For JPG / HEIC paths this behaves identically to the previous
+    ``Image.open + thumbnail`` path.
     """
-    with Image.open(src_path) as im:
-        im = im.convert("RGB")
-        w, h = im.size
-        if w > target_width:
-            new_h = int(h * target_width / w)
-            im = im.resize((target_width, new_h), Image.Resampling.LANCZOS)
-        buf = io.BytesIO()
-        im.save(buf, format="JPEG", quality=quality, optimize=True,
-                progressive=True)
-        return buf.getvalue()
+    from pixcull.io.loader import load_image_for_display
+    # max_side at 2× target gives headroom for portrait-orientation
+    # photos (where the long side is the height); we re-crop to the
+    # exact target width below.
+    im = load_image_for_display(src_path, max_side=max(target_width * 2,
+                                                          target_width))
+    if im is None:
+        # Last-resort fallback to the pre-V26 PIL path so the gallery
+        # doesn't lose a frame on an unusual RAW format.
+        with Image.open(src_path) as fallback:
+            im = fallback.convert("RGB")
+    w, h = im.size
+    if w > target_width:
+        new_h = int(h * target_width / w)
+        im = im.resize((target_width, new_h), Image.Resampling.LANCZOS)
+    buf = io.BytesIO()
+    im.save(buf, format="JPEG", quality=quality, optimize=True,
+            progressive=True)
+    return buf.getvalue()
 
 
 def build_gallery_zip(
