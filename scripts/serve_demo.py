@@ -3309,15 +3309,30 @@ class _Handler(BaseHTTPRequestHandler):
                 target_mode = params.get("target", "tmp")
             except (UnicodeDecodeError, json.JSONDecodeError) as exc:
                 _dbg("export/parse_body", exc)
-        if target_mode not in ("tmp", "alongside"):
-            self._reject_upload(400, "target must be 'tmp' or 'alongside'")
-            return
-        if target_mode == "alongside" and run.get("mode") != "scan":
+        # V29.1 — new "embedded" mode writes IPTC INTO the original
+        # file via exiftool. Same scope rules as "alongside": only
+        # works for scanned runs where we know the originals.
+        if target_mode not in ("tmp", "alongside", "embedded"):
             self._reject_upload(
                 400,
-                "'alongside' 模式只在扫描本地文件夹时可用 —— 上传模式没有原图位置可写。",
+                "target must be 'tmp' / 'alongside' / 'embedded'",
             )
             return
+        if target_mode in ("alongside", "embedded") and run.get("mode") != "scan":
+            self._reject_upload(
+                400,
+                "'alongside' / 'embedded' 模式只在扫描本地文件夹时可用 —— "
+                "上传模式没有原图位置可写。",
+            )
+            return
+        if target_mode == "embedded":
+            from pixcull.io.iptc_embed import is_available, install_hint
+            if not is_available():
+                self._reject_upload(
+                    500,
+                    "embedded 模式需要 exiftool。\n" + install_hint(),
+                )
+                return
 
         result = _build_results(run_id)
         if result is None:
@@ -3365,6 +3380,24 @@ class _Handler(BaseHTTPRequestHandler):
                           keywords=iptc["keywords"],
                           description=iptc["description"],
                           headline=iptc["headline"])
+            elif target_mode == "embedded":
+                # V29.1 — write IPTC into the original via exiftool.
+                # No sidecar; metadata travels with the file.
+                src = _resolve_image_source(run, fn)
+                if src is None:
+                    skipped += 1
+                    continue
+                from pixcull.io.iptc_embed import write_iptc_to_file
+                ok = write_iptc_to_file(
+                    src,
+                    rating=stars, color_label=label,
+                    keywords=iptc["keywords"],
+                    description=iptc["description"],
+                    headline=iptc["headline"],
+                )
+                if not ok:
+                    skipped += 1
+                    continue
             else:
                 virtual = xmp_dir / Path(fn).name
                 write_xmp(virtual, stars, label,
