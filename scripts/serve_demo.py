@@ -1771,6 +1771,11 @@ class _Handler(BaseHTTPRequestHandler):
             return self._serve_image(path[len("/full/"):], _FULL_SIZE)
         if path.startswith("/xmp_zip/"):
             return self._serve_xmp_zip(path[len("/xmp_zip/"):])
+        if path.startswith("/gallery_zip/"):
+            # V23.x — standalone HTML gallery export. Returns a zip
+            # the user can email/upload as-is; index.html opens in
+            # any browser, no PixCull server needed.
+            return self._serve_gallery_zip(path[len("/gallery_zip/"):])
         # V9.3: scores.csv direct download
         if path.startswith("/scores_csv/"):
             return self._serve_scores_csv(path[len("/scores_csv/"):])
@@ -2645,6 +2650,61 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_header(
             "Content-Disposition",
             f'attachment; filename="pixcull_{run_id}_scores.csv"',
+        )
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _serve_gallery_zip(self, rel: str) -> None:
+        """V23.x — standalone HTML gallery export for a run.
+
+        URL: /gallery_zip/<run_id>?include=keep[,maybe[,cull]]
+
+        Default is keep-only (the typical client deliverable). Pass
+        ``include=keep,maybe`` to also surface ambiguous shots, or
+        ``include=keep,maybe,cull`` to dump everything.
+
+        Streams the assembled zip as ``Content-Disposition: attachment``
+        so the browser saves it instead of opening it.
+        """
+        # Split run_id from query string
+        if "?" in rel:
+            run_id, qs = rel.split("?", 1)
+        else:
+            run_id, qs = rel, ""
+        from urllib.parse import parse_qs
+        qparams = parse_qs(qs)
+        include_raw = qparams.get("include", ["keep"])[0]
+        include = tuple(
+            x.strip() for x in include_raw.split(",")
+            if x.strip() in ("keep", "maybe", "cull")
+        ) or ("keep",)
+
+        result = _build_results(run_id)
+        if result is None:
+            run = _get_run(run_id) or _reload_run_from_disk(run_id)
+            if run is None:
+                self.send_error(404, "no such run")
+                return
+            self.send_error(425, "results not ready")
+            return
+        rows, _summary = result
+
+        from pixcull.report.gallery import build_gallery_zip
+        try:
+            data = build_gallery_zip(
+                run_id, rows, include_decisions=include,
+            )
+        except Exception as exc:  # noqa: BLE001
+            self.send_error(500, f"gallery build failed: {exc}")
+            return
+
+        title_decisions = "_".join(include)
+        self.send_response(200)
+        self.send_header("Content-Type", "application/zip")
+        self.send_header(
+            "Content-Disposition",
+            f'attachment; filename="pixcull_{run_id}_gallery_{title_decisions}.zip"',
         )
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()

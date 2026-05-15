@@ -854,6 +854,12 @@
       <button class="export-btn" id="exportZipBtn" title="导出 XMP 评级到 zip 包(Lightroom / Capture One)">下载 XMP</button>
       <button class="export-btn" id="exportAlongsideBtn" style="display:none" title="把 XMP sidecar 写到原图旁边">写到原图旁边</button>
       <a class="export-btn" id="csvBtn" title="下载完整 scores.csv (Excel/Numbers 友好)" style="text-decoration:none">下载 CSV</a>
+      <!-- V23.x: standalone HTML gallery export — self-contained zip
+           the user can email/upload as-is to clients. Default = keep
+           only; Shift-click for keep+maybe. -->
+      <a class="export-btn" id="galleryBtn"
+         title="导出可发客户的 standalone HTML 相册(默认仅 keep;Shift-点 = keep+maybe)"
+         style="text-decoration:none">📔 导出相册</a>
       <button class="export-btn" id="batchBtn" title="按总分批量打 keep/cull 标签">批量打分</button>
       <span class="export-status" id="exportStatus"></span>
     </div>
@@ -2650,6 +2656,27 @@
   const csvBtn = document.getElementById("csvBtn");
   csvBtn.href = `/scores_csv/${run_id}`;
   csvBtn.setAttribute("download", "");
+
+  // V23.x — standalone HTML gallery export. Plain link with the
+  // download attr; Shift+click widens scope to keep+maybe.
+  const galleryBtn = document.getElementById("galleryBtn");
+  function updateGalleryHref(includeMaybe) {
+    const inc = includeMaybe ? "keep,maybe" : "keep";
+    galleryBtn.href = `/gallery_zip/${run_id}?include=${inc}`;
+  }
+  updateGalleryHref(false);
+  galleryBtn.setAttribute("download", "");
+  galleryBtn.addEventListener("click", e => {
+    // If user shift-clicked, swap to keep+maybe before letting the
+    // browser follow the link. updateGalleryHref mutates href in
+    // place; the click then targets the new URL.
+    if (e.shiftKey) {
+      updateGalleryHref(true);
+      // Reset back to keep-only after the click so a later plain
+      // click goes back to default.
+      setTimeout(() => updateGalleryHref(false), 200);
+    }
+  });
 
   // V9.3 — batch label by score threshold
   document.getElementById("batchBtn").addEventListener("click", async () => {
