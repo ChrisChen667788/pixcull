@@ -905,11 +905,27 @@
     <div class="info-pane" id="lbInfo"></div>
   </div>
 
-  <!-- V9.2 cluster compare modal -->
+  <!-- V9.2 cluster compare modal · P0.3 added next/prev burst nav -->
   <div class="cmp-modal" id="cmpModal">
     <div class="cmp-header">
       <h3 id="cmpTitle">连拍组比较</h3>
       <span class="muted" id="cmpMeta"></span>
+      <!-- P0.3 — prev/next walk across burst clusters without
+           leaving the modal. Keyboard: ← / → and j / k. -->
+      <span style="margin-left:auto;display:inline-flex;gap:6px">
+        <button id="cmpPrev" style="padding:4px 10px;
+          background:transparent;color:var(--muted);
+          border:1px solid var(--border);border-radius:4px;
+          font:inherit;cursor:pointer" title="上一个连拍组 (←)">
+          ◀ 上一组
+        </button>
+        <button id="cmpNext" style="padding:4px 10px;
+          background:transparent;color:var(--muted);
+          border:1px solid var(--border);border-radius:4px;
+          font:inherit;cursor:pointer" title="下一个连拍组 (→)">
+          下一组 ▶
+        </button>
+      </span>
       <span class="close" id="cmpClose">关闭 (Esc)</span>
     </div>
     <div class="cmp-body" id="cmpBody"></div>
@@ -1713,12 +1729,25 @@
       `<span class="pill burst-peak-toggle${filterState.burstPeakOnly ? ' active' : ''}" ` +
       `title="${_REAL_BURSTS.length} 个连拍组,共 ${totalBurstPhotos} 张 — ` +
       `打开后只保留每组的最佳一张">` +
-      `🎯 每连拍峰值 <span style="opacity:0.5">${_REAL_BURSTS.length}</span></span>`;
+      `🎯 每连拍峰值 <span style="opacity:0.5">${_REAL_BURSTS.length}</span></span>` +
+      // P0.3 — direct entry to the V9.2 compare modal without
+      // having to switch to sort=cluster first.
+      `<span class="pill burst-compare-jump" ` +
+      `title="打开并排比较 — 从第一个连拍组开始,←/→ 翻页">` +
+      `⊞ 并排比较</span>`;
     el.querySelectorAll(".burst-peak-toggle").forEach(b => {
       b.addEventListener("click", () => {
         filterState.burstPeakOnly = !filterState.burstPeakOnly;
         b.classList.toggle("active");
         render();
+      });
+    });
+    el.querySelectorAll(".burst-compare-jump").forEach(b => {
+      b.addEventListener("click", () => {
+        // Jump straight to the first burst cluster
+        if (_REAL_BURSTS.length > 0) {
+          openCompare(`c${_REAL_BURSTS[0][0]}`);
+        }
       });
     });
   }
@@ -3122,6 +3151,74 @@
   cmpClose.addEventListener("click", () => cmpModal.classList.remove("show"));
   cmpModal.addEventListener("click", e => {
     if (e.target === cmpModal) cmpModal.classList.remove("show");
+  });
+
+  // P0.3 — prev/next burst walk + keyboard navigation. Compute the
+  // list of REAL burst cluster keys (size ≥ 2) once; openCompare
+  // tracks the index into this list so prev/next can advance.
+  let _COMPARE_BURST_KEYS = [];
+  let _COMPARE_CUR_IDX = -1;
+
+  function _rebuildBurstKeys() {
+    const counts = new Map();
+    for (const r of rows) {
+      if (r.cluster_id == null) continue;
+      counts.set(r.cluster_id, (counts.get(r.cluster_id) || 0) + 1);
+    }
+    _COMPARE_BURST_KEYS = [...counts.entries()]
+      .filter(([_, n]) => n >= 2)
+      .sort((a, b) => a[0] - b[0])           // stable by cluster_id
+      .map(([cid, _]) => `c${cid}`);
+  }
+  _rebuildBurstKeys();
+
+  // Wrap openCompare so callers (button clicks, prev/next) both
+  // update the current index.
+  const _origOpenCompare = openCompare;
+  openCompare = function(clusterKey) {
+    // Re-build the list lazily in case rows have shifted
+    if (_COMPARE_BURST_KEYS.length === 0) _rebuildBurstKeys();
+    _COMPARE_CUR_IDX = _COMPARE_BURST_KEYS.indexOf(clusterKey);
+    _origOpenCompare(clusterKey);
+    _updateCmpNavLabels();
+  };
+
+  function _updateCmpNavLabels() {
+    const prev = document.getElementById("cmpPrev");
+    const next = document.getElementById("cmpNext");
+    if (!prev || !next) return;
+    const total = _COMPARE_BURST_KEYS.length;
+    if (total <= 1) {
+      prev.disabled = true; next.disabled = true;
+      prev.style.opacity = next.style.opacity = "0.4";
+    } else {
+      prev.disabled = _COMPARE_CUR_IDX <= 0;
+      next.disabled = _COMPARE_CUR_IDX >= total - 1;
+      prev.style.opacity = prev.disabled ? "0.4" : "1";
+      next.style.opacity = next.disabled ? "0.4" : "1";
+    }
+  }
+
+  function _cmpStep(delta) {
+    const nxt = _COMPARE_CUR_IDX + delta;
+    if (nxt < 0 || nxt >= _COMPARE_BURST_KEYS.length) return;
+    openCompare(_COMPARE_BURST_KEYS[nxt]);
+  }
+
+  document.getElementById("cmpPrev").addEventListener("click",
+    () => _cmpStep(-1));
+  document.getElementById("cmpNext").addEventListener("click",
+    () => _cmpStep(1));
+
+  // Keyboard shortcuts while the compare modal is open. Mirrors the
+  // V14.4 modal-registry pattern used by other modals.
+  document.addEventListener("keydown", e => {
+    if (!cmpModal.classList.contains("show")) return;
+    if (e.key === "ArrowLeft" || e.key === "j") {
+      e.preventDefault(); _cmpStep(-1);
+    } else if (e.key === "ArrowRight" || e.key === "k") {
+      e.preventDefault(); _cmpStep(1);
+    }
   });
 
   // XMP export — POST /export/<run_id>.
