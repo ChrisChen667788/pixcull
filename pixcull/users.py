@@ -47,6 +47,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -78,14 +79,50 @@ def _app_data_root() -> Path:
     return p
 
 
-def get_active_user() -> str:
-    """Return the active user id. ``PIXCULL_USER`` env var overrides;
-    default = "default" (the legacy single-user install).
+# V28.2 — per-request user override. The HTTP handler can set this
+# (via a cookie or header read at the top of do_GET / do_POST) so
+# different requests can target different users WITHOUT changing
+# the env var + restarting. Falls through to the env-var default
+# when nothing is set on the current thread.
+#
+# threading.local because the HTTPServer uses ThreadingHTTPServer
+# in V21+ (one thread per request), so attribute access naturally
+# isolates per-request state.
+_REQUEST_USER = threading.local()
 
-    Invalid IDs (containing /, .., etc.) silently fall through to
-    ``default`` rather than crashing — the user can fix their env
-    var without losing access to their data.
+
+def set_request_user(user_id: str | None) -> None:
+    """V28.2 — set the per-request user override.
+
+    Call at the start of each HTTP request from a cookie / header.
+    Pass None to clear (revert to env-var default). Invalid IDs are
+    silently dropped — same behavior as ``get_active_user`` for env
+    var.
     """
+    if user_id is None:
+        if hasattr(_REQUEST_USER, "uid"):
+            del _REQUEST_USER.uid
+        return
+    if not _USER_ID_RE.match(user_id):
+        return
+    _REQUEST_USER.uid = user_id
+
+
+def get_active_user() -> str:
+    """Return the active user id.
+
+    Lookup priority:
+      1. V28.2 per-request override (``set_request_user``)
+      2. ``PIXCULL_USER`` env var (V28 baseline)
+      3. ``"default"`` (the legacy single-user install)
+
+    Invalid IDs at any layer silently fall through to ``default``
+    rather than crashing — keeps the data-access path safe even
+    when a bogus value sneaks in via env var or cookie.
+    """
+    req_uid = getattr(_REQUEST_USER, "uid", None)
+    if req_uid and _USER_ID_RE.match(req_uid):
+        return req_uid
     uid = os.environ.get("PIXCULL_USER") or "default"
     if not _USER_ID_RE.match(uid):
         print(f"[users] invalid PIXCULL_USER={uid!r} — using 'default'",
@@ -307,6 +344,7 @@ def subscribe_to_team_vertical(user_id: str, vertical_key: str,
 __all__ = [
     "_app_data_root",
     "get_active_user",
+    "set_request_user",      # V28.2 — per-request override
     "user_root",
     "list_users",
     "create_user",

@@ -1883,6 +1883,9 @@ class _Handler(BaseHTTPRequestHandler):
         # V28 — user management
         if sub == "/users":
             return self._handle_users_create()
+        # V28.2 — switch active user via cookie (no restart needed)
+        if sub == "/users/active":
+            return self._handle_users_active_post()
         if sub.startswith("/users/") and sub.endswith("/team_subscribe"):
             uid = sub[len("/users/"):-len("/team_subscribe")]
             return self._handle_team_subscribe(uid)
@@ -2131,7 +2134,31 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     # --- routes ------------------------------------------------------------
+    def _read_request_user(self) -> None:
+        """V28.2 — set the active user for this request from either:
+        1. ``X-PixCull-User`` request header (third-party / mobile)
+        2. ``pixcull_user`` cookie (browser session, set by
+           ``POST /api/v1/users/active``)
+
+        Falls through (no-op) when neither is set, in which case
+        ``get_active_user()`` returns the env-var default.
+        """
+        from pixcull.users import set_request_user
+        uid = self.headers.get("X-PixCull-User") or ""
+        if not uid:
+            cookie_hdr = self.headers.get("Cookie") or ""
+            for part in cookie_hdr.split(";"):
+                k, _, v = part.strip().partition("=")
+                if k == "pixcull_user":
+                    uid = v.strip()
+                    break
+        if uid:
+            set_request_user(uid)
+        else:
+            set_request_user(None)
+
     def do_GET(self) -> None:  # noqa: N802
+        self._read_request_user()       # V28.2
         path = urlparse(self.path).path
         # V25 — versioned API namespace. Auth-gated, CORS-friendly,
         # discoverable via ``GET /api/v1/``. Most routes are aliases to
@@ -2231,6 +2258,7 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_error(404, "not found")
 
     def do_POST(self) -> None:  # noqa: N802
+        self._read_request_user()       # V28.2
         path = urlparse(self.path).path
         # V25 — versioned API namespace (POST side).
         if path.startswith("/api/v1"):
@@ -2861,6 +2889,55 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
+        return True
+
+    def _handle_users_active_post(self) -> bool:
+        """V28.2 — POST /api/v1/users/active with body
+        ``{user_id: str}`` sets the ``pixcull_user`` cookie. The
+        cookie applies only to this browser session; the env var
+        baseline is unchanged. Pass empty string / no body to
+        clear the cookie (revert to env-var default).
+
+        The cookie is HttpOnly so JS can't read it (mitigates the
+        XSS-leaks-active-user attack vector), SameSite=Lax so it
+        survives cross-tab navigation but not cross-site requests.
+        """
+        from pixcull.users import _USER_ID_RE
+        n = int(self.headers.get("Content-Length") or "0")
+        try:
+            body = json.loads(self.rfile.read(n).decode("utf-8") or "{}")
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            self.send_error(400, "invalid JSON")
+            return True
+        uid = str(body.get("user_id") or "").strip()
+        # Validate against the same allowlist as create_user. Empty
+        # input is OK — that's the "clear cookie" signal.
+        if uid and not _USER_ID_RE.match(uid):
+            self.send_error(400, "invalid user_id format")
+            return True
+        out_body = _safe_dumps({
+            "ok":     True,
+            "active": uid or "default",
+        }).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(out_body)))
+        # Cookie management: set when uid is non-empty, expire (Max-Age=0)
+        # when it's the empty "clear" signal.
+        if uid:
+            self.send_header(
+                "Set-Cookie",
+                f"pixcull_user={uid}; Path=/; HttpOnly; "
+                f"SameSite=Lax; Max-Age=2592000",   # 30 days
+            )
+        else:
+            self.send_header(
+                "Set-Cookie",
+                "pixcull_user=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0",
+            )
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(out_body)
         return True
 
     def _handle_users_create(self) -> bool:
@@ -8231,11 +8308,11 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
       </div>
       <div style="border-top:1px solid var(--border);padding-top:14px;
            margin-top:14px;font-size:10px;color:var(--muted-soft);line-height:1.5">
-        要切换到其他用户,在启动 PixCull 前设置环境变量:
-        <code style="display:block;background:rgba(0,0,0,0.3);padding:6px 8px;
-              border-radius:4px;margin-top:4px;color:var(--fg);
-              font-family:ui-monospace,monospace">export PIXCULL_USER=&lt;user_id&gt;</code>
-        然后重启 PixCull.app(或 serve_demo.py 进程)。
+        <b style="color:var(--fg)">V28.2:</b> 点击上面任一非当前用户的行 → 直接切换(本浏览器
+        会话内,通过 cookie 标记;不需要重启服务)。<br>
+        <span style="opacity:0.8">如果要 PERMANENTLY 改默认用户(全局),启动前设
+        <code style="background:rgba(0,0,0,0.3);padding:1px 5px;border-radius:3px;
+              font-family:ui-monospace,monospace">PIXCULL_USER=&lt;id&gt;</code></span>
       </div>
       <div style="text-align:right;margin-top:14px">
         <button onclick="closeUserModal()" style="padding:6px 14px;
@@ -8540,9 +8617,10 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
       modalList.innerHTML = (data.users || []).map(u => {
         const tag = u.is_active
           ? '<span style="color:var(--keep);margin-left:6px;font-size:10px">← 当前</span>'
-          : '';
-        return `<div style="padding:8px 10px;border-radius:4px;
-                ${u.is_active ? 'background:rgba(52,211,153,0.08);' : ''}
+          : '<span style="color:var(--muted-soft);margin-left:6px;font-size:10px">点击切换</span>';
+        return `<div data-uid="${u.user_id}" class="user-row"
+                style="padding:8px 10px;border-radius:4px;
+                ${u.is_active ? 'background:rgba(52,211,153,0.08);' : 'cursor:pointer;'}
                 margin-bottom:4px;display:flex;justify-content:space-between;
                 align-items:center;font-size:12px">
           <span><b>${u.user_id}</b>${tag}</span>
@@ -8551,6 +8629,27 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
           </span>
         </div>`;
       }).join("");
+      // V28.2 — click a (non-active) row to switch via cookie
+      modalList.querySelectorAll(".user-row").forEach(row => {
+        row.addEventListener("click", async () => {
+          const targetUid = row.dataset.uid;
+          if (!targetUid) return;
+          if (targetUid === pillName.textContent) return;  // already active
+          try {
+            const res = await fetch("/api/v1/users/active", {
+              method: "POST",
+              headers: {"Content-Type": "application/json"},
+              body: JSON.stringify({user_id: targetUid}),
+            });
+            if (!res.ok) throw new Error("HTTP " + res.status);
+            // V28.2: the cookie set means subsequent requests load
+            // the new user. Refresh to pick up everything.
+            location.reload();
+          } catch (e) {
+            createMsg.textContent = "切换失败: " + e.message;
+          }
+        });
+      });
     } catch (e) {
       console.warn("userPill: refresh failed", e);
       pill.style.display = "none";
