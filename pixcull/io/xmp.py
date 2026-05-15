@@ -36,7 +36,10 @@ _XPACKET_UUID = "W5M0MpCehiHzreSzNTczkc9d"
 _VALID_LABELS = frozenset({"", "Red", "Yellow", "Green", "Blue", "Purple"})
 
 
-def write_xmp(image_path: Path, rating: int, color_label: str = "") -> Path:
+def write_xmp(image_path: Path, rating: int, color_label: str = "",
+                 keywords: list[str] | None = None,
+                 description: str = "",
+                 headline: str = "") -> Path:
     """Write Lightroom-compatible XMP sidecar next to ``image_path``.
 
     Args:
@@ -46,6 +49,16 @@ def write_xmp(image_path: Path, rating: int, color_label: str = "") -> Path:
         rating: 0..5; clamped silently if outside range. 0 = "unrated".
         color_label: one of "", "Red", "Yellow", "Green", "Blue", "Purple".
             Anything else raises ValueError to catch typos at the call site.
+        keywords: V29 — list of IPTC ``dc:subject`` keywords to embed.
+            Photojournalism + commercial workflows search by these in
+            Lr / C1 catalogs ("show me all PixCull:keep + scene:portrait").
+            Empty list / None = no <dc:subject> block.
+        description: V29 — IPTC ``dc:description`` (LR's "Caption" field).
+            Free-form text; typically PixCull's per-image verdict.
+            Empty = no caption block written.
+        headline: V29 — IPTC ``photoshop:Headline`` (LR's "Headline").
+            Short single-line; typically PixCull's top strength phrase.
+            Empty = no headline block.
 
     Returns:
         Path to the written .xmp file.
@@ -62,14 +75,61 @@ def write_xmp(image_path: Path, rating: int, color_label: str = "") -> Path:
         if color_label else ""
     )
 
+    # V29 — IPTC namespace blocks. ``dc:`` is Dublin Core, the
+    # standard XMP wrapper for keywords + descriptions. ``photoshop:``
+    # is Adobe's extension for the Headline field LR specifically reads.
+    iptc_blocks = ""
+    if keywords:
+        # ``rdf:Bag`` is an unordered keyword set; ``rdf:Seq`` would
+        # imply ordering. LR treats both identically; Bag is the
+        # conventional shape for keywords.
+        items = "".join(
+            f"          <rdf:li>{escape(str(k))}</rdf:li>\n"
+            for k in keywords if str(k).strip()
+        )
+        if items:
+            iptc_blocks += (
+                "      <dc:subject>\n"
+                "        <rdf:Bag>\n"
+                f"{items}"
+                "        </rdf:Bag>\n"
+                "      </dc:subject>\n"
+            )
+    if description:
+        # dc:description is an alt-lang Alt — LR reads the x-default
+        # variant by default. We could emit per-language but that
+        # adds complexity for zero gain in practice.
+        iptc_blocks += (
+            "      <dc:description>\n"
+            "        <rdf:Alt>\n"
+            f'          <rdf:li xml:lang="x-default">{escape(description)}</rdf:li>\n'
+            "        </rdf:Alt>\n"
+            "      </dc:description>\n"
+        )
+    if headline:
+        iptc_blocks += (
+            f"      <photoshop:Headline>{escape(headline)}</photoshop:Headline>\n"
+        )
+
+    # Build namespace declarations. Always include xmp:; conditionally
+    # add dc: and photoshop: only when we're writing those blocks (the
+    # XMP spec is permissive but Adobe tools warn on unused ns).
+    ns_decls = ['xmlns:xmp="http://ns.adobe.com/xap/1.0/"']
+    if keywords or description:
+        ns_decls.append('xmlns:dc="http://purl.org/dc/elements/1.1/"')
+    if headline:
+        ns_decls.append('xmlns:photoshop="http://ns.adobe.com/photoshop/1.0/"')
+    ns_str = "\n        ".join(ns_decls)
+
     body = (
         '<?xpacket begin="﻿" id="' + _XPACKET_UUID + '"?>\n'
         '<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="PixCull">\n'
         '  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">\n'
         '    <rdf:Description rdf:about=""\n'
-        '        xmlns:xmp="http://ns.adobe.com/xap/1.0/">\n'
+        f'        {ns_str}>\n'
         f'      <xmp:Rating>{rating}</xmp:Rating>\n'
         f'{label_tag}'
+        f'{iptc_blocks}'
         '    </rdf:Description>\n'
         '  </rdf:RDF>\n'
         '</x:xmpmeta>\n'
@@ -133,3 +193,90 @@ def decision_to_xmp(decision: str) -> tuple[int, str]:
         "maybe": (3, "Yellow"),
         "cull":  (1, "Red"),
     }.get(decision, (0, ""))
+
+
+# V29 — build IPTC fields from a row + advice. Centralized here so
+# the /export endpoint, the CLI ``pixcull export``, and any future
+# bulk tooling all emit identical metadata.
+def build_iptc_fields_from_row(
+    row: dict,
+    *,
+    advice: dict | None = None,
+    face_labels: dict[int, str] | None = None,
+    vertical: str | None = None,
+    run_id: str | None = None,
+) -> dict:
+    """V29 — turn a result row into IPTC keyword + caption fields.
+
+    Returns ``{keywords: [str], description: str, headline: str}``
+    ready to feed into ``write_xmp``.
+
+    Keyword scheme (all are namespaced so search is unambiguous in
+    LR's keyword tree):
+      ``PixCull:keep`` / ``PixCull:maybe`` / ``PixCull:cull``
+      ``PixCull:scene:<scene>``
+      ``PixCull:vertical:<key>``                  (only when set)
+      ``PixCull:person:<label>``                  (per-face for clusters
+                                                    that have user labels)
+      ``PixCull:run:<run_id_prefix>``             (last 4 chars; for
+                                                    grouping in LR)
+    Each keyword survives a LR catalog export. Photographers can
+    filter "Find: keywords contains PixCull:person:Bride" to surface
+    every catalog photo where PixCull identified the bride.
+    """
+    decision = str(row.get("decision") or "")
+    scene = str(row.get("scene") or "")
+    keywords: list[str] = []
+
+    if decision in ("keep", "maybe", "cull"):
+        keywords.append(f"PixCull:{decision}")
+    if scene:
+        keywords.append(f"PixCull:scene:{scene}")
+    if vertical:
+        keywords.append(f"PixCull:vertical:{vertical}")
+    if run_id:
+        # Last 4 chars is short + unambiguous within a single user's
+        # catalog; the full run_id would clutter LR's keyword tree.
+        keywords.append(f"PixCull:run:{run_id[-4:]}")
+
+    # Per-face person keywords. ``face_clusters`` is a list of int
+    # cluster ids; ``face_labels`` is the user-supplied {cluster_id:
+    # label} from V22.1. Only labeled clusters contribute keywords —
+    # unlabeled "Person N" doesn't survive LR catalog filtering well.
+    fc = row.get("face_clusters") or []
+    if face_labels and fc:
+        seen = set()
+        for cid in fc:
+            try:
+                cid_int = int(cid)
+            except (TypeError, ValueError):
+                continue
+            label = (face_labels.get(cid_int) or "").strip()
+            if label and label not in seen:
+                keywords.append(f"PixCull:person:{label}")
+                seen.add(label)
+
+    # V20 advice → caption + headline. The verdict_short string is
+    # designed to be a one-liner ("保留 ✓ — 亮点: Zone V 中灰..."), so
+    # use it as the headline. The fuller description joins strengths
+    # + weaknesses into a paragraph (skipped when both are empty —
+    # don't want a blank caption shadow).
+    headline = ""
+    description = ""
+    if advice:
+        headline = str(advice.get("verdict_short") or "")
+        bits: list[str] = []
+        for s in advice.get("strengths") or []:
+            bits.append(f"+ {s}")
+        for w in advice.get("weaknesses") or []:
+            bits.append(f"- {w}")
+        for sug in advice.get("suggestions") or []:
+            bits.append(f"→ {sug}")
+        if bits:
+            description = "\n".join(bits)
+
+    return {
+        "keywords":    keywords,
+        "description": description,
+        "headline":    headline,
+    }

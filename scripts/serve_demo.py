@@ -2984,11 +2984,19 @@ class _Handler(BaseHTTPRequestHandler):
             return
         rows, _ = result
 
-        from pixcull.io.xmp import write_xmp, decision_to_xmp
+        from pixcull.io.xmp import (
+            write_xmp, decision_to_xmp, build_iptc_fields_from_row,
+        )
 
         output_dir = Path(run["output_dir"])
         xmp_dir = output_dir / "xmp"
         xmp_dir.mkdir(parents=True, exist_ok=True)
+
+        # V29 — surface face cluster labels + run vertical for IPTC
+        # keyword generation. ``face_labels`` is {cluster_id: label};
+        # ``vertical`` is the per-run scoring override (V17.0+).
+        face_labels = _load_face_labels(run_id)
+        run_vertical = run.get("vertical") or None
 
         written = 0
         skipped = 0
@@ -2997,16 +3005,31 @@ class _Handler(BaseHTTPRequestHandler):
             fn = r["filename"]
             decision = r["decision"]
             stars, label = decision_to_xmp(decision)
+            # V29 — IPTC fields (keywords / description / headline)
+            # derived from the row + advice + face labels.
+            iptc = build_iptc_fields_from_row(
+                r,
+                advice=r.get("advice") or None,
+                face_labels=face_labels,
+                vertical=run_vertical,
+                run_id=run_id,
+            )
             if target_mode == "alongside":
                 src = _resolve_image_source(run, fn)
                 if src is None:
                     skipped += 1
                     continue
                 # Sidecar lands at <orig_dir>/<stem>.xmp
-                write_xmp(src, stars, label)
+                write_xmp(src, stars, label,
+                          keywords=iptc["keywords"],
+                          description=iptc["description"],
+                          headline=iptc["headline"])
             else:
                 virtual = xmp_dir / Path(fn).name
-                write_xmp(virtual, stars, label)
+                write_xmp(virtual, stars, label,
+                          keywords=iptc["keywords"],
+                          description=iptc["description"],
+                          headline=iptc["headline"])
             written += 1
             per_decision[decision] += 1
 
