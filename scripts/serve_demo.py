@@ -1700,9 +1700,268 @@ class _Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt: str, *args: object) -> None:
         sys.stderr.write("%s - %s\n" % (self.address_string(), fmt % args))
 
+    # --- V25 /api/v1/ dispatch ---------------------------------------------
+    # Routes under /api/v1/ are designed for programmatic consumption:
+    # mobile apps, third-party tools, the Lightroom plugin's future
+    # cross-machine support. All return clean JSON (no HTML) and carry
+    # CORS headers from end_headers() above.
+    #
+    # Most routes are thin aliases over the existing handlers; the
+    # unique additions are the discovery endpoint and the mobile-friendly
+    # summary endpoints (``/runs/<id>`` returns a single JSON doc
+    # describing the run + linking to its specific assets).
+    def _dispatch_api_v1_get(self, path: str) -> bool:
+        """Returns True if the request was handled. Caller falls through
+        to legacy routes (or 404) when this returns False."""
+        sub = path[len("/api/v1"):]
+        if sub in ("", "/"):
+            return self._serve_api_v1_index()
+        if sub == "/runs":
+            return self._serve_runs_list_json_api()
+        if sub == "/verticals":
+            self._serve_verticals_json(); return True
+        if sub == "/storage_info":
+            self._serve_storage_info(); return True
+        if sub == "/rubric_meta":
+            self._serve_rubric_meta(); return True
+        # /runs/<id> and its sub-resources
+        if sub.startswith("/runs/"):
+            tail = sub[len("/runs/"):]
+            # /runs/<id> (no further path) → run summary
+            if "/" not in tail:
+                return self._serve_api_v1_run_summary(tail)
+            run_id, rest = tail.split("/", 1)
+            if rest == "decisions":
+                self._serve_decisions(run_id); return True
+            if rest == "face_clusters":
+                self._serve_face_clusters(run_id); return True
+            if rest == "locations":
+                self._serve_locations(run_id); return True
+            if rest == "status":
+                self._serve_status(run_id); return True
+            if rest == "scores.csv":
+                self._serve_scores_csv(run_id); return True
+            if rest == "gallery.zip" or rest.startswith("gallery.zip?"):
+                # Strip /api/v1/runs/<id>/gallery.zip → ``run_id`` +
+                # optional ``?include=keep,maybe``. Re-attach the query
+                # string the way ``_serve_gallery_zip`` expects.
+                qs = ""
+                if "?" in rest:
+                    _, qs = rest.split("?", 1)
+                self._serve_gallery_zip(f"{run_id}?{qs}" if qs else run_id)
+                return True
+            if rest == "xmp.zip":
+                self._serve_xmp_zip(run_id); return True
+        return False
+
+    def _dispatch_api_v1_post(self, path: str) -> bool:
+        sub = path[len("/api/v1"):]
+        if sub == "/scan_local":
+            self._handle_scan_local(); return True
+        if sub == "/analyze":
+            self._handle_analyze_post(); return True
+        if sub.startswith("/runs/"):
+            tail = sub[len("/runs/"):]
+            if "/" in tail:
+                run_id, rest = tail.split("/", 1)
+                if rest == "face_clusters/label":
+                    self._handle_face_label_post(run_id); return True
+                if rest == "export":
+                    self._handle_export(run_id); return True
+        return False
+
+    def _serve_api_v1_index(self) -> bool:
+        """V25 discovery endpoint. Returns the route map + version info
+        so mobile / third-party clients can introspect without scraping
+        the source.
+        """
+        body = _safe_dumps({
+            "schema":   "pixcull.api.v1.index",
+            "version":  "v1",
+            "server":   "PixCull",
+            "auth": {
+                "model":            "localhost-free + optional API key",
+                "api_key_header":   "X-PixCull-API-Key",
+                "api_key_env":      "PIXCULL_API_KEY",
+                "is_localhost":     self.client_address[0] in
+                                     ("127.0.0.1", "::1", "localhost"),
+            },
+            "endpoints": [
+                {"method": "GET",  "path": "/api/v1/",
+                 "doc":    "this discovery index"},
+                {"method": "GET",  "path": "/api/v1/runs",
+                 "doc":    "list runs with summary"},
+                {"method": "GET",  "path": "/api/v1/runs/<run_id>",
+                 "doc":    "summary of one run + asset URLs"},
+                {"method": "GET",  "path": "/api/v1/runs/<run_id>/decisions",
+                 "doc":    "{filename: keep|maybe|cull} + src_paths"},
+                {"method": "GET",  "path": "/api/v1/runs/<run_id>/face_clusters",
+                 "doc":    "face cluster summary + labels"},
+                {"method": "POST", "path": "/api/v1/runs/<run_id>/face_clusters/label",
+                 "body":   "{cluster_id: int, label: str}",
+                 "doc":    "rename a face cluster"},
+                {"method": "GET",  "path": "/api/v1/runs/<run_id>/locations",
+                 "doc":    "GPS location cluster summary"},
+                {"method": "GET",  "path": "/api/v1/runs/<run_id>/status",
+                 "doc":    "pipeline progress JSON"},
+                {"method": "GET",  "path": "/api/v1/runs/<run_id>/scores.csv",
+                 "doc":    "scores.csv download"},
+                {"method": "GET",  "path": "/api/v1/runs/<run_id>/gallery.zip",
+                 "params": {"include": "keep | keep,maybe | keep,maybe,cull"},
+                 "doc":    "standalone HTML gallery zip"},
+                {"method": "GET",  "path": "/api/v1/runs/<run_id>/xmp.zip",
+                 "doc":    "XMP sidecar zip (run /export first)"},
+                {"method": "POST", "path": "/api/v1/runs/<run_id>/export",
+                 "doc":    "render XMP sidecars to disk"},
+                {"method": "POST", "path": "/api/v1/scan_local",
+                 "body":   "{folder: abs_path, vertical?: str}",
+                 "doc":    "kick off a scan of a local folder"},
+                {"method": "POST", "path": "/api/v1/analyze",
+                 "doc":    "upload + analyze a multipart batch"},
+                {"method": "GET",  "path": "/api/v1/verticals",
+                 "doc":    "vertical registry + sample bank progress"},
+                {"method": "GET",  "path": "/api/v1/storage_info",
+                 "doc":    "disk usage + run count summary"},
+                {"method": "GET",  "path": "/api/v1/rubric_meta",
+                 "doc":    "rubric axes definition (for annotation UI)"},
+            ],
+        }).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "public, max-age=60")
+        self.end_headers()
+        self.wfile.write(body)
+        return True
+
+    def _serve_runs_list_json_api(self) -> bool:
+        """V25 — clean JSON run list (no HTML). The pre-existing
+        ``/runs`` endpoint already returns JSON (via _enumerate_runs);
+        this is the versioned alias with the standard envelope shape.
+        """
+        runs = _enumerate_runs()
+        body = _safe_dumps({
+            "schema":  "pixcull.api.v1.runs.list",
+            "n_runs":  len(runs),
+            "runs":    runs,
+        }).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+        return True
+
+    def _serve_api_v1_run_summary(self, run_id: str) -> bool:
+        """V25 — single-run summary doc designed for a mobile app's
+        run-detail page. Returns counts + the URL paths to fetch the
+        run's various asset endpoints. The mobile client follows the
+        embedded paths rather than constructing them — that lets us
+        rename or version routes without breaking apps.
+        """
+        run = _get_run(run_id) or _reload_run_from_disk(run_id)
+        if run is None:
+            self.send_error(404, "no such run")
+            return True
+        result = _build_results(run_id)
+        summary = result[1] if result else {}
+        face_clusters_info = (_build_face_clusters_info(run_id, result[0])
+                               if result else {"clusters": [], "n_noise": 0})
+        locations_info = (_build_locations_info(result[0]) if result
+                          else {"clusters": [], "n_no_gps": 0, "n_total": 0})
+        body = _safe_dumps({
+            "schema":   "pixcull.api.v1.run",
+            "run_id":   run_id,
+            "summary":  summary,
+            "face_clusters_n":  len(face_clusters_info.get("clusters") or []),
+            "locations_n":      len(locations_info.get("clusters") or []),
+            "links": {
+                "results_html":   f"/results/{run_id}",
+                "status":         f"/api/v1/runs/{run_id}/status",
+                "decisions":      f"/api/v1/runs/{run_id}/decisions",
+                "face_clusters":  f"/api/v1/runs/{run_id}/face_clusters",
+                "locations":      f"/api/v1/runs/{run_id}/locations",
+                "scores_csv":     f"/api/v1/runs/{run_id}/scores.csv",
+                "gallery_zip":    f"/api/v1/runs/{run_id}/gallery.zip",
+                "xmp_zip":        f"/api/v1/runs/{run_id}/xmp.zip",
+            },
+        }).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+        return True
+
+    # --- V25 CORS + API auth shims -----------------------------------------
+    # We override ``end_headers`` so every response under ``/api/v1/`` gets
+    # CORS headers without per-handler bookkeeping. Browser-hosted apps
+    # served from a different origin (or running off ``file://`` like the
+    # V23.x gallery) can fetch the JSON endpoints directly.
+    #
+    # Auth model:
+    #   * Localhost (127.0.0.1 / ::1): no auth required — PixCull is a
+    #     local-first app and the existing CLI / browser flows assume
+    #     trusted same-machine access.
+    #   * Non-localhost: requires ``X-PixCull-API-Key`` matching the
+    #     ``PIXCULL_API_KEY`` env var if that var is set. If unset, the
+    #     server still accepts non-localhost calls (preserves the V14.0
+    #     "LAN demo" behavior); admin can set it to lock down.
+    def _api_v1_auth_ok(self) -> bool:
+        """V25 — return True if the current request is allowed to hit
+        /api/v1 endpoints. See class header comment for the model."""
+        client_host = (self.client_address[0] if self.client_address
+                       else "")
+        if client_host in ("127.0.0.1", "::1", "localhost"):
+            return True
+        required = os.environ.get("PIXCULL_API_KEY") or ""
+        if not required:
+            return True
+        got = self.headers.get("X-PixCull-API-Key") or ""
+        return got == required
+
+    def end_headers(self) -> None:  # noqa: N802 — stdlib override
+        path = urlparse(self.path).path
+        if path.startswith("/api/v1"):
+            # CORS — wide-open for now; tighten to an env-var allowlist
+            # in V25.1 if needed for production deployments.
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Methods",
+                              "GET, POST, OPTIONS")
+            self.send_header(
+                "Access-Control-Allow-Headers",
+                "Content-Type, X-PixCull-API-Key",
+            )
+            self.send_header("Access-Control-Max-Age", "86400")
+        return BaseHTTPRequestHandler.end_headers(self)
+
+    def do_OPTIONS(self) -> None:  # noqa: N802 — CORS preflight
+        # Always respond 204 No Content for OPTIONS on /api/v1/* so the
+        # browser's preflight succeeds. Auth not required for preflight
+        # (CORS spec — the actual request gets auth-checked).
+        path = urlparse(self.path).path
+        if not path.startswith("/api/v1"):
+            self.send_error(404, "preflight only valid on /api/v1/*")
+            return
+        self.send_response(204)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
     # --- routes ------------------------------------------------------------
     def do_GET(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
+        # V25 — versioned API namespace. Auth-gated, CORS-friendly,
+        # discoverable via ``GET /api/v1/``. Most routes are aliases to
+        # existing handlers; the discovery endpoint + a couple of
+        # mobile-friendly summary endpoints are unique to /api/v1/.
+        if path.startswith("/api/v1"):
+            if not self._api_v1_auth_ok():
+                self.send_error(401, "missing or wrong X-PixCull-API-Key")
+                return
+            if self._dispatch_api_v1_get(path):
+                return
         # V14.6 — first-run setup endpoints. Available always (idempotent
         # snapshot when no setup is running) so the launcher can spin
         # up the server BEFORE warming starts and the browser can sit
@@ -1789,6 +2048,13 @@ class _Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
+        # V25 — versioned API namespace (POST side).
+        if path.startswith("/api/v1"):
+            if not self._api_v1_auth_ok():
+                self.send_error(401, "missing or wrong X-PixCull-API-Key")
+                return
+            if self._dispatch_api_v1_post(path):
+                return
         if path == "/analyze":
             return self._handle_analyze_post()
         if path == "/scan_local":
