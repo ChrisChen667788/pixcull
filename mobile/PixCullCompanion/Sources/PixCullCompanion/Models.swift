@@ -1,0 +1,71 @@
+// P2.1 — JSON response shapes matching the V25 /api/v1 endpoints.
+//
+// These are deliberately partial — we only decode the fields the
+// SwiftUI views actually render. PixCull's responses carry richer
+// metadata (per-axis stars, advice text, etc.) that we can wire in
+// later versions without breaking back-compat.
+
+import Foundation
+
+public struct APIIndex: Decodable {
+    public let schema: String
+    public let version: String
+    public let server: String
+}
+
+public struct UsersResponse: Decodable {
+    public let active: String
+    public let users: [UserEntry]
+}
+
+public struct UserEntry: Decodable, Identifiable {
+    public var id: String { user_id }
+    public let user_id: String
+    public let vertical_count: Int
+    public let is_active: Bool
+}
+
+public struct UsersActive: Decodable {
+    public let ok: Bool
+    public let active: String
+}
+
+public struct RunListResponse: Decodable {
+    public let schema: String
+    public let n_runs: Int
+    public let runs: [RunEntry]
+}
+
+public struct RunEntry: Decodable, Identifiable {
+    public var id: String { run_id }
+    public let run_id: String
+    public let mode: String?
+    public let size_bytes: Int?
+    public let n_input: Int?
+    public let decisions: Decisions?
+    public let state: String?
+    public let age_seconds: Double?
+}
+
+public struct Decisions: Decodable {
+    public let keep: Int?
+    public let maybe: Int?
+    public let cull: Int?
+}
+
+public struct RunSummary: Decodable {
+    public let schema: String
+    public let run_id: String
+    public let summary: RunSummaryBody?
+    public let face_clusters_n: Int?
+    public let locations_n: Int?
+    public let links: [String: String]?
+}
+
+public struct RunSummaryBody: Decodable {
+    public let n_total: Int?
+    public let n_keep: Int?
+    public let n_maybe: Int?
+    public let n_cull: Int?
+    public let vertical: String?
+}
