@@ -1804,6 +1804,14 @@ class _Handler(BaseHTTPRequestHandler):
                 return True
             if rest == "xmp.zip":
                 self._serve_xmp_zip(run_id); return True
+            # P2.4 — active-learning queue (batch). Accepts ?n=N.
+            # urlparse already stripped the query string from ``path``
+            # in the caller; read it back off ``self.path`` so we
+            # forward it to _serve_next_to_label.
+            if rest == "next_to_label":
+                qs = urlparse(self.path).query
+                rel = f"{run_id}?{qs}" if qs else run_id
+                self._serve_next_to_label(rel); return True
         return False
 
     def _dispatch_api_v1_post(self, path: str) -> bool:
@@ -1882,6 +1890,12 @@ class _Handler(BaseHTTPRequestHandler):
                  "doc":    "disk usage + run count summary"},
                 {"method": "GET",  "path": "/api/v1/rubric_meta",
                  "doc":    "rubric axes definition (for annotation UI)"},
+                # P2.4 — active-learning queue
+                {"method": "GET",  "path": "/api/v1/runs/<run_id>/next_to_label",
+                 "params": {"n": "1 (default) | N for batch queue"},
+                 "doc":    "active-learning queue: highest-info-gain "
+                          "photos to label next, ranked by rescorer "
+                          "disagreement + uncertainty"},
                 # V28 multi-user
                 {"method": "GET",  "path": "/api/v1/users",
                  "doc":    "list user profiles + active user"},
@@ -3431,8 +3445,24 @@ class _Handler(BaseHTTPRequestHandler):
           4. rubric axes near the median (a 3★ that could go either
              way is a strong train-time signal)
           5. fallback: lowest score_final among unlabeled
+
+        P2.4 — also accepts ``?n=<N>`` to return the TOP-N queue at
+        once instead of just the single next item. When ``n > 1``
+        the response shape switches to a ``queue`` array of
+        ``{filename, why, priority_rank}`` entries.
         """
-        run_id = unquote(rel)
+        # P2.4 — split rel into run_id + query string. Most callers
+        # pass just the run_id; the new "?n=N" form supports batch.
+        path_q = rel.split("?", 1)
+        run_id = unquote(path_q[0])
+        from urllib.parse import parse_qs
+        qparams = parse_qs(path_q[1]) if len(path_q) > 1 else {}
+        try:
+            n_requested = int(qparams.get("n", ["1"])[0])
+        except (ValueError, TypeError):
+            n_requested = 1
+        n_requested = max(1, min(200, n_requested))   # clamp to sane range
+
         run = _get_run(run_id) or _reload_run_from_disk(run_id)
         if run is None:
             self.send_error(404, "no such run")
@@ -3475,31 +3505,65 @@ class _Handler(BaseHTTPRequestHandler):
             )
 
         candidates.sort(key=priority)
-        chosen = candidates[0]
-        # Why we picked this one — surface for the UI tooltip.
-        reasons = []
-        if (chosen.get("rescorer_pred") is not None
-                and chosen["rescorer_pred"] != chosen["decision"]):
-            reasons.append(
-                f"规则=={chosen['decision']} 但 rescorer=={chosen['rescorer_pred']} (P={chosen.get('rescorer_prob_keep'):.2f})"
-            )
-        if (chosen.get("rescorer_prob_keep") is not None
-                and 0.40 <= chosen["rescorer_prob_keep"] <= 0.70):
-            reasons.append(
-                f"rescorer 不确定区 (P={chosen['rescorer_prob_keep']:.2f})"
-            )
-        score = chosen.get("score_final")
-        if score is not None and 0.35 <= score <= 0.65:
-            reasons.append(f"score_final={score:.2f} 临界")
-        if not reasons:
-            reasons.append("queue 中未标注的下一张")
 
+        # P2.4 — helper to assemble a per-candidate explanation string.
+        # Returns a list of short reason fragments suitable for the UI
+        # tooltip. Identical logic to the legacy single-item path, just
+        # factored out so the batch path can reuse it.
+        def _reasons_for(c: dict) -> list[str]:
+            reasons: list[str] = []
+            if (c.get("rescorer_pred") is not None
+                    and c["rescorer_pred"] != c["decision"]):
+                prob = c.get("rescorer_prob_keep")
+                prob_str = f" (P={prob:.2f})" if prob is not None else ""
+                reasons.append(
+                    f"规则=={c['decision']} 但 rescorer=={c['rescorer_pred']}{prob_str}"
+                )
+            if (c.get("rescorer_prob_keep") is not None
+                    and 0.40 <= c["rescorer_prob_keep"] <= 0.70):
+                reasons.append(
+                    f"rescorer 不确定区 (P={c['rescorer_prob_keep']:.2f})"
+                )
+            score = c.get("score_final")
+            if score is not None and 0.35 <= score <= 0.65:
+                reasons.append(f"score_final={score:.2f} 临界")
+            if not reasons:
+                reasons.append("queue 中未标注的下一张")
+            return reasons
+
+        # P2.4 — batch mode returns the top-N as a queue array. Used
+        # by the "🎯 主动学习" filter pill in the results page. Each
+        # entry carries its priority_rank (1-based) for the UI badge.
+        if n_requested > 1:
+            queue = []
+            for i, c in enumerate(candidates[:n_requested]):
+                queue.append({
+                    "filename":       c["filename"],
+                    "priority_rank":  i + 1,
+                    "why":            "; ".join(_reasons_for(c)),
+                    "decision":       c.get("decision"),
+                    "score_final":    c.get("score_final"),
+                    "rescorer_pred":  c.get("rescorer_pred"),
+                })
+            self._send_json(200, json.dumps({
+                "schema":      "pixcull.next_to_label.queue.v1",
+                "run_id":      run_id,
+                "n_total":     len(rows),
+                "n_labeled":   len(labeled),
+                "n_remaining": len(candidates),
+                "n_returned":  len(queue),
+                "queue":       queue,
+            }, ensure_ascii=False).encode("utf-8"))
+            return
+
+        # Legacy single-item path
+        chosen = candidates[0]
         self._send_json(200, json.dumps({
             "filename": chosen["filename"],
             "n_total": len(rows),
             "n_labeled": len(labeled),
             "n_remaining": len(candidates),
-            "why": "; ".join(reasons),
+            "why": "; ".join(_reasons_for(chosen)),
             "row": chosen,
         }, ensure_ascii=False).encode("utf-8"))
 

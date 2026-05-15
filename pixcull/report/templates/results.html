@@ -844,6 +844,15 @@
       <span class="filter-divider" id="burstPeakDivider" style="display:none"></span>
       <span class="filter-group" id="burstPeakFilter"></span>
 
+      <!-- P2.4: active-learning queue. Click to fetch the top-N
+           highest-information-gain photos to label next (rescorer
+           disagrees with rule, uncertain rescorer probability,
+           score near threshold). When active, the grid filters to
+           those N photos sorted by priority + each card shows an
+           "AL #N" badge. -->
+      <span class="filter-divider" id="activeLearningDivider"></span>
+      <span class="filter-group" id="activeLearningFilter"></span>
+
       <span style="flex:1"></span>
 
       <!-- V9.0: sort + group dropdowns -->
@@ -1341,6 +1350,10 @@
     // cluster passes. Off by default. Pairs with the "🎯 每连拍峰值"
     // button populated by buildBurstPeakFilter().
     burstPeakOnly: false,
+    // P2.4 — when populated, only photos in this active-learning
+    // queue pass the filter. Map<filename, priority_rank> so the
+    // grid can also show "AL #N" badges per card.
+    activeLearningQueue: null,    // null = inactive, Map = active
     sort: "default",
   };
 
@@ -1389,6 +1402,9 @@
     buildLocationFilters();
     // V27 — burst peak toggle (sports/event "THE shot" picker).
     buildBurstPeakFilter();
+    // P2.4 — active-learning toggle (label the highest-info-gain
+    // photos first).
+    buildActiveLearningFilter();
   }
   buildDynamicFilters();
 
@@ -1617,10 +1633,83 @@
     });
   }
 
+  // P2.4 — active-learning filter. Click → fetch top-N queue from
+  // /api/v1/runs/<id>/next_to_label?n=20, populate
+  // filterState.activeLearningQueue as a Map<filename,
+  // {rank, why}>. Click again → clear (re-shows everything).
+  // The active-learning quota (20) is hard-coded for now; future
+  // V31 could expose a slider.
+  const _ACTIVE_LEARNING_N = 20;
+  function buildActiveLearningFilter() {
+    const divider = document.getElementById("activeLearningDivider");
+    const el = document.getElementById("activeLearningFilter");
+    const active = filterState.activeLearningQueue != null;
+    divider.style.display = "block";
+    const sizeNote = active
+      ? ` <span style="opacity:0.5">${filterState.activeLearningQueue.size}</span>`
+      : "";
+    el.innerHTML =
+      `<span class="pill active-learning-toggle${active ? ' active' : ''}" ` +
+      `title="主动学习排队: 列出最值得标注的 ${_ACTIVE_LEARNING_N} 张照片 — ` +
+      `优先暴露规则与 rescorer 不一致 / 概率临界 / 分数临界 / 还未标注的">` +
+      `🎯 主动学习${sizeNote}</span>`;
+    el.querySelectorAll(".active-learning-toggle").forEach(b => {
+      b.addEventListener("click", async () => {
+        if (filterState.activeLearningQueue != null) {
+          // Toggle off
+          filterState.activeLearningQueue = null;
+          buildActiveLearningFilter();
+          render();
+          return;
+        }
+        b.classList.add("active");
+        b.innerHTML = "🎯 主动学习 <span style=\"opacity:0.5\">…</span>";
+        try {
+          const r = await fetch(
+            `/api/v1/runs/${run_id}/next_to_label?n=${_ACTIVE_LEARNING_N}`
+          );
+          if (!r.ok) throw new Error("HTTP " + r.status);
+          const data = await r.json();
+          if (data.done) {
+            // No unlabeled photos left — friendly message
+            toast(data.message || "已标完本批所有图片 ✓", "success");
+            b.classList.remove("active");
+            buildActiveLearningFilter();
+            return;
+          }
+          const m = new Map();
+          (data.queue || []).forEach(q => {
+            m.set(q.filename, {rank: q.priority_rank, why: q.why});
+          });
+          filterState.activeLearningQueue = m;
+          buildActiveLearningFilter();
+          render();
+        } catch (e) {
+          console.error("active learning fetch failed", e);
+          toast("主动学习队列获取失败: " + e, "error");
+          b.classList.remove("active");
+          buildActiveLearningFilter();
+        }
+      });
+    });
+  }
+
   // Sort key function
   function sortRows(arr) {
     const order = { keep: 0, maybe: 1, cull: 2, "": 3 };
     const a = [...arr];
+    // P2.4 — when active-learning filter is on, sort by AL rank
+    // (lowest rank = highest priority). Ignores the user's chosen
+    // sort because the queue order IS the meaningful order.
+    if (filterState.activeLearningQueue != null) {
+      const q = filterState.activeLearningQueue;
+      a.sort((x, y) => {
+        const rx = q.get(x.filename)?.rank ?? 1e9;
+        const ry = q.get(y.filename)?.rank ?? 1e9;
+        return rx - ry;
+      });
+      return a;
+    }
     const s = filterState.sort;
     if (s === "score_desc")   a.sort((x, y) => (y.score_final ?? -1) - (x.score_final ?? -1));
     else if (s === "score_asc")  a.sort((x, y) => (x.score_final ?? 999) - (y.score_final ?? 999));
@@ -1697,6 +1786,13 @@
         return r.is_burst_peak === true;
       });
     }
+    // P2.4 — active-learning filter. When the queue map is set, only
+    // photos in it pass; subsequent sortRows respects rank order via
+    // a custom sort key further down.
+    if (filterState.activeLearningQueue != null) {
+      const q = filterState.activeLearningQueue;
+      filtered = filtered.filter(r => q.has(r.filename));
+    }
     const sorted = sortRows(filtered);
 
     // Card renderer (extracted)
@@ -1706,6 +1802,22 @@
       const dim = (k, v) => v == null
         ? `<div class="dim"><span class="k">${k}</span><span class="v">--</span></div>`
         : `<div class="dim"><span class="k">${k}</span><span class="v">${v.toFixed(2)}</span></div>`;
+      // P2.4 — when the active-learning filter is on, mark each card
+      // with "AL #N" + the per-photo "why" tooltip so the user knows
+      // why this photo was prioritized.
+      let activeLearningBadge = "";
+      if (filterState.activeLearningQueue != null) {
+        const al = filterState.activeLearningQueue.get(r.filename);
+        if (al) {
+          activeLearningBadge =
+            `<div style="position:absolute;top:6px;left:6px;
+             background:linear-gradient(90deg,#3b82f6,#6366f1);
+             color:#fff;padding:2px 8px;border-radius:3px;
+             font-size:10px;font-weight:600;z-index:5;
+             box-shadow:0 1px 4px rgba(0,0,0,0.4)"
+             title="${esc(al.why || '')}">AL #${al.rank}</div>`;
+        }
+      }
       // V16.0 — translate reason tokens for the card display.
       // Keep the raw value in the title attr so power users can still
       // grep for the underlying token if needed.
@@ -1763,6 +1875,7 @@
       const rotStyle = rotDeg ? `style="transform: rotate(${rotDeg}deg)"` : "";
       return `
         <div class="card ${cardCls}" data-fn="${fnEsc}">
+          ${activeLearningBadge}
           <img class="thumb" src="${thumb}" data-full="${full}" loading="lazy" alt="${fnEsc}" ${rotStyle}>
           <button class="annotate-btn" data-fn="${fnEsc}" title="人工标注 (rubric)">${r.rubric_human_labeled ? "✓ 已标" : "标注"}</button>
           <button class="card-rot-btn" data-fn="${fnEsc}" type="button" title="顺时针旋转 90°(在放大窗中可继续微调)">↻</button>
