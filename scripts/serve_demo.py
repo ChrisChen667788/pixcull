@@ -2298,6 +2298,11 @@ class _Handler(BaseHTTPRequestHandler):
         if path.startswith("/runs/") and path.endswith("/rescan_scene"):
             mid = path[len("/runs/"):-len("/rescan_scene")]
             return self._handle_rescan_scene(mid)
+        # P2.3 — apply the active style guide to a run's rows
+        # (post-decision; can knock keep → maybe/cull).
+        if path.startswith("/runs/") and path.endswith("/apply_style_guide"):
+            mid = path[len("/runs/"):-len("/apply_style_guide")]
+            return self._handle_apply_style_guide(mid)
         if path.startswith("/annotation/"):
             return self._handle_save_annotation(path[len("/annotation/"):])
         if path.startswith("/face_clusters/") and path.endswith("/label"):
@@ -5247,6 +5252,119 @@ class _Handler(BaseHTTPRequestHandler):
                 if corrected else {},
             "backup_path": str(backup),
             "note": "scores.csv 已更新;刷新结果页即可看到新的 scene 分布。",
+        }).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _handle_apply_style_guide(self, run_id: str) -> None:
+        """P2.3 — apply the active user's style guide to a run.
+
+        Runs every rule against every row, tallies violations, and
+        OPTIONALLY adjusts the decision column when a rule's
+        ``on_violation`` is ``maybe`` or ``cull``. Reports a per-
+        rule violation count + total adjustments back.
+
+        Body (optional):
+            {dry_run: bool}   — when True, don't mutate scores.csv,
+                                just report what WOULD change.
+        """
+        run = _get_run(run_id) or _reload_run_from_disk(run_id)
+        if run is None:
+            self.send_error(404, "no such run")
+            return
+        n = int(self.headers.get("Content-Length") or "0")
+        params: dict = {}
+        if n > 0:
+            try:
+                params = json.loads(self.rfile.read(n).decode("utf-8")
+                                      or "{}")
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                self.send_error(400, "invalid JSON body")
+                return
+        dry_run = bool(params.get("dry_run") or False)
+
+        from pixcull.scoring.style_guide import (
+            load_style_guide, apply_style_guide,
+        )
+        guide = load_style_guide()
+        if not guide:
+            body = _safe_dumps({
+                "ok": True, "run_id": run_id,
+                "message": "no style guide configured for active user "
+                           "(no <user_root>/style_guide.yaml and no "
+                           "subscribed team guide)",
+                "violations_n": 0, "decision_changes": 0,
+            }).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type",
+                              "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
+        result = _build_results(run_id)
+        if result is None:
+            self.send_error(425, "results not ready")
+            return
+        rows, _summary = result
+
+        scores_path = Path(run["output_dir"]) / "scores.csv"
+        import pandas as pd
+        df = pd.read_csv(scores_path)
+
+        per_rule_count: dict[str, int] = {}
+        decision_changes = 0
+        sample_violations: list[dict] = []
+        for i, r in enumerate(rows):
+            src = r.get("src_path") or r.get("path")
+            res = apply_style_guide(
+                r, guide,
+                image_path=Path(src) if src else None,
+            )
+            for v in res["violations"]:
+                per_rule_count[v["rule_id"]] = (
+                    per_rule_count.get(v["rule_id"], 0) + 1
+                )
+                if len(sample_violations) < 8:
+                    sample_violations.append({
+                        "filename": r["filename"],
+                        **v,
+                    })
+            new_dec = res["new_decision"]
+            if new_dec and new_dec != r["decision"]:
+                decision_changes += 1
+                if not dry_run:
+                    # Update scores.csv in place
+                    match = df["filename"] == r["filename"]
+                    df.loc[match, "decision"] = new_dec
+
+        if not dry_run and decision_changes > 0:
+            backup = scores_path.with_suffix(
+                f".csv.bak.{int(time.time())}"
+            )
+            try:
+                scores_path.rename(backup)
+                df.to_csv(scores_path, index=False)
+            except OSError as exc:
+                self.send_error(500, f"write failed: {exc}")
+                return
+
+        body = _safe_dumps({
+            "ok":               True,
+            "run_id":           run_id,
+            "dry_run":          dry_run,
+            "guide_name":       guide.get("name") or "(unnamed)",
+            "n_rows":           int(len(df)),
+            "violations_n":     sum(per_rule_count.values()),
+            "per_rule_count":   per_rule_count,
+            "decision_changes": decision_changes,
+            "sample_violations": sample_violations,
         }).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json; charset=utf-8")
