@@ -876,6 +876,13 @@
       <a class="export-btn" id="galleryBtn"
          title="导出可发客户的 standalone HTML 相册(默认仅 keep;Shift-点 = keep+maybe)"
          style="text-decoration:none">📔 导出相册</a>
+      <!-- P2.5: auto-generate IPTC captions from structured data
+           (scene + face labels + location + advice). Free / offline
+           by default; Shift-click to enable LLM polish via DeepSeek
+           V4-Flash (INFRA-4-budgeted). Captions land in
+           auto_captions.json; next /export embeds them. -->
+      <button class="export-btn" id="captionBtn"
+         title="自动生成 IPTC Caption-Abstract(场景+人物+地点+评价)。Shift-点 = LLM 润色(走 DeepSeek + INFRA-4 预算)">📝 自动 Caption</button>
       <button class="export-btn" id="batchBtn" title="按总分批量打 keep/cull 标签">批量打分</button>
       <span class="export-status" id="exportStatus"></span>
     </div>
@@ -2976,6 +2983,30 @@
     galleryBtn.href = `/gallery_zip/${run_id}?include=${inc}`;
   }
   updateGalleryHref(false);
+  // P2.5 — auto-caption button. Plain click = compose mode (free);
+  // Shift-click = polish via DeepSeek (INFRA-4-budgeted).
+  document.getElementById("captionBtn").addEventListener("click", async e => {
+    const polish = e.shiftKey;
+    const btn = e.currentTarget;
+    const orig = btn.textContent;
+    btn.disabled = true; btn.textContent = polish ? "📝 LLM 润色中…" : "📝 生成中…";
+    try {
+      const res = await fetch(`/api/v1/runs/${run_id}/auto_caption`, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({polish, decisions: ["keep"]}),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || "HTTP " + res.status);
+      const mode = polish ? `LLM 润色 (¥${data.cost_yuan.toFixed(3)})` : "compose";
+      toast(`已生成 ${data.written} 条 caption · ${mode}`, "success");
+    } catch (e) {
+      toast("Caption 生成失败: " + e.message, "error");
+    } finally {
+      btn.disabled = false; btn.textContent = orig;
+    }
+  });
+
   galleryBtn.setAttribute("download", "");
   galleryBtn.addEventListener("click", e => {
     // If user shift-clicked, swap to keep+maybe before letting the

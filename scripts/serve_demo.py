@@ -1902,6 +1902,8 @@ class _Handler(BaseHTTPRequestHandler):
                     self._handle_location_label_post(run_id); return True
                 if rest == "export":
                     self._handle_export(run_id); return True
+                if rest == "auto_caption":
+                    self._handle_auto_caption(run_id); return True
         return False
 
     def _serve_api_v1_index(self) -> bool:
@@ -1955,6 +1957,12 @@ class _Handler(BaseHTTPRequestHandler):
                  "doc":    "XMP sidecar zip (run /export first)"},
                 {"method": "POST", "path": "/api/v1/runs/<run_id>/export",
                  "doc":    "render XMP sidecars to disk"},
+                {"method": "POST", "path": "/api/v1/runs/<run_id>/auto_caption",
+                 "body":   "{polish?: bool, decisions?: [keep,...]}",
+                 "doc":    "P2.5 — generate IPTC captions per photo. "
+                          "compose (free) or polish (DeepSeek, "
+                          "INFRA-4-budgeted). Persisted to "
+                          "auto_captions.json; next /export uses them."},
                 {"method": "POST", "path": "/api/v1/scan_local",
                  "body":   "{folder: abs_path, vertical?: str}",
                  "doc":    "kick off a scan of a local folder"},
@@ -3025,6 +3033,66 @@ class _Handler(BaseHTTPRequestHandler):
         self.wfile.write(out)
         return True
 
+    def _handle_auto_caption(self, run_id: str) -> None:
+        """P2.5 — generate per-photo IPTC captions for a run.
+
+        Body (all optional):
+            ``{polish: bool, decisions: ["keep", ...]}``
+
+        Default: ``polish=false`` (compose mode, zero API cost,
+        offline). ``decisions`` defaults to ``["keep"]`` — we don't
+        waste captions on rows the photographer is going to discard.
+
+        The generated captions land at
+        ``<output>/auto_captions.json`` and the next /export run
+        picks them up automatically (V29 sidecar / V29.1 embedded).
+        """
+        run = _get_run(run_id) or _reload_run_from_disk(run_id)
+        if run is None:
+            self.send_error(404, "no such run")
+            return
+        result = _build_results(run_id)
+        if result is None:
+            self.send_error(425, "results not ready")
+            return
+        rows, _summary = result
+        n = int(self.headers.get("Content-Length") or "0")
+        params: dict = {}
+        if n > 0:
+            try:
+                params = json.loads(self.rfile.read(n).decode("utf-8")
+                                      or "{}")
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                self.send_error(400, "invalid JSON body")
+                return
+        polish = bool(params.get("polish") or False)
+        decisions = tuple(params.get("decisions") or ["keep"])
+
+        from pixcull.scoring.caption_gen import generate_for_run
+        face_labels = _load_face_labels(run_id)
+        location_labels = _load_location_labels(run_id)
+        output_dir = Path(run["output_dir"])
+        info = generate_for_run(
+            rows, output_dir,
+            face_labels=face_labels,
+            location_labels=location_labels,
+            polish=polish,
+            decisions=decisions,
+        )
+        body = _safe_dumps({
+            "ok":          True,
+            "run_id":      run_id,
+            "polish":      polish,
+            "decisions":   list(decisions),
+            **info,
+        }).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
     def _handle_location_label_post(self, run_id: str) -> None:
         """V23.1 — POST /locations/<run_id>/label with body
         ``{cluster_id: int, label: str}``. Empty label = remove.
@@ -3383,6 +3451,11 @@ class _Handler(BaseHTTPRequestHandler):
         # ``vertical`` is the per-run scoring override (V17.0+).
         face_labels = _load_face_labels(run_id)
         run_vertical = run.get("vertical") or None
+        # P2.5 — load any pre-computed auto-captions for this run.
+        # When present, ``build_iptc_fields_from_row`` uses them as
+        # IPTC:Caption-Abstract instead of the V20-advice bullets.
+        from pixcull.scoring.caption_gen import load_captions
+        auto_captions_map = load_captions(output_dir)
 
         written = 0
         skipped = 0
@@ -3399,6 +3472,7 @@ class _Handler(BaseHTTPRequestHandler):
                 face_labels=face_labels,
                 vertical=run_vertical,
                 run_id=run_id,
+                auto_caption=auto_captions_map.get(fn),
             )
             if target_mode == "alongside":
                 src = _resolve_image_source(run, fn)

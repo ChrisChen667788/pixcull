@@ -289,6 +289,7 @@ def build_iptc_fields_from_row(
     face_labels: dict[int, str] | None = None,
     vertical: str | None = None,
     run_id: str | None = None,
+    auto_caption: str | None = None,
 ) -> dict:
     """V29 — turn a result row into IPTC keyword + caption fields.
 
@@ -345,10 +346,20 @@ def build_iptc_fields_from_row(
     # use it as the headline. The fuller description joins strengths
     # + weaknesses into a paragraph (skipped when both are empty —
     # don't want a blank caption shadow).
+    #
+    # P2.5 — when a per-photo ``auto_caption`` was passed in, it
+    # WINS over the V20 advice-derived description. The auto-caption
+    # is designed to read as a journalistic sentence and is what
+    # agencies / wire services expect in IPTC:Caption-Abstract. The
+    # advice-derived bullets stay as a useful "verbose annotation"
+    # for solo photographers via the V20 path when auto_caption is None.
     headline = ""
     description = ""
     if advice:
         headline = str(advice.get("verdict_short") or "")
+    if auto_caption:
+        description = auto_caption
+    elif advice:
         bits: list[str] = []
         for s in advice.get("strengths") or []:
             bits.append(f"+ {s}")
