@@ -1914,6 +1914,11 @@ class _Handler(BaseHTTPRequestHandler):
                 "is_localhost":     self.client_address[0] in
                                      ("127.0.0.1", "::1", "localhost"),
             },
+            "cors": {
+                "origins_env": "PIXCULL_API_CORS_ORIGINS",
+                "current":     (os.environ.get("PIXCULL_API_CORS_ORIGINS")
+                                or "*"),
+            },
             "endpoints": [
                 {"method": "GET",  "path": "/api/v1/",
                  "doc":    "this discovery index"},
@@ -2074,9 +2079,36 @@ class _Handler(BaseHTTPRequestHandler):
     def end_headers(self) -> None:  # noqa: N802 — stdlib override
         path = urlparse(self.path).path
         if path.startswith("/api/v1"):
-            # CORS — wide-open for now; tighten to an env-var allowlist
-            # in V25.1 if needed for production deployments.
-            self.send_header("Access-Control-Allow-Origin", "*")
+            # V25.1 — CORS origin allowlist via env var.
+            # PIXCULL_API_CORS_ORIGINS is a comma-separated list:
+            #   "https://app.example.com,https://staging.example.com"
+            # The special value "*" (default when env var unset)
+            # echoes the wild-open V25 behavior — fine for localhost
+            # development, NOT recommended for any server reachable
+            # from the public internet.
+            #
+            # When the env var is set, we ECHO the matching Origin
+            # back in Access-Control-Allow-Origin (per CORS spec —
+            # browsers reject "*" when credentials are involved, and
+            # an echoed value is the proper way to allow a specific
+            # origin). Unknown origins get no CORS header at all,
+            # which the browser correctly rejects as a CORS failure.
+            allowlist_raw = (os.environ.get("PIXCULL_API_CORS_ORIGINS")
+                              or "*").strip()
+            allowlist = [s.strip() for s in allowlist_raw.split(",")
+                          if s.strip()]
+            req_origin = self.headers.get("Origin", "")
+            if "*" in allowlist:
+                self.send_header("Access-Control-Allow-Origin", "*")
+            elif req_origin and req_origin in allowlist:
+                self.send_header("Access-Control-Allow-Origin", req_origin)
+                # When echoing a specific origin we must also send
+                # Vary: Origin so intermediate caches don't serve the
+                # wrong-origin response to another origin's preflight.
+                self.send_header("Vary", "Origin")
+            # else: no Allow-Origin header → browser blocks the
+            # request. Servers don't need to send a 403 — silence is
+            # the spec-correct rejection.
             self.send_header("Access-Control-Allow-Methods",
                               "GET, POST, OPTIONS")
             self.send_header(
