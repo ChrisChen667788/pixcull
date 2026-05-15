@@ -141,6 +141,90 @@ def write_xmp(image_path: Path, rating: int, color_label: str = "",
     return sidecar
 
 
+def read_develop_settings(image_path: Path) -> dict:
+    """V26.1 — parse Lightroom develop settings from the XMP sidecar.
+
+    Returns a dict with the subset of Lr ``crs:*`` fields we can
+    actually apply during a rawpy postprocess + PIL post-pass:
+
+      ``exposure``       float, EV stops (Lr ``crs:Exposure2012``)
+      ``contrast``       float, -1..+1 (mapped from Lr -100..+100)
+      ``highlights``     float, -1..+1 (Lr ``crs:Highlights2012``)
+      ``shadows``        float, -1..+1
+      ``saturation``     float, -1..+1
+      ``vibrance``       float, -1..+1 (treated as saturation for now —
+                          Lr's vibrance is non-uniform per-channel;
+                          we approximate with the same multiplier)
+      ``temperature``    int, Kelvin (Lr ``crs:Temperature``)
+      ``tint``           int, -150..+150 magenta-green
+
+    Missing fields default to None. Returns an empty dict when:
+      * the sidecar doesn't exist
+      * the sidecar is unparseable
+      * no Lr develop fields are present
+
+    Pure regex parser — same approach as ``read_xmp`` for the
+    rating/label case. We DON'T attempt the full crs: tone curve
+    or per-channel HSL adjustments because those would require a
+    real XMP parser + Lr's proprietary tone-curve math.
+    """
+    import re
+
+    sidecar = image_path.with_suffix(".xmp")
+    if not sidecar.exists():
+        return {}
+    try:
+        text = sidecar.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return {}
+
+    out: dict = {}
+
+    def _attr_or_tag(key: str, scale: float = 1.0,
+                       to_float: bool = True) -> object:
+        # Lr writes either attribute (``crs:Exposure2012="0.50"``) or
+        # tag (``<crs:Exposure2012>0.50</crs:Exposure2012>``); accept both.
+        m = re.search(
+            r'crs:%s(?:="([-+\d.]+)"|>([-+\d.]+)</crs:%s>)' % (key, key),
+            text,
+        )
+        if not m:
+            return None
+        raw = m.group(1) or m.group(2)
+        try:
+            v = float(raw) * scale
+        except (TypeError, ValueError):
+            return None
+        return v if to_float else int(v)
+
+    # Exposure is in EV stops on the wire; Lr range is typically -5..+5
+    exp = _attr_or_tag("Exposure2012")
+    if exp is not None:
+        out["exposure"] = exp
+    # Contrast/Highlights/Shadows/Whites/Blacks are -100..+100; scale
+    # to -1..+1 for the application code.
+    for src, dst in [("Contrast2012",   "contrast"),
+                      ("Highlights2012", "highlights"),
+                      ("Shadows2012",    "shadows"),
+                      ("Whites2012",     "whites"),
+                      ("Blacks2012",     "blacks"),
+                      ("Saturation",     "saturation"),
+                      ("Vibrance",       "vibrance")]:
+        v = _attr_or_tag(src, scale=0.01)
+        if v is not None:
+            out[dst] = max(-1.0, min(1.0, v))
+
+    # Temperature / Tint are integers; absolute Kelvin + relative shift.
+    temp = _attr_or_tag("Temperature", to_float=False)
+    if temp is not None:
+        out["temperature"] = int(temp)
+    tint = _attr_or_tag("Tint", to_float=False)
+    if tint is not None:
+        out["tint"] = int(tint)
+
+    return out
+
+
 def read_xmp(image_path: Path) -> dict:
     """Read existing XMP sidecar → ``{"rating": int, "color_label": str}``.
 

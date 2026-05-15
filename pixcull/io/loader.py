@@ -81,8 +81,83 @@ def load_image(path: Path, max_side: int = 2048) -> Optional[Image.Image]:
 # and the postprocess path kicks in only when the user zooms past the
 # preview's resolution. JPG / HEIC / TIFF paths are identical to
 # ``load_image`` but with the higher max_side cap.
+def _apply_develop_settings(img: Image.Image, settings: dict) -> Image.Image:
+    """V26.1 — apply a subset of Lr develop settings to a decoded image.
+
+    Approximations (Lr's pipeline is proprietary; we do NOT match it
+    pixel-perfect, just get close enough that the lightbox preview
+    looks like the user expects):
+
+      * exposure (EV)   → multiply pixel values by 2**exposure
+      * contrast        → PIL ImageEnhance.Contrast (1 + 0.5*c) where
+                          c in -1..+1
+      * saturation/
+        vibrance        → PIL ImageEnhance.Color (1 + 0.5*max(s,v))
+      * highlights/
+        shadows         → PIL.ImageOps.autocontrast cut-points
+                          (we shift the histogram tails inward)
+
+    Temperature/tint/whites/blacks not applied — they'd need a proper
+    color-temperature transform that PIL doesn't expose. The big four
+    above cover ~80% of typical Lr edits.
+
+    Skips silently when ``settings`` is empty.
+    """
+    if not settings:
+        return img
+    from PIL import ImageEnhance
+    import numpy as np
+
+    # Exposure: multiplicative in linear-light space. PIL doesn't
+    # de-gamma for us; we apply the multiplier in sRGB which is
+    # imperfect but very close to what Lr displays for small shifts.
+    if "exposure" in settings:
+        ev = settings["exposure"]
+        if abs(ev) > 0.01:
+            arr = np.asarray(img, dtype=np.float32)
+            arr *= (2.0 ** ev)
+            arr = np.clip(arr, 0, 255).astype(np.uint8)
+            img = Image.fromarray(arr)
+
+    if "contrast" in settings:
+        c = settings["contrast"]
+        if abs(c) > 0.01:
+            img = ImageEnhance.Contrast(img).enhance(1.0 + 0.5 * c)
+
+    # Saturation + Vibrance share the PIL.ImageEnhance.Color knob.
+    # Take whichever is bigger so the user's intent (saturated /
+    # desaturated) is preserved when both are set.
+    s = settings.get("saturation", 0.0) or 0.0
+    v = settings.get("vibrance", 0.0) or 0.0
+    sv = s if abs(s) > abs(v) else v
+    if abs(sv) > 0.01:
+        img = ImageEnhance.Color(img).enhance(1.0 + 0.5 * sv)
+
+    # Highlights/shadows: shift the histogram tails inward / outward.
+    # Negative highlights recover blown areas; positive shadows lift
+    # the darks. Approximate via a piecewise linear curve.
+    hi = settings.get("highlights", 0.0) or 0.0
+    sh = settings.get("shadows", 0.0) or 0.0
+    if abs(hi) > 0.01 or abs(sh) > 0.01:
+        arr = np.asarray(img, dtype=np.float32) / 255.0
+        if abs(hi) > 0.01:
+            # hi < 0 → compress highlights; hi > 0 → expand
+            mask = arr > 0.6
+            arr[mask] = arr[mask] - (arr[mask] - 0.6) * (-hi * 0.5)
+        if abs(sh) > 0.01:
+            mask = arr < 0.4
+            arr[mask] = arr[mask] + (0.4 - arr[mask]) * (sh * 0.5)
+        arr = np.clip(arr * 255.0, 0, 255).astype(np.uint8)
+        img = Image.fromarray(arr)
+
+    return img
+
+
 def load_image_for_display(path: Path,
-                              max_side: int = 4800) -> Optional[Image.Image]:
+                              max_side: int = 4800,
+                              *,
+                              apply_xmp_develop: bool = True,
+                              ) -> Optional[Image.Image]:
     """V26 — quality-preserving loader.
 
     Differences from ``load_image``:
@@ -94,30 +169,51 @@ def load_image_for_display(path: Path,
       * Default ``max_side`` is 4800 (vs 2048 for the analysis loader).
         This is the upper bound the lightbox / 5K monitor would ask
         for; smaller targets pass through ``thumbnail()`` as before.
+
+    V26.1 — when ``apply_xmp_develop`` is True (default) and the file
+    is a RAW with a sibling ``<stem>.xmp`` carrying Lr ``crs:*``
+    develop settings, we go through the rawpy postprocess path AND
+    apply the approximate develop settings via PIL. This makes the
+    lightbox show roughly what Lr would render for an edited DNG /
+    CR3 instead of the neutral rawpy decode.
+
+    The embedded-JPEG path is unchanged — if Lr re-saved the
+    embedded preview those edits already bake into the preview.
     """
     ext = path.suffix.lower()
     try:
         if ext in RAW_EXTS:
+            # V26.1 — read XMP develop settings up front. If present
+            # AND non-trivial, prefer the postprocess path so we can
+            # apply them (the embedded preview won't reflect them
+            # unless Lr re-rendered, which it often doesn't).
+            develop_settings: dict = {}
+            if apply_xmp_develop:
+                try:
+                    from pixcull.io.xmp import read_develop_settings
+                    develop_settings = read_develop_settings(path) or {}
+                except Exception:
+                    develop_settings = {}
+
             with rawpy.imread(str(path)) as raw:
                 img: Optional[Image.Image] = None
-                try:
-                    thumb = raw.extract_thumb()
-                    if thumb.format == rawpy.ThumbFormat.JPEG:
-                        candidate = Image.open(io.BytesIO(thumb.data))
-                    else:
-                        candidate = Image.fromarray(thumb.data)
-                    # Only accept the embedded preview if it's already
-                    # at least the target resolution. Otherwise we'd
-                    # ship a 1620-px upscale on a 5K monitor → blurry.
-                    if max(candidate.size) >= max_side:
-                        img = candidate
-                except rawpy.LibRawNoThumbnailError:
-                    img = None
+                # When Lr develop settings are present, skip the
+                # embedded-preview shortcut and decode from bayer so
+                # we can apply the settings on a clean image. Without
+                # this branch, an edited DNG would render its STALE
+                # embedded preview (= pre-edit) for any size ≥ preview.
+                if not develop_settings:
+                    try:
+                        thumb = raw.extract_thumb()
+                        if thumb.format == rawpy.ThumbFormat.JPEG:
+                            candidate = Image.open(io.BytesIO(thumb.data))
+                        else:
+                            candidate = Image.fromarray(thumb.data)
+                        if max(candidate.size) >= max_side:
+                            img = candidate
+                    except rawpy.LibRawNoThumbnailError:
+                        img = None
                 if img is None:
-                    # Full demosaic. ``no_auto_bright=False`` lets
-                    # rawpy stretch the histogram for a pleasing preview
-                    # (similar to camera-jpeg behavior); turn off if
-                    # you want clinical exposure.
                     img = Image.fromarray(
                         raw.postprocess(
                             use_camera_wb=True,
@@ -126,6 +222,9 @@ def load_image_for_display(path: Path,
                             no_auto_bright=False,
                         )
                     )
+                # Apply Lr develop settings on the decoded array
+                if develop_settings:
+                    img = _apply_develop_settings(img, develop_settings)
         else:
             img = Image.open(path)
         img = ImageOps.exif_transpose(img)
