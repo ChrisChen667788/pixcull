@@ -1545,18 +1545,25 @@
       return;
     }
     divider.style.display = "block";
-    // Each pill: "📍 lat,lon (or short label) n_photos 🏆 best_fn"
+    // Each pill: "📍 <label-or-lat,lon> <count> ✎"
     const pills = locationsState.map(c => {
       const isActive = filterState.locationClusters.has(c.id);
       const lat = c.center_lat != null ? c.center_lat.toFixed(3) : "?";
       const lon = c.center_lon != null ? c.center_lon.toFixed(3) : "?";
+      // V23.1 — prefer the user-supplied label over raw coords.
+      const display = c.label && c.label.length > 0
+        ? c.label
+        : `${lat},${lon}`;
       const tip = `${c.n_photos} 张照片\\n中心: (${lat}, ${lon})\\n` +
                   `🏆 当地最佳: ${c.best_filename} (${c.best_score?.toFixed(2)})\\n` +
                   `样本: ${(c.sample_filenames || []).join(', ')}`;
       return `<span class="pill location-pill${isActive ? ' active' : ''}" `
            + `data-loc="${c.id}" title="${esc(tip)}">`
-           + `📍 ${lat},${lon} `
+           + `📍 <span class="location-pill-label" data-loc="${c.id}">${esc(display)}</span> `
            + `<span style="opacity:0.5">${c.n_photos}</span>`
+           + ` <span class="location-pill-edit" data-loc="${c.id}" `
+           + `title="重命名地点(如 Notre Dame / 我家)" `
+           + `style="margin-left:4px;opacity:0.4;cursor:text">✎</span>`
            + `</span>`;
     });
     // Unknown-location bucket if any photos lack GPS
@@ -1572,7 +1579,13 @@
     el.innerHTML = pills.join("");
 
     el.querySelectorAll(".location-pill").forEach(pill => {
-      pill.addEventListener("click", () => {
+      pill.addEventListener("click", e => {
+        // V23.1 — ✎ icon opens inline rename; pill click toggles filter.
+        if (e.target.classList.contains("location-pill-edit")) {
+          e.stopPropagation();
+          startLocationRename(pill);
+          return;
+        }
         const cid = parseInt(pill.dataset.loc, 10);
         if (filterState.locationClusters.has(cid)) {
           filterState.locationClusters.delete(cid);
@@ -1603,6 +1616,74 @@
       if (c.best_filename) m.set(c.id, c.best_filename);
     }
     return m;
+  }
+
+  // V23.1 — inline rename for location pills. Mirrors the V22.1
+  // face-cluster rename: replace the label <span> with an <input>,
+  // POST to /api/v1/runs/<id>/locations/label on Enter / blur,
+  // re-fetch /api/v1/runs/<id>/locations to refresh display.
+  function startLocationRename(pill) {
+    const cid = parseInt(pill.dataset.loc, 10);
+    const labelSpan = pill.querySelector(".location-pill-label");
+    if (!labelSpan) return;
+    const old = labelSpan.textContent;
+    const input = document.createElement("input");
+    // Pre-populate with the EXISTING label if it's not the bare
+    // coordinate fallback (lat,lon — those are the "no name" form).
+    input.value = old.includes(",") && /^-?\d/.test(old) ? "" : old;
+    input.placeholder = "Notre Dame / 我家 / 海岸边 ...";
+    input.style.cssText = "background:transparent;border:none;"
+      + "border-bottom:1px solid var(--fg);color:var(--fg);font:inherit;"
+      + "width:11em;outline:none;padding:0";
+    labelSpan.replaceWith(input);
+    input.focus(); input.select();
+
+    let done = false;
+    async function commit() {
+      if (done) return; done = true;
+      const newLabel = input.value.trim();
+      if (newLabel === old) {
+        const restore = document.createElement("span");
+        restore.className = "location-pill-label";
+        restore.dataset.loc = String(cid);
+        restore.textContent = old;
+        input.replaceWith(restore);
+        return;
+      }
+      try {
+        const res = await fetch(`/api/v1/runs/${run_id}/locations/label`, {
+          method:  "POST",
+          headers: {"Content-Type": "application/json"},
+          body:    JSON.stringify({cluster_id: cid, label: newLabel}),
+        });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const r2 = await fetch(`/api/v1/runs/${run_id}/locations`);
+        if (r2.ok) {
+          const fresh = await r2.json();
+          locationsState = fresh.clusters || [];
+          buildLocationFilters();
+        }
+      } catch (e) {
+        console.error("location rename failed:", e);
+        const restore = document.createElement("span");
+        restore.className = "location-pill-label";
+        restore.dataset.loc = String(cid);
+        restore.textContent = old;
+        input.replaceWith(restore);
+      }
+    }
+    input.addEventListener("keydown", e => {
+      if (e.key === "Enter") { e.preventDefault(); commit(); }
+      else if (e.key === "Escape") {
+        done = true;
+        const r = document.createElement("span");
+        r.className = "location-pill-label";
+        r.dataset.loc = String(cid);
+        r.textContent = old;
+        input.replaceWith(r);
+      }
+    });
+    input.addEventListener("blur", commit);
   }
 
   // V27 — burst peak filter. Compute the set of burst cluster_ids that

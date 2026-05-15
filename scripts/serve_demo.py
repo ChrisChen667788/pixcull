@@ -1230,7 +1230,62 @@ def _build_face_clusters_info(run_id: str, rows: list[dict]) -> dict:
 # geocoding goes beyond V23 scope).
 # ---------------------------------------------------------------------------
 
-def _build_locations_info(rows: list[dict]) -> dict:
+# V23.1 — per-run location labels. Same shape as face labels (V22.1):
+# {cluster_id: "Notre Dame" / "我家" / ...}, stored at
+# <output_dir>/location_labels.json. Pattern mirrors face labels
+# exactly so the UI code can reuse the same inline-edit flow.
+
+def _location_labels_path(run_id: str) -> Path | None:
+    run = _get_run(run_id) or _reload_run_from_disk(run_id)
+    if run is None:
+        return None
+    od = run.get("output_dir")
+    if not od:
+        return None
+    return Path(od) / "location_labels.json"
+
+
+def _load_location_labels(run_id: str) -> dict[int, str]:
+    p = _location_labels_path(run_id)
+    if p is None or not p.exists():
+        return {}
+    try:
+        data = json.loads(p.read_text("utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    labels = data.get("labels") or {}
+    out: dict[int, str] = {}
+    for k, v in labels.items():
+        try:
+            out[int(k)] = str(v)
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def _save_location_labels(run_id: str, labels: dict[int, str]) -> bool:
+    p = _location_labels_path(run_id)
+    if p is None:
+        return False
+    p.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "schema":     "pixcull.location_labels.v1",
+        "run_id":     run_id,
+        "updated_at": time.time(),
+        "labels":     {str(k): v for k, v in labels.items()},
+    }
+    try:
+        p.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        return True
+    except OSError:
+        return False
+
+
+def _build_locations_info(rows: list[dict],
+                              run_id: str | None = None) -> dict:
     """Build the {clusters: [...], n_no_gps} block for the results
     payload + the /locations endpoint.
 
@@ -1242,6 +1297,7 @@ def _build_locations_info(rows: list[dict]) -> dict:
         best_filename   highest score_final photo in the cluster
         best_score      that photo's final score
         sample_filenames first up-to-5 filenames (for thumbnails)
+        label           V23.1 — user-supplied location name (may be "")
     """
     cluster_acc: dict[int, dict] = {}
     n_no_gps = 0
@@ -1283,6 +1339,9 @@ def _build_locations_info(rows: list[dict]) -> dict:
                 d["best_score"] = sf_f
                 d["best_filename"] = fn
 
+    # V23.1 — attach user-supplied location labels.
+    labels = _load_location_labels(run_id) if run_id else {}
+
     clusters: list[dict] = []
     for d in cluster_acc.values():
         if d["lats"]:
@@ -1293,6 +1352,7 @@ def _build_locations_info(rows: list[dict]) -> dict:
             d["center_lon"] = None
         d.pop("lats", None)
         d.pop("lons", None)
+        d["label"] = labels.get(d["id"], "")
         clusters.append(d)
     clusters.sort(key=lambda d: -d["n_photos"])
     return {
@@ -1832,6 +1892,8 @@ class _Handler(BaseHTTPRequestHandler):
                 run_id, rest = tail.split("/", 1)
                 if rest == "face_clusters/label":
                     self._handle_face_label_post(run_id); return True
+                if rest == "locations/label":
+                    self._handle_location_label_post(run_id); return True
                 if rest == "export":
                     self._handle_export(run_id); return True
         return False
@@ -1868,6 +1930,9 @@ class _Handler(BaseHTTPRequestHandler):
                  "doc":    "rename a face cluster"},
                 {"method": "GET",  "path": "/api/v1/runs/<run_id>/locations",
                  "doc":    "GPS location cluster summary"},
+                {"method": "POST", "path": "/api/v1/runs/<run_id>/locations/label",
+                 "body":   "{cluster_id: int, label: str}",
+                 "doc":    "rename a GPS location cluster (V23.1)"},
                 {"method": "GET",  "path": "/api/v1/runs/<run_id>/status",
                  "doc":    "pipeline progress JSON"},
                 {"method": "GET",  "path": "/api/v1/runs/<run_id>/scores.csv",
@@ -1952,7 +2017,7 @@ class _Handler(BaseHTTPRequestHandler):
         summary = result[1] if result else {}
         face_clusters_info = (_build_face_clusters_info(run_id, result[0])
                                if result else {"clusters": [], "n_noise": 0})
-        locations_info = (_build_locations_info(result[0]) if result
+        locations_info = (_build_locations_info(result[0], run_id) if result
                           else {"clusters": [], "n_no_gps": 0, "n_total": 0})
         body = _safe_dumps({
             "schema":   "pixcull.api.v1.run",
@@ -2158,6 +2223,10 @@ class _Handler(BaseHTTPRequestHandler):
             # V22.1 — update a per-cluster label for a run.
             mid = path[len("/face_clusters/"):-len("/label")]
             return self._handle_face_label_post(mid)
+        if path.startswith("/locations/") and path.endswith("/label"):
+            # V23.1 — update a per-location label for a run.
+            mid = path[len("/locations/"):-len("/label")]
+            return self._handle_location_label_post(mid)
         if path == "/retrain":
             return self._handle_retrain()
         if path == "/license":
@@ -2617,7 +2686,7 @@ class _Handler(BaseHTTPRequestHandler):
         # run-scoped; V22.2+ will add cross-run inheritance).
         face_clusters_info = _build_face_clusters_info(run_id, rows)
         # V23 — GPS location clusters + per-cluster "best" picker.
-        locations_info = _build_locations_info(rows)
+        locations_info = _build_locations_info(rows, run_id)
         payload = {
             "run_id": run_id,
             "rows": rows,
@@ -2720,7 +2789,7 @@ class _Handler(BaseHTTPRequestHandler):
             self.send_error(425, "results not ready")
             return
         rows, _summary = result
-        info = _build_locations_info(rows)
+        info = _build_locations_info(rows, run_id)
         info["run_id"] = run_id
         info["schema"] = "pixcull.locations.v1"
         body = _safe_dumps(info).encode("utf-8")
@@ -2816,6 +2885,49 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(out)
         return True
+
+    def _handle_location_label_post(self, run_id: str) -> None:
+        """V23.1 — POST /locations/<run_id>/label with body
+        ``{cluster_id: int, label: str}``. Empty label = remove.
+        Mirrors V22.1's face-label handler.
+        """
+        run = _get_run(run_id) or _reload_run_from_disk(run_id)
+        if run is None:
+            self.send_error(404, "no such run")
+            return
+        n = int(self.headers.get("Content-Length") or "0")
+        try:
+            body = json.loads(self.rfile.read(n).decode("utf-8") or "{}")
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            self.send_error(400, "invalid JSON body")
+            return
+        try:
+            cid = int(body.get("cluster_id"))
+        except (TypeError, ValueError):
+            self.send_error(400, "cluster_id must be int")
+            return
+        label = str(body.get("label") or "").strip()
+        if len(label) > 60:        # locations get a bit more room
+            label = label[:60]
+        labels = _load_location_labels(run_id)
+        if label:
+            labels[cid] = label
+        else:
+            labels.pop(cid, None)
+        if not _save_location_labels(run_id, labels):
+            self.send_error(500, "failed to persist labels")
+            return
+        out_body = _safe_dumps({
+            "ok":     True,
+            "run_id": run_id,
+            "labels": {str(k): v for k, v in labels.items()},
+        }).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(out_body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(out_body)
 
     def _serve_face_avatar(self, rel: str) -> None:
         """V22.3 — serve a per-cluster face crop JPEG.
