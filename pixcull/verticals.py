@@ -300,7 +300,13 @@ def get_effective_policy(key: str) -> VerticalPolicy | None:
 
 def _data_root() -> Path:
     """Mirror of launcher.app_data_dir() — kept here so this module
-    has no app/launcher dependency. See app/launcher.py docstring."""
+    has no app/launcher dependency. See app/launcher.py docstring.
+
+    V28 — this is now just the TOP-LEVEL PixCull dir. Per-user
+    profiles live below it; ``vertical_root`` resolves through
+    ``pixcull.users.vertical_root_for_user`` which honors the active
+    user + team redirects.
+    """
     if sys.platform == "darwin":
         p = Path.home() / "Library" / "Application Support" / "PixCull"
     else:
@@ -310,11 +316,21 @@ def _data_root() -> Path:
 
 
 def vertical_root(key: str) -> Path:
-    """Per-vertical storage root. Created lazily."""
-    p = _data_root() / "verticals" / key
-    (p / "good").mkdir(parents=True, exist_ok=True)
-    (p / "bad").mkdir(parents=True, exist_ok=True)
-    return p
+    """Per-vertical storage root for the ACTIVE USER. Created lazily.
+
+    V28 — resolved through ``pixcull.users.vertical_root_for_user``
+    so the active user's bank is used by default, and a team-redirect
+    file (``_team_redirect.json``) in the user's vertical dir
+    transparently points the bank at a shared
+    ``teams/<team_id>/verticals/<key>/`` path.
+
+    Existing single-user installations remain backward-compatible:
+    the ``default`` user's verticals/ is a symlink to the legacy
+    global ``<root>/verticals/`` (created on first V28 access),
+    so all the pre-V28 sample banks load transparently.
+    """
+    from pixcull.users import get_active_user, vertical_root_for_user
+    return vertical_root_for_user(get_active_user(), key)
 
 
 def metadata_path(key: str) -> Path:

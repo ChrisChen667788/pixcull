@@ -1734,6 +1734,11 @@ class _Handler(BaseHTTPRequestHandler):
             self._serve_storage_info(); return True
         if sub == "/rubric_meta":
             self._serve_rubric_meta(); return True
+        # V28 — user / team profile endpoints
+        if sub == "/users":
+            return self._serve_users_list()
+        if sub == "/users/active":
+            return self._serve_users_active()
         # /runs/<id> and its sub-resources
         if sub.startswith("/runs/"):
             tail = sub[len("/runs/"):]
@@ -1770,6 +1775,12 @@ class _Handler(BaseHTTPRequestHandler):
             self._handle_scan_local(); return True
         if sub == "/analyze":
             self._handle_analyze_post(); return True
+        # V28 — user management
+        if sub == "/users":
+            return self._handle_users_create()
+        if sub.startswith("/users/") and sub.endswith("/team_subscribe"):
+            uid = sub[len("/users/"):-len("/team_subscribe")]
+            return self._handle_team_subscribe(uid)
         if sub.startswith("/runs/"):
             tail = sub[len("/runs/"):]
             if "/" in tail:
@@ -1834,6 +1845,18 @@ class _Handler(BaseHTTPRequestHandler):
                  "doc":    "disk usage + run count summary"},
                 {"method": "GET",  "path": "/api/v1/rubric_meta",
                  "doc":    "rubric axes definition (for annotation UI)"},
+                # V28 multi-user
+                {"method": "GET",  "path": "/api/v1/users",
+                 "doc":    "list user profiles + active user"},
+                {"method": "GET",  "path": "/api/v1/users/active",
+                 "doc":    "just the active user id"},
+                {"method": "POST", "path": "/api/v1/users",
+                 "body":   "{user_id: str}",
+                 "doc":    "create user profile (idempotent)"},
+                {"method": "POST", "path": "/api/v1/users/<uid>/team_subscribe",
+                 "body":   "{vertical: str, team_id: str|''}",
+                 "doc":    "redirect a user's vertical bank to a team's; "
+                          "empty team_id unsubscribes"},
             ],
         }).encode("utf-8")
         self.send_response(200)
@@ -2653,6 +2676,92 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
+
+    # --- V28 multi-user / team endpoints ----------------------------------
+    def _serve_users_list(self) -> bool:
+        """V28 — list all user profiles + which one is active."""
+        from pixcull.users import list_users, get_active_user
+        body = _safe_dumps({
+            "schema":   "pixcull.api.v1.users.list",
+            "active":   get_active_user(),
+            "users":    list_users(),
+        }).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+        return True
+
+    def _serve_users_active(self) -> bool:
+        """V28 — just the active user id. Useful for the UI to show
+        ``Logged in as: <id>`` in the corner.
+        """
+        from pixcull.users import get_active_user
+        body = _safe_dumps({"active": get_active_user()}).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+        return True
+
+    def _handle_users_create(self) -> bool:
+        """V28 — POST /api/v1/users with body {user_id: str}.
+        Creates a new profile dir. Idempotent.
+        """
+        from pixcull.users import create_user
+        n = int(self.headers.get("Content-Length") or "0")
+        try:
+            body = json.loads(self.rfile.read(n).decode("utf-8") or "{}")
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            self.send_error(400, "invalid JSON")
+            return True
+        try:
+            result = create_user(str(body.get("user_id") or ""))
+        except ValueError as exc:
+            self.send_error(400, str(exc))
+            return True
+        out = _safe_dumps({"ok": True, **result}).encode("utf-8")
+        self.send_response(201 if result["created"] else 200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(out)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(out)
+        return True
+
+    def _handle_team_subscribe(self, user_id: str) -> bool:
+        """V28 — POST /api/v1/users/<uid>/team_subscribe with body
+        {vertical: str, team_id: str|""}.
+        Empty team_id = unsubscribe (restore personal bank).
+        """
+        from pixcull.users import subscribe_to_team_vertical
+        n = int(self.headers.get("Content-Length") or "0")
+        try:
+            body = json.loads(self.rfile.read(n).decode("utf-8") or "{}")
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            self.send_error(400, "invalid JSON")
+            return True
+        try:
+            result = subscribe_to_team_vertical(
+                user_id,
+                str(body.get("vertical") or ""),
+                str(body.get("team_id") or ""),
+            )
+        except (ValueError, KeyError) as exc:
+            self.send_error(400, str(exc))
+            return True
+        out = _safe_dumps({"ok": True, **result}).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(out)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(out)
+        return True
 
     def _serve_face_clusters(self, run_id: str) -> None:
         """V22.1 — face cluster summary + labels for a run.

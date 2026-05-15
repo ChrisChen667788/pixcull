@@ -22,7 +22,12 @@ from pixcull.scoring.photo_advice import build_advice
 
 @pytest.fixture
 def isolated_data_dir(tmp_path, monkeypatch):
+    """V28 — also patch pixcull.users._app_data_root so vertical_root
+    (which now resolves through pixcull.users) lands in the tmp dir.
+    """
     monkeypatch.setattr(vmod, "_data_root", lambda: tmp_path)
+    from pixcull import users as _users_mod
+    monkeypatch.setattr(_users_mod, "_app_data_root", lambda: tmp_path)
     return tmp_path
 
 

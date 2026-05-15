@@ -82,9 +82,18 @@ def test_get_vertical_unknown_returns_none():
 
 @pytest.fixture
 def isolated_data_dir(tmp_path, monkeypatch):
-    """Redirect _data_root() to a tmp dir so tests don't pollute
-    ~/Library/Application Support/PixCull."""
+    """Redirect storage to a tmp dir so tests don't pollute
+    ~/Library/Application Support/PixCull.
+
+    V28 — ``vertical_root`` now resolves through ``pixcull.users``;
+    we patch the underlying ``_app_data_root`` to redirect the WHOLE
+    PixCull data tree (verticals/, users/, teams/, ...) into a tmp
+    dir. The legacy ``verticals._data_root`` patch is kept for any
+    callers that still hit it directly.
+    """
     monkeypatch.setattr(verticals, "_data_root", lambda: tmp_path)
+    from pixcull import users as _users_mod
+    monkeypatch.setattr(_users_mod, "_app_data_root", lambda: tmp_path)
     return tmp_path
 
 

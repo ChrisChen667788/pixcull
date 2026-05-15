@@ -24,9 +24,15 @@ def config() -> PixCullConfig:
 def _isolate_vertical_overrides(tmp_path, monkeypatch):
     """V18 — isolate vertical-data root so any policy_override.json or
     phrase_override.json files written during real usage don't pollute
-    decide() tests that exercise the V17.2 baseline policies."""
+    decide() tests that exercise the V17.2 baseline policies.
+
+    V28 — also patch ``pixcull.users._app_data_root`` because that's
+    where ``vertical_root`` now resolves through.
+    """
     from pixcull import verticals as vmod
+    from pixcull import users as _users_mod
     monkeypatch.setattr(vmod, "_data_root", lambda: tmp_path)
+    monkeypatch.setattr(_users_mod, "_app_data_root", lambda: tmp_path)
     yield
 
 

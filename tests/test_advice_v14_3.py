@@ -284,9 +284,15 @@ def _isolate_vertical_data_root(tmp_path, monkeypatch):
     """V17.5 isolation — any override JSONs that exist on the
     developer's machine (e.g. from live testing) must not leak
     into the vertical-pool tests, which check the V17.3 hand-written
-    fallback behavior."""
+    fallback behavior.
+
+    V28 — also patch ``pixcull.users._app_data_root``; vertical_root
+    now resolves through there.
+    """
     from pixcull import verticals as vmod
+    from pixcull import users as _users_mod
     monkeypatch.setattr(vmod, "_data_root", lambda: tmp_path)
+    monkeypatch.setattr(_users_mod, "_app_data_root", lambda: tmp_path)
     yield
 
 
