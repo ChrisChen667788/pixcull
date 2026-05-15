@@ -2080,10 +2080,22 @@
     // cards silently did nothing (lightbox never showed). Removed the
     // duplicate; the outer `esc` works just as well here.
 
+    // V27.1 — peak badge in lightbox. Show 🏆 when this row is
+    // the burst-peak AND its cluster has ≥2 photos (singletons
+    // aren't meaningful "peaks"). Visible at-a-glance so the user
+    // can verify the picker chose the right frame.
+    const _clusterSize = _BURST_CLUSTER_SIZES.get(r.cluster_id) || 0;
+    const peakBadge = (r.is_burst_peak && _clusterSize >= 2)
+      ? `<span class="badge keep" title="此连拍组的最佳一张(共 ${_clusterSize} 张)" `
+        + `style="background:linear-gradient(90deg,#d4a843,#b88a2e);color:#1a1d24">`
+        + `🏆 连拍峰值</span>`
+      : '';
+
     return `
       <h2>${esc(r.filename)}</h2>
       <div class="meta-line">
         <span class="badge ${dec}" title="${esc(dec)}">${esc(decLabel)}</span>
+        ${peakBadge}
         <span title="${esc(r.scene || '')}">${esc(trGenre(r.scene) || '?')}</span>
         <span>综合分 ${scoreLine}</span>
         ${styleChips}

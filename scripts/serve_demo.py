@@ -7944,6 +7944,60 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
   </style>
 </head>
 <body>
+  <!-- V28.1 — active user pill in the top-right corner. Click to open
+       the user-management modal. Updates from /api/v1/users/active on
+       page load. Renders empty initially so the layout doesn't jump. -->
+  <div id="userPill" style="position:fixed;top:14px;right:18px;z-index:50;
+       padding:6px 14px;border:1px solid var(--border);border-radius:20px;
+       background:var(--bg-card);color:var(--muted);font-size:11px;
+       cursor:pointer;user-select:none;display:none">
+    <span style="opacity:0.7">用户</span>
+    <span id="userPillName" style="color:var(--fg);font-weight:500">···</span>
+    <span style="opacity:0.5;margin-left:4px">▾</span>
+  </div>
+  <div id="userModal" style="display:none;position:fixed;inset:0;
+       background:rgba(0,0,0,0.7);z-index:200;align-items:center;
+       justify-content:center" onclick="if(event.target===this)closeUserModal()">
+    <div style="background:var(--bg-card);border:1px solid var(--border);
+         border-radius:8px;padding:24px;width:min(440px,90vw);
+         box-shadow:var(--shadow-lg)">
+      <h3 style="margin:0 0 14px;font-size:16px">用户配置</h3>
+      <div style="color:var(--muted-soft);font-size:11px;margin-bottom:14px">
+        当前活动用户: <span id="userModalActive" style="color:var(--fg)">···</span>
+        <br>每个用户独立维护垂类样本桶 / 策略 / phrase 覆盖。
+      </div>
+      <div id="userModalList" style="margin-bottom:18px"></div>
+      <div style="border-top:1px solid var(--border);padding-top:14px">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:6px">
+          新建用户:
+        </div>
+        <div style="display:flex;gap:8px">
+          <input id="userCreateInput" type="text" placeholder="alice / bob ..."
+            style="flex:1;background:transparent;color:var(--fg);border:1px solid var(--border);
+                   border-radius:4px;padding:6px 10px;font:inherit;outline:none"
+            maxlength="39">
+          <button id="userCreateBtn" style="padding:6px 14px;
+            background:var(--accent);color:#fff;border:none;border-radius:4px;
+            font:inherit;cursor:pointer">创建</button>
+        </div>
+        <div id="userCreateMsg" style="font-size:10px;color:var(--muted-soft);margin-top:6px"></div>
+      </div>
+      <div style="border-top:1px solid var(--border);padding-top:14px;
+           margin-top:14px;font-size:10px;color:var(--muted-soft);line-height:1.5">
+        要切换到其他用户,在启动 PixCull 前设置环境变量:
+        <code style="display:block;background:rgba(0,0,0,0.3);padding:6px 8px;
+              border-radius:4px;margin-top:4px;color:var(--fg);
+              font-family:ui-monospace,monospace">export PIXCULL_USER=&lt;user_id&gt;</code>
+        然后重启 PixCull.app(或 serve_demo.py 进程)。
+      </div>
+      <div style="text-align:right;margin-top:14px">
+        <button onclick="closeUserModal()" style="padding:6px 14px;
+          background:transparent;color:var(--muted);border:1px solid var(--border);
+          border-radius:4px;font:inherit;cursor:pointer">关闭</button>
+      </div>
+    </div>
+  </div>
+
   <h1>PixCull</h1>
   <div class="subtitle">
     AI 摄影分拣 · 6 轴 rubric · 风格感知评分<br>
@@ -8210,6 +8264,90 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
     paint();
     overlay.classList.add("show");
   }
+})();
+</script>
+
+<!-- V28.1 — active-user pill + modal wiring. Reads /api/v1/users to
+     populate; lets the user create new profiles inline. Switching is
+     env-var-based (documented in the modal); changing on-the-fly
+     would need a process restart which we can't do from JS. -->
+<script>
+(() => {
+  const pill = document.getElementById("userPill");
+  const pillName = document.getElementById("userPillName");
+  const modal = document.getElementById("userModal");
+  const modalActive = document.getElementById("userModalActive");
+  const modalList = document.getElementById("userModalList");
+  const createInput = document.getElementById("userCreateInput");
+  const createBtn = document.getElementById("userCreateBtn");
+  const createMsg = document.getElementById("userCreateMsg");
+
+  async function refreshUsers() {
+    try {
+      const r = await fetch("/api/v1/users");
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const data = await r.json();
+      pillName.textContent = data.active || "default";
+      pill.style.display = "block";
+      modalActive.textContent = data.active || "default";
+      modalList.innerHTML = (data.users || []).map(u => {
+        const tag = u.is_active
+          ? '<span style="color:var(--keep);margin-left:6px;font-size:10px">← 当前</span>'
+          : '';
+        return `<div style="padding:8px 10px;border-radius:4px;
+                ${u.is_active ? 'background:rgba(52,211,153,0.08);' : ''}
+                margin-bottom:4px;display:flex;justify-content:space-between;
+                align-items:center;font-size:12px">
+          <span><b>${u.user_id}</b>${tag}</span>
+          <span style="color:var(--muted-soft);font-size:10px">
+            ${u.vertical_count} 个垂类已填样本
+          </span>
+        </div>`;
+      }).join("");
+    } catch (e) {
+      console.warn("userPill: refresh failed", e);
+      pill.style.display = "none";
+    }
+  }
+
+  pill.addEventListener("click", () => {
+    refreshUsers();
+    modal.style.display = "flex";
+  });
+  window.closeUserModal = () => { modal.style.display = "none"; };
+
+  createBtn.addEventListener("click", async () => {
+    const id = (createInput.value || "").trim();
+    if (!id) {
+      createMsg.textContent = "请输入 user_id";
+      return;
+    }
+    createBtn.disabled = true;
+    try {
+      const r = await fetch("/api/v1/users", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({user_id: id}),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (r.ok) {
+        createMsg.textContent = data.created
+          ? `已创建 '${id}'。切换需要 export PIXCULL_USER=${id} + 重启。`
+          : `'${id}' 已存在(无新建)。`;
+        createInput.value = "";
+        refreshUsers();
+      } else {
+        createMsg.textContent = "失败: " + (data.error || ("HTTP " + r.status));
+      }
+    } catch (e) {
+      createMsg.textContent = "网络错误: " + e.message;
+    } finally {
+      createBtn.disabled = false;
+    }
+  });
+
+  // Initial load
+  refreshUsers();
 })();
 </script>
 
