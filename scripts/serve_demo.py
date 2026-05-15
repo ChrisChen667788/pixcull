@@ -1030,6 +1030,123 @@ def _parse_int_list(v: object) -> list[int]:
 
 
 # ---------------------------------------------------------------------------
+# V22.1 — face cluster summary + per-run label persistence.
+# Labels are user-edited names for cluster IDs ("Bride", "Groom",
+# "Child A"). Stored per-run at ``<output_dir>/face_labels.json``;
+# cross-run inheritance (so "Bride" label sticks across multiple
+# weddings) is V22.2+.
+# ---------------------------------------------------------------------------
+
+def _face_labels_path(run_id: str) -> Path | None:
+    """Resolve the on-disk label file for a run, or None if the run
+    has no output dir on disk."""
+    run = _get_run(run_id) or _reload_run_from_disk(run_id)
+    if run is None:
+        return None
+    od = run.get("output_dir")
+    if not od:
+        return None
+    return Path(od) / "face_labels.json"
+
+
+def _load_face_labels(run_id: str) -> dict[int, str]:
+    """Read the run's label file. Returns {cluster_id: label}.
+    Empty dict when no file or parse error — never raises."""
+    p = _face_labels_path(run_id)
+    if p is None or not p.exists():
+        return {}
+    try:
+        data = json.loads(p.read_text("utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    labels = data.get("labels") or {}
+    out: dict[int, str] = {}
+    for k, v in labels.items():
+        try:
+            out[int(k)] = str(v)
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def _save_face_labels(run_id: str, labels: dict[int, str]) -> bool:
+    """Persist labels for a run. Returns True on success."""
+    p = _face_labels_path(run_id)
+    if p is None:
+        return False
+    p.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "schema":      "pixcull.face_labels.v1",
+        "run_id":      run_id,
+        "updated_at":  time.time(),
+        "labels":      {str(k): v for k, v in labels.items()},
+    }
+    try:
+        p.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        return True
+    except OSError:
+        return False
+
+
+def _build_face_clusters_info(run_id: str, rows: list[dict]) -> dict:
+    """Build the {clusters: [...], labels: {...}} block for the
+    results-page payload.
+
+    Each cluster entry has:
+        id           run-scoped int (>= 0 for real clusters, -1 = noise)
+        n_photos     distinct photos that contain at least one face
+                     with this cluster id
+        n_faces      total face count across the batch with this id
+        sample_filenames  up to 5 filenames for thumbnail samples
+        label        user-supplied label (may be "")
+    """
+    labels = _load_face_labels(run_id)
+    # Build distinct-photo + total-face counts per cluster.
+    cluster_counts: dict[int, dict] = {}
+    for r in rows:
+        cs = r.get("face_clusters") or []
+        if not cs:
+            continue
+        # First record total face count
+        for cid in cs:
+            d = cluster_counts.setdefault(cid, {
+                "id":               cid,
+                "n_photos":         0,
+                "n_faces":          0,
+                "sample_filenames": [],
+            })
+            d["n_faces"] += 1
+        # Then distinct-photo counting (use a set per row to dedupe
+        # photos that contain the same person twice — siblings, mirror
+        # shots — from inflating n_photos)
+        fn = r.get("filename", "")
+        for cid in set(cs):
+            d = cluster_counts.setdefault(cid, {
+                "id":               cid,
+                "n_photos":         0,
+                "n_faces":          0,
+                "sample_filenames": [],
+            })
+            d["n_photos"] += 1
+            if fn and len(d["sample_filenames"]) < 5:
+                d["sample_filenames"].append(fn)
+
+    # Attach labels + sort by n_photos desc (noise/-1 always last).
+    out: list[dict] = []
+    for cid, d in cluster_counts.items():
+        d["label"] = labels.get(cid, "")
+        out.append(d)
+    out.sort(key=lambda d: (d["id"] < 0, -d["n_photos"]))
+    return {
+        "clusters": out,
+        "n_noise":  cluster_counts.get(-1, {}).get("n_photos", 0),
+    }
+
+
+# ---------------------------------------------------------------------------
 # V2.1 retrain worker — invokes build_axis_training_set + train_axis_rescorers
 # as Python imports (faster than shelling out, and we get exceptions back).
 # Updates _RETRAIN_STATE so the admin UI can poll progress.
@@ -1533,6 +1650,9 @@ class _Handler(BaseHTTPRequestHandler):
             # {filename: decision} for a run so the LR Lua script can
             # propagate decisions to star ratings / reject flags.
             return self._serve_decisions(path[len("/decisions/"):])
+        if path.startswith("/face_clusters/"):
+            # V22.1 — face cluster summary + labels for a run.
+            return self._serve_face_clusters(path[len("/face_clusters/"):])
         if path.startswith("/thumb/"):
             return self._serve_image(path[len("/thumb/"):], _THUMB_SIZE)
         if path.startswith("/full/"):
@@ -1564,6 +1684,10 @@ class _Handler(BaseHTTPRequestHandler):
             return self._handle_runs_cleanup()
         if path.startswith("/annotation/"):
             return self._handle_save_annotation(path[len("/annotation/"):])
+        if path.startswith("/face_clusters/") and path.endswith("/label"):
+            # V22.1 — update a per-cluster label for a run.
+            mid = path[len("/face_clusters/"):-len("/label")]
+            return self._handle_face_label_post(mid)
         if path == "/retrain":
             return self._handle_retrain()
         if path == "/license":
@@ -2017,7 +2141,17 @@ class _Handler(BaseHTTPRequestHandler):
             )
             return
         rows, summary = result
-        payload = {"run_id": run_id, "rows": rows, "summary": summary}
+        # V22.1 — assemble per-cluster summary + per-run labels for the
+        # UI filter pill row. Labels live in <output_dir>/face_labels.json
+        # so they survive server restarts (V22.0's clusters are
+        # run-scoped; V22.2+ will add cross-run inheritance).
+        face_clusters_info = _build_face_clusters_info(run_id, rows)
+        payload = {
+            "run_id": run_id,
+            "rows": rows,
+            "summary": summary,
+            "face_clusters": face_clusters_info,
+        }
         # _safe_dumps strips NaN/Infinity (V14.0) so JS JSON.parse never
         # blows up on a stray inf in score_final or a NaN in axis stars.
         # V19.4.1 — hot-reloadable template (loaded from disk per request,
@@ -2095,6 +2229,81 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
+
+    def _serve_face_clusters(self, run_id: str) -> None:
+        """V22.1 — face cluster summary + labels for a run.
+
+        Returns the same block we inline into the results-page payload,
+        but available as a standalone JSON endpoint so the UI can
+        refresh after a label edit without re-rendering the whole
+        results page.
+        """
+        result = _build_results(run_id)
+        if result is None:
+            run = _get_run(run_id) or _reload_run_from_disk(run_id)
+            if run is None:
+                self.send_error(404, "no such run")
+                return
+            self.send_error(425, "results not ready")
+            return
+        rows, _summary = result
+        info = _build_face_clusters_info(run_id, rows)
+        info["run_id"] = run_id
+        info["schema"] = "pixcull.face_clusters.v1"
+        body = _safe_dumps(info).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _handle_face_label_post(self, run_id: str) -> None:
+        """V22.1 — POST /face_clusters/<run_id>/label with body
+        {cluster_id: int, label: str} to set a cluster's label.
+
+        Empty / whitespace-only label removes the entry (treat as "unlabel").
+        Returns {ok: true, labels: {...latest...}} on success.
+        """
+        run = _get_run(run_id) or _reload_run_from_disk(run_id)
+        if run is None:
+            self.send_error(404, "no such run")
+            return
+        n = int(self.headers.get("Content-Length") or "0")
+        try:
+            body = json.loads(self.rfile.read(n).decode("utf-8") or "{}")
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            self.send_error(400, "invalid JSON body")
+            return
+        try:
+            cid = int(body.get("cluster_id"))
+        except (TypeError, ValueError):
+            self.send_error(400, "cluster_id must be int")
+            return
+        label = str(body.get("label") or "").strip()
+        # Length cap so a typo doesn't write a megabyte filename.
+        if len(label) > 40:
+            label = label[:40]
+
+        labels = _load_face_labels(run_id)
+        if label:
+            labels[cid] = label
+        else:
+            labels.pop(cid, None)
+        if not _save_face_labels(run_id, labels):
+            self.send_error(500, "failed to persist labels")
+            return
+        out_body = _safe_dumps({
+            "ok":     True,
+            "run_id": run_id,
+            "labels": {str(k): v for k, v in labels.items()},
+        }).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(out_body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(out_body)
 
     def _serve_image(self, rel: str, size: int) -> None:
         # Format: <run_id>/<filename>[?w=N]

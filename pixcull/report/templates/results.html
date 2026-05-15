@@ -822,6 +822,13 @@
       <span class="filter-group" id="sceneFilters"></span>
       <span class="filter-group" id="styleFilters"></span>
 
+      <!-- V22.1: face cluster filter chips. Shown only when the run
+           has ≥1 cluster (DBSCAN found at least 2 photos sharing a
+           face). Each pill: "👤 <label-or-N> <count>". Click toggles
+           filter; ✏ icon opens inline rename. -->
+      <span class="filter-divider" id="faceFiltersDivider" style="display:none"></span>
+      <span class="filter-group" id="faceFilters"></span>
+
       <span style="flex:1"></span>
 
       <!-- V9.0: sort + group dropdowns -->
@@ -1298,6 +1305,9 @@
     decision: "all",
     scenes: new Set(),
     styles: new Set(),
+    // V22.1 — set of face cluster ids active in the filter. Empty
+    // set = no face filter (all photos pass).
+    faceClusters: new Set(),
     sort: "default",
   };
 
@@ -1337,8 +1347,120 @@
         render();
       });
     });
+
+    // V22.1 — face cluster filter chips. Driven by PAYLOAD.face_clusters
+    // (computed server-side from row.face_clusters). Hidden when no
+    // clusters were found (run has no recurring faces).
+    buildFaceFilters();
   }
   buildDynamicFilters();
+
+  // V22.1 — face cluster chip rendering. Out-of-line so we can re-run
+  // it after a label edit refreshes the cluster info from /face_clusters.
+  let faceClustersState = (PAYLOAD.face_clusters && PAYLOAD.face_clusters.clusters) || [];
+  function buildFaceFilters() {
+    const divider = document.getElementById("faceFiltersDivider");
+    const el = document.getElementById("faceFilters");
+    const real = faceClustersState.filter(c => c.id >= 0);
+    if (!real.length) {
+      divider.style.display = "none";
+      el.innerHTML = "";
+      return;
+    }
+    divider.style.display = "block";
+    el.innerHTML = real.map(c => {
+      const isActive = filterState.faceClusters.has(c.id);
+      const display = c.label || ("Person " + (c.id + 1));
+      // Hover tooltip lists the sample filenames so the user can recall
+      // who this cluster is before clicking.
+      const tip = `${c.n_photos} 张照片 · ${c.n_faces} 张人脸\\n样本: ${(c.sample_filenames || []).join(', ')}`;
+      return `<span class="pill face-pill${isActive ? ' active' : ''}" data-cid="${c.id}" title="${esc(tip)}">`
+           + `👤 <span class="face-pill-label" data-cid="${c.id}">${esc(display)}</span>`
+           + ` <span style="opacity:0.5">${c.n_photos}</span>`
+           + ` <span class="face-pill-edit" data-cid="${c.id}" title="重命名这一组" style="margin-left:4px;opacity:0.4;cursor:text">✎</span>`
+           + `</span>`;
+    }).join("");
+
+    el.querySelectorAll(".face-pill").forEach(pill => {
+      pill.addEventListener("click", e => {
+        // ✎ icon click = inline rename; the pill itself = toggle filter
+        if (e.target.classList.contains("face-pill-edit")) {
+          e.stopPropagation();
+          startInlineRename(pill);
+          return;
+        }
+        const cid = parseInt(pill.dataset.cid, 10);
+        if (filterState.faceClusters.has(cid)) {
+          filterState.faceClusters.delete(cid);
+          pill.classList.remove("active");
+        } else {
+          filterState.faceClusters.add(cid);
+          pill.classList.add("active");
+        }
+        render();
+      });
+    });
+  }
+
+  // V22.1 — inline rename UI. Replaces the label <span> with an <input>,
+  // POSTs to /face_clusters/<run>/label on Enter / blur, then rerenders.
+  function startInlineRename(pill) {
+    const cid = parseInt(pill.dataset.cid, 10);
+    const labelSpan = pill.querySelector(".face-pill-label");
+    if (!labelSpan) return;
+    const old = labelSpan.textContent;
+    const input = document.createElement("input");
+    input.value = old.startsWith("Person ") ? "" : old;
+    input.placeholder = "Bride / Groom / 小宝 ...";
+    input.style.cssText = "background:transparent;border:none;border-bottom:1px solid var(--fg);"
+      + "color:var(--fg);font:inherit;width:9em;outline:none;padding:0";
+    labelSpan.replaceWith(input);
+    input.focus(); input.select();
+
+    let done = false;
+    async function commit() {
+      if (done) return; done = true;
+      const newLabel = input.value.trim();
+      if (newLabel === old || (newLabel === "" && old.startsWith("Person "))) {
+        // No real change; just restore display
+        const restore = document.createElement("span");
+        restore.className = "face-pill-label";
+        restore.dataset.cid = String(cid);
+        restore.textContent = old;
+        input.replaceWith(restore);
+        return;
+      }
+      try {
+        const res = await fetch(`/face_clusters/${run_id}/label`, {
+          method:  "POST",
+          headers: {"Content-Type": "application/json"},
+          body:    JSON.stringify({cluster_id: cid, label: newLabel}),
+        });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        // Refresh cluster info from server (don't trust our local
+        // state — the server's the source of truth for labels).
+        const r2 = await fetch(`/face_clusters/${run_id}`);
+        if (r2.ok) {
+          const fresh = await r2.json();
+          faceClustersState = fresh.clusters || [];
+          buildFaceFilters();
+        }
+      } catch (e) {
+        console.error("rename failed:", e);
+        // Restore old display on failure
+        const restore = document.createElement("span");
+        restore.className = "face-pill-label";
+        restore.dataset.cid = String(cid);
+        restore.textContent = old;
+        input.replaceWith(restore);
+      }
+    }
+    input.addEventListener("keydown", e => {
+      if (e.key === "Enter") { e.preventDefault(); commit(); }
+      else if (e.key === "Escape") { done = true; const r = document.createElement("span"); r.className = "face-pill-label"; r.dataset.cid = String(cid); r.textContent = old; input.replaceWith(r); }
+    });
+    input.addEventListener("blur", commit);
+  }
 
   // Sort key function
   function sortRows(arr) {
@@ -1380,6 +1502,13 @@
     if (filterState.styles.size > 0) {
       filtered = filtered.filter(r =>
         (r.style_modes || []).some(s => filterState.styles.has(s))
+      );
+    }
+    // V22.1 — face cluster filter. A row passes if any of its face
+    // cluster ids is currently selected. Empty set = no filter.
+    if (filterState.faceClusters.size > 0) {
+      filtered = filtered.filter(r =>
+        (r.face_clusters || []).some(cid => filterState.faceClusters.has(cid))
       );
     }
     const sorted = sortRows(filtered);
