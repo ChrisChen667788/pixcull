@@ -139,4 +139,54 @@ public final class APIClient: ObservableObject {
                                    method: "POST", body: body)
         return try await runRequest(req, as: UsersActive.self)
     }
+
+    // P2.1 V0.2 — paginated row list for the photo grid.
+    public func rows(_ runID: String,
+                       limit: Int = 200,
+                       offset: Int = 0) async throws -> RowListResponse {
+        let path = "/api/v1/runs/\(runID)/rows?limit=\(limit)&offset=\(offset)"
+        let req = try makeRequest(path)
+        return try await runRequest(req, as: RowListResponse.self)
+    }
+
+    // P2.1 V0.2 — POST a swipe-annotation. Empty axes dict; only
+    // the overall keep/maybe/cull label travels. Per-axis rubric
+    // annotation stays in the browser /annotate flow.
+    public func annotate(runID: String,
+                          filename: String,
+                          decision: String) async throws -> AnnotateResponse {
+        let body = try JSONSerialization.data(withJSONObject: [
+            "axes": [:],
+            "overall_label": decision,
+            "overall_rationale": "iOS swipe (PixCullCompanion V0.2)",
+        ])
+        // URL-encode the filename for the path segment — phones shoot
+        // photos with spaces / non-ASCII in their names.
+        let encoded = filename.addingPercentEncoding(
+            withAllowedCharacters: .urlPathAllowed) ?? filename
+        let path = "/api/v1/runs/\(runID)/annotate/\(encoded)"
+        let req = try makeRequest(path, method: "POST", body: body)
+        return try await runRequest(req, as: AnnotateResponse.self)
+    }
+
+    // P2.1 V0.2 — URL for a photo's thumbnail. Renders via AsyncImage.
+    // ``size`` is the long-side cap; the existing /thumb endpoint
+    // honors ?w= for cache-bucket sizing.
+    public func thumbURL(runID: String, filename: String,
+                           size: Int = 420) -> URL? {
+        let base = serverURL.trimmingCharacters(
+            in: CharacterSet(charactersIn: "/"))
+        let enc = filename.addingPercentEncoding(
+            withAllowedCharacters: .urlPathAllowed) ?? filename
+        return URL(string: "\(base)/thumb/\(runID)/\(enc)?w=\(size)")
+    }
+
+    public func fullURL(runID: String, filename: String,
+                          size: Int = 1600) -> URL? {
+        let base = serverURL.trimmingCharacters(
+            in: CharacterSet(charactersIn: "/"))
+        let enc = filename.addingPercentEncoding(
+            withAllowedCharacters: .urlPathAllowed) ?? filename
+        return URL(string: "\(base)/full/\(runID)/\(enc)?w=\(size)")
+    }
 }

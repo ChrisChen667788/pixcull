@@ -69,3 +69,33 @@ public struct RunSummaryBody: Decodable {
     public let n_cull: Int?
     public let vertical: String?
 }
+
+// P2.1 V0.2 — paginated row list for the photo grid + lightbox.
+// Shape mirrors the server's slim ``pixcull.api.v1.rows.v1`` schema:
+// just the fields the iOS grid + swipe annotator need.
+public struct RowListResponse: Decodable {
+    public let schema: String
+    public let run_id: String
+    public let n_total: Int
+    public let offset: Int
+    public let limit: Int
+    public let rows: [RowEntry]
+}
+
+public struct RowEntry: Decodable, Identifiable, Equatable {
+    public var id: String { filename }
+    public let filename: String
+    public let decision: String?
+    public let score_final: Double?
+    public let scene: String?
+    public let cluster_id: Int?
+    public let is_burst_peak: Bool?
+    public let rubric_human_labeled: Bool?
+}
+
+// P2.1 V0.2 — annotation POST response. ``ok`` is True on success;
+// ``message`` is set on validation failures (axis name typos etc).
+public struct AnnotateResponse: Decodable {
+    public let ok: Bool?
+    public let message: String?
+}

@@ -1867,6 +1867,14 @@ class _Handler(BaseHTTPRequestHandler):
                 return True
             if rest == "xmp.zip":
                 self._serve_xmp_zip(run_id); return True
+            # P2.1 V0.2 — paginated rows for the mobile photo grid.
+            # ``?limit=N&offset=K`` (defaults 200 / 0). Slim row shape
+            # — only the fields the iOS grid + lightbox render —
+            # so a 1500-photo wedding doesn't ship 5MB of advice text
+            # the mobile UI doesn't use.
+            if rest == "rows":
+                qs = urlparse(self.path).query
+                return self._serve_api_v1_rows(run_id, qs)
             # P2.4 — active-learning queue (batch). Accepts ?n=N.
             # urlparse already stripped the query string from ``path``
             # in the caller; read it back off ``self.path`` so we
@@ -1904,6 +1912,13 @@ class _Handler(BaseHTTPRequestHandler):
                     self._handle_export(run_id); return True
                 if rest == "auto_caption":
                     self._handle_auto_caption(run_id); return True
+                # P2.1 V0.2 — annotation alias for the iOS swipe-to-
+                # label flow. Forwards to the existing
+                # ``_handle_save_annotation`` which takes "run/filename".
+                if rest.startswith("annotate/"):
+                    fn = rest[len("annotate/"):]
+                    self._handle_save_annotation(f"{run_id}/{fn}")
+                    return True
         return False
 
     def _serve_api_v1_index(self) -> bool:
@@ -1934,6 +1949,13 @@ class _Handler(BaseHTTPRequestHandler):
                  "doc":    "list runs with summary"},
                 {"method": "GET",  "path": "/api/v1/runs/<run_id>",
                  "doc":    "summary of one run + asset URLs"},
+                {"method": "GET",  "path": "/api/v1/runs/<run_id>/rows",
+                 "params": {"limit": "200 (default)", "offset": "0 (default)"},
+                 "doc":    "paginated slim row list for mobile photo grid"},
+                {"method": "POST", "path": "/api/v1/runs/<run_id>/annotate/<filename>",
+                 "body":   "{overall_label: keep|maybe|cull, axes?: {}, overall_rationale?: str}",
+                 "doc":    "save a human annotation for a single photo "
+                          "(append-only; latest wins on read)"},
                 {"method": "GET",  "path": "/api/v1/runs/<run_id>/decisions",
                  "doc":    "{filename: keep|maybe|cull} + src_paths"},
                 {"method": "GET",  "path": "/api/v1/runs/<run_id>/face_clusters",
@@ -2016,6 +2038,67 @@ class _Handler(BaseHTTPRequestHandler):
             "schema":  "pixcull.api.v1.runs.list",
             "n_runs":  len(runs),
             "runs":    runs,
+        }).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+        return True
+
+    def _serve_api_v1_rows(self, run_id: str, qs: str) -> bool:
+        """P2.1 V0.2 — paginated rows for the iOS photo grid.
+
+        URL: GET /api/v1/runs/<run_id>/rows[?limit=N&offset=K]
+        Default ``limit=200``, ``offset=0``. Hard-capped at 1000 so
+        a typo can't ship a 50MB blob.
+
+        Slim row shape — strip the heavy ``advice`` blob (~2 KB/row),
+        ``rubric_stars``, ``scene_probs``, etc. The iOS V0.2 grid + swipe
+        annotator only needs filename, decision, score_final, scene,
+        cluster_id, is_burst_peak. When the user opens the lightbox
+        we re-fetch a single row via /results JSON (already implemented).
+        """
+        result = _build_results(run_id)
+        if result is None:
+            run = _get_run(run_id) or _reload_run_from_disk(run_id)
+            if run is None:
+                self.send_error(404, "no such run"); return True
+            self.send_error(425, "results not ready"); return True
+        rows, _summary = result
+
+        from urllib.parse import parse_qs
+        qparams = parse_qs(qs) if qs else {}
+        try:
+            limit = int(qparams.get("limit", ["200"])[0])
+            offset = int(qparams.get("offset", ["0"])[0])
+        except (ValueError, TypeError):
+            limit, offset = 200, 0
+        limit = max(1, min(1000, limit))
+        offset = max(0, offset)
+
+        # Slim each row to the iOS-grid essentials. ``filename`` is
+        # the primary key the grid renders; the rest is decoration.
+        page = []
+        for r in rows[offset:offset + limit]:
+            page.append({
+                "filename":      r.get("filename"),
+                "decision":      r.get("decision"),
+                "score_final":   r.get("score_final"),
+                "scene":         r.get("scene"),
+                "cluster_id":    r.get("cluster_id"),
+                "is_burst_peak": bool(r.get("is_burst_peak")),
+                "rubric_human_labeled": bool(r.get("rubric_human_labeled")),
+            })
+
+        body = _safe_dumps({
+            "schema":  "pixcull.api.v1.rows.v1",
+            "run_id":  run_id,
+            "n_total": len(rows),
+            "offset":  offset,
+            "limit":   limit,
+            "rows":    page,
         }).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json; charset=utf-8")
