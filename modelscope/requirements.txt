@@ -1,0 +1,39 @@
+# PixCull ModelScope Studio · single-image demo deps
+#
+# This is a TRIMMED dependency set for the Gradio Studio:
+# we only need the auto-rubric scoring pipeline (no rescorer
+# joblibs, no Lr export, no tether). Roughly half the install
+# weight of the full pyproject `dependencies` block.
+
+gradio>=4.0,<5
+numpy>=1.26,<2
+pandas>=2.2
+Pillow>=10.2
+pyyaml>=6.0
+pydantic>=2.7
+rich>=13.7
+
+# CV
+opencv-python>=4.9
+rawpy>=0.19
+
+# DL — CPU wheels are fine for the Studio's free tier
+torch>=2.2
+torchvision>=0.17
+transformers>=4.40
+safetensors>=0.4
+
+# subject segmentation + aesthetic
+rembg>=2.0.57
+onnxruntime>=1.17
+pyiqa>=0.1.11
+imagededup>=0.3.2
+
+# PixCull itself
+# (uncomment after publishing to PyPI; for now, the Studio
+# repo is expected to vendor the pixcull/ folder as a sibling
+# of app.py)
+# pixcull>=0.1.0
+
+# Or pull from GitHub directly (slower first build, simpler maintenance):
+git+https://github.com/ChrisChen667788/pixcull.git@main
