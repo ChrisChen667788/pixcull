@@ -149,6 +149,18 @@ public final class APIClient: ObservableObject {
         return try await runRequest(req, as: RowListResponse.self)
     }
 
+    // V0.3 — fetch a single rich row (advice + axis stars + GPS +
+    // face clusters) for the lightbox info panel. Filename is
+    // URL-encoded for the path segment so spaces / non-ASCII names
+    // survive the wire.
+    public func richRow(runID: String,
+                          filename: String) async throws -> RichRowResponse {
+        let encoded = filename.addingPercentEncoding(
+            withAllowedCharacters: .urlPathAllowed) ?? filename
+        let req = try makeRequest("/api/v1/runs/\(runID)/row/\(encoded)")
+        return try await runRequest(req, as: RichRowResponse.self)
+    }
+
     // P2.1 V0.2 — POST a swipe-annotation. Empty axes dict; only
     // the overall keep/maybe/cull label travels. Per-axis rubric
     // annotation stays in the browser /annotate flow.

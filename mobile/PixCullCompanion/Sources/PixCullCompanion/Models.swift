@@ -99,3 +99,48 @@ public struct AnnotateResponse: Decodable {
     public let ok: Bool?
     public let message: String?
 }
+
+// V0.3 — full single-row response for the rich lightbox.
+// Adds advice + rubric stars + GPS + face_clusters on top of the
+// slim ``RowEntry`` fields.
+public struct RichRowResponse: Decodable {
+    public let schema: String
+    public let run_id: String
+    public let row: RichRow
+}
+
+public struct RichRow: Decodable {
+    public let filename: String
+    public let decision: String?
+    public let scene: String?
+    public let score_final: Double?
+    public let score_sharpness: Double?
+    public let score_exposure: Double?
+    public let score_aesthetic: Double?
+    public let score_composition: Double?
+    public let cluster_id: Int?
+    public let is_burst_peak: Bool?
+    public let rubric_human_labeled: Bool?
+    public let reason: String?
+
+    public let advice: Advice?
+    public let rubric_stars: [String: Double]?
+    public let face_clusters: [Int]?
+
+    public let gps_lat: Double?
+    public let gps_lon: Double?
+    public let gps_cluster_id: Int?
+
+    public let meta_overall_rationale: String?
+    public let meta_confidence: Double?
+    public let vlm_overall_rationale: String?
+}
+
+public struct Advice: Decodable {
+    public let verdict_short: String?
+    public let verdict: String?
+    public let strengths: [String]?
+    public let weaknesses: [String]?
+    public let suggestions: [String]?
+    public let rationale: String?
+}

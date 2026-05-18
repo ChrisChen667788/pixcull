@@ -1881,6 +1881,13 @@ class _Handler(BaseHTTPRequestHandler):
             if rest == "rows":
                 qs = urlparse(self.path).query
                 return self._serve_api_v1_rows(run_id, qs)
+            # V0.3 — single rich row for the iOS lightbox info panel.
+            # Strips nothing, so callers see advice + rubric_stars +
+            # gps_lat/lon + face_clusters etc. URL-encoded filename
+            # because mobile-shot photos often have spaces / non-ASCII.
+            if rest.startswith("row/"):
+                fn = rest[len("row/"):]
+                return self._serve_api_v1_row(run_id, fn)
             # P2.4 — active-learning queue (batch). Accepts ?n=N.
             # urlparse already stripped the query string from ``path``
             # in the caller; read it back off ``self.path`` so we
@@ -1967,6 +1974,9 @@ class _Handler(BaseHTTPRequestHandler):
                 {"method": "GET",  "path": "/api/v1/runs/<run_id>/rows",
                  "params": {"limit": "200 (default)", "offset": "0 (default)"},
                  "doc":    "paginated slim row list for mobile photo grid"},
+                {"method": "GET",  "path": "/api/v1/runs/<run_id>/row/<filename>",
+                 "doc":    "single rich row (V20 advice + rubric stars + "
+                          "GPS + face clusters) for the iOS lightbox"},
                 {"method": "POST", "path": "/api/v1/runs/<run_id>/annotate/<filename>",
                  "body":   "{overall_label: keep|maybe|cull, axes?: {}, overall_rationale?: str}",
                  "doc":    "save a human annotation for a single photo "
@@ -2131,6 +2141,46 @@ class _Handler(BaseHTTPRequestHandler):
             "offset":  offset,
             "limit":   limit,
             "rows":    page,
+        }).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+        return True
+
+    def _serve_api_v1_row(self, run_id: str, filename: str) -> bool:
+        """V0.3 — full single-row dict for the iOS lightbox.
+
+        Includes ``advice`` (verdict + strengths + weaknesses +
+        suggestions, all from V20), ``rubric_stars`` (per-axis 1-5★),
+        ``gps_lat`` / ``gps_lon``, ``face_clusters`` (per-face cluster
+        ids; iOS resolves to names via the face_clusters endpoint),
+        and any meta-judge / VLM rationale present.
+
+        Looks the row up by filename in the result rows. 404 if not
+        found — typically because the filename was URL-encoded wrong,
+        but the message says so the iOS UI can tell.
+        """
+        result = _build_results(run_id)
+        if result is None:
+            run = _get_run(run_id) or _reload_run_from_disk(run_id)
+            if run is None:
+                self.send_error(404, "no such run"); return True
+            self.send_error(425, "results not ready"); return True
+        rows, _ = result
+        fn = unquote(filename)
+        match = next((r for r in rows if r.get("filename") == fn), None)
+        if match is None:
+            self.send_error(404, f"no such filename in this run: {fn}")
+            return True
+        # Wrap in a schema envelope; the row itself is passthrough so
+        # all fields the row builder produced are visible.
+        body = _safe_dumps({
+            "schema": "pixcull.api.v1.row.v1",
+            "run_id": run_id,
+            "row":    match,
         }).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json; charset=utf-8")

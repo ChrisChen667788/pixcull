@@ -4,14 +4,24 @@
 // V0.1 scope (shipped): read-only review of runs the Mac/NAS has
 // already analyzed + embedded browser fallback.
 //
-// V0.2 scope (this revision): native photo grid + per-photo swipe
-// gestures. Tapping a card opens a full-screen lightbox; swipe up
-// = keep, down = cull, left/right = prev/next photo. Annotations
-// POST to /api/v1/runs/<id>/annotate/<filename> and update the
-// local row state immediately so the grid reflects changes on
-// dismiss. Decisions are persisted server-side via the same
-// annotation.jsonl append-only file the V2.0 browser flow uses,
-// so labels survive across iOS / browser / Lr-write-back paths.
+// V0.2 scope: native photo grid + per-photo swipe gestures.
+// Tapping a card opens a full-screen lightbox; swipe up = keep,
+// down = cull, left/right = prev/next. Annotations POST to
+// /api/v1/runs/<id>/annotate/<filename>; decisions persisted
+// server-side via the same annotation.jsonl as the V2.0 browser
+// flow so labels travel across iOS / browser / Lr-write-back.
+//
+// V0.3 scope (this revision): rich lightbox info sheet. Tapping
+// the (i) icon in the lightbox header opens a sheet with:
+//   - V20 verdict + strengths / weaknesses / suggestions
+//   - 6-axis rubric stars
+//   - GPS lat/lon + location cluster id
+//   - face cluster membership
+//   - meta-judge + VLM rationale (when present)
+// Backed by GET /api/v1/runs/<id>/row/<filename> which returns
+// the full row dict (no slim-shape stripping). The fetch is
+// per-photo + cached by filename so swiping doesn't re-hit on
+// the same photo.
 
 import SwiftUI
 #if canImport(WebKit)
@@ -524,6 +534,10 @@ public struct PhotoLightboxView: View {
     @State private var dragOffset: CGSize = .zero
     @State private var savingDecision: String? = nil
     @State private var lastError: String? = nil
+    // V0.3 — rich-row state + sheet visibility
+    @State private var richRow: RichRow? = nil
+    @State private var richRowFilename: String? = nil    // tracks staleness
+    @State private var infoSheetUp = false
 
     private let swipeThreshold: CGFloat = 80
 
@@ -550,6 +564,15 @@ public struct PhotoLightboxView: View {
                             .foregroundColor(.white.opacity(0.7))
                             .lineLimit(1)
                             .truncationMode(.middle)
+                        // V0.3 — info button toggles the rich-row sheet
+                        Button {
+                            infoSheetUp = true
+                        } label: {
+                            Image(systemName: "info.circle.fill")
+                                .font(.title3)
+                                .foregroundColor(.white.opacity(0.8))
+                        }
+                        .padding(.leading, 8)
                     }
                     .padding()
 
@@ -589,6 +612,17 @@ public struct PhotoLightboxView: View {
                 // intensifies as the user passes the threshold.
                 .overlay(decisionHint, alignment: .center)
             }
+        }
+        // V0.3 — fetch the rich row when the user navigates to a
+        // photo OR opens the info sheet. ``.task(id:)`` re-runs on
+        // index change so swiping invalidates the previous row.
+        .task(id: index) {
+            if index >= 0 && index < rows.count {
+                await loadRichRow(for: rows[index].filename)
+            }
+        }
+        .sheet(isPresented: $infoSheetUp) {
+            RichRowSheet(row: richRow, slimRow: rows[safe: index])
         }
     }
 
@@ -681,6 +715,28 @@ public struct PhotoLightboxView: View {
         if next != index { index = next }
     }
 
+    // V0.3 — fetch the rich row for the current photo. Idempotent
+    // per-filename: if we already have ``richRowFilename == fn`` we
+    // skip the network call. Failures are swallowed (the info sheet
+    // gracefully shows what's available — at minimum the slim row).
+    private func loadRichRow(for filename: String) async {
+        if richRowFilename == filename, richRow != nil { return }
+        richRowFilename = filename
+        richRow = nil
+        do {
+            let resp = try await api.richRow(runID: runID,
+                                                filename: filename)
+            // Guard: only commit if the user hasn't already swiped to
+            // a different photo while the request was in flight.
+            if richRowFilename == filename {
+                richRow = resp.row
+            }
+        } catch {
+            // Silent — the sheet's fallback view handles "no rich
+            // data" by showing just the slim row.
+        }
+    }
+
     private func annotate(_ decision: String) async {
         guard index >= 0 && index < rows.count else { return }
         let row = rows[index]
@@ -707,5 +763,265 @@ public struct PhotoLightboxView: View {
                 ?? error.localizedDescription
         }
         savingDecision = nil
+    }
+}
+
+// V0.3 — safe Array subscript so the lightbox info sheet can read
+// rows[safe: index] without index-out-of-bounds when annotate races
+// with grid reload.
+extension Array {
+    subscript(safe index: Int) -> Element? {
+        return (indices ~= index) ? self[index] : nil
+    }
+}
+
+// V0.3 — info-sheet view shown when the user taps the (i) icon in
+// the lightbox. Renders the full V20 advice block + per-axis stars
+// + GPS + face cluster ids. Falls back to the slim row's fields
+// when the rich-row fetch hasn't completed yet (or failed).
+public struct RichRowSheet: View {
+    let row: RichRow?
+    let slimRow: RowEntry?
+
+    private static let axisOrder = ["technical", "subject",
+                                      "composition", "light",
+                                      "moment", "aesthetic"]
+    private static let axisAbbr: [String: String] = [
+        "technical":   "技术",
+        "subject":     "主体",
+        "composition": "构图",
+        "light":       "光线",
+        "moment":      "瞬间",
+        "aesthetic":   "美感",
+    ]
+
+    public var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    headerSection
+                    if let r = row {
+                        if let advice = r.advice {
+                            adviceSection(advice)
+                        }
+                        if let stars = r.rubric_stars, !stars.isEmpty {
+                            axisStarsSection(stars)
+                        }
+                        if r.gps_lat != nil || r.gps_lon != nil {
+                            gpsSection(r)
+                        }
+                        if let cs = r.face_clusters, !cs.isEmpty {
+                            faceSection(cs)
+                        }
+                        if let meta = r.meta_overall_rationale,
+                           !meta.isEmpty {
+                            metaSection(meta, confidence: r.meta_confidence)
+                        }
+                        if let vlm = r.vlm_overall_rationale,
+                           !vlm.isEmpty {
+                            vlmSection(vlm)
+                        }
+                    } else {
+                        ProgressView("Loading details…")
+                            .padding()
+                    }
+                }
+                .padding()
+            }
+            .navigationTitle("Details")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+
+    private var headerSection: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                if let dec = row?.decision ?? slimRow?.decision {
+                    DecisionBadge(decision: dec)
+                }
+                if let scene = row?.scene ?? slimRow?.scene {
+                    Text(scene)
+                        .font(.caption)
+                        .padding(.horizontal, 8).padding(.vertical, 2)
+                        .background(Color.secondary.opacity(0.15))
+                        .cornerRadius(4)
+                }
+                if let s = row?.score_final ?? slimRow?.score_final {
+                    Text("综合分 \(String(format: "%.2f", s))")
+                        .font(.caption.monospacedDigit())
+                }
+                Spacer()
+            }
+            if let fn = row?.filename ?? slimRow?.filename {
+                Text(fn)
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundColor(.secondary)
+            }
+        }
+    }
+
+    private func adviceSection(_ advice: Advice) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let v = advice.verdict_short, !v.isEmpty {
+                Text(v)
+                    .font(.subheadline.weight(.medium))
+            }
+            if let s = advice.strengths, !s.isEmpty {
+                bulletList(title: "优点", items: s, color: .green,
+                           prefix: "✓")
+            }
+            if let w = advice.weaknesses, !w.isEmpty {
+                bulletList(title: "弱点", items: w, color: .orange,
+                           prefix: "✗")
+            }
+            if let sug = advice.suggestions, !sug.isEmpty {
+                bulletList(title: "建议", items: sug, color: .blue,
+                           prefix: "→")
+            }
+            if let r = advice.rationale, !r.isEmpty {
+                Text(r)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .padding(.top, 4)
+            }
+        }
+    }
+
+    private func bulletList(title: String, items: [String],
+                              color: Color, prefix: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).font(.caption.bold()).foregroundColor(color)
+            ForEach(Array(items.enumerated()), id: \.offset) { (_, item) in
+                HStack(alignment: .top, spacing: 6) {
+                    Text(prefix).foregroundColor(color)
+                    Text(item).font(.caption)
+                    Spacer()
+                }
+            }
+        }
+    }
+
+    private func axisStarsSection(_ stars: [String: Double]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("六轴评分")
+                .font(.caption.bold())
+                .foregroundColor(.secondary)
+            ForEach(Self.axisOrder, id: \.self) { name in
+                if let s = stars[name] {
+                    AxisStarRow(name: Self.axisAbbr[name] ?? name,
+                                  stars: s)
+                }
+            }
+        }
+    }
+
+    private func gpsSection(_ r: RichRow) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("📍 GPS").font(.caption.bold())
+                .foregroundColor(.secondary)
+            HStack {
+                if let lat = r.gps_lat, let lon = r.gps_lon {
+                    Text(String(format: "%.4f, %.4f", lat, lon))
+                        .font(.caption.monospacedDigit())
+                }
+                if let cid = r.gps_cluster_id {
+                    Text("地点组 #\(cid)")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+                Spacer()
+            }
+        }
+    }
+
+    private func faceSection(_ clusters: [Int]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("👤 人脸").font(.caption.bold())
+                .foregroundColor(.secondary)
+            HStack {
+                ForEach(Array(clusters.enumerated()), id: \.offset) { (_, cid) in
+                    Text(cid >= 0 ? "Person \(cid + 1)" : "(unique)")
+                        .font(.caption2)
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(Color.purple.opacity(0.18))
+                        .foregroundColor(.purple)
+                        .cornerRadius(3)
+                }
+                Spacer()
+            }
+        }
+    }
+
+    private func metaSection(_ text: String, confidence: Double?) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("⌬ DeepSeek meta-judge")
+                    .font(.caption.bold())
+                    .foregroundColor(.purple)
+                if let c = confidence {
+                    Text(String(format: "(置信 %.0f%%)", c * 100))
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+                Spacer()
+            }
+            Text(text).font(.caption)
+        }
+    }
+
+    private func vlmSection(_ text: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("👁 VLM 视觉判断")
+                .font(.caption.bold())
+                .foregroundColor(.blue)
+            Text(text).font(.caption)
+        }
+    }
+}
+
+private struct DecisionBadge: View {
+    let decision: String
+    var body: some View {
+        let color: Color = {
+            switch decision {
+            case "keep":  return .green
+            case "maybe": return .yellow
+            case "cull":  return .red
+            default:      return .gray
+            }
+        }()
+        return Text(decision.uppercased())
+            .font(.caption.bold())
+            .padding(.horizontal, 8).padding(.vertical, 2)
+            .background(color.opacity(0.18))
+            .foregroundColor(color)
+            .overlay(
+                RoundedRectangle(cornerRadius: 4)
+                    .stroke(color, lineWidth: 1)
+            )
+    }
+}
+
+private struct AxisStarRow: View {
+    let name: String
+    let stars: Double
+
+    var body: some View {
+        HStack {
+            Text(name).font(.caption).frame(width: 40, alignment: .leading)
+            // 5-star visualization: filled / half / empty per integer
+            HStack(spacing: 2) {
+                ForEach(0..<5, id: \.self) { i in
+                    let filled = Double(i) + 0.5 < stars
+                    Image(systemName: filled ? "star.fill" : "star")
+                        .font(.system(size: 11))
+                        .foregroundColor(.yellow)
+                }
+            }
+            Spacer()
+            Text(String(format: "%.1f", stars))
+                .font(.caption.monospacedDigit())
+                .foregroundColor(.secondary)
+        }
     }
 }
