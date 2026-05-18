@@ -1837,6 +1837,9 @@ class _Handler(BaseHTTPRequestHandler):
         # INFRA-2 — multi-machine sync status
         if sub == "/sync_status":
             return self._serve_sync_status()
+        # P2.2 — list active tether sessions
+        if sub == "/tether":
+            return self._serve_tether_list()
         # V28 — user / team profile endpoints
         if sub == "/users":
             return self._serve_users_list()
@@ -1900,6 +1903,12 @@ class _Handler(BaseHTTPRequestHandler):
         # INFRA-2 — explicit "configure sync now" trigger
         if sub == "/sync_configure":
             return self._handle_sync_configure()
+        # P2.2 — tether session start / stop
+        if sub == "/tether/start":
+            return self._handle_tether_start()
+        if sub.startswith("/tether/") and sub.endswith("/stop"):
+            sid = sub[len("/tether/"):-len("/stop")]
+            return self._handle_tether_stop(sid)
         # V28.2 — switch active user via cookie (no restart needed)
         if sub == "/users/active":
             return self._handle_users_active_post()
@@ -2014,6 +2023,15 @@ class _Handler(BaseHTTPRequestHandler):
                  "body":   "{user_id?: str, team_id?: str}",
                  "doc":    "wire sync subtrees (symlinks) for a user "
                           "or team to the PIXCULL_SYNC_DIR target"},
+                # P2.2 — Lr/C1 tether live-cull
+                {"method": "GET",  "path": "/api/v1/tether",
+                 "doc":    "list active tether sessions"},
+                {"method": "POST", "path": "/api/v1/tether/start",
+                 "body":   "{folder: abs_path, vertical?: str}",
+                 "doc":    "start a watcher that auto-analyzes new "
+                          "files in the tether folder (Lr/C1 tether dest)"},
+                {"method": "POST", "path": "/api/v1/tether/<session>/stop",
+                 "doc":    "stop a tether session"},
                 # P2.4 — active-learning queue
                 {"method": "GET",  "path": "/api/v1/runs/<run_id>/next_to_label",
                  "params": {"n": "1 (default) | N for batch queue"},
@@ -2984,6 +3002,76 @@ class _Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     # --- V28 multi-user / team endpoints ----------------------------------
+    def _serve_tether_list(self) -> bool:
+        """P2.2 — list active tether sessions."""
+        from pixcull.tether import list_sessions
+        body = _safe_dumps({
+            "schema":   "pixcull.tether.list.v1",
+            "sessions": list_sessions(),
+        }).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+        return True
+
+    def _handle_tether_start(self) -> bool:
+        """P2.2 — POST /api/v1/tether/start with body
+        ``{folder: str, vertical?: str}``. Starts a watcher thread
+        that polls the folder for new images and auto-analyzes them.
+        Returns the session_id (= run_id) so the caller can hit
+        /api/v1/runs/<id>/rows to watch results stream in.
+        """
+        n = int(self.headers.get("Content-Length") or "0")
+        try:
+            body = json.loads(self.rfile.read(n).decode("utf-8") or "{}")
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            self.send_error(400, "invalid JSON")
+            return True
+        folder = str(body.get("folder") or "").strip()
+        if not folder:
+            self.send_error(400, "missing 'folder'")
+            return True
+        vertical = body.get("vertical") or None
+        from pixcull.tether import start_session
+        try:
+            session = start_session(Path(folder), vertical=vertical)
+        except ValueError as exc:
+            self.send_error(400, str(exc))
+            return True
+        out = _safe_dumps({
+            "ok":          True,
+            "session_id":  session.session_id,
+            "run_id":      session.run_id,
+            "status":      session.status(),
+            "results_url": f"/results/{session.run_id}",
+        }).encode("utf-8")
+        self.send_response(201)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(out)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(out)
+        return True
+
+    def _handle_tether_stop(self, session_id: str) -> bool:
+        """P2.2 — POST /api/v1/tether/<session>/stop. Idempotent."""
+        from pixcull.tether import stop_session
+        ok = stop_session(session_id)
+        body = _safe_dumps({
+            "ok":         ok,
+            "session_id": session_id,
+        }).encode("utf-8")
+        self.send_response(200 if ok else 404)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+        return True
+
     def _serve_sync_status(self) -> bool:
         """INFRA-2 — sync configuration + per-subtree state for the
         active user. See pixcull.sync.status() for the shape."""
