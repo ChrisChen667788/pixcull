@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 400" width="1280" height="400" role="img" aria-label="PixCull — AI photo culling for professional photographers">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b0d10"/>
+      <stop offset="1" stop-color="#14171c"/>
+    </linearGradient>
+    <linearGradient id="title" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#c8d0db"/>
+    </linearGradient>
+    <linearGradient id="accentGlow" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#3b82f6" stop-opacity="0.0"/>
+      <stop offset="0.5" stop-color="#3b82f6" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#3b82f6" stop-opacity="0.0"/>
+    </linearGradient>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="6"/>
+    </filter>
+  </defs>
+
+  <rect width="1280" height="400" fill="url(#bg)"/>
+
+  <!-- subtle accent band behind the right-side grid -->
+  <rect x="660" y="40" width="600" height="320" fill="url(#accentGlow)" opacity="0.8"/>
+
+  <!-- Left: title + tagline + key tokens -->
+  <g transform="translate(64, 96)">
+    <text x="0" y="0" fill="url(#title)" font-family="Inter, -apple-system, 'Segoe UI', sans-serif" font-weight="800" font-size="84" letter-spacing="-2">PixCull</text>
+    <text x="0" y="48" fill="#a8b2c1" font-family="Inter, sans-serif" font-weight="500" font-size="22" letter-spacing="0.3">AI photo culling for professional photographers</text>
+    <text x="0" y="84" fill="#7a8696" font-family="Inter, sans-serif" font-weight="400" font-size="16">Local-first · 6-axis rubric · Lightroom / Capture One sidecars</text>
+
+    <!-- 3 colored pills representing keep / maybe / cull -->
+    <g transform="translate(0, 142)">
+      <g>
+        <rect x="0" y="0" width="86" height="32" rx="16" fill="#34d399"/>
+        <text x="43" y="22" fill="#062618" font-family="Inter, sans-serif" font-weight="700" font-size="14" text-anchor="middle">KEEP</text>
+      </g>
+      <g transform="translate(96, 0)">
+        <rect x="0" y="0" width="96" height="32" rx="16" fill="#fbbf24"/>
+        <text x="48" y="22" fill="#2a1d05" font-family="Inter, sans-serif" font-weight="700" font-size="14" text-anchor="middle">MAYBE</text>
+      </g>
+      <g transform="translate(202, 0)">
+        <rect x="0" y="0" width="80" height="32" rx="16" fill="#ef6363"/>
+        <text x="40" y="22" fill="#2a0606" font-family="Inter, sans-serif" font-weight="700" font-size="14" text-anchor="middle">CULL</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- Right: stylized 3x2 photo grid with decision strips, score, rubric stars -->
+  <g transform="translate(700, 50)">
+    <!-- 6 cards -->
+    <!-- Card template: outer rounded rect, "image" gradient block, decision strip on left edge, score chip top-right, 6 axis ticks bottom -->
+
+    <!-- card 1 (keep) -->
+    <g transform="translate(0, 0)">
+      <rect x="0" y="0" width="172" height="142" rx="10" fill="#14171c" stroke="#232830"/>
+      <rect x="0" y="0" width="3" height="142" fill="#34d399"/>
+      <rect x="8" y="8" width="156" height="92" rx="6" fill="#2b3340"/>
+      <!-- abstracted subject: a face oval + horizon line -->
+      <ellipse cx="86" cy="50" rx="22" ry="26" fill="#48586b"/>
+      <line x1="8" y1="78" x2="164" y2="78" stroke="#1a1e25" stroke-width="2"/>
+      <rect x="130" y="12" width="32" height="16" rx="3" fill="rgba(255,255,255,0.07)"/>
+      <text x="146" y="24" fill="#e9ecf2" font-family="ui-monospace, monospace" font-size="10" text-anchor="middle">.78</text>
+      <!-- 6-axis tick strip -->
+      <g transform="translate(10, 112)" font-family="ui-monospace, monospace" font-size="9">
+        <rect x="0"  y="0" width="24" height="18" rx="2" fill="rgba(255,255,255,0.04)"/><text x="12" y="12" fill="#88cc88" text-anchor="middle">4.6</text>
+        <rect x="26" y="0" width="24" height="18" rx="2" fill="rgba(255,255,255,0.04)"/><text x="38" y="12" fill="#88cc88" text-anchor="middle">4.2</text>
+        <rect x="52" y="0" width="24" height="18" rx="2" fill="rgba(255,255,255,0.04)"/><text x="64" y="12" fill="#34d399" text-anchor="middle">5.0</text>
+        <rect x="78" y="0" width="24" height="18" rx="2" fill="rgba(255,255,255,0.04)"/><text x="90" y="12" fill="#88cc88" text-anchor="middle">4.0</text>
+        <rect x="104" y="0" width="24" height="18" rx="2" fill="rgba(255,255,255,0.04)"/><text x="116" y="12" fill="#34d399" text-anchor="middle">4.8</text>
+        <rect x="130" y="0" width="24" height="18" rx="2" fill="rgba(255,255,255,0.04)"/><text x="142" y="12" fill="#88cc88" text-anchor="middle">4.5</text>
+      </g>
+    </g>
+
+    <!-- card 2 (maybe) -->
+    <g transform="translate(186, 0)">
+      <rect x="0" y="0" width="172" height="142" rx="10" fill="#14171c" stroke="#232830"/>
+      <rect x="0" y="0" width="3" height="142" fill="#fbbf24"/>
+      <rect x="8" y="8" width="156" height="92" rx="6" fill="#2b3340"/>
+      <ellipse cx="86" cy="46" rx="20" ry="24" fill="#3e4756"/>
+      <line x1="8" y1="76" x2="164" y2="76" stroke="#1a1e25" stroke-width="2"/>
+      <rect x="130" y="12" width="32" height="16" rx="3" fill="rgba(255,255,255,0.07)"/>
+      <text x="146" y="24" fill="#e9ecf2" font-family="ui-monospace, monospace" font-size="10" text-anchor="middle">.54</text>
+      <g transform="translate(10, 112)" font-family="ui-monospace, monospace" font-size="9">
+        <rect x="0"  y="0" width="24" height="18" rx="2" fill="rgba(255,255,255,0.04)"/><text x="12" y="12" fill="#ee8888" text-anchor="middle">2.8</text>
+        <rect x="26" y="0" width="24" height="18" rx="2" fill="rgba(255,255,255,0.04)"/><text x="38" y="12" fill="#88cc88" text-anchor="middle">4.1</text>
+        <rect x="52" y="0" width="24" height="18" rx="2" fill="rgba(255,255,255,0.04)"/><text x="64" y="12" fill="#a8b2c1" text-anchor="middle">3.2</text>
+        <rect x="78" y="0" width="24" height="18" rx="2" fill="rgba(255,255,255,0.04)"/><text x="90" y="12" fill="#88cc88" text-anchor="middle">4.0</text>
+        <rect x="104" y="0" width="24" height="18" rx="2" fill="rgba(255,255,255,0.04)"/><text x="116" y="12" fill="#a8b2c1" text-anchor="middle">3.5</text>
+        <rect x="130" y="0" width="24" height="18" rx="2" fill="rgba(255,255,255,0.04)"/><text x="142" y="12" fill="#88cc88" text-anchor="middle">4.0</text>
+      </g>
+    </g>
+
+    <!-- card 3 (cull, dimmed) -->
+    <g transform="translate(372, 0)" opacity="0.7">
+      <rect x="0" y="0" width="172" height="142" rx="10" fill="#14171c" stroke="#232830"/>
+      <rect x="0" y="0" width="3" height="142" fill="#ef6363"/>
+      <rect x="8" y="8" width="156" height="92" rx="6" fill="#2b3340"/>
+      <ellipse cx="86" cy="50" rx="18" ry="22" fill="#3a4250"/>
+      <!-- blurred ellipse for cull (focus miss) -->
+      <ellipse cx="86" cy="50" rx="34" ry="38" fill="#3a4250" opacity="0.4" filter="url(#soft)"/>
+      <line x1="8" y1="78" x2="164" y2="78" stroke="#1a1e25" stroke-width="2"/>
+      <rect x="130" y="12" width="32" height="16" rx="3" fill="rgba(255,255,255,0.07)"/>
+      <text x="146" y="24" fill="#e9ecf2" font-family="ui-monospace, monospace" font-size="10" text-anchor="middle">.31</text>
+      <g transform="translate(10, 112)" font-family="ui-monospace, monospace" font-size="9">
+        <rect x="0"  y="0" width="24" height="18" rx="2" fill="rgba(255,255,255,0.04)"/><text x="12" y="12" fill="#ef6363" text-anchor="middle">1.8</text>
+        <rect x="26" y="0" width="24" height="18" rx="2" fill="rgba(255,255,255,0.04)"/><text x="38" y="12" fill="#a8b2c1" text-anchor="middle">3.0</text>
+        <rect x="52" y="0" width="24" height="18" rx="2" fill="rgba(255,255,255,0.04)"/><text x="64" y="12" fill="#ee8888" text-anchor="middle">2.5</text>
+        <rect x="78" y="0" width="24" height="18" rx="2" fill="rgba(255,255,255,0.04)"/><text x="90" y="12" fill="#a8b2c1" text-anchor="middle">3.2</text>
+        <rect x="104" y="0" width="24" height="18" rx="2" fill="rgba(255,255,255,0.04)"/><text x="116" y="12" fill="#ee8888" text-anchor="middle">2.8</text>
+        <rect x="130" y="0" width="24" height="18" rx="2" fill="rgba(255,255,255,0.04)"/><text x="142" y="12" fill="#a8b2c1" text-anchor="middle">3.0</text>
+      </g>
+    </g>
+
+    <!-- Second row, slightly offset -->
+    <g transform="translate(0, 158)">
+      <!-- card 4 (keep, burst peak) -->
+      <g>
+        <rect x="0" y="0" width="172" height="142" rx="10" fill="#14171c" stroke="#34d399" stroke-width="2"/>
+        <rect x="0" y="0" width="3" height="142" fill="#34d399"/>
+        <rect x="8" y="8" width="156" height="92" rx="6" fill="#2b3340"/>
+        <ellipse cx="86" cy="50" rx="22" ry="26" fill="#48586b"/>
+        <line x1="8" y1="78" x2="164" y2="78" stroke="#1a1e25" stroke-width="2"/>
+        <!-- burst peak badge -->
+        <rect x="100" y="12" width="56" height="18" rx="9" fill="#d4a843"/>
+        <text x="128" y="25" fill="#1a1d24" font-family="Inter, sans-serif" font-weight="700" font-size="9" text-anchor="middle">PEAK</text>
+        <g transform="translate(10, 112)" font-family="ui-monospace, monospace" font-size="9">
+          <rect x="0"  y="0" width="24" height="18" rx="2" fill="rgba(255,255,255,0.04)"/><text x="12" y="12" fill="#34d399" text-anchor="middle">4.8</text>
+          <rect x="26" y="0" width="24" height="18" rx="2" fill="rgba(255,255,255,0.04)"/><text x="38" y="12" fill="#88cc88" text-anchor="middle">4.4</text>
+          <rect x="52" y="0" width="24" height="18" rx="2" fill="rgba(255,255,255,0.04)"/><text x="64" y="12" fill="#88cc88" text-anchor="middle">4.6</text>
+          <rect x="78" y="0" width="24" height="18" rx="2" fill="rgba(255,255,255,0.04)"/><text x="90" y="12" fill="#34d399" text-anchor="middle">4.7</text>
+          <rect x="104" y="0" width="24" height="18" rx="2" fill="rgba(255,255,255,0.04)"/><text x="116" y="12" fill="#34d399" text-anchor="middle">5.0</text>
+          <rect x="130" y="0" width="24" height="18" rx="2" fill="rgba(255,255,255,0.04)"/><text x="142" y="12" fill="#88cc88" text-anchor="middle">4.3</text>
+        </g>
+      </g>
+      <!-- card 5 (maybe) -->
+      <g transform="translate(186, 0)">
+        <rect x="0" y="0" width="172" height="142" rx="10" fill="#14171c" stroke="#232830"/>
+        <rect x="0" y="0" width="3" height="142" fill="#fbbf24"/>
+        <rect x="8" y="8" width="156" height="92" rx="6" fill="#2b3340"/>
+        <ellipse cx="86" cy="46" rx="20" ry="24" fill="#3e4756"/>
+        <line x1="8" y1="76" x2="164" y2="76" stroke="#1a1e25" stroke-width="2"/>
+        <rect x="130" y="12" width="32" height="16" rx="3" fill="rgba(255,255,255,0.07)"/>
+        <text x="146" y="24" fill="#e9ecf2" font-family="ui-monospace, monospace" font-size="10" text-anchor="middle">.61</text>
+        <g transform="translate(10, 112)" font-family="ui-monospace, monospace" font-size="9">
+          <rect x="0"  y="0" width="24" height="18" rx="2" fill="rgba(255,255,255,0.04)"/><text x="12" y="12" fill="#88cc88" text-anchor="middle">4.1</text>
+          <rect x="26" y="0" width="24" height="18" rx="2" fill="rgba(255,255,255,0.04)"/><text x="38" y="12" fill="#ee8888" text-anchor="middle">2.9</text>
+          <rect x="52" y="0" width="24" height="18" rx="2" fill="rgba(255,255,255,0.04)"/><text x="64" y="12" fill="#a8b2c1" text-anchor="middle">3.4</text>
+          <rect x="78" y="0" width="24" height="18" rx="2" fill="rgba(255,255,255,0.04)"/><text x="90" y="12" fill="#88cc88" text-anchor="middle">4.0</text>
+          <rect x="104" y="0" width="24" height="18" rx="2" fill="rgba(255,255,255,0.04)"/><text x="116" y="12" fill="#a8b2c1" text-anchor="middle">3.6</text>
+          <rect x="130" y="0" width="24" height="18" rx="2" fill="rgba(255,255,255,0.04)"/><text x="142" y="12" fill="#88cc88" text-anchor="middle">4.2</text>
+        </g>
+      </g>
+      <!-- card 6 (cull, eyes closed) -->
+      <g transform="translate(372, 0)" opacity="0.7">
+        <rect x="0" y="0" width="172" height="142" rx="10" fill="#14171c" stroke="#232830"/>
+        <rect x="0" y="0" width="3" height="142" fill="#ef6363"/>
+        <rect x="8" y="8" width="156" height="92" rx="6" fill="#2b3340"/>
+        <ellipse cx="86" cy="50" rx="22" ry="26" fill="#3a4250"/>
+        <!-- closed-eye dashes -->
+        <line x1="76" y1="44" x2="84" y2="44" stroke="#1a1e25" stroke-width="2"/>
+        <line x1="92" y1="44" x2="100" y2="44" stroke="#1a1e25" stroke-width="2"/>
+        <line x1="8" y1="78" x2="164" y2="78" stroke="#1a1e25" stroke-width="2"/>
+        <!-- cull-reason chip -->
+        <rect x="92" y="12" width="64" height="16" rx="3" fill="rgba(239, 99, 99, 0.18)" stroke="rgba(239, 99, 99, 0.35)"/>
+        <text x="124" y="23" fill="#ff9a9a" font-family="Inter, sans-serif" font-weight="600" font-size="9" text-anchor="middle">✕ EYES</text>
+        <g transform="translate(10, 112)" font-family="ui-monospace, monospace" font-size="9">
+          <rect x="0"  y="0" width="24" height="18" rx="2" fill="rgba(255,255,255,0.04)"/><text x="12" y="12" fill="#88cc88" text-anchor="middle">4.0</text>
+          <rect x="26" y="0" width="24" height="18" rx="2" fill="rgba(255,255,255,0.04)"/><text x="38" y="12" fill="#ef6363" text-anchor="middle">1.5</text>
+          <rect x="52" y="0" width="24" height="18" rx="2" fill="rgba(255,255,255,0.04)"/><text x="64" y="12" fill="#a8b2c1" text-anchor="middle">3.5</text>
+          <rect x="78" y="0" width="24" height="18" rx="2" fill="rgba(255,255,255,0.04)"/><text x="90" y="12" fill="#88cc88" text-anchor="middle">4.2</text>
+          <rect x="104" y="0" width="24" height="18" rx="2" fill="rgba(255,255,255,0.04)"/><text x="116" y="12" fill="#ef6363" text-anchor="middle">1.8</text>
+          <rect x="130" y="0" width="24" height="18" rx="2" fill="rgba(255,255,255,0.04)"/><text x="142" y="12" fill="#a8b2c1" text-anchor="middle">3.2</text>
+        </g>
+      </g>
+    </g>
+  </g>
+</svg>

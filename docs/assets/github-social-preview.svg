@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" width="1280" height="640" role="img" aria-label="PixCull social preview">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b0d10"/>
+      <stop offset="1" stop-color="#1a1e25"/>
+    </linearGradient>
+    <linearGradient id="title" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#c8d0db"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.7">
+      <stop offset="0" stop-color="#3b82f6" stop-opacity="0.20"/>
+      <stop offset="1" stop-color="#3b82f6" stop-opacity="0.0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1280" height="640" fill="url(#bg)"/>
+  <ellipse cx="960" cy="320" rx="500" ry="320" fill="url(#glow)"/>
+
+  <!-- Title -->
+  <g transform="translate(96, 130)">
+    <text x="0" y="0" fill="url(#title)" font-family="Inter, -apple-system, 'Segoe UI', sans-serif" font-weight="800" font-size="144" letter-spacing="-3">PixCull</text>
+    <text x="0" y="56" fill="#a8b2c1" font-family="Inter, sans-serif" font-weight="500" font-size="28" letter-spacing="0.3">AI photo culling for professional photographers</text>
+  </g>
+
+  <!-- 3 value-prop columns -->
+  <g transform="translate(96, 320)" font-family="Inter, sans-serif">
+    <!-- col 1: local-first -->
+    <g>
+      <rect x="0" y="0" width="346" height="200" rx="10" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.08)"/>
+      <text x="24" y="44" fill="#34d399" font-weight="700" font-size="14" letter-spacing="0.1">LOCAL-FIRST</text>
+      <text x="24" y="84" fill="#e9ecf2" font-weight="600" font-size="22">Your photos stay on disk</text>
+      <text x="24" y="116" fill="#a8b2c1" font-size="15">Nothing uploads. RAW decode, scoring,</text>
+      <text x="24" y="138" fill="#a8b2c1" font-size="15">faces, GPS — all on-device. Optional</text>
+      <text x="24" y="160" fill="#a8b2c1" font-size="15">DeepSeek polish runs on your token.</text>
+    </g>
+
+    <!-- col 2: 6-axis rubric -->
+    <g transform="translate(372, 0)">
+      <rect x="0" y="0" width="346" height="200" rx="10" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.08)"/>
+      <text x="24" y="44" fill="#3b82f6" font-weight="700" font-size="14" letter-spacing="0.1">6-AXIS RUBRIC</text>
+      <text x="24" y="84" fill="#e9ecf2" font-weight="600" font-size="22">Why, not just what</text>
+      <text x="24" y="116" fill="#a8b2c1" font-size="15">Technical · subject · composition</text>
+      <text x="24" y="138" fill="#a8b2c1" font-size="15">light · moment · aesthetic — each</text>
+      <text x="24" y="160" fill="#a8b2c1" font-size="15">with stars, advice, and an audit trail.</text>
+    </g>
+
+    <!-- col 3: pipeline-ready -->
+    <g transform="translate(744, 0)">
+      <rect x="0" y="0" width="346" height="200" rx="10" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.08)"/>
+      <text x="24" y="44" fill="#fbbf24" font-weight="700" font-size="14" letter-spacing="0.1">PIPELINE-READY</text>
+      <text x="24" y="84" fill="#e9ecf2" font-weight="600" font-size="22">Where you already work</text>
+      <text x="24" y="116" fill="#a8b2c1" font-size="15">XMP sidecars for Lr / Capture One,</text>
+      <text x="24" y="138" fill="#a8b2c1" font-size="15">IPTC captions, standalone gallery</text>
+      <text x="24" y="160" fill="#a8b2c1" font-size="15">export, iOS swipe companion app.</text>
+    </g>
+  </g>
+
+  <!-- Footer: keep / maybe / cull pill row -->
+  <g transform="translate(96, 560)">
+    <text x="0" y="0" fill="#7a8696" font-family="Inter, sans-serif" font-size="14" letter-spacing="0.3">github.com/ChrisChen667788/pixcull</text>
+    <g transform="translate(820, -22)">
+      <rect x="0" y="0" width="80" height="28" rx="14" fill="#34d399"/>
+      <text x="40" y="20" fill="#062618" font-family="Inter, sans-serif" font-weight="700" font-size="13" text-anchor="middle">KEEP</text>
+      <rect x="90" y="0" width="86" height="28" rx="14" fill="#fbbf24"/>
+      <text x="133" y="20" fill="#2a1d05" font-family="Inter, sans-serif" font-weight="700" font-size="13" text-anchor="middle">MAYBE</text>
+      <rect x="186" y="0" width="78" height="28" rx="14" fill="#ef6363"/>
+      <text x="225" y="20" fill="#2a0606" font-family="Inter, sans-serif" font-weight="700" font-size="13" text-anchor="middle">CULL</text>
+    </g>
+  </g>
+</svg>

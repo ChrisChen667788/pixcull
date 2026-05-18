@@ -1,10 +1,35 @@
 [project]
 name = "pixcull"
 version = "0.1.0"
-description = "AI photo culling & scoring for professional photographers"
+description = "Local-first AI photo culling for professional photographers — 6-axis rubric, XMP/IPTC export, Lightroom & Capture One ready."
+readme = "README.md"
 requires-python = ">=3.11,<3.13"
 license = "MIT"
-authors = [{ name = "PixCull Team" }]
+authors = [
+    { name = "Chris Chen", email = "chenhaorui667788@gmail.com" },
+]
+keywords = [
+    "photography", "photo-culling", "ai", "computer-vision",
+    "image-classification", "rubric-scoring", "lightroom", "capture-one",
+    "xmp", "iptc", "raw-photography", "wedding-photography",
+    "local-first", "on-device-ai", "image-quality-assessment",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Web Environment",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS :: MacOS X",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Graphics",
+    "Topic :: Scientific/Engineering :: Image Processing",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 
 dependencies = [
     # core
@@ -69,6 +94,13 @@ bird = [
     "segment-anything>=1.0",  # Meta SAM
 ]
 
+[project.urls]
+Homepage      = "https://github.com/ChrisChen667788/pixcull"
+Repository    = "https://github.com/ChrisChen667788/pixcull"
+Issues        = "https://github.com/ChrisChen667788/pixcull/issues"
+Documentation = "https://github.com/ChrisChen667788/pixcull#readme"
+ModelScope    = "https://www.modelscope.cn/profile/haozi667788"
+
 [project.scripts]
 pixcull = "pixcull.cli:app"
 
@@ -83,6 +115,7 @@ packages = ["pixcull"]
 include = [
     "pixcull/scoring/templates/*.yaml",
     "pixcull/report/templates/*.j2",
+    "pixcull/report/templates/*.html",   # V19.4.1 — results.html is loaded from disk at runtime
 ]
 
 [tool.ruff]
