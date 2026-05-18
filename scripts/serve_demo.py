@@ -358,6 +358,23 @@ def _capture_client_event(payload: dict) -> None:
 _AUTO_RETRAIN_THRESHOLD = 10
 _annotations_since_retrain = 0
 
+# P-UX-4 — reject-reason taxonomy. When a photographer marks a photo
+# ``cull``, they can optionally tag *why* via a small overlay. Tokens
+# are snake_case ASCII for stability across versions + CSV/training
+# tools; the UI translates them to localized labels at render time
+# (same convention as the genre/scene taxonomy). Adding a new token
+# here is enough to surface it in the picker — the server validates
+# against this list to silently drop typos.
+_CULL_REASONS: tuple[str, ...] = (
+    "focus_miss",       # 焦点不准  — the AF locked on the wrong plane
+    "eyes_closed",      # 闭眼/表情 — subject blinked / awkward expression
+    "motion_blur",      # 模糊抖动 — handshake or subject motion blur
+    "framing",          # 构图差   — bad composition / crop / framing
+    "duplicate",        # 与更佳重复 — kept a better near-duplicate
+    "exposure",         # 曝光问题 — under/overexposed beyond recovery
+    "other",            # 其他    — catch-all for everything else
+)
+
 _DEFAULT_PORT = 8770
 _FALLBACK_PORTS = (8770, 8771, 8772, 9322, 7799)
 _DEMO_ROOT = Path("/tmp/pixcull_demo")  # base dir for upload + output trees
@@ -894,6 +911,16 @@ def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
             "rubric_human_labeled": human_rec is not None,
             "rubric_overall_rationale": (
                 human_rec.get("overall_rationale") if human_rec else ""
+            ),
+            # P-UX-4 — optional reject reason (one of _CULL_REASONS or "").
+            # Only surfaced when the LATEST human annotation actually
+            # culled the photo — otherwise a stale "focus_miss" from a
+            # since-revised verdict would mislead the UI chip + filter.
+            "cull_reason": (
+                str(human_rec.get("cull_reason") or "")
+                if (human_rec and
+                    str(human_rec.get("overall_label", "")).strip().lower() == "cull")
+                else ""
             ),
             # V3.x rationales for the modal's 4-way comparison
             "vlm_overall_rationale": str(r.get("vlm_overall_rationale", "") or ""),
@@ -1831,6 +1858,13 @@ class _Handler(BaseHTTPRequestHandler):
             self._serve_storage_info(); return True
         if sub == "/rubric_meta":
             self._serve_rubric_meta(); return True
+        # P-UX-4 — stable enum advertisement so clients (iOS,
+        # third-party) populate the reject-reason picker without
+        # hardcoding the token list. Currently exposes cull_reasons
+        # + their default zh-CN labels; will grow as more taxonomies
+        # appear (style_modes, scenes, etc.).
+        if sub == "/taxonomy":
+            return self._serve_api_v1_taxonomy()
         # INFRA-4 — daily LLM spend ledger
         if sub == "/llm_budget":
             return self._serve_llm_budget()
@@ -1888,6 +1922,13 @@ class _Handler(BaseHTTPRequestHandler):
             if rest.startswith("row/"):
                 fn = rest[len("row/"):]
                 return self._serve_api_v1_row(run_id, fn)
+            # P-UX-5 — composite-similarity nearest-neighbor lookup
+            # ("show me photos like this one") for the lightbox's
+            # similar-photos row. Returns up to k=5 by default.
+            if rest.startswith("similar/"):
+                fn = rest[len("similar/"):]
+                qs = urlparse(self.path).query
+                return self._serve_api_v1_similar(run_id, fn, qs)
             # P2.4 — active-learning queue (batch). Accepts ?n=N.
             # urlparse already stripped the query string from ``path``
             # in the caller; read it back off ``self.path`` so we
@@ -1977,10 +2018,24 @@ class _Handler(BaseHTTPRequestHandler):
                 {"method": "GET",  "path": "/api/v1/runs/<run_id>/row/<filename>",
                  "doc":    "single rich row (V20 advice + rubric stars + "
                           "GPS + face clusters) for the iOS lightbox"},
+                # P-UX-5 — composite-similarity nearest-neighbor
+                {"method": "GET",  "path": "/api/v1/runs/<run_id>/similar/<filename>",
+                 "params": {"k": "5 (default), max 20"},
+                 "doc":    "top-k visually-similar photos for the "
+                          "lightbox 'similar' row. Composite score "
+                          "over burst+scene+face+GPS+rubric."},
                 {"method": "POST", "path": "/api/v1/runs/<run_id>/annotate/<filename>",
-                 "body":   "{overall_label: keep|maybe|cull, axes?: {}, overall_rationale?: str}",
+                 "body":   "{overall_label: keep|maybe|cull, "
+                          "axes?: {}, overall_rationale?: str, "
+                          "cull_reason?: <token from /api/v1/taxonomy>}",
                  "doc":    "save a human annotation for a single photo "
                           "(append-only; latest wins on read)"},
+                # P-UX-4 — taxonomy advertisement so iOS / future clients
+                # can populate the cull-reason picker without hardcoding
+                # the token list. ASCII tokens are stable; localized
+                # labels live in the UI layer.
+                {"method": "GET",  "path": "/api/v1/taxonomy",
+                 "doc":    "stable enums: cull_reasons (+future labels)"},
                 {"method": "GET",  "path": "/api/v1/runs/<run_id>/decisions",
                  "doc":    "{filename: keep|maybe|cull} + src_paths"},
                 {"method": "GET",  "path": "/api/v1/runs/<run_id>/face_clusters",
@@ -2132,6 +2187,10 @@ class _Handler(BaseHTTPRequestHandler):
                 "cluster_id":    r.get("cluster_id"),
                 "is_burst_peak": bool(r.get("is_burst_peak")),
                 "rubric_human_labeled": bool(r.get("rubric_human_labeled")),
+                # P-UX-4 — empty unless the row carries an annotated
+                # reject reason. iOS V0.4+ can show this as a small
+                # chip on the swipe card without re-fetching the row.
+                "cull_reason":   str(r.get("cull_reason") or ""),
             })
 
         body = _safe_dumps({
@@ -2146,6 +2205,181 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+        return True
+
+    def _serve_api_v1_similar(self, run_id: str, filename: str, qs: str) -> bool:
+        """P-UX-5 — "show me photos like this one" for the lightbox.
+
+        We don't keep raw CLIP embeddings on disk (would be GB-scale
+        across runs), but the rubric / scene / cluster / face / GPS
+        columns already carry a rich perceptual signature per photo.
+        This composes them into a single 0..1 similarity score with
+        named reasons so the lightbox can show "why" each match
+        surfaced ("same burst", "same person + same scene", etc).
+
+        URL: GET /api/v1/runs/<run_id>/similar/<filename>?k=5
+
+        Response:
+          {
+            "schema": "pixcull.api.v1.similar.v1",
+            "target": "<filename>",
+            "k": 5,
+            "similar": [
+              {"filename": ..., "similarity": 0.87,
+               "reasons": ["burst", "same_scene"],
+               "decision": "keep", "score_final": 0.72},
+              ...
+            ]
+          }
+        """
+        result = _build_results(run_id)
+        if result is None:
+            run = _get_run(run_id) or _reload_run_from_disk(run_id)
+            if run is None:
+                self.send_error(404, "no such run"); return True
+            self.send_error(425, "results not ready"); return True
+        rows, _ = result
+        fn = unquote(filename)
+        target = next((r for r in rows if r.get("filename") == fn), None)
+        if target is None:
+            self.send_error(404, f"no such filename: {fn}"); return True
+
+        from urllib.parse import parse_qs
+        qparams = parse_qs(qs) if qs else {}
+        try:
+            k = int(qparams.get("k", ["5"])[0])
+        except (ValueError, TypeError):
+            k = 5
+        k = max(1, min(20, k))
+
+        # Build the perceptual signature for the target then score every
+        # OTHER row by composite similarity. Weights chosen so a burst
+        # neighbor dominates (it's almost certainly a near-dupe), then
+        # face+scene match, then rubric proximity (the long tail).
+        t_cluster = target.get("cluster_id")
+        t_scene   = (target.get("scene") or "").strip()
+        t_faces   = set(target.get("face_clusters") or [])
+        t_gps_cid = target.get("gps_cluster_id")
+        t_rubric  = target.get("rubric_stars") or {}
+        t_aest    = target.get("score_aesthetic")
+
+        def _rubric_proximity(other_rubric: dict) -> float:
+            """L1 distance over present axes, mapped to 0..1 similarity."""
+            if not other_rubric or not t_rubric:
+                return 0.0
+            axes = [a for a in t_rubric.keys()
+                    if t_rubric.get(a) is not None
+                    and other_rubric.get(a) is not None]
+            if not axes:
+                return 0.0
+            dist = sum(
+                abs(float(t_rubric[a]) - float(other_rubric[a]))
+                for a in axes
+            ) / (len(axes) * 4.0)  # max single-axis diff is 5-1 = 4
+            return max(0.0, 1.0 - dist)
+
+        candidates: list[tuple[float, list[str], dict]] = []
+        for r in rows:
+            if r.get("filename") == fn:
+                continue
+            sim = 0.0
+            reasons: list[str] = []
+            # Burst neighbor — strongest signal. cluster_id is the
+            # already-validated photo-level dedup grouping.
+            if (t_cluster is not None
+                    and r.get("cluster_id") == t_cluster):
+                sim += 0.55
+                reasons.append("burst")
+            # Same scene token — caps at 0.25 alone, stacks with face/GPS
+            o_scene = (r.get("scene") or "").strip()
+            if t_scene and o_scene == t_scene:
+                sim += 0.18
+                reasons.append("same_scene")
+            # Face overlap (Jaccard) — same subject across non-burst frames
+            o_faces = set(r.get("face_clusters") or [])
+            if t_faces and o_faces:
+                jacc = len(t_faces & o_faces) / max(1, len(t_faces | o_faces))
+                if jacc > 0:
+                    sim += 0.22 * jacc
+                    reasons.append("same_person")
+            # GPS location cluster — same physical spot at this batch
+            if (t_gps_cid is not None
+                    and r.get("gps_cluster_id") == t_gps_cid):
+                sim += 0.10
+                reasons.append("same_location")
+            # Rubric proximity — the perceptual long tail (composition,
+            # light, moment, etc. similar feel).
+            r_prox = _rubric_proximity(r.get("rubric_stars") or {})
+            if r_prox > 0.5:
+                sim += 0.10 * r_prox
+                if r_prox > 0.75:
+                    reasons.append("similar_rubric")
+            # Aesthetic-score proximity — finer-grained tie-breaker.
+            o_aest = r.get("score_aesthetic")
+            if t_aest is not None and o_aest is not None:
+                delta = abs(float(t_aest) - float(o_aest))
+                sim += 0.05 * max(0.0, 1.0 - delta)
+            if sim > 0.10:  # noise floor — don't surface random matches
+                candidates.append((sim, reasons, r))
+
+        candidates.sort(key=lambda c: c[0], reverse=True)
+        top = candidates[:k]
+        similar = [
+            {
+                "filename":    r.get("filename"),
+                "similarity":  round(sim, 3),
+                "reasons":     reasons,
+                "decision":    r.get("decision"),
+                "score_final": r.get("score_final"),
+            }
+            for (sim, reasons, r) in top
+        ]
+        body = _safe_dumps({
+            "schema":  "pixcull.api.v1.similar.v1",
+            "run_id":  run_id,
+            "target":  fn,
+            "k":       k,
+            "similar": similar,
+        }).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+        return True
+
+    def _serve_api_v1_taxonomy(self) -> bool:
+        """P-UX-4 — stable enum advertisement.
+
+        Returns the cull-reason taxonomy (snake_case tokens + zh-CN
+        labels) so clients can render a picker without hardcoding
+        the list. Adding a token to ``_CULL_REASONS`` and a label
+        below is the full change needed for both the web UI and any
+        future iOS/CLI client to pick it up.
+        """
+        labels_zh = {
+            "focus_miss":   "焦点不准",
+            "eyes_closed":  "闭眼/表情",
+            "motion_blur":  "模糊抖动",
+            "framing":      "构图差",
+            "duplicate":    "与更佳重复",
+            "exposure":     "曝光问题",
+            "other":        "其他",
+        }
+        body = _safe_dumps({
+            "schema":  "pixcull.api.v1.taxonomy.v1",
+            "cull_reasons": [
+                {"token": t, "label_zh": labels_zh.get(t, t)}
+                for t in _CULL_REASONS
+            ],
+        }).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "max-age=300")
         self.end_headers()
         self.wfile.write(body)
         return True
@@ -4083,11 +4317,27 @@ class _Handler(BaseHTTPRequestHandler):
                 "source": "human",
             }
 
+        # P-UX-4 — optional cull_reason. Only meaningful when
+        # overall_label == "cull"; silently dropped otherwise so a
+        # later relabel to keep doesn't carry a stale reason. Tokens
+        # outside the taxonomy are dropped (treated same as "no
+        # reason given") rather than rejected — keeps the wire format
+        # forgiving for old clients sending free-form text.
+        overall_label_clean = str(params.get("overall_label", ""))[:32]
+        cull_reason_in = str(params.get("cull_reason", "") or "").strip().lower()
+        cull_reason_clean = (
+            cull_reason_in if (
+                overall_label_clean == "cull"
+                and cull_reason_in in _CULL_REASONS
+            ) else ""
+        )
+
         record = {
             "filename": fn,
             "axes": clean_axes,
-            "overall_label": str(params.get("overall_label", ""))[:32],
+            "overall_label": overall_label_clean,
             "overall_rationale": str(params.get("overall_rationale", ""))[:1000],
+            "cull_reason": cull_reason_clean,
             "source": "human",
             "timestamp": time.time(),
         }

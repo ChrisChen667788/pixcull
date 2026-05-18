@@ -37,3 +37,28 @@ v0_output/
 *.sqlite
 *.sqlite3
 thumbs/
+
+# Internal / not for public repo
+MARKET_ANALYSIS_*.md
+.claude/
+*.local
+*.notes.md
+
+# Per-developer or runtime config — these should stay private even on a
+# fork. The taxonomy and config defaults live in code; anything written
+# at runtime (DeepSeek key, license token, sync paths) belongs in the
+# user's app-data dir, not the repo.
+.envrc
+.env
+.env.local
+*.token
+
+# Lr plugin packaged bundles
+lr_plugin/*.zip
+lr_plugin/*.lrtemplate
+
+# Large generated artifacts
+*.h5
+*.npz
+face_library*.npz
+*.bak

@@ -269,8 +269,51 @@
       flex: 1; min-height: 280px;
       display: flex; align-items: center; justify-content: center;
       background: #000; cursor: zoom-in;
+      overflow: hidden;   /* P-UX-7 — clip scaled image */
+      position: relative;
     }
-    .cmp-cell .img-wrap img { max-width: 100%; max-height: 100%; object-fit: contain; }
+    .cmp-cell .img-wrap img {
+      max-width: 100%; max-height: 100%; object-fit: contain;
+      transform-origin: center center;
+      transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
+      will-change: transform;
+    }
+    /* P-UX-7 — synced zoom across compare cells. The shared-zoom
+       state applies the same scale + normalized pan to every cell's
+       image, so panning/zooming one updates them all in lock-step.
+       Click in fit mode = 1:1 zoom; click in 1:1 mode = back to
+       fit; drag pans; wheel fine-tunes. Per-cell cursor states
+       reflect the current zoom mode below. */
+    .cmp-cell.zoomed .img-wrap { cursor: grab; }
+    .cmp-cell.zoomed.dragging .img-wrap { cursor: grabbing; }
+    .cmp-cell.dragging .img-wrap img { transition: none; }
+    .cmp-header .cmp-zoom-controls {
+      display: inline-flex; align-items: center; gap: 8px;
+      margin-left: 12px;
+    }
+    .cmp-header .cmp-zoom-btn {
+      height: 28px; padding: 0 12px; border-radius: 5px;
+      background: rgba(0,0,0,0.4); color: #fff;
+      border: 1px solid rgba(255,255,255,0.18);
+      font: inherit; font-size: 11.5px; cursor: pointer;
+      display: inline-flex; align-items: center;
+      transition: background 120ms;
+    }
+    .cmp-header .cmp-zoom-btn:hover { background: rgba(0,0,0,0.7); }
+    .cmp-header .cmp-zoom-btn.active {
+      background: var(--accent); border-color: var(--accent);
+    }
+    .cmp-header .cmp-zoom-badge {
+      padding: 3px 8px; border-radius: 4px;
+      background: rgba(0,0,0,0.45); color: #fff;
+      font-size: 11px; font-family: ui-monospace, monospace;
+      opacity: 0; transition: opacity 150ms;
+    }
+    .cmp-header .cmp-zoom-badge.show { opacity: 1; }
+    .cmp-header .cmp-sync-hint {
+      font-size: 10.5px; color: var(--muted);
+      margin-left: 4px;
+    }
     .cmp-cell .meta {
       padding: 10px 12px; font-size: 11px;
       border-top: 1px solid var(--border);
@@ -314,6 +357,65 @@
     .filters .export-status { font-size: 11px; color: var(--muted); }
     .filters .export-status a { color: #4b9aff; text-decoration: none; }
     .filters .export-status a:hover { text-decoration: underline; }
+
+    /* P-UX-1 — export action menu. The 5 export-related buttons
+       (XMP zip / XMP alongside / CSV / standalone gallery / auto-
+       caption) used to sit inline alongside ~7 filter chip groups,
+       so on most screens the header wrapped to 3-4 rows and pushed
+       the photo grid below the fold. Collapsing them into a single
+       anchored "📥 导出 ▾" dropdown gets the row back to one line
+       and keeps every action one click away. Inner buttons keep
+       their original IDs so the existing JS listeners bind without
+       modification. */
+    .filters .export-menu { position: relative; display: inline-block; }
+    .filters .export-menu-trigger.export-btn::after {
+      content: " ▾";
+      font-size: 9px; vertical-align: middle;
+      margin-left: 3px; opacity: 0.7;
+    }
+    .filters .export-menu-trigger.export-btn.open {
+      border-color: var(--fg);
+      background: var(--bg-card-hi);
+    }
+    .filters .export-menu-panel {
+      position: absolute;
+      top: calc(100% + 6px); right: 0;
+      min-width: 200px;
+      z-index: 12;
+      background: var(--bg-card);
+      border: 1px solid var(--border-hi);
+      border-radius: 6px;
+      padding: 6px;
+      display: none;
+      flex-direction: column;
+      gap: 3px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.55),
+                  0 0 0 1px rgba(255,255,255,0.03);
+    }
+    .filters .export-menu-panel.show { display: flex; }
+    .filters .export-menu-panel .export-btn {
+      display: block; width: 100%;
+      text-align: left;
+      font-size: 11.5px; font-weight: 500;
+      padding: 7px 10px;
+      border-color: transparent;
+      background: transparent;
+      color: var(--fg);
+      text-decoration: none;
+    }
+    .filters .export-menu-panel .export-btn:hover {
+      background: var(--bg-card-hi);
+      border-color: var(--border-hi);
+    }
+    /* When the alongside button is disabled (e.g. non-scan run) it
+       collapses out of the panel entirely so the dropdown height
+       shrinks rather than showing a dead row. JS toggles inline
+       display:none / "" instead of a class to stay compatible with
+       the pre-existing wiring. */
+    .filters .export-menu-panel .export-btn[style*="display:none"],
+    .filters .export-menu-panel .export-btn[style*="display: none"] {
+      display: none !important;
+    }
 
     .grid {
       display: grid;
@@ -425,6 +527,305 @@
     }
     .card:hover .card-rot-btn { opacity: 1; }
     .card-rot-btn:hover { background: var(--accent); }
+    /* P-UX-3 — free-pick A/B compare: card-hover pin button + the
+       pinned-state visual ("A" badge + accent border). The pin
+       lives at top-LEFT next to the rotate button; pressing it once
+       arms the card as photo A, then pressing on a second card
+       opens the compare modal with [A, B]. Shift+click on the
+       thumbnail is the keyboard-friendly equivalent. */
+    .card-cmp-btn {
+      position: absolute; top: 6px; left: 38px;
+      width: 26px; height: 22px;
+      background: rgba(0,0,0,0.65); color: white; border: 0;
+      border-radius: 3px; font-size: 12px; line-height: 1;
+      cursor: pointer; opacity: 0; transition: opacity 0.15s, background 120ms;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    .card:hover .card-cmp-btn { opacity: 1; }
+    .card-cmp-btn:hover { background: var(--accent); }
+    .card.compare-a {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px var(--accent-glow),
+                  0 8px 24px rgba(0,0,0,0.45);
+    }
+    .card.compare-a .card-cmp-btn {
+      opacity: 1;
+      background: var(--accent);
+    }
+    .card.compare-a::after {
+      content: "A";
+      position: absolute; top: 6px; right: 50%;
+      transform: translateX(50%);
+      background: var(--accent); color: #fff;
+      padding: 2px 8px; border-radius: 10px;
+      font-size: 10px; font-weight: 700;
+      letter-spacing: 0.05em;
+      pointer-events: none;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    }
+    /* Floating "已选 A,点选第二张比较" hint pill — appears at the
+       top of the viewport (below the sticky header) once a photo
+       is pinned for compare. Click the × to cancel, or hit Esc. */
+    .cmp-pick-tray {
+      position: fixed; top: 12px; left: 50%;
+      transform: translateX(-50%) translateY(-20px);
+      z-index: 8;
+      display: none;
+      align-items: center; gap: 12px;
+      padding: 8px 14px 8px 16px;
+      background: rgba(59,130,246,0.95);
+      color: #fff;
+      border-radius: 999px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5),
+                  0 0 0 1px rgba(255,255,255,0.15);
+      font-size: 12px; font-weight: 500;
+      opacity: 0; transition: opacity 180ms, transform 180ms;
+      pointer-events: none;
+    }
+    .cmp-pick-tray.show {
+      display: inline-flex;
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+      pointer-events: auto;
+    }
+    .cmp-pick-tray .cmp-pick-fn {
+      font-family: ui-monospace, monospace;
+      font-size: 11.5px;
+      max-width: 280px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      opacity: 0.92;
+    }
+    .cmp-pick-tray .cmp-pick-cancel {
+      background: rgba(0,0,0,0.25);
+      border: 0; color: #fff;
+      width: 22px; height: 22px;
+      border-radius: 50%; cursor: pointer;
+      font-size: 14px; line-height: 1;
+      display: inline-flex; align-items: center; justify-content: center;
+      transition: background 120ms;
+    }
+    .cmp-pick-tray .cmp-pick-cancel:hover { background: rgba(0,0,0,0.5); }
+
+    /* P-UX-4 — reject-reason taxonomy. When a photo is culled (via
+       the 3 key, the annotate modal, or any other path), this
+       transient bottom-center pill appears for ~6 seconds asking
+       "why?". Clicking a reason chip persists it via a follow-up
+       annotation POST; ignoring it lets the cull stand without a
+       reason. The picker is opt-in — never blocks the workflow. */
+    .cull-reason-tray {
+      position: fixed; bottom: 18px; left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      z-index: 7;
+      display: none;
+      align-items: center; gap: 6px;
+      padding: 8px 10px 8px 14px;
+      background: rgba(20, 23, 28, 0.96);
+      color: #fff;
+      border-radius: 999px;
+      border: 1px solid var(--cull);
+      box-shadow: 0 12px 36px rgba(0,0,0,0.6),
+                  0 0 0 1px rgba(239,99,99,0.15);
+      font-size: 12px;
+      opacity: 0; transition: opacity 180ms, transform 180ms;
+      pointer-events: none;
+      max-width: calc(100vw - 32px);
+      flex-wrap: wrap;
+    }
+    .cull-reason-tray.show {
+      display: inline-flex;
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+      pointer-events: auto;
+    }
+    .cull-reason-tray .cull-reason-label {
+      color: var(--muted);
+      font-weight: 500;
+    }
+    .cull-reason-tray .reason-pill {
+      background: transparent;
+      border: 1px solid rgba(255,255,255,0.18);
+      color: #fff;
+      font: inherit; font-size: 11.5px;
+      padding: 4px 10px;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: border-color 120ms, background 120ms;
+    }
+    .cull-reason-tray .reason-pill:hover {
+      border-color: var(--cull);
+      background: rgba(239, 99, 99, 0.18);
+    }
+    .cull-reason-tray .reason-skip {
+      background: transparent;
+      border: 0;
+      color: var(--muted);
+      font: inherit; font-size: 11px;
+      padding: 4px 6px 4px 8px;
+      cursor: pointer;
+      margin-left: 2px;
+    }
+    .cull-reason-tray .reason-skip:hover { color: var(--fg); }
+
+    /* P-UX-4 — chip on the card showing the cull reason once set.
+       Lives in row1 alongside the decision badge. Subtle red tint
+       so it ties visually to the cull verdict without competing. */
+    .row1 .cull-reason-chip {
+      display: inline-flex; align-items: center;
+      font-size: 9.5px; padding: 1px 6px; border-radius: 3px;
+      background: rgba(239, 99, 99, 0.18);
+      color: #ff9a9a;
+      border: 1px solid rgba(239, 99, 99, 0.35);
+      cursor: help;
+      letter-spacing: 0.02em;
+      max-width: 90px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+
+    /* P-UX-4 — filter pill for "show only photos culled because X".
+       Same .pill styling as the existing filter groups; just the
+       red-themed accent border. */
+    .filters .filter-group .pill.reason-pill {
+      border-color: rgba(239, 99, 99, 0.35);
+      background: rgba(239, 99, 99, 0.08);
+      color: #ff9a9a;
+    }
+    .filters .filter-group .pill.reason-pill.active {
+      border-color: var(--cull);
+      background: rgba(239, 99, 99, 0.22);
+      color: #fff;
+    }
+
+    /* P-UX-5 — similar-photos row in the lightbox info pane. Shows
+       up to 5 thumbnails of visually-similar photos with a tiny
+       reason badge + decision dot. Click to jump; Shift+click to
+       pin for A/B compare so the two flows (P-UX-3 + P-UX-5)
+       chain into a single "find similar → compare" workflow. */
+    .lightbox .info-pane .similar-row {
+      display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px;
+      margin-top: 6px;
+    }
+    .lightbox .info-pane .similar-item {
+      position: relative;
+      background: var(--bg-card-hi);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+      cursor: pointer;
+      aspect-ratio: 1;
+      transition: transform 120ms, border-color 120ms;
+    }
+    .lightbox .info-pane .similar-item:hover {
+      transform: scale(1.04);
+      border-color: var(--fg);
+    }
+    .lightbox .info-pane .similar-item img {
+      width: 100%; height: 100%; object-fit: cover; display: block;
+    }
+    .lightbox .info-pane .similar-item .deco {
+      position: absolute; bottom: 2px; left: 2px; right: 2px;
+      display: flex; gap: 3px; justify-content: space-between;
+      pointer-events: none;
+    }
+    .lightbox .info-pane .similar-item .dec {
+      font-size: 8.5px; padding: 1px 4px; border-radius: 2px;
+      color: #fff; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .lightbox .info-pane .similar-item .dec.keep  { background: var(--keep);  }
+    .lightbox .info-pane .similar-item .dec.maybe { background: var(--maybe); }
+    .lightbox .info-pane .similar-item .dec.cull  { background: var(--cull);  }
+    .lightbox .info-pane .similar-item .sim {
+      font-size: 8.5px; padding: 1px 4px; border-radius: 2px;
+      background: rgba(0,0,0,0.65); color: #fff;
+      font-family: ui-monospace, monospace;
+    }
+    .lightbox .info-pane .similar-loading,
+    .lightbox .info-pane .similar-empty {
+      color: var(--muted-soft); font-size: 11px;
+      padding: 4px 0; font-style: italic;
+    }
+    .lightbox .info-pane .similar-reason-tags {
+      display: flex; flex-wrap: wrap; gap: 4px;
+      margin-top: 6px;
+    }
+    .lightbox .info-pane .similar-reason-tag {
+      font-size: 9.5px; padding: 1px 5px; border-radius: 2px;
+      background: rgba(255,255,255,0.05);
+      color: var(--muted);
+      letter-spacing: 0.02em;
+    }
+    .lightbox .info-pane .similar-hint {
+      font-size: 10.5px; color: var(--muted-soft);
+      margin-top: 8px; line-height: 1.5;
+    }
+
+    /* P-UX-6 — sticky decision toolbar inside the lightbox info pane.
+       Currently keep/maybe/cull are 1/2/3 hotkeys only; mouse users
+       had nothing to click. The toolbar sits at the bottom of the
+       scrollable info pane so it stays in reach while the user
+       reads advice / rubric / similar above it. Three colored
+       buttons + the matching hotkey on each. The current decision
+       gets a filled background; clicking flips it and advances. */
+    .lightbox .info-pane {
+      padding-bottom: 72px;  /* room behind the sticky toolbar */
+    }
+    .lightbox .info-pane .decision-toolbar {
+      position: sticky; bottom: 0;
+      margin: 18px -22px -20px;
+      padding: 12px 22px 16px;
+      background: linear-gradient(180deg,
+        rgba(20,23,28,0.0) 0%,
+        rgba(20,23,28,0.92) 30%,
+        rgba(20,23,28,0.98) 100%);
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+      z-index: 3;
+    }
+    .lightbox .info-pane .decision-btn {
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 2px;
+      padding: 10px 6px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: rgba(255,255,255,0.04);
+      color: var(--fg);
+      font: inherit; cursor: pointer;
+      transition: background 120ms, border-color 120ms, transform 120ms;
+    }
+    .lightbox .info-pane .decision-btn:hover {
+      background: rgba(255,255,255,0.10);
+      transform: translateY(-1px);
+    }
+    .lightbox .info-pane .decision-btn .label {
+      font-size: 12px; font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+    .lightbox .info-pane .decision-btn .hk {
+      font-size: 9.5px; font-family: ui-monospace, monospace;
+      color: var(--muted-soft);
+      padding: 1px 5px; border-radius: 2px;
+      background: rgba(255,255,255,0.06);
+    }
+    .lightbox .info-pane .decision-btn.keep.active {
+      background: var(--keep); color: #062618;
+      border-color: var(--keep);
+    }
+    .lightbox .info-pane .decision-btn.maybe.active {
+      background: var(--maybe); color: #2a1d05;
+      border-color: var(--maybe);
+    }
+    .lightbox .info-pane .decision-btn.cull.active {
+      background: var(--cull); color: #2a0606;
+      border-color: var(--cull);
+    }
+    .lightbox .info-pane .decision-btn.active .hk {
+      background: rgba(0,0,0,0.18); color: rgba(0,0,0,0.7);
+    }
+    .lightbox .info-pane .decision-btn:hover.keep  { border-color: var(--keep); }
+    .lightbox .info-pane .decision-btn:hover.maybe { border-color: var(--maybe); }
+    .lightbox .info-pane .decision-btn:hover.cull  { border-color: var(--cull); }
     /* Smooth thumbnail rotation — same easing as the lightbox img
        so they feel like the same gesture. */
     .card .thumb { transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1); }
@@ -636,10 +1037,28 @@
     .lightbox .img-pane {
       display: flex; align-items: center; justify-content: center;
       padding: 28px 24px; cursor: zoom-out; min-height: 0;
+      /* P-UX-2 — clip the scaled image so panning at >1× doesn't
+         bleed into the info-pane. The padding stays cursor:zoom-out
+         (click empty space to close) but the image itself gets its
+         own cursor per zoom mode (see .lbimg.zoomed below). */
+      overflow: hidden;
+      position: relative;
     }
     .lightbox .img-pane img {
       max-width: 100%; max-height: 100%; object-fit: contain;
       border-radius: 6px; box-shadow: 0 12px 40px rgba(0,0,0,0.7);
+      cursor: zoom-in;
+      transform-origin: center center;
+      will-change: transform;
+    }
+    /* P-UX-2 — cursor + transition affordances for the zoom states.
+       .zoomed = 1:1 (or >1×) mode → user can pan; .dragging = active
+       grab so we kill the rotation/zoom transition so panning feels
+       instant rather than rubber-banded. */
+    .lightbox .img-pane img.zoomed { cursor: grab; }
+    .lightbox .img-pane img.zoomed.dragging {
+      cursor: grabbing;
+      transition: none;
     }
     .lightbox .info-pane {
       background: var(--bg-card); border-left: 1px solid var(--border);
@@ -790,6 +1209,43 @@
       transition: background 120ms;
     }
     .lightbox .rot-btn:hover { background: rgba(0,0,0,0.85); }
+    /* P-UX-2 — zoom button group + live-percent badge.
+       Sits at the top-LEFT of the lightbox (mirror of the rotate
+       group on the right) so the two control clusters don't
+       collide. The button toggles fit ↔ 1:1; the badge fades in
+       only while zoomed and shows the current % so the user knows
+       they're not at fit anymore. */
+    .lightbox .zoom-grp {
+      position: absolute; top: 18px; left: 18px;
+      display: flex; gap: 6px; align-items: center;
+      z-index: 11;
+    }
+    .lightbox .zoom-btn {
+      height: 32px; padding: 0 12px; border-radius: 6px;
+      background: rgba(0,0,0,0.6); color: #fff;
+      border: 1px solid rgba(255,255,255,0.15);
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 12px; font-weight: 500; cursor: pointer;
+      font-family: inherit;
+      transition: background 120ms;
+    }
+    .lightbox .zoom-btn:hover { background: rgba(0,0,0,0.85); }
+    .lightbox .zoom-btn.active {
+      background: rgba(59,130,246,0.85);
+      border-color: var(--accent);
+    }
+    .lightbox .zoom-badge {
+      padding: 4px 10px; border-radius: 4px;
+      background: rgba(0,0,0,0.55); color: #fff;
+      font-size: 11px; font-family: ui-monospace, monospace;
+      letter-spacing: 0.02em;
+      opacity: 0; pointer-events: none;
+      transition: opacity 150ms;
+    }
+    .lightbox .zoom-badge.show { opacity: 1; }
+    @media (max-width: 900px) {
+      .lightbox .zoom-grp { top: 18px; left: 18px; }
+    }
     /* lbImg gets transformed via inline style; transition for the
        rotation feel (ease-out, 220 ms — fast enough not to feel slow,
        slow enough to read direction). */
@@ -844,6 +1300,12 @@
       <span class="filter-divider" id="burstPeakDivider" style="display:none"></span>
       <span class="filter-group" id="burstPeakFilter"></span>
 
+      <!-- P-UX-4: cull-reason filters. One pill per token currently
+           present in the batch (e.g. "因为焦点不准而 cull"). Hidden
+           when no row carries a cull_reason. -->
+      <span class="filter-divider" id="cullReasonDivider" style="display:none"></span>
+      <span class="filter-group" id="cullReasonFilter"></span>
+
       <!-- P2.4: active-learning queue. Click to fetch the top-N
            highest-information-gain photos to label next (rescorer
            disagrees with rule, uncertain rescorer probability,
@@ -867,29 +1329,72 @@
 
       <button class="export-btn" id="kbdHelpBtn" title="键盘快捷键 (?)" style="font-family:ui-monospace,monospace">?</button>
       <button class="export-btn" id="annNextBtn" title="按 active learning 优先级标注 — 优先暴露规则与 rescorer 不一致、概率临界、聚类分裂的图">▸ 标注下一张</button>
-      <button class="export-btn" id="exportZipBtn" title="导出 XMP 评级到 zip 包(Lightroom / Capture One)">下载 XMP</button>
-      <button class="export-btn" id="exportAlongsideBtn" style="display:none" title="把 XMP sidecar 写到原图旁边">写到原图旁边</button>
-      <a class="export-btn" id="csvBtn" title="下载完整 scores.csv (Excel/Numbers 友好)" style="text-decoration:none">下载 CSV</a>
-      <!-- V23.x: standalone HTML gallery export — self-contained zip
-           the user can email/upload as-is to clients. Default = keep
-           only; Shift-click for keep+maybe. -->
-      <a class="export-btn" id="galleryBtn"
-         title="导出可发客户的 standalone HTML 相册(默认仅 keep;Shift-点 = keep+maybe)"
-         style="text-decoration:none">📔 导出相册</a>
-      <!-- P2.5: auto-generate IPTC captions from structured data
-           (scene + face labels + location + advice). Free / offline
-           by default; Shift-click to enable LLM polish via DeepSeek
-           V4-Flash (INFRA-4-budgeted). Captions land in
-           auto_captions.json; next /export embeds them. -->
-      <button class="export-btn" id="captionBtn"
-         title="自动生成 IPTC Caption-Abstract(场景+人物+地点+评价)。Shift-点 = LLM 润色(走 DeepSeek + INFRA-4 预算)">📝 自动 Caption</button>
       <button class="export-btn" id="batchBtn" title="按总分批量打 keep/cull 标签">批量打分</button>
+      <!-- P-UX-1 — five export actions consolidated into one anchored
+           dropdown so the filter row stays scannable instead of
+           wrapping to 3-4 lines. Each inner button keeps its
+           original ID; the existing event listeners further down
+           the script bind to them unmodified. The alongside button
+           remains hidden by inline style on non-scan runs (set
+           below) and the dropdown's CSS collapses it out of the
+           panel layout. -->
+      <div class="export-menu">
+        <button class="export-btn export-menu-trigger" id="exportMenuBtn"
+                type="button"
+                aria-haspopup="true" aria-expanded="false"
+                title="导出 / 下载 / 自动 Caption">📥 导出</button>
+        <div class="export-menu-panel" id="exportMenuPanel" role="menu">
+          <button class="export-btn" id="exportZipBtn" role="menuitem"
+                  title="导出 XMP 评级到 zip 包(Lightroom / Capture One)">下载 XMP</button>
+          <button class="export-btn" id="exportAlongsideBtn" role="menuitem"
+                  style="display:none"
+                  title="把 XMP sidecar 写到原图旁边">写到原图旁边</button>
+          <a class="export-btn" id="csvBtn" role="menuitem"
+             title="下载完整 scores.csv (Excel/Numbers 友好)">下载 CSV</a>
+          <!-- V23.x: standalone HTML gallery export — self-contained
+               zip the user can email/upload as-is to clients.
+               Default = keep only; Shift-click for keep+maybe. -->
+          <a class="export-btn" id="galleryBtn" role="menuitem"
+             title="导出可发客户的 standalone HTML 相册(默认仅 keep;Shift-点 = keep+maybe)">📔 导出相册</a>
+          <!-- P2.5: auto-generate IPTC captions from structured data
+               (scene + face labels + location + advice). Free / offline
+               by default; Shift-click to enable LLM polish via DeepSeek
+               V4-Flash (INFRA-4-budgeted). Captions land in
+               auto_captions.json; next /export embeds them. -->
+          <button class="export-btn" id="captionBtn" role="menuitem"
+             title="自动生成 IPTC Caption-Abstract(场景+人物+地点+评价)。Shift-点 = LLM 润色(走 DeepSeek + INFRA-4 预算)">📝 自动 Caption</button>
+        </div>
+      </div>
       <span class="export-status" id="exportStatus"></span>
     </div>
   </header>
   <div class="grid" id="grid"></div>
   <!-- V14.2 — toast container; populated by ``toast(msg, kind)`` in JS -->
   <div class="toast-stack" id="toastStack" aria-live="polite"></div>
+
+  <!-- P-UX-3 — free-pick A/B compare hint tray. Hidden until the
+       user pins a 1st photo for compare via the card ⇆ button or
+       Shift+click. Tells them what's selected and how to cancel. -->
+  <div class="cmp-pick-tray" id="cmpPickTray" role="status"
+       aria-live="polite">
+    <span>已选 <b>A</b>:</span>
+    <span class="cmp-pick-fn" id="cmpPickFn"></span>
+    <span style="opacity:0.85">· 点选第二张比较 (Esc 取消)</span>
+    <button class="cmp-pick-cancel" id="cmpPickCancel"
+            type="button" title="取消比较选择 (Esc)">×</button>
+  </div>
+
+  <!-- P-UX-4 — reject-reason quick picker. Appears after every cull
+       action; auto-dismisses in ~6 s if untouched. Pills are
+       populated dynamically from /api/v1/taxonomy so adding a new
+       reason on the server requires no client change. -->
+  <div class="cull-reason-tray" id="cullReasonTray" role="status"
+       aria-live="polite">
+    <span class="cull-reason-label">为什么 cull?</span>
+    <span id="cullReasonPills"></span>
+    <button class="reason-skip" id="cullReasonSkip"
+            type="button" title="跳过 (Esc)">跳过</button>
+  </div>
   <div class="lightbox" id="lightbox">
     <span class="close-btn" id="lbClose" title="关闭 (Esc)">×</span>
     <!-- V14.2 — prev/next chevrons; keyboard ←→ also works -->
@@ -908,6 +1413,19 @@
       <button class="rot-btn" id="lbRotReset" type="button"
               title="恢复 EXIF 默认方向">⟲</button>
     </div>
+    <!-- P-UX-2 — 1:1 focus check. The single feature pro photographers
+         ask for first: click the image to zoom to 100% (1 image pixel
+         = 1 screen pixel) centered on the click point, drag to pan,
+         mouse-wheel to fine-tune zoom, click again or press z to
+         return to fit. On entering 1:1 the lightbox swaps to a hi-res
+         image (w=3600 instead of the viewport-bucketed cap) so the
+         pixel-peeping is on real detail, not upscaled mush. -->
+    <div class="zoom-grp" role="group" aria-label="缩放">
+      <button class="zoom-btn" id="lbZoomToggle" type="button"
+              title="1:1 焦点检查 (z) — 点图片任意处可放大到该位置">🔍 1:1</button>
+      <span class="zoom-badge" id="lbZoomBadge"
+            aria-live="polite"></span>
+    </div>
     <div class="img-pane"><img id="lbImg" alt=""></div>
     <div class="info-pane" id="lbInfo"></div>
   </div>
@@ -917,6 +1435,16 @@
     <div class="cmp-header">
       <h3 id="cmpTitle">连拍组比较</h3>
       <span class="muted" id="cmpMeta"></span>
+      <!-- P-UX-7 — synced 1:1 zoom across compare cells. Click a
+           cell, drag, or wheel-scroll; the same scale + normalized
+           pan applies to every cell so the user can pixel-peep the
+           same region across all of them simultaneously. -->
+      <span class="cmp-zoom-controls">
+        <button class="cmp-zoom-btn" id="cmpZoomToggle" type="button"
+                title="点图片任意处放大到该位置 · 拖动平移 · 滚轮细调">🔍 1:1 同步</button>
+        <span class="cmp-zoom-badge" id="cmpZoomBadge"
+              aria-live="polite"></span>
+      </span>
       <!-- P0.3 — prev/next walk across burst clusters without
            leaving the modal. Keyboard: ← / → and j / k. -->
       <span style="margin-left:auto;display:inline-flex;gap:6px">
@@ -988,7 +1516,7 @@
           <div class="shortcut-section-title">快速标注</div>
           <div class="shortcut-row"><span class="keys"><kbd>1</kbd></span><span class="desc">标 <span class="tag keep">keep</span></span></div>
           <div class="shortcut-row"><span class="keys"><kbd>2</kbd></span><span class="desc">标 <span class="tag maybe">maybe</span></span></div>
-          <div class="shortcut-row"><span class="keys"><kbd>3</kbd></span><span class="desc">标 <span class="tag cull">cull</span></span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>3</kbd></span><span class="desc">标 <span class="tag cull">cull</span>(可补充 cull 原因)</span></div>
           <div class="shortcut-row"><span class="keys"><kbd>Enter</kbd></span><span class="desc">打开 rubric 详细标注</span></div>
         </div>
         <div class="shortcut-section">
@@ -996,9 +1524,30 @@
           <div class="shortcut-row"><span class="keys"><kbd>⌘</kbd>+<kbd>Z</kbd></span><span class="desc">撤销最近一次标注</span></div>
         </div>
         <div class="shortcut-section">
+          <div class="shortcut-section-title">A/B 比较</div>
+          <div class="shortcut-row"><span class="keys"><kbd>c</kbd></span><span class="desc">选当前为 A;再按 <kbd>c</kbd> 另一张 = 打开 A/B 比较</span></div>
+          <div class="shortcut-row"><span class="keys">Shift+点击</span><span class="desc">缩略图直接进 A 槽(网格上的快捷手势)</span></div>
+          <div class="shortcut-row"><span class="keys">⇆ 按钮</span><span class="desc">卡片悬停可见;点一次选 A,点第二张开比较</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>Esc</kbd></span><span class="desc">取消 A 选择</span></div>
+        </div>
+        <div class="shortcut-section">
+          <div class="shortcut-section-title">比较窗内(同步缩放)</div>
+          <div class="shortcut-row"><span class="keys"><kbd>z</kbd></span><span class="desc">所有照片同步 1:1 放大 / 复原</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>+</kbd> / <kbd>−</kbd></span><span class="desc">同步细调缩放</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>0</kbd></span><span class="desc">回到中心位置(保留缩放)</span></div>
+          <div class="shortcut-row"><span class="keys">点击图片</span><span class="desc">所有照片同步 1:1 缩放到该相对位置</span></div>
+          <div class="shortcut-row"><span class="keys">拖动 / 滚轮</span><span class="desc">所有照片同步平移 / 缩放</span></div>
+        </div>
+        <div class="shortcut-section">
           <div class="shortcut-section-title">放大窗内</div>
           <div class="shortcut-row"><span class="keys"><kbd>r</kbd></span><span class="desc">顺时针旋转 90°</span></div>
           <div class="shortcut-row"><span class="keys"><kbd>R</kbd></span><span class="desc">逆时针旋转 90°</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>z</kbd></span><span class="desc">1:1 焦点检查 (再按一次回到适配)</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>+</kbd> / <kbd>−</kbd></span><span class="desc">细调缩放</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>0</kbd></span><span class="desc">回到中心位置(保留缩放)</span></div>
+          <div class="shortcut-row"><span class="keys">点击图片</span><span class="desc">在该位置 1:1 放大 · 再点回适配</span></div>
+          <div class="shortcut-row"><span class="keys">拖动图片</span><span class="desc">在 1:1 模式下平移</span></div>
+          <div class="shortcut-row"><span class="keys">滚轮</span><span class="desc">以光标为中心放大/缩小</span></div>
         </div>
         <div class="shortcut-section">
           <div class="shortcut-section-title">通用</div>
@@ -1120,6 +1669,31 @@
   };
   const I18N_DECISION = {
     keep: "保留", maybe: "待定", cull: "剔除",
+  };
+
+  // P-UX-4 — cull-reason taxonomy. Loaded from /api/v1/taxonomy on
+  // page-init; cached here so render() can call _cullReasonLabel()
+  // synchronously when building each card. Both declarations are
+  // hoisted (var + function-declaration) so they're safe to call
+  // from the first render() pass before the async fetch resolves —
+  // empty map → label fallback to the raw token.
+  var _CULL_REASONS_LIST = [];   // [{token, label_zh}, ...]
+  var _CULL_REASONS_MAP  = {};   // {token: label_zh}
+  function _cullReasonLabel(token) {
+    if (!token) return "";
+    return _CULL_REASONS_MAP[token] || token;
+  }
+
+  // P-UX-5 — labels for similarity reasons returned by
+  // /api/v1/runs/<id>/similar/<filename>. Kept as a static map (not
+  // taxonomy-fetched) because the reason vocabulary is server-pinned
+  // and small enough that bundling it inline keeps the lightbox fast.
+  const I18N_SIM_REASON = {
+    burst:           "同连拍",
+    same_scene:      "同场景",
+    same_person:     "同人物",
+    same_location:   "同地点",
+    similar_rubric:  "相似评分",
   };
 
   function tr(token, table) {
@@ -1377,6 +1951,9 @@
     // queue pass the filter. Map<filename, priority_rank> so the
     // grid can also show "AL #N" badges per card.
     activeLearningQueue: null,    // null = inactive, Map = active
+    // P-UX-4 — when set, only rows whose cull_reason matches pass.
+    // null = no filter; one of _CULL_REASONS_LIST tokens otherwise.
+    cullReason: null,
     sort: "default",
   };
 
@@ -1874,6 +2451,13 @@
         (r.style_modes || []).some(s => filterState.styles.has(s))
       );
     }
+    // P-UX-4 — cull-reason filter. Active when the user has clicked
+    // a pill in the "因为 X 而 cull" group; passes rows whose
+    // cull_reason matches (and which are themselves cull — the
+    // server-side hydration already gates that).
+    if (filterState.cullReason) {
+      filtered = filtered.filter(r => r.cull_reason === filterState.cullReason);
+    }
     // V22.1 — face cluster filter. A row passes if any of its face
     // cluster ids is currently selected. Empty set = no filter.
     if (filterState.faceClusters.size > 0) {
@@ -2005,6 +2589,8 @@
           <img class="thumb" src="${thumb}" data-full="${full}" loading="lazy" alt="${fnEsc}" ${rotStyle}>
           <button class="annotate-btn" data-fn="${fnEsc}" title="人工标注 (rubric)">${r.rubric_human_labeled ? "✓ 已标" : "标注"}</button>
           <button class="card-rot-btn" data-fn="${fnEsc}" type="button" title="顺时针旋转 90°(在放大窗中可继续微调)">↻</button>
+          <button class="card-cmp-btn" data-fn="${fnEsc}" type="button"
+            title="选这张进入 A/B 比较(Shift+点击缩略图同效;c 键也可)">⇆</button>
           <div class="body">
             <div class="row1">
               <span class="badge ${r.decision}" title="${esc(r.decision)}">${esc(tr(r.decision, I18N_DECISION) || r.decision)}</span>
@@ -2012,6 +2598,7 @@
               ${rescorerBadge}
               ${metaBadge}
               ${styleChips}
+              ${r.cull_reason ? `<span class="cull-reason-chip" title="cull 原因: ${esc(_cullReasonLabel(r.cull_reason))}">✕ ${esc(_cullReasonLabel(r.cull_reason))}</span>` : ""}
             </div>
             <div class="row2">
               <span class="scene" title="${esc(r.scene || '')}">${esc(trGenre(r.scene) || "?")}</span>
@@ -2118,7 +2705,9 @@
         filterState.decision = "all";
         filterState.scenes.clear();
         filterState.styles.clear();
-        document.querySelectorAll("#filters .pill, #sceneFilters .pill, #styleFilters .pill")
+        // P-UX-4 — also clear the cull-reason filter on full reset
+        filterState.cullReason = null;
+        document.querySelectorAll("#filters .pill, #sceneFilters .pill, #styleFilters .pill, #cullReasonFilter .pill")
           .forEach(el => el.classList.remove("active"));
         document.querySelector('#filters .pill[data-d="all"]')?.classList.add("active");
         render();
@@ -2190,6 +2779,16 @@
     const r = rows.find(x => x.filename === fn);
     if (!r) return;
     _lbCurrentFn = fn;
+    // P-UX-2 — reset zoom state for each photo. A culling pass is
+    // "fit, glance, decide" — landing on the next frame already
+    // zoomed-in from the previous one would be disorienting. Pros
+    // explicitly press z / click again when they want to pixel-peep
+    // the next shot.
+    _lbZoom.mode = "fit";
+    _lbZoom.scale = 1.0;
+    _lbZoom.panX = 0; _lbZoom.panY = 0;
+    _lbZoom.hiResLoaded = false;
+    _lbZoom.hiResUrl = null;
     // V14.1 — tell the server how big our viewport actually is so it
     // can serve a viewport-bucketed cache (800/1200/1600/...) instead
     // of always 1600 even on a 13" laptop. devicePixelRatio handles
@@ -2203,9 +2802,121 @@
     // already gets 99% of cases right; this is the fallback for
     // images with no orientation tag, or rare cases where the user
     // wants a different framing than EXIF intended.
-    _applyLbRotation();
+    _applyLbTransform();
+    _updateLbZoomBadge();
+    lbImg.classList.remove("zoomed", "dragging");
+    const _zt = document.getElementById("lbZoomToggle");
+    if (_zt) _zt.classList.remove("active");
     lb.classList.add("show");
+    // P-UX-5 — kick the similar-photos lookup. Doesn't block lightbox
+    // open; the section above shows a "寻找类似…" placeholder until
+    // this returns. Each photo's result is cached so flipping back
+    // and forth doesn't re-hit the endpoint.
+    _loadLbSimilar(fn);
   }
+
+  // P-UX-5 — async lookup + render for the lightbox's similar-photos
+  // section. Talks to /api/v1/runs/<id>/similar/<filename>?k=5 and
+  // injects thumbnails into #lbSimilarBody. Plain click navigates to
+  // that photo in the lightbox; Shift+click pins for A/B compare so
+  // the "find a near-dupe → compare" workflow stays inside the
+  // lightbox without a round-trip to the grid.
+  const _LB_SIMILAR_CACHE = new Map();   // filename → array
+
+  async function _loadLbSimilar(fn) {
+    if (!fn) return;
+    const body = document.getElementById("lbSimilarBody");
+    if (!body) return;
+    // Race-guard: if the user has already navigated to the next
+    // photo before our fetch returns, don't paint stale results.
+    const requestedFn = fn;
+    // Cache hit → paint synchronously.
+    if (_LB_SIMILAR_CACHE.has(fn)) {
+      _paintLbSimilar(_LB_SIMILAR_CACHE.get(fn));
+      return;
+    }
+    body.className = "similar-loading";
+    body.textContent = "寻找类似…";
+    try {
+      const res = await fetch(
+        `/api/v1/runs/${run_id}/similar/${encodeURIComponent(fn)}?k=5`);
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const data = await res.json();
+      const similar = Array.isArray(data.similar) ? data.similar : [];
+      _LB_SIMILAR_CACHE.set(fn, similar);
+      if (_lbCurrentFn !== requestedFn) return;  // navigated away
+      _paintLbSimilar(similar);
+    } catch (_e) {
+      if (_lbCurrentFn !== requestedFn) return;
+      body.className = "similar-empty";
+      body.textContent = "暂时无法加载类似照片";
+    }
+  }
+
+  function _paintLbSimilar(similar) {
+    const body = document.getElementById("lbSimilarBody");
+    if (!body) return;
+    if (!similar.length) {
+      body.className = "similar-empty";
+      body.textContent = "本批中没有明显类似的照片";
+      return;
+    }
+    body.className = "similar-row";
+    body.innerHTML = similar.map(s => {
+      const fnEsc = esc(s.filename);
+      const thumb = `/thumb/${run_id}/${encodeURIComponent(s.filename)}`;
+      const simPct = Math.round((s.similarity || 0) * 100);
+      const dec = s.decision || "";
+      const reasonsText = (s.reasons || [])
+        .map(t => I18N_SIM_REASON[t] || t).join(" · ");
+      return `
+        <div class="similar-item" data-fn="${fnEsc}"
+             title="${fnEsc} — ${esc(reasonsText)} (相似度 ${simPct}%)">
+          <img src="${thumb}" loading="lazy" alt="${fnEsc}">
+          <div class="deco">
+            ${dec ? `<span class="dec ${dec}">${esc(dec)}</span>` : '<span></span>'}
+            <span class="sim">${simPct}%</span>
+          </div>
+        </div>
+      `;
+    }).join("");
+    // Reason tag row below the thumbs — union of reasons across the
+    // top-k, deduped, ordered by first appearance.
+    const reasonOrder = [];
+    const reasonSeen = new Set();
+    for (const s of similar) {
+      for (const t of (s.reasons || [])) {
+        if (!reasonSeen.has(t)) { reasonSeen.add(t); reasonOrder.push(t); }
+      }
+    }
+    if (reasonOrder.length) {
+      const tags = reasonOrder.map(t =>
+        `<span class="similar-reason-tag">${esc(I18N_SIM_REASON[t] || t)}</span>`
+      ).join("");
+      const wrap = document.createElement("div");
+      wrap.className = "similar-reason-tags";
+      wrap.innerHTML = tags;
+      body.appendChild(wrap);
+    }
+  }
+
+  // Event delegation: a click on any .similar-item navigates the
+  // lightbox to that photo; Shift+click pins it for A/B compare.
+  document.addEventListener("click", e => {
+    const item = e.target.closest(".lightbox .similar-item");
+    if (!item) return;
+    const fn = item.dataset.fn;
+    if (!fn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.shiftKey) {
+      // Pin without navigating away — user can compare current vs
+      // similar from the same view.
+      pinForCompare(fn);
+      return;
+    }
+    openLightbox(fn);
+  });
 
   // V16.1 — manual rotation override. Persisted per (run_id, filename)
   // in localStorage as a degree value (0/90/180/270). 0 = honor EXIF.
@@ -2219,24 +2930,197 @@
     if (deg === 0) localStorage.removeItem(_lbRotKey(fn));
     else localStorage.setItem(_lbRotKey(fn), String(deg));
   }
-  function _applyLbRotation() {
+  // P-UX-2 — zoom + pan state for the 1:1 focus check. Session-only
+  // (resets on photo change, unlike rotation which is persisted).
+  // mode "fit": image at object-fit:contain scale (1.0); "1to1":
+  // scaled so 1 image pixel == 1 screen pixel (or whatever scale the
+  // user has wheeled to). hiResLoaded gates the high-resolution
+  // image swap so we only fetch it once per photo.
+  const _lbZoom = {
+    mode: "fit",
+    scale: 1.0,
+    panX: 0,
+    panY: 0,
+    dragging: false,
+    dragStartClientX: 0,
+    dragStartClientY: 0,
+    dragStartPanX: 0,
+    dragStartPanY: 0,
+    mouseDownPos: null,
+    hiResLoaded: false,
+    hiResUrl: null,
+  };
+
+  // P-UX-2 — Single transform composer. Order matters: in CSS,
+  // `transform: translate(...) scale(...) rotate(...)` applies
+  // rotate first, then scale, then translate. Rotating first means
+  // EXIF orientation stays consistent across zoom; translating last
+  // means panX/panY are in *screen* pixels (matches mouse-drag dx/dy).
+  function _applyLbTransform() {
     if (!_lbCurrentFn) return;
     const deg = _lbRotGet(_lbCurrentFn);
-    lbImg.style.transform = deg ? `rotate(${deg}deg)` : "";
+    const { scale, panX, panY } = _lbZoom;
+    const parts = [];
+    if (panX || panY) parts.push(`translate(${panX}px, ${panY}px)`);
+    if (scale !== 1)   parts.push(`scale(${scale})`);
+    if (deg)           parts.push(`rotate(${deg}deg)`);
+    lbImg.style.transform = parts.join(" ");
   }
+  // Backwards-compat shim — old callers still expect _applyLbRotation
+  // (just an alias now since the composer handles rotation too).
+  function _applyLbRotation() { _applyLbTransform(); }
+
   function _lbRotateBy(delta) {
     if (!_lbCurrentFn) return;
     const next = _lbRotGet(_lbCurrentFn) + delta;
     _lbRotSet(_lbCurrentFn, next);
-    _applyLbRotation();
+    _applyLbTransform();
     // V16.2 — keep the matching grid card's thumbnail in sync.
     _syncCardRotation(_lbCurrentFn);
   }
   function _lbRotateReset() {
     if (!_lbCurrentFn) return;
     _lbRotSet(_lbCurrentFn, 0);
-    _applyLbRotation();
+    _applyLbTransform();
     _syncCardRotation(_lbCurrentFn);
+  }
+
+  // P-UX-2 — zoom + pan + hi-res-swap interaction layer.
+  // ===================================================
+  //
+  //   click image (fit)     → 1:1 zoom centered on click point
+  //   click image (zoomed)  → back to fit (no pan)
+  //   drag image (zoomed)   → pan within image bounds
+  //   wheel up/down         → fine-tune zoom centered on cursor
+  //   z                     → toggle fit ↔ 1:1 centered on viewport
+  //   0                     → reset pan (stay zoomed)
+  //
+  // Hi-res swap: when entering zoom for the first time on a photo,
+  // we pre-load /full/<run>/<fn>?w=3600 in the background then swap
+  // src once it's ready. The current viewport-bucketed image keeps
+  // showing in the meantime so the user never sees a flash.
+
+  const _LB_MIN_SCALE = 1.0;
+  const _LB_MAX_SCALE = 8.0;
+  const _LB_CLICK_DRAG_THRESH = 4;   // px of mouse motion that turns a click into a drag
+
+  function _lbZoomBadgeEl() { return document.getElementById("lbZoomBadge"); }
+  function _lbZoomToggleEl() { return document.getElementById("lbZoomToggle"); }
+
+  function _updateLbZoomBadge() {
+    const el = _lbZoomBadgeEl();
+    if (!el) return;
+    if (_lbZoom.mode === "fit") {
+      el.classList.remove("show");
+      el.textContent = "";
+    } else {
+      // Express scale relative to "fit" (object-fit:contain). At
+      // exactly the natural-pixel-per-screen-pixel ratio we show
+      // "1:1"; otherwise show a percentage of fit so the user has a
+      // sense of how zoomed-in they are.
+      const fitW = lbImg.offsetWidth;
+      const natural = lbImg.naturalWidth;
+      const oneOneScale = (natural && fitW) ? natural / fitW : 1;
+      const pct = Math.round(100 * _lbZoom.scale / oneOneScale);
+      el.textContent = pct === 100 ? "1:1" : `${Math.round(100 * _lbZoom.scale)}%`;
+      el.classList.add("show");
+    }
+    const tgl = _lbZoomToggleEl();
+    if (tgl) tgl.classList.toggle("active", _lbZoom.mode !== "fit");
+  }
+
+  // Cap the pan so the image edges don't pull inside the viewport
+  // (we don't want "black space + half image" — feels broken).
+  function _lbClampPan() {
+    const fitW = lbImg.offsetWidth;
+    const fitH = lbImg.offsetHeight;
+    if (!fitW || !fitH) return;
+    const paneRect = lbImg.parentElement.getBoundingClientRect();
+    const scaledW = fitW * _lbZoom.scale;
+    const scaledH = fitH * _lbZoom.scale;
+    // Max pan = how far the image edge can move past the viewport
+    // edge while keeping at least one edge visible. When scaled <=
+    // viewport on an axis, lock to 0 on that axis.
+    const maxX = Math.max(0, (scaledW - paneRect.width)  / 2);
+    const maxY = Math.max(0, (scaledH - paneRect.height) / 2);
+    _lbZoom.panX = Math.max(-maxX, Math.min(maxX, _lbZoom.panX));
+    _lbZoom.panY = Math.max(-maxY, Math.min(maxY, _lbZoom.panY));
+  }
+
+  // Pre-load the hi-res image once per photo on first zoom-in. The
+  // viewport-bucketed image stays on screen until the hi-res arrives,
+  // then we swap src. This avoids the dreaded "blank → high-res
+  // pop-in" flash and keeps perceived latency near-zero.
+  function _maybeLoadHiRes() {
+    if (_lbZoom.hiResLoaded) return;
+    const fn = _lbCurrentFn;
+    if (!fn) return;
+    const url = `/full/${run_id}/${encodeURIComponent(fn)}?w=3600`;
+    const pre = new Image();
+    pre.onload = () => {
+      // User may have navigated to another frame while we were
+      // loading; bail if so.
+      if (_lbCurrentFn !== fn) return;
+      lbImg.src = url;
+      _lbZoom.hiResLoaded = true;
+      _lbZoom.hiResUrl = url;
+      // Re-paint the badge (naturalWidth now reflects hi-res, so the
+      // "1:1" target scale changes accordingly).
+      lbImg.addEventListener("load", _updateLbZoomBadge, { once: true });
+    };
+    pre.src = url;
+  }
+
+  // Zoom to a target scale around a viewport point (clientX, clientY).
+  // The point under the cursor stays put after the transform — Adobe
+  // Lightroom / Photo Mechanic / Capture One all use this gesture so
+  // pros feel at home.
+  function _lbZoomToPoint(newScale, clientX, clientY) {
+    newScale = Math.max(_LB_MIN_SCALE, Math.min(_LB_MAX_SCALE, newScale));
+    const rect = lbImg.getBoundingClientRect();
+    // Click point in image-local coordinates relative to the image's
+    // *current* visual center.
+    const cx = (clientX - (rect.left + rect.width  / 2));
+    const cy = (clientY - (rect.top  + rect.height / 2));
+    // Solve for the new pan that keeps (cx, cy) anchored under the
+    // cursor. In current state we have pan=(p,q) and scale=s; after
+    // the transform we want pan=(p',q') and scale=s' such that the
+    // point at (cx, cy) in the viewport stays at (cx, cy). Working
+    // through the algebra (with translate-then-scale semantics):
+    //   p' = cx - (cx - p) * (s' / s)
+    const s = _lbZoom.scale || 1;
+    _lbZoom.panX = cx - (cx - _lbZoom.panX) * (newScale / s);
+    _lbZoom.panY = cy - (cy - _lbZoom.panY) * (newScale / s);
+    _lbZoom.scale = newScale;
+    _lbZoom.mode = newScale > 1.001 ? "1to1" : "fit";
+    if (_lbZoom.mode === "fit") {
+      _lbZoom.panX = 0; _lbZoom.panY = 0;
+      lbImg.classList.remove("zoomed");
+    } else {
+      lbImg.classList.add("zoomed");
+      _maybeLoadHiRes();
+    }
+    _lbClampPan();
+    _applyLbTransform();
+    _updateLbZoomBadge();
+  }
+
+  // Toggle to 1:1 (or back to fit) around a viewport point. If no
+  // point provided (e.g. keyboard z), use viewport center.
+  function _lbZoomToggleAt(clientX, clientY) {
+    if (_lbZoom.mode === "fit") {
+      const fitW = lbImg.offsetWidth;
+      const natural = lbImg.naturalWidth;
+      const target = (natural && fitW) ? natural / fitW : 2.0;
+      if (clientX == null || clientY == null) {
+        const rect = lbImg.getBoundingClientRect();
+        clientX = rect.left + rect.width  / 2;
+        clientY = rect.top  + rect.height / 2;
+      }
+      _lbZoomToPoint(target, clientX, clientY);
+    } else {
+      _lbZoomToPoint(1.0, 0, 0);
+    }
   }
   // V16.2 — push the current localStorage rotation onto every visible
   // card matching this filename. Cheap query, runs only on rotate.
@@ -2348,6 +3232,15 @@
         ${detailHtml ? `<div class="axis-grid-detail">${detailHtml}</div>` : ''}
       </div>
 
+      <!-- P-UX-5 — similar-photos row. Populated asynchronously by
+           _loadLbSimilar() once the lightbox is shown so renderInfoPane
+           stays sync + cheap. Empty state collapses into a faint hint. -->
+      <div class="section" id="lbSimilarSection">
+        <div class="section-title">↳ 类似照片</div>
+        <div id="lbSimilarBody" class="similar-loading">寻找类似…</div>
+        <div class="similar-hint">点击跳转 · Shift+点击 = 加入 A/B 比较</div>
+      </div>
+
       ${r.meta_overall_rationale ? `
       <div class="section">
         <div class="section-title">⌬ DeepSeek meta-judge ${r.meta_confidence != null ? `(置信 ${(r.meta_confidence*100).toFixed(0)}%)` : ''}</div>
@@ -2417,6 +3310,35 @@
         <div class="rationale" title="${esc(r.reason)}">${esc(trReason(r.reason))}</div>
       </div>
       ` : ''}
+
+      <!-- P-UX-6 — sticky decision toolbar. Mirrors the 1/2/3 hotkeys
+           with explicit buttons + active state so mouse users + new
+           users without the muscle memory can drive culling from the
+           lightbox. The active button reflects the current decision
+           (auto OR human) and updates after every click via
+           _updateLbDecisionToolbar(). Clicking advances to the next
+           visible photo just like keyboard 1/2/3 do. -->
+      <div class="decision-toolbar" id="lbDecisionToolbar"
+           role="group" aria-label="为这张照片打标">
+        <button class="decision-btn keep ${dec === 'keep' ? 'active' : ''}"
+                data-label="keep" type="button"
+                title="保留 (1)">
+          <span class="label">保留</span>
+          <span class="hk">1</span>
+        </button>
+        <button class="decision-btn maybe ${dec === 'maybe' ? 'active' : ''}"
+                data-label="maybe" type="button"
+                title="待定 (2)">
+          <span class="label">待定</span>
+          <span class="hk">2</span>
+        </button>
+        <button class="decision-btn cull ${dec === 'cull' ? 'active' : ''}"
+                data-label="cull" type="button"
+                title="剔除 (3) · 可补充 cull 原因">
+          <span class="label">剔除</span>
+          <span class="hk">3</span>
+        </button>
+      </div>
     `;
   }
 
@@ -2483,14 +3405,149 @@
   if (lbRotReset) lbRotReset.addEventListener("click", e => {
     e.stopPropagation(); _lbRotateReset();
   });
+
+  // P-UX-2 — zoom-toggle button + image click-to-zoom + drag-to-pan
+  // + wheel-zoom. The image itself becomes interactive: clicks toggle
+  // 1:1 around the click point, drags pan within bounds, wheel
+  // incrementally zooms. Clicking the dark padding around the image
+  // (img-pane outside the <img>) still closes the lightbox.
+  const lbZoomToggle = document.getElementById("lbZoomToggle");
+  if (lbZoomToggle) lbZoomToggle.addEventListener("click", e => {
+    e.stopPropagation();
+    _lbZoomToggleAt(null, null);
+  });
+
+  // Track mousedown so we can distinguish a click (toggle) from a
+  // drag (pan). Only count motion > _LB_CLICK_DRAG_THRESH as a drag.
+  lbImg.addEventListener("mousedown", e => {
+    if (e.button !== 0) return;
+    _lbZoom.mouseDownPos = { x: e.clientX, y: e.clientY };
+    if (_lbZoom.mode === "1to1") {
+      e.preventDefault();
+      _lbZoom.dragging = true;
+      _lbZoom.dragStartClientX = e.clientX;
+      _lbZoom.dragStartClientY = e.clientY;
+      _lbZoom.dragStartPanX = _lbZoom.panX;
+      _lbZoom.dragStartPanY = _lbZoom.panY;
+      lbImg.classList.add("dragging");
+    }
+  });
+  // Listen on window so a fast drag whose mouseup leaves the image
+  // doesn't strand us in dragging-state.
+  window.addEventListener("mousemove", e => {
+    if (!_lbZoom.dragging) return;
+    _lbZoom.panX = _lbZoom.dragStartPanX + (e.clientX - _lbZoom.dragStartClientX);
+    _lbZoom.panY = _lbZoom.dragStartPanY + (e.clientY - _lbZoom.dragStartClientY);
+    _lbClampPan();
+    _applyLbTransform();
+  });
+  window.addEventListener("mouseup", () => {
+    if (_lbZoom.dragging) {
+      _lbZoom.dragging = false;
+      lbImg.classList.remove("dragging");
+    }
+  });
+  // Click = toggle zoom, but ignore the click if the user actually
+  // dragged (motion > 4px). stopPropagation so the lb-click handler
+  // below doesn't close the lightbox out from under us.
+  lbImg.addEventListener("click", e => {
+    const down = _lbZoom.mouseDownPos;
+    _lbZoom.mouseDownPos = null;
+    if (down) {
+      const dist = Math.hypot(e.clientX - down.x, e.clientY - down.y);
+      if (dist > _LB_CLICK_DRAG_THRESH) return;  // was a drag
+    }
+    e.stopPropagation();
+    _lbZoomToggleAt(e.clientX, e.clientY);
+  });
+  // Mouse wheel = incremental zoom centered on cursor. Wheel up
+  // zooms in, wheel down zooms out. Trackpad pinch on macOS also
+  // fires wheel events with ctrlKey set — same handler covers it.
+  lbImg.parentElement.addEventListener("wheel", e => {
+    if (!lb.classList.contains("show")) return;
+    e.preventDefault();
+    const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+    const target = (_lbZoom.scale || 1) * factor;
+    _lbZoomToPoint(target, e.clientX, e.clientY);
+  }, { passive: false });
+
   lb.addEventListener("click", e => {
-    // Only close on backdrop or img-pane click — not on info-pane,
-    // close button, or nav buttons, or rotate buttons.
+    // Only close on backdrop or img-pane padding click — not on info-
+    // pane, close button, nav buttons, rotate buttons, zoom buttons,
+    // or the image itself (the image has its own click → toggle zoom).
     if (e.target.closest(".info-pane")) return;
     if (e.target === lbClose) return;
     if (e.target.closest(".nav-btn")) return;
     if (e.target.closest(".rotate-grp")) return;
+    if (e.target.closest(".zoom-grp")) return;
+    if (e.target === lbImg) return;
     lb.classList.remove("show");
+  });
+
+  // P-UX-6 — sticky decision toolbar inside the lightbox info pane.
+  // Three buttons (keep / maybe / cull) — each fires a POST to
+  // /annotation/... with the corresponding label, updates the local
+  // row state, refreshes the toolbar's active highlight, and advances
+  // to the next visible photo (consistent with the 1/2/3 hotkeys).
+  // For cull, also fires the reject-reason picker (P-UX-4).
+  function _updateLbDecisionToolbar(label) {
+    const tb = document.getElementById("lbDecisionToolbar");
+    if (!tb) return;
+    tb.querySelectorAll(".decision-btn").forEach(btn => {
+      btn.classList.toggle("active", btn.dataset.label === label);
+    });
+  }
+
+  async function _lbLabel(label) {
+    const fn = _lbCurrentFn;
+    if (!fn) return;
+    const r = rows.find(x => x.filename === fn);
+    if (r) {
+      pushUndo([{
+        filename: fn,
+        prev_decision: r.decision,
+        prev_human_labeled: r.rubric_human_labeled,
+      }]);
+    }
+    try {
+      await fetch(`/annotation/${run_id}/${encodeURIComponent(fn)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          axes: {},
+          overall_label: label,
+          overall_rationale: `labeled ${label} via lightbox toolbar`,
+        }),
+      });
+      if (r) {
+        r.rubric_human_labeled = true;
+        r.decision = label;
+        if (label !== "cull") r.cull_reason = "";
+      }
+      // Sync the matching grid card so closing the lightbox lands
+      // on a card with the right decision border + has-human class.
+      const card = grid.querySelector(`.card[data-fn="${CSS.escape(fn)}"]`);
+      if (card) {
+        card.classList.remove("keep", "maybe", "cull");
+        card.classList.add(label, "has-human");
+      }
+      summary.n_human_labeled = (summary.n_human_labeled || 0) + 1;
+    } catch (_e) { /* ignore network blip */ }
+    _updateLbDecisionToolbar(label);
+    if (label === "cull") promptCullReason(fn);
+    // Advance to next visible photo (same as keyboard 1/2/3 + j).
+    // Skip the advance if the user just culled and we want them to
+    // engage the reason picker without a card swap underneath.
+    if (label !== "cull") lightboxStep(+1);
+  }
+
+  // Event delegation on the lightbox so the toolbar wiring survives
+  // every renderInfoPane() rebuild without needing re-attachment.
+  lb.addEventListener("click", e => {
+    const btn = e.target.closest(".decision-btn[data-label]");
+    if (!btn) return;
+    e.stopPropagation();
+    _lbLabel(btn.dataset.label);
   });
 
   // ==================================================================
@@ -2577,6 +3634,7 @@
         prev_human_labeled: r.rubric_human_labeled,
       }]);
     }
+    const wasFn = focusedFn;
     try {
       await fetch(`/annotation/${run_id}/${encodeURIComponent(focusedFn)}`, {
         method: "POST",
@@ -2590,6 +3648,8 @@
       if (r) {
         r.rubric_human_labeled = true;
         r.decision = label;
+        // P-UX-4 — flipping away from cull clears any stale reason.
+        if (label !== "cull") r.cull_reason = "";
       }
       // Quick visual feedback: flash a label badge near the card.
       const card = grid.querySelector(`.card[data-fn="${CSS.escape(focusedFn)}"]`);
@@ -2599,6 +3659,9 @@
       }
       summary.n_human_labeled = (summary.n_human_labeled || 0) + 1;
     } catch (e) { /* ignore quick errors */ }
+    // P-UX-4 — after a cull, prompt for a reason. Opt-in: auto-
+    // dismisses in ~6 s, never blocks the keep/maybe/cull rhythm.
+    if (label === "cull") promptCullReason(wasFn);
   }
   // V14.5 — shortcuts cheat sheet replaces the old alert(). The
   // overlay HTML is statically rendered; JS just toggles .show
@@ -2651,6 +3714,13 @@
       if (am && am.classList.contains("show")) { am.classList.remove("show"); return; }
       const bm = document.getElementById("browserModal");
       if (bm && bm.classList.contains("show")) { bm.classList.remove("show"); return; }
+      // P-UX-3 — Esc also cancels a pending A/B compare pick. This
+      // is last in the chain so any open modal still takes priority.
+      if (_compareA) { cancelComparePick(); return; }
+      // P-UX-4 — Esc also dismisses the cull-reason picker tray.
+      if (cullReasonTray && cullReasonTray.classList.contains("show")) {
+        _hideCullReasonTray(); return;
+      }
       return;
     }
     // Don't act when an annotation modal is open — let modal own input
@@ -2672,6 +3742,59 @@
       // V16.1 — r / R inside lightbox = rotate CW / CCW (manual override)
       if (e.key === "r") { e.preventDefault(); _lbRotateBy(+90);  return; }
       if (e.key === "R") { e.preventDefault(); _lbRotateBy(-90);  return; }
+      // P-UX-6 — route 1/2/3 through the lightbox label flow so the
+      // sticky decision toolbar's active highlight stays in sync.
+      // (quickLabel uses focusedFn which may diverge from the
+      // lightbox's _lbCurrentFn when the user clicked a card to
+      // open rather than tabbing through with j/k.)
+      if (e.key === "1") { e.preventDefault(); _lbLabel("keep");  return; }
+      if (e.key === "2") { e.preventDefault(); _lbLabel("maybe"); return; }
+      if (e.key === "3") { e.preventDefault(); _lbLabel("cull");  return; }
+      // P-UX-2 — z = toggle 1:1 focus check (around viewport center);
+      // 0 = reset pan but stay at current scale so the user can
+      // re-center after wandering. + / - = wheel-equivalent zoom.
+      if (e.key === "z" || e.key === "Z") {
+        e.preventDefault(); _lbZoomToggleAt(null, null); return;
+      }
+      if (e.key === "0") {
+        e.preventDefault();
+        _lbZoom.panX = 0; _lbZoom.panY = 0;
+        _lbClampPan(); _applyLbTransform(); return;
+      }
+      if (e.key === "+" || e.key === "=") {
+        e.preventDefault();
+        const rect = lbImg.getBoundingClientRect();
+        _lbZoomToPoint((_lbZoom.scale || 1) * 1.25,
+                       rect.left + rect.width / 2,
+                       rect.top  + rect.height / 2);
+        return;
+      }
+      if (e.key === "-" || e.key === "_") {
+        e.preventDefault();
+        const rect = lbImg.getBoundingClientRect();
+        _lbZoomToPoint((_lbZoom.scale || 1) / 1.25,
+                       rect.left + rect.width / 2,
+                       rect.top  + rect.height / 2);
+        return;
+      }
+      // P-UX-3 — c inside lightbox = pin the current photo for A/B
+      // compare. If A is already pinned, this closes the lightbox
+      // and opens the compare modal with [A, current]; if not, the
+      // current frame becomes A. Lets the user 1:1-check then pin.
+      if (e.key === "c" || e.key === "C") {
+        e.preventDefault();
+        if (!_lbCurrentFn) return;
+        const cur = _lbCurrentFn;
+        if (_compareA && _compareA !== cur) {
+          lb.classList.remove("show");
+          // Defer one tick so the lightbox-close transition starts
+          // before the modal animates in.
+          setTimeout(() => pinForCompare(cur), 30);
+        } else {
+          pinForCompare(cur);
+        }
+        return;
+      }
     }
 
     if (e.key === "j" || e.key === "ArrowRight") { e.preventDefault(); moveFocus(+1); }
@@ -2679,6 +3802,13 @@
     else if (e.key === "1") { e.preventDefault(); quickLabel("keep"); }
     else if (e.key === "2") { e.preventDefault(); quickLabel("maybe"); }
     else if (e.key === "3") { e.preventDefault(); quickLabel("cull"); }
+    // P-UX-3 — c on the grid pins the currently focused card for
+    // A/B compare. If another card was already pinned, this fires
+    // the modal directly. Symmetrical with the lightbox-side c.
+    else if (e.key === "c" || e.key === "C") {
+      e.preventDefault();
+      if (focusedFn) pinForCompare(focusedFn);
+    }
     else if (e.key === " " || e.key === "Spacebar") {
       // toggle lightbox (with info pane) on focused card
       e.preventDefault();
@@ -2917,10 +4047,20 @@
         Object.keys(axes).forEach(k => {
           if (axes[k].stars) r.rubric_stars[k] = axes[k].stars;
         });
-        if (annOverall.value) r.decision = annOverall.value;
+        if (annOverall.value) {
+          r.decision = annOverall.value;
+          // P-UX-4 — flipping away from cull clears any stale reason
+          if (annOverall.value !== "cull") r.cull_reason = "";
+        }
       }
       const activeFilter = document.querySelector("#filters .pill.active").dataset.d;
       render(activeFilter);
+      // P-UX-4 — if the user just culled via the rubric modal, prompt
+      // for a reason (unless they're already advancing — in advance
+      // mode the rapid-flow rhythm shouldn't be interrupted).
+      if (annOverall.value === "cull" && !thenAdvance) {
+        promptCullReason(currentFn);
+      }
       summary.n_human_labeled = (summary.n_human_labeled || 0) + (r && !rows._wasLabeled ? 1 : 0);
       if (thenAdvance) {
         // V14.5 — toast confirmation + smooth cross-fade to next.
@@ -3124,14 +4264,18 @@
       `;
     }).join("");
     cmpModal.classList.add("show");
+    // P-UX-7 — every fresh compare opens at fit. The shared cmp-
+    // zoom state is reset so a stray zoom from a previous compare
+    // doesn't leak into the new one.
+    if (typeof _cmpResetZoom === "function") _cmpResetZoom();
 
-    // Click to zoom inside cmp
-    cmpBody.querySelectorAll(".img-wrap").forEach(el => {
-      el.addEventListener("click", () => {
-        lbImg.src = el.dataset.full;
-        lb.classList.add("show");
-      });
-    });
+    // P-UX-7 — click on an .img-wrap is now reserved for the synced
+    // zoom toggle (handled by cmpBody's delegated mousedown/click
+    // listeners). The old "click to open in the lightbox" path
+    // would break in-place pixel-peeping, so we drop it. Users who
+    // want the full lightbox can still get there by closing this
+    // modal and clicking the photo's card.
+
     // Pick handler — keep this one, cull the others
     cmpBody.querySelectorAll(".pick-btn").forEach(btn => {
       btn.addEventListener("click", async () => {
@@ -3183,6 +4327,347 @@
   cmpModal.addEventListener("click", e => {
     if (e.target === cmpModal) cmpModal.classList.remove("show");
   });
+
+  // ==================================================================
+  // P-UX-3 — free-pick A/B compare. Burst-cluster compare (above)
+  // only covers photos that landed in the same DBSCAN cluster, but
+  // pro photographers regularly need to compare any two near-dupes
+  // — second-shooter coverage of the same moment, two angles of the
+  // same subject, before/after a small reframe — that may not have
+  // clustered together. This adds a "pin for compare" interaction
+  // that lets the user pick any 2 photos and pipe them through the
+  // existing compare modal (which is happily n-cell, not 2-only).
+  //
+  //   click the ⇆ button on a card  → pins as A (highlighted, tray
+  //                                    appears at top of viewport)
+  //   click the ⇆ on a 2nd card    → opens compare modal with [A, B]
+  //   Shift-click the thumbnail     → same as the ⇆ button (fast path)
+  //   Esc                            → cancels the A pick
+  //   c key (focused card)           → pins/unpins that card
+  //
+  // The existing burst-walk prev/next buttons are hidden in custom
+  // mode (they're cluster-specific and would mis-step).
+  // ==================================================================
+
+  let _compareA = null;  // filename of the pinned photo, or null
+  const cmpPickTray   = document.getElementById("cmpPickTray");
+  const cmpPickFn     = document.getElementById("cmpPickFn");
+  const cmpPickCancel = document.getElementById("cmpPickCancel");
+
+  function _updateCmpPickUI() {
+    // Reflect _compareA into the floating tray + per-card class.
+    cmpPickTray.classList.toggle("show", _compareA != null);
+    if (_compareA) cmpPickFn.textContent = _compareA;
+    // Sync .compare-a class on visible cards
+    grid.querySelectorAll(".card.compare-a").forEach(c => {
+      if (!_compareA || c.dataset.fn !== _compareA) {
+        c.classList.remove("compare-a");
+      }
+    });
+    if (_compareA) {
+      grid.querySelectorAll(`.card[data-fn]`).forEach(c => {
+        if (c.dataset.fn === _compareA) c.classList.add("compare-a");
+      });
+    }
+  }
+  function cancelComparePick() {
+    _compareA = null;
+    _updateCmpPickUI();
+  }
+  function pinForCompare(filename) {
+    if (!filename) return;
+    if (!_compareA) {
+      _compareA = filename;
+      _updateCmpPickUI();
+      showToast(`已选 A: ${filename} · 点选第二张 (Esc 取消)`, "info");
+      return;
+    }
+    if (_compareA === filename) {
+      // Re-pinning the same card just cancels.
+      cancelComparePick();
+      return;
+    }
+    // Two photos selected → open the compare modal in custom mode.
+    const a = _compareA, b = filename;
+    cancelComparePick();
+    openCompareCustom([a, b]);
+  }
+
+  // Generalized version of openCompare() that accepts an arbitrary
+  // list of filenames instead of a cluster key. Reuses the same DOM
+  // template, sort order (score_final desc), and pick-handler logic
+  // as the cluster path so the UX is identical once the modal opens.
+  function openCompareCustom(filenames) {
+    const members = filenames
+      .map(fn => rows.find(r => r.filename === fn))
+      .filter(Boolean);
+    if (members.length < 2) {
+      showToast("至少需要两张图才能比较", "error");
+      return;
+    }
+    members.sort((a, b) => (b.score_final ?? 0) - (a.score_final ?? 0));
+    const best = members[0];
+    cmpTitle.textContent = `A/B 比较 (${members.length} 张)`;
+    cmpMeta.textContent =
+      `按 score_final 降序;左为系统推荐。点 "选这张" 把另一张标 cull。`;
+
+    const axisAbbr = {technical:"技", subject:"主", composition:"构",
+                       light:"光", moment:"瞬", aesthetic:"美"};
+    cmpBody.innerHTML = members.map(r => {
+      const isBest = (r === best);
+      const stars = ["technical","subject","composition","light","moment","aesthetic"].map(name => {
+        const s = r.rubric_stars && r.rubric_stars[name];
+        return `<div class="a">${axisAbbr[name]} ${s == null ? "--" : s.toFixed(1)}</div>`;
+      }).join("");
+      const dec = r.decision || "";
+      return `
+        <div class="cmp-cell ${isBest?'best':''}" data-fn="${esc(r.filename)}">
+          <div class="img-wrap" data-full="/full/${run_id}/${encodeURIComponent(r.filename)}">
+            <img src="/thumb/${run_id}/${encodeURIComponent(r.filename)}" alt="${esc(r.filename)}">
+          </div>
+          <div class="meta">
+            <span class="fn" title="${esc(r.filename)}">${esc(r.filename)}</span>
+            <div>
+              <span class="badge ${dec}" style="font-size:9px;padding:1px 5px">${esc(dec || '?')}</span>
+              <span style="margin-left:6px">final ${r.score_final == null ? "--" : r.score_final.toFixed(2)}</span>
+            </div>
+            <div class="stars">${stars}</div>
+            <button class="pick-btn" data-fn="${esc(r.filename)}">${isBest?'✓ 选这张(系统推荐)':'选这张'}</button>
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    // Hide the burst prev/next nav — meaningless in custom-pick mode.
+    const _navPrev = document.getElementById("cmpPrev");
+    const _navNext = document.getElementById("cmpNext");
+    if (_navPrev) _navPrev.style.display = "none";
+    if (_navNext) _navNext.style.display = "none";
+    cmpModal.classList.add("show");
+    // P-UX-7 — reset synced zoom for the new compare set.
+    if (typeof _cmpResetZoom === "function") _cmpResetZoom();
+
+    // P-UX-7 — click on an .img-wrap is reserved for the synced
+    // zoom toggle now (see cmpBody-level mousedown/click delegation).
+    // Pick handler — keep one, cull the other(s). Mirrors the cluster
+    // path's flow including undo snapshot + toast.
+    cmpBody.querySelectorAll(".pick-btn").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const pickFn = btn.dataset.fn;
+        const ok = confirm(
+          `选 ${pickFn} 为 keep,其余 ${members.length - 1} 张标 cull?`);
+        if (!ok) return;
+        pushUndo(members.map(m => ({
+          filename: m.filename,
+          prev_decision: m.decision,
+          prev_human_labeled: m.rubric_human_labeled,
+        })));
+        for (const m of members) {
+          const lbl = (m.filename === pickFn) ? "keep" : "cull";
+          try {
+            await fetch(`/annotation/${run_id}/${encodeURIComponent(m.filename)}`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                axes: {},
+                overall_label: lbl,
+                overall_rationale: `A/B compare: ${lbl === 'keep' ? 'picked' : 'rejected'}`,
+              }),
+            });
+            const local = rows.find(x => x.filename === m.filename);
+            if (local) {
+              local.rubric_human_labeled = true;
+              local.decision = lbl;
+            }
+          } catch (e) { /* ignore */ }
+        }
+        summary.n_human_labeled = (summary.n_human_labeled || 0) + members.length;
+        cmpModal.classList.remove("show");
+        showToast(`已选 ${pickFn},另一张标 cull · Cmd+Z 撤销`, "success");
+        render();
+      });
+    });
+  }
+
+  // Restore the burst-walk nav when the modal closes — the user may
+  // open a real cluster compare next, and prev/next should work
+  // again.
+  function _restoreBurstNav() {
+    const _navPrev = document.getElementById("cmpPrev");
+    const _navNext = document.getElementById("cmpNext");
+    if (_navPrev) _navPrev.style.display = "";
+    if (_navNext) _navNext.style.display = "";
+  }
+  cmpClose.addEventListener("click", _restoreBurstNav);
+  cmpModal.addEventListener("click", e => {
+    if (e.target === cmpModal) _restoreBurstNav();
+  });
+
+  // Card-level wiring. Use event delegation on the grid so we don't
+  // have to re-attach after every render(). Both the explicit ⇆ pin
+  // button and Shift+click on the thumbnail map to pinForCompare();
+  // the existing thumbnail-click → openLightbox path stays intact
+  // for plain clicks.
+  grid.addEventListener("click", e => {
+    const cmpBtn = e.target.closest(".card-cmp-btn");
+    if (cmpBtn) {
+      e.stopPropagation();
+      const fn = cmpBtn.dataset.fn;
+      if (fn) pinForCompare(fn);
+      return;
+    }
+    // Shift-click on a thumbnail = quick pin for compare.
+    if (e.shiftKey && e.target.tagName === "IMG"
+        && e.target.classList.contains("thumb")) {
+      e.preventDefault(); e.stopPropagation();
+      const card = e.target.closest(".card");
+      if (card && card.dataset.fn) pinForCompare(card.dataset.fn);
+      return;
+    }
+  }, true);  // capture phase so we get ahead of the existing thumb-click → openLightbox
+
+  cmpPickCancel.addEventListener("click", () => cancelComparePick());
+
+  // ==================================================================
+  // P-UX-4 — reject-reason taxonomy. Three concerns:
+  //   1. fetch the server-advertised cull-reason list once at boot
+  //   2. show a transient picker after every cull action
+  //   3. build a dynamic "因为 X 而 cull" filter pill group from rows
+  // The picker is OPT-IN — culling stays a 1-keystroke action; the
+  // picker auto-dismisses in ~6 s if the user doesn't engage.
+  // ==================================================================
+
+  const cullReasonTray   = document.getElementById("cullReasonTray");
+  const cullReasonPills  = document.getElementById("cullReasonPills");
+  const cullReasonSkip   = document.getElementById("cullReasonSkip");
+  let _cullReasonFn      = null;   // the photo currently being asked about
+  let _cullReasonTimer   = null;   // setTimeout handle for auto-dismiss
+
+  async function _loadCullReasonTaxonomy() {
+    try {
+      const r = await fetch("/api/v1/taxonomy");
+      if (!r.ok) return;
+      const d = await r.json();
+      _CULL_REASONS_LIST = Array.isArray(d.cull_reasons) ? d.cull_reasons : [];
+      _CULL_REASONS_MAP = {};
+      for (const e of _CULL_REASONS_LIST) {
+        if (e && e.token) _CULL_REASONS_MAP[e.token] = e.label_zh || e.token;
+      }
+      _populateReasonPills();
+      // If any row already has a cull_reason from a prior session,
+      // the filter pill group needs to come up populated.
+      _renderCullReasonFilters();
+    } catch (_e) { /* offline / API missing — picker stays inert */ }
+  }
+
+  function _populateReasonPills() {
+    if (!cullReasonPills) return;
+    cullReasonPills.innerHTML = _CULL_REASONS_LIST.map(e =>
+      `<button class="reason-pill" data-token="${esc(e.token)}" type="button"
+               title="${esc(e.label_zh || e.token)}">${esc(e.label_zh || e.token)}</button>`
+    ).join(" ");
+  }
+
+  function _hideCullReasonTray() {
+    if (cullReasonTray) cullReasonTray.classList.remove("show");
+    _cullReasonFn = null;
+    if (_cullReasonTimer) {
+      clearTimeout(_cullReasonTimer);
+      _cullReasonTimer = null;
+    }
+  }
+
+  function promptCullReason(fn) {
+    if (!fn || !cullReasonTray || !_CULL_REASONS_LIST.length) return;
+    _cullReasonFn = fn;
+    cullReasonTray.classList.add("show");
+    if (_cullReasonTimer) clearTimeout(_cullReasonTimer);
+    _cullReasonTimer = setTimeout(_hideCullReasonTray, 6000);
+  }
+
+  async function _setCullReason(token) {
+    const fn = _cullReasonFn;
+    _hideCullReasonTray();
+    if (!fn || !token) return;
+    try {
+      await fetch(`/annotation/${run_id}/${encodeURIComponent(fn)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          axes: {},
+          overall_label: "cull",
+          overall_rationale: `cull reason: ${token}`,
+          cull_reason: token,
+        }),
+      });
+      const r = rows.find(x => x.filename === fn);
+      if (r) { r.cull_reason = token; r.decision = "cull"; r.rubric_human_labeled = true; }
+      showToast(`已记录 cull 原因: ${_cullReasonLabel(token)}`, "success");
+      _renderCullReasonFilters();
+      render();
+    } catch (_e) { /* ignore — user can re-pick next time */ }
+  }
+
+  // Pills are populated dynamically — delegate clicks on the tray.
+  if (cullReasonTray) {
+    cullReasonTray.addEventListener("click", e => {
+      const pill = e.target.closest(".reason-pill");
+      if (pill && pill.dataset.token) {
+        _setCullReason(pill.dataset.token);
+        return;
+      }
+      if (e.target === cullReasonSkip) _hideCullReasonTray();
+    });
+  }
+
+  // ----- Filter pill row for "因为 X 而 cull" -----
+
+  function _renderCullReasonFilters() {
+    const wrap = document.getElementById("cullReasonFilter");
+    const divider = document.getElementById("cullReasonDivider");
+    if (!wrap || !divider) return;
+    // Tally tokens actually present in the batch so we only show
+    // pills the user can meaningfully click. {token: count}
+    const tally = new Map();
+    for (const r of rows) {
+      const t = r.cull_reason;
+      if (t) tally.set(t, (tally.get(t) || 0) + 1);
+    }
+    if (tally.size === 0) {
+      divider.style.display = "none";
+      wrap.innerHTML = "";
+      return;
+    }
+    divider.style.display = "";
+    // Render in the taxonomy's declared order, then any unknown
+    // tokens at the end (defensive — schema drift).
+    const known = _CULL_REASONS_LIST.map(e => e.token);
+    const tokens = [
+      ...known.filter(t => tally.has(t)),
+      ...[...tally.keys()].filter(t => !known.includes(t)),
+    ];
+    wrap.innerHTML = tokens.map(t => {
+      const count = tally.get(t);
+      const active = filterState.cullReason === t ? " active" : "";
+      return `<span class="pill reason-pill${active}" data-cull-reason="${esc(t)}"
+                    title="只看因为 ${esc(_cullReasonLabel(t))} 而 cull 的">✕ ${esc(_cullReasonLabel(t))} <span style="opacity:0.7">${count}</span></span>`;
+    }).join("");
+  }
+
+  // Wire pill clicks via delegation so dynamic rebuilds keep working.
+  document.getElementById("cullReasonFilter")?.addEventListener("click", e => {
+    const pill = e.target.closest(".pill[data-cull-reason]");
+    if (!pill) return;
+    const token = pill.dataset.cullReason;
+    filterState.cullReason = (filterState.cullReason === token) ? null : token;
+    _renderCullReasonFilters();
+    render();
+  });
+
+  // Kick off the taxonomy fetch. Doesn't block anything — the picker
+  // just stays empty until the response lands (typically <50 ms on
+  // localhost).
+  _loadCullReasonTaxonomy();
 
   // P0.3 — prev/next burst walk + keyboard navigation. Compute the
   // list of REAL burst cluster keys (size ≥ 2) once; openCompare
@@ -3250,7 +4735,286 @@
     } else if (e.key === "ArrowRight" || e.key === "k") {
       e.preventDefault(); _cmpStep(1);
     }
+    // P-UX-7 — z = toggle synced 1:1 across all compare cells.
+    // + / − = wheel-equivalent zoom centered on viewport.
+    else if (e.key === "z" || e.key === "Z") {
+      e.preventDefault(); _cmpZoomToggleSynced(null, null);
+    }
+    else if (e.key === "0") {
+      e.preventDefault();
+      _cmpZoom.panNX = 0; _cmpZoom.panNY = 0;
+      _applyCmpTransform();
+    }
+    else if (e.key === "+" || e.key === "=") {
+      e.preventDefault();
+      const r = cmpBody.getBoundingClientRect();
+      _cmpZoomToPoint((_cmpZoom.scale || 1) * 1.25,
+                       r.left + r.width / 2, r.top + r.height / 2);
+    }
+    else if (e.key === "-" || e.key === "_") {
+      e.preventDefault();
+      const r = cmpBody.getBoundingClientRect();
+      _cmpZoomToPoint((_cmpZoom.scale || 1) / 1.25,
+                       r.left + r.width / 2, r.top + r.height / 2);
+    }
   });
+
+  // ==================================================================
+  // P-UX-7 — synced 1:1 zoom across compare cells.
+  //
+  //   click any cell (fit)     → 1:1 zoom centered on click point;
+  //                              ALL cells zoom in to the same
+  //                              normalized point of their image
+  //   click any cell (zoomed)  → back to fit (no pan)
+  //   drag any cell            → pan ALL cells in lock-step
+  //   wheel on any cell        → zoom all centered on cursor
+  //   z                        → keyboard toggle (above)
+  //
+  // Hi-res swap: each cell's <img> starts as a thumbnail; on first
+  // zoom-in we swap each src to /full/<run>/<fn>?w=3600 so 1:1 shows
+  // real pixels instead of upscaled thumb mush. The data-full attr
+  // already on each .img-wrap (set by openCompare) carries the
+  // hi-res URL base.
+  //
+  // The shared state uses NORMALIZED pan (0..1 fractions of fit-cell
+  // size) so cells of different aspect ratios still pan to the same
+  // relative region — what photographers actually want when comparing
+  // near-duplicates with subtly different crops.
+  // ==================================================================
+
+  const _CMP_MIN_SCALE = 1.0;
+  const _CMP_MAX_SCALE = 8.0;
+  const _CMP_CLICK_DRAG_THRESH = 4;
+
+  const _cmpZoom = {
+    scale: 1.0,
+    panNX: 0.0,
+    panNY: 0.0,
+    mode: "fit",
+    dragging: false,
+    dragCellEl: null,
+    dragStartClientX: 0,
+    dragStartClientY: 0,
+    dragStartPanNX: 0,
+    dragStartPanNY: 0,
+    mouseDownPos: null,
+    hiResLoaded: false,
+  };
+
+  function _cmpResetZoom() {
+    _cmpZoom.scale = 1.0;
+    _cmpZoom.panNX = 0.0;
+    _cmpZoom.panNY = 0.0;
+    _cmpZoom.mode = "fit";
+    _cmpZoom.hiResLoaded = false;
+    _applyCmpTransform();
+    _updateCmpZoomBadge();
+    cmpBody.querySelectorAll(".cmp-cell")
+      .forEach(c => c.classList.remove("zoomed", "dragging"));
+  }
+
+  function _applyCmpTransform() {
+    if (!cmpBody) return;
+    const { scale, panNX, panNY } = _cmpZoom;
+    cmpBody.querySelectorAll(".cmp-cell img").forEach(img => {
+      const w = img.offsetWidth, h = img.offsetHeight;
+      if (!w || !h) return;
+      const panX = panNX * w;
+      const panY = panNY * h;
+      const parts = [];
+      if (panX || panY) parts.push(`translate(${panX}px, ${panY}px)`);
+      if (scale !== 1) parts.push(`scale(${scale})`);
+      img.style.transform = parts.join(" ");
+    });
+  }
+
+  function _updateCmpZoomBadge() {
+    const badge = document.getElementById("cmpZoomBadge");
+    const tgl = document.getElementById("cmpZoomToggle");
+    if (!badge || !tgl) return;
+    if (_cmpZoom.mode === "fit") {
+      badge.classList.remove("show");
+      badge.textContent = "";
+      tgl.classList.remove("active");
+    } else {
+      const firstImg = cmpBody.querySelector(".cmp-cell img");
+      const oneOneScale = (firstImg && firstImg.offsetWidth && firstImg.naturalWidth)
+        ? firstImg.naturalWidth / firstImg.offsetWidth : 1;
+      const pct = Math.round(100 * _cmpZoom.scale / oneOneScale);
+      badge.textContent = pct === 100 ? "1:1" : `${Math.round(100 * _cmpZoom.scale)}%`;
+      badge.classList.add("show");
+      tgl.classList.add("active");
+    }
+  }
+
+  // Map a screen-coord (clientX, clientY) to a normalized image
+  // coordinate (-0.5..0.5) for the cell the cursor is currently in.
+  // Returns { cell, nx, ny } or null if cursor isn't over any cell.
+  function _cmpCursorNorm(clientX, clientY) {
+    const cells = cmpBody.querySelectorAll(".cmp-cell img");
+    for (const img of cells) {
+      const r = img.getBoundingClientRect();
+      if (clientX >= r.left && clientX <= r.right
+          && clientY >= r.top && clientY <= r.bottom) {
+        const nx = (clientX - (r.left + r.width  / 2)) / r.width;
+        const ny = (clientY - (r.top  + r.height / 2)) / r.height;
+        return { cell: img.closest(".cmp-cell"), nx, ny };
+      }
+    }
+    return null;
+  }
+
+  // Swap each cell's <img> to its hi-res companion the first time
+  // the user zooms in on this batch. Cached state on _cmpZoom so
+  // we don't re-request per-zoom-step.
+  function _maybeLoadCmpHiRes() {
+    if (_cmpZoom.hiResLoaded) return;
+    _cmpZoom.hiResLoaded = true;  // optimistic — fetch in background
+    cmpBody.querySelectorAll(".cmp-cell .img-wrap").forEach(wrap => {
+      const baseFull = wrap.dataset.full;
+      if (!baseFull) return;
+      const url = `${baseFull}?w=3600`;
+      const img = wrap.querySelector("img");
+      if (!img) return;
+      const pre = new Image();
+      pre.onload = () => {
+        // Only swap if the cmp modal is still open AND this img is
+        // still the same DOM node (user may have switched cluster).
+        if (!cmpModal.classList.contains("show")) return;
+        if (!img.isConnected) return;
+        img.src = url;
+      };
+      pre.src = url;
+    });
+  }
+
+  // Core zoom-to-point operation: takes a target scale + a screen
+  // coord, anchors the cursor's normalized point under the cursor
+  // (so the spot you clicked stays put while everything else
+  // scales around it), applies the transform to all cells.
+  function _cmpZoomToPoint(newScale, clientX, clientY) {
+    newScale = Math.max(_CMP_MIN_SCALE, Math.min(_CMP_MAX_SCALE, newScale));
+    let cursor = null;
+    if (clientX != null && clientY != null) {
+      cursor = _cmpCursorNorm(clientX, clientY);
+    }
+    if (!cursor) cursor = { nx: 0, ny: 0 };
+    const s = _cmpZoom.scale || 1;
+    // panNX' = cursorNX * (1 - s'/s) + panNX * (s'/s)
+    _cmpZoom.panNX = cursor.nx * (1 - newScale / s) + _cmpZoom.panNX * (newScale / s);
+    _cmpZoom.panNY = cursor.ny * (1 - newScale / s) + _cmpZoom.panNY * (newScale / s);
+    _cmpZoom.scale = newScale;
+    _cmpZoom.mode = newScale > 1.001 ? "1to1" : "fit";
+    if (_cmpZoom.mode === "fit") {
+      _cmpZoom.panNX = 0; _cmpZoom.panNY = 0;
+      cmpBody.querySelectorAll(".cmp-cell").forEach(c =>
+        c.classList.remove("zoomed", "dragging"));
+    } else {
+      cmpBody.querySelectorAll(".cmp-cell").forEach(c =>
+        c.classList.add("zoomed"));
+      _maybeLoadCmpHiRes();
+    }
+    _clampCmpPan();
+    _applyCmpTransform();
+    _updateCmpZoomBadge();
+  }
+
+  function _clampCmpPan() {
+    // panNX/Y are normalized to fit-cell-size; max meaningful pan is
+    // ±(scale - 1)/2 because at scale=1 the image fills the cell
+    // exactly (no overflow), at scale=2 the overflow per side is
+    // (2-1)/2 = 0.5 of fit size.
+    const maxN = Math.max(0, (_cmpZoom.scale - 1) / 2);
+    _cmpZoom.panNX = Math.max(-maxN, Math.min(maxN, _cmpZoom.panNX));
+    _cmpZoom.panNY = Math.max(-maxN, Math.min(maxN, _cmpZoom.panNY));
+  }
+
+  function _cmpZoomToggleSynced(clientX, clientY) {
+    if (_cmpZoom.mode === "fit") {
+      // Pick a target scale based on the first cell's natural-to-
+      // displayed ratio so "1:1" really means 1 image px per screen
+      // px on that cell (and roughly that on the others).
+      const firstImg = cmpBody.querySelector(".cmp-cell img");
+      const target = (firstImg && firstImg.offsetWidth && firstImg.naturalWidth)
+        ? firstImg.naturalWidth / firstImg.offsetWidth : 2.5;
+      if (clientX == null || clientY == null) {
+        const r = cmpBody.getBoundingClientRect();
+        clientX = r.left + r.width / 2;
+        clientY = r.top  + r.height / 2;
+      }
+      _cmpZoomToPoint(target, clientX, clientY);
+    } else {
+      _cmpZoomToPoint(1.0, null, null);
+    }
+  }
+
+  // Toolbar button — toggles synced zoom around viewport center.
+  document.getElementById("cmpZoomToggle")?.addEventListener("click", e => {
+    e.stopPropagation();
+    _cmpZoomToggleSynced(null, null);
+  });
+
+  // Mouse interactions on cmpBody — delegation so they survive every
+  // openCompare* rebuild. Click toggles; drag pans; wheel zooms.
+  cmpBody.addEventListener("mousedown", e => {
+    if (e.button !== 0) return;
+    const img = e.target.closest(".cmp-cell img");
+    if (!img) return;
+    _cmpZoom.mouseDownPos = { x: e.clientX, y: e.clientY };
+    if (_cmpZoom.mode === "1to1") {
+      e.preventDefault();
+      _cmpZoom.dragging = true;
+      _cmpZoom.dragCellEl = img.closest(".cmp-cell");
+      _cmpZoom.dragStartClientX = e.clientX;
+      _cmpZoom.dragStartClientY = e.clientY;
+      _cmpZoom.dragStartPanNX = _cmpZoom.panNX;
+      _cmpZoom.dragStartPanNY = _cmpZoom.panNY;
+      cmpBody.querySelectorAll(".cmp-cell").forEach(c =>
+        c.classList.add("dragging"));
+    }
+  });
+  window.addEventListener("mousemove", e => {
+    if (!_cmpZoom.dragging) return;
+    // Translate screen-delta into normalized pan delta using the
+    // dragged cell's dimensions as the reference.
+    const refImg = _cmpZoom.dragCellEl
+      ? _cmpZoom.dragCellEl.querySelector("img")
+      : cmpBody.querySelector(".cmp-cell img");
+    if (!refImg || !refImg.offsetWidth || !refImg.offsetHeight) return;
+    const dnx = (e.clientX - _cmpZoom.dragStartClientX) / refImg.offsetWidth;
+    const dny = (e.clientY - _cmpZoom.dragStartClientY) / refImg.offsetHeight;
+    _cmpZoom.panNX = _cmpZoom.dragStartPanNX + dnx;
+    _cmpZoom.panNY = _cmpZoom.dragStartPanNY + dny;
+    _clampCmpPan();
+    _applyCmpTransform();
+  });
+  window.addEventListener("mouseup", () => {
+    if (_cmpZoom.dragging) {
+      _cmpZoom.dragging = false;
+      _cmpZoom.dragCellEl = null;
+      cmpBody.querySelectorAll(".cmp-cell").forEach(c =>
+        c.classList.remove("dragging"));
+    }
+  });
+  cmpBody.addEventListener("click", e => {
+    const img = e.target.closest(".cmp-cell img");
+    if (!img) return;
+    const down = _cmpZoom.mouseDownPos;
+    _cmpZoom.mouseDownPos = null;
+    if (down) {
+      const dist = Math.hypot(e.clientX - down.x, e.clientY - down.y);
+      if (dist > _CMP_CLICK_DRAG_THRESH) return;
+    }
+    e.stopPropagation();
+    _cmpZoomToggleSynced(e.clientX, e.clientY);
+  });
+  cmpBody.addEventListener("wheel", e => {
+    if (!cmpModal.classList.contains("show")) return;
+    if (!e.target.closest(".cmp-cell img")) return;
+    e.preventDefault();
+    const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+    _cmpZoomToPoint((_cmpZoom.scale || 1) * factor, e.clientX, e.clientY);
+  }, { passive: false });
 
   // XMP export — POST /export/<run_id>.
   // Two buttons:
@@ -3261,7 +5025,10 @@
   const exportStatus = document.getElementById("exportStatus");
 
   if (summary.mode === "scan") {
-    exportAlongsideBtn.style.display = "inline-block";
+    // P-UX-1 — clear the inline display:none rather than forcing
+    // "inline-block"; the alongside button now lives inside the
+    // export-menu panel where CSS lays items out vertically.
+    exportAlongsideBtn.style.display = "";
   }
 
   async function doExport(target, btn, successHtml) {
@@ -3298,6 +5065,40 @@
     doExport("alongside", exportAlongsideBtn, data =>
       `已写入 <b>${data.written}</b> 个 .xmp 到原图旁边${data.skipped ? `,跳过 ${data.skipped} 个找不到原图的` : ''} · ${summary.origin_folder || ''}`
     );
+  });
+
+  // P-UX-1 — export-menu open/close + outside-click + Esc dismiss.
+  // The inner buttons keep their original IDs (see above) so their
+  // event handlers bind unchanged; this block only manages panel
+  // visibility. Clicking any item fires its native handler then
+  // closes the panel on the next microtask.
+  const exportMenuBtn = document.getElementById("exportMenuBtn");
+  const exportMenuPanel = document.getElementById("exportMenuPanel");
+  function setExportMenu(open) {
+    exportMenuPanel.classList.toggle("show", open);
+    exportMenuBtn.classList.toggle("open", open);
+    exportMenuBtn.setAttribute("aria-expanded", String(open));
+  }
+  exportMenuBtn.addEventListener("click", e => {
+    e.stopPropagation();
+    setExportMenu(!exportMenuPanel.classList.contains("show"));
+  });
+  exportMenuPanel.addEventListener("click", e => {
+    if (e.target.closest(".export-btn")) {
+      // setTimeout so the item's own click handler runs first
+      // (avoids closing before the action fires).
+      setTimeout(() => setExportMenu(false), 0);
+    }
+  });
+  document.addEventListener("click", e => {
+    if (!exportMenuPanel.classList.contains("show")) return;
+    if (e.target.closest(".export-menu")) return;
+    setExportMenu(false);
+  });
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && exportMenuPanel.classList.contains("show")) {
+      setExportMenu(false);
+    }
   });
 })();
 </script>
