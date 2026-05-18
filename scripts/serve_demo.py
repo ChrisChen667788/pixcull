@@ -1834,6 +1834,9 @@ class _Handler(BaseHTTPRequestHandler):
         # INFRA-4 — daily LLM spend ledger
         if sub == "/llm_budget":
             return self._serve_llm_budget()
+        # INFRA-2 — multi-machine sync status
+        if sub == "/sync_status":
+            return self._serve_sync_status()
         # V28 — user / team profile endpoints
         if sub == "/users":
             return self._serve_users_list()
@@ -1894,6 +1897,9 @@ class _Handler(BaseHTTPRequestHandler):
         # V28 — user management
         if sub == "/users":
             return self._handle_users_create()
+        # INFRA-2 — explicit "configure sync now" trigger
+        if sub == "/sync_configure":
+            return self._handle_sync_configure()
         # V28.2 — switch active user via cookie (no restart needed)
         if sub == "/users/active":
             return self._handle_users_active_post()
@@ -2000,6 +2006,14 @@ class _Handler(BaseHTTPRequestHandler):
                 {"method": "GET",  "path": "/api/v1/llm_budget",
                  "doc":    "daily LLM spend (yuan) + cap from "
                           "PIXCULL_LLM_BUDGET_YUAN env (default 10)"},
+                # INFRA-2 — multi-machine sync
+                {"method": "GET",  "path": "/api/v1/sync_status",
+                 "doc":    "sync target + per-subtree state for "
+                          "the active user"},
+                {"method": "POST", "path": "/api/v1/sync_configure",
+                 "body":   "{user_id?: str, team_id?: str}",
+                 "doc":    "wire sync subtrees (symlinks) for a user "
+                          "or team to the PIXCULL_SYNC_DIR target"},
                 # P2.4 — active-learning queue
                 {"method": "GET",  "path": "/api/v1/runs/<run_id>/next_to_label",
                  "params": {"n": "1 (default) | N for batch queue"},
@@ -2970,6 +2984,52 @@ class _Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     # --- V28 multi-user / team endpoints ----------------------------------
+    def _serve_sync_status(self) -> bool:
+        """INFRA-2 — sync configuration + per-subtree state for the
+        active user. See pixcull.sync.status() for the shape."""
+        from pixcull.sync import status as sync_status
+        body = _safe_dumps(sync_status()).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+        return True
+
+    def _handle_sync_configure(self) -> bool:
+        """INFRA-2 — POST /api/v1/sync_configure with body
+        ``{user_id?: str, team_id?: str}`` (one of). Wires the
+        sync subtrees for that user/team (symlinks them through
+        the shared target). Idempotent.
+        """
+        n = int(self.headers.get("Content-Length") or "0")
+        try:
+            body = json.loads(self.rfile.read(n).decode("utf-8") or "{}")
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            self.send_error(400, "invalid JSON")
+            return True
+        uid = str(body.get("user_id") or "").strip()
+        tid = str(body.get("team_id") or "").strip()
+        if not uid and not tid:
+            self.send_error(400, "expected user_id or team_id")
+            return True
+        from pixcull.sync import (
+            configure_sync_for_user, configure_sync_for_team,
+        )
+        if uid:
+            result = configure_sync_for_user(uid)
+        else:
+            result = configure_sync_for_team(tid)
+        out = _safe_dumps(result).encode("utf-8")
+        self.send_response(200 if result.get("ok") else 400)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(out)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(out)
+        return True
+
     def _serve_llm_budget(self) -> bool:
         """INFRA-4 — daily LLM spend ledger snapshot.
 
@@ -3082,7 +3142,19 @@ class _Handler(BaseHTTPRequestHandler):
         except ValueError as exc:
             self.send_error(400, str(exc))
             return True
-        out = _safe_dumps({"ok": True, **result}).encode("utf-8")
+        # INFRA-2 — auto-wire sync if a shared target is configured.
+        # No-op (and no error) when PIXCULL_SYNC_DIR isn't set, so
+        # single-machine installs are unaffected.
+        sync_result = None
+        try:
+            from pixcull.sync import configure_sync_for_user
+            sync_result = configure_sync_for_user(result["user_id"])
+        except Exception as exc:  # noqa: BLE001
+            sync_result = {"ok": False, "error": str(exc)}
+        out_body: dict = {"ok": True, **result}
+        if sync_result and sync_result.get("ok"):
+            out_body["sync"] = "configured"
+        out = _safe_dumps(out_body).encode("utf-8")
         self.send_response(201 if result["created"] else 200)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(out)))
