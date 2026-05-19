@@ -65,7 +65,7 @@ def cull_one_image(image) -> tuple[str, str, str]:
 
     _ensure_pipeline()
     from pixcull.pipeline.worker import analyze_one
-    from pixcull.scoring.advice import build_advice
+    from pixcull.scoring.photo_advice import build_advice
 
     # Gradio gives us a numpy array; persist to a temp file so analyze_one
     # can use the existing path-based pipeline without modification.

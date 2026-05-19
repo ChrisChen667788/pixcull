@@ -66,7 +66,8 @@ jobs:
         run: |
           python -c "import pixcull; print('pixcull: ok')"
           python -c "from pixcull.scoring.rubric import RUBRIC_AXES; print(f'axes: {[a.name for a in RUBRIC_AXES]}')"
-          python -c "from pixcull.scoring.advice import build_advice; print('advice: ok')"
+          python -c "from pixcull.scoring.photo_advice import build_advice; print('photo_advice: ok')"
+          python -c "from pixcull.scoring.decision import decide; print('decision: ok')"
           python -c "import pixcull.tether; print('tether: ok')"
           python -c "import pixcull.sync; print('sync: ok')"
 
