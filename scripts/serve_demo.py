@@ -1865,6 +1865,10 @@ class _Handler(BaseHTTPRequestHandler):
         # appear (style_modes, scenes, etc.).
         if sub == "/taxonomy":
             return self._serve_api_v1_taxonomy()
+        # P-UX-9 — accumulated cull-reason counts so the picker can
+        # sort by user frequency + admin can show "your cull habits".
+        if sub == "/cull_reasons/stats":
+            return self._serve_api_v1_cull_reason_stats()
         # INFRA-4 — daily LLM spend ledger
         if sub == "/llm_budget":
             return self._serve_llm_budget()
@@ -2036,6 +2040,9 @@ class _Handler(BaseHTTPRequestHandler):
                 # labels live in the UI layer.
                 {"method": "GET",  "path": "/api/v1/taxonomy",
                  "doc":    "stable enums: cull_reasons (+future labels)"},
+                # P-UX-9 — usage stats over the user's annotations history
+                {"method": "GET",  "path": "/api/v1/cull_reasons/stats",
+                 "doc":    "accumulated cull-reason counts across all runs"},
                 {"method": "GET",  "path": "/api/v1/runs/<run_id>/decisions",
                  "doc":    "{filename: keep|maybe|cull} + src_paths"},
                 {"method": "GET",  "path": "/api/v1/runs/<run_id>/face_clusters",
@@ -2380,6 +2387,73 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "max-age=300")
+        self.end_headers()
+        self.wfile.write(body)
+        return True
+
+    def _serve_api_v1_cull_reason_stats(self) -> bool:
+        """P-UX-9 — accumulated cull-reason counts across the user's
+        runs. Drives two things on the client:
+
+          1. Reorder the cull-reason picker so the tokens you reach
+             for most are listed first (less mouse travel).
+          2. Power a "your cull habits" card on /admin so the user
+             can see their own bias over time.
+
+        Read-only aggregate: walks every ``annotations.jsonl`` under
+        ``/tmp/pixcull_demo/<run_id>/output/``, tallies the
+        ``cull_reason`` field on rows whose latest annotation was
+        ``cull``. Latest-wins per (run, filename) so a row that was
+        first marked cull/focus_miss then later flipped to keep
+        contributes zero.
+        """
+        from collections import Counter
+        counts: Counter[str] = Counter()
+        n_scanned = 0
+        n_with_reason = 0
+        for run_dir in sorted(_DEMO_ROOT.glob("*/")):
+            ann_path = run_dir / "output" / "annotations.jsonl"
+            if not ann_path.is_file():
+                continue
+            # Latest-wins reducer
+            latest: dict[str, dict] = {}
+            try:
+                with open(ann_path, encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            rec = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+                        fn = rec.get("filename")
+                        if not fn:
+                            continue
+                        latest[fn] = rec
+                        n_scanned += 1
+            except OSError:
+                continue
+            for rec in latest.values():
+                if str(rec.get("overall_label", "")).strip().lower() != "cull":
+                    continue
+                reason = str(rec.get("cull_reason") or "").strip().lower()
+                if reason and reason in _CULL_REASONS:
+                    counts[reason] += 1
+                    n_with_reason += 1
+
+        # Stable order: same taxonomy order as /taxonomy; clients
+        # combine this with the count to sort their picker.
+        body = _safe_dumps({
+            "schema":   "pixcull.api.v1.cull_reason_stats.v1",
+            "counts":   {t: counts.get(t, 0) for t in _CULL_REASONS},
+            "total_culls_with_reason": n_with_reason,
+            "total_annotations_scanned": n_scanned,
+        }).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "max-age=30")
         self.end_headers()
         self.wfile.write(body)
         return True

@@ -4564,15 +4564,34 @@
   let _cullReasonFn      = null;   // the photo currently being asked about
   let _cullReasonTimer   = null;   // setTimeout handle for auto-dismiss
 
+  // P-UX-9 — accumulated counts across the user's annotation history.
+  // Server returns one count per taxonomy token; we use it to sort the
+  // picker pills so high-frequency reasons land first (less travel).
+  var _CULL_REASONS_STATS = {};   // {token: count}
+
   async function _loadCullReasonTaxonomy() {
     try {
-      const r = await fetch("/api/v1/taxonomy");
-      if (!r.ok) return;
-      const d = await r.json();
+      // Fire the taxonomy + stats in parallel — they're independent.
+      const [taxoR, statsR] = await Promise.all([
+        fetch("/api/v1/taxonomy"),
+        fetch("/api/v1/cull_reasons/stats"),
+      ]);
+      if (!taxoR.ok) return;
+      const d = await taxoR.json();
       _CULL_REASONS_LIST = Array.isArray(d.cull_reasons) ? d.cull_reasons : [];
       _CULL_REASONS_MAP = {};
       for (const e of _CULL_REASONS_LIST) {
         if (e && e.token) _CULL_REASONS_MAP[e.token] = e.label_zh || e.token;
+      }
+      if (statsR && statsR.ok) {
+        const sd = await statsR.json();
+        _CULL_REASONS_STATS = sd.counts || {};
+        // Sort taxonomy in place by descending user frequency. Tokens
+        // with no history keep their declared taxonomy order at the
+        // tail (sort is stable per spec).
+        _CULL_REASONS_LIST.sort((a, b) =>
+          (_CULL_REASONS_STATS[b.token] || 0) - (_CULL_REASONS_STATS[a.token] || 0)
+        );
       }
       _populateReasonPills();
       // If any row already has a cull_reason from a prior session,
@@ -4583,10 +4602,18 @@
 
   function _populateReasonPills() {
     if (!cullReasonPills) return;
-    cullReasonPills.innerHTML = _CULL_REASONS_LIST.map(e =>
-      `<button class="reason-pill" data-token="${esc(e.token)}" type="button"
-               title="${esc(e.label_zh || e.token)}">${esc(e.label_zh || e.token)}</button>`
-    ).join(" ");
+    // Render the sorted-by-frequency tokens; append a small "× N"
+    // count hint to the user's top-3 most-used so they see their
+    // own bias.
+    const total = Object.values(_CULL_REASONS_STATS).reduce((s,n) => s+n, 0);
+    cullReasonPills.innerHTML = _CULL_REASONS_LIST.map((e, idx) => {
+      const n = _CULL_REASONS_STATS[e.token] || 0;
+      const hint = (idx < 3 && n > 0 && total >= 5)
+        ? ` <span style="opacity:0.55;font-size:10px">×${n}</span>`
+        : "";
+      return `<button class="reason-pill" data-token="${esc(e.token)}" type="button"
+               title="${esc(e.label_zh || e.token)}${n > 0 ? ` · 你已用过 ${n} 次` : ''}">${esc(e.label_zh || e.token)}${hint}</button>`;
+    }).join(" ");
   }
 
   function _hideCullReasonTray() {
