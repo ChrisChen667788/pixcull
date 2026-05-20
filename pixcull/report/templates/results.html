@@ -2,6 +2,10 @@
 <html lang="zh">
 <head>
   <meta charset="utf-8">
+  <!-- P-UX-17 — mobile-responsive layout needs viewport meta -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#0b0d10">
   <title>PixCull — 分析结果</title>
   <style>
     :root {
@@ -1031,6 +1035,121 @@
       .shortcuts-hint {
         bottom: 12px; right: 12px;
         padding: 8px 14px; font-size: 12px;
+      }
+    }
+
+    /* P-UX-17 — mobile-responsive layout overhaul. The desktop UI is
+       built around mouse + keyboard; phones need:
+         - bigger touch targets (action buttons 36px min)
+         - single-column or 2-column grid (down from auto-fill 220px)
+         - filter row scrollable horizontally with snap points
+         - header compactness (drop secondary stats)
+         - lightbox falls back to single column (info-pane stacks
+           BELOW the image, not to the right)
+       Breakpoint at 640px (iPhone Pro Max landscape) covers all
+       phones in portrait + iPhone in landscape. Tablets stay on
+       desktop layout. */
+    @media (max-width: 640px) {
+      header {
+        padding: 10px 12px 8px;
+      }
+      h1 { font-size: 14px; }
+      .stats {
+        font-size: 11px; gap: 10px;
+        max-height: 1.6em;
+        overflow: hidden;          /* hide secondary stats on phone */
+      }
+      .stats .vertical-badge,
+      .stats .promote-btn {
+        font-size: 10.5px;
+      }
+      .filters {
+        display: flex; flex-wrap: nowrap;
+        overflow-x: auto; overflow-y: hidden;
+        scroll-snap-type: x proximity;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: 6px;
+        margin: 6px -12px 0;        /* bleed to edges so scroll feels native */
+        padding-left: 12px; padding-right: 12px;
+      }
+      .filters::-webkit-scrollbar { display: none; }
+      .filters .pill, .filters .filter-group .pill {
+        flex-shrink: 0;
+        scroll-snap-align: start;
+        min-height: 28px;          /* bigger tap target */
+        line-height: 1.7;
+        font-size: 11.5px;
+      }
+      .filters .filter-divider { display: none; }   /* collapse dividers on phone */
+      .filters .export-menu-trigger,
+      .filters button.export-btn,
+      .filters .sort-select {
+        min-height: 32px; padding: 0 14px;
+        font-size: 12px;
+      }
+      .filters .export-status {
+        flex-basis: 100%;          /* status drops to new line if shown */
+        text-align: center;
+      }
+      .grid {
+        grid-template-columns: 1fr 1fr;    /* 2 cards per row on phone */
+        gap: 8px;
+        padding: 8px 8px 32px;
+      }
+      .card .body { padding: 6px 8px 8px; }
+      .row1 .fn { font-size: 10px; }
+      .row3 {
+        grid-template-columns: repeat(6, 1fr);
+        gap: 2px; font-size: 9px;
+      }
+      .row4, .row5 { font-size: 9.5px; }
+      /* Lightbox: stack info pane BELOW image on phones (image
+         takes ~ 60vh, info pane scrolls below). The desktop
+         "1fr 380px" was unusable on a ≤ 400px wide phone. */
+      .lightbox.show {
+        grid-template-columns: 1fr;
+        grid-template-rows: 60vh 1fr;
+      }
+      .lightbox .info-pane {
+        border-left: 0;
+        border-top: 1px solid var(--border);
+        padding: 12px 14px;
+        max-height: calc(40vh - 24px);
+      }
+      .lightbox .info-pane .decision-toolbar {
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 6px;
+      }
+      .lightbox .info-pane .decision-btn {
+        min-height: 44px;          /* iOS HIG tap target */
+      }
+      .lightbox .close-btn { right: 12px; top: 12px; }
+      .lightbox .nav-btn {
+        width: 32px; height: 44px; font-size: 18px;
+      }
+      .lightbox .nav-prev { left: 8px; }
+      .lightbox .nav-next { right: 8px; }
+      .lightbox .rotate-grp { display: none; }   /* unused on touch */
+      .lightbox .zoom-grp { top: 12px; left: 12px; }
+      .lightbox .zoom-btn { height: 36px; }
+      /* Floating compare/cull-reason trays: keep them at the top
+         but full-width so reasons don't horizontal-overflow. */
+      .cmp-pick-tray, .cull-reason-tray {
+        left: 8px; right: 8px;
+        width: auto;
+        transform: translateY(-20px);
+        max-width: none;
+      }
+      .cmp-pick-tray.show, .cull-reason-tray.show {
+        transform: translateY(0);
+        left: 8px; right: 8px;
+      }
+      .cull-reason-tray .reason-pill {
+        min-height: 30px; padding: 6px 12px;
+      }
+      .cmp-modal .cmp-body {
+        grid-auto-flow: row;       /* on phone, stack cmp cells vertically */
+        grid-auto-columns: 1fr;
       }
     }
     .ann-card {
