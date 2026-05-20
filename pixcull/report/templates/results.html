@@ -2006,7 +2006,14 @@
     // photos first).
     buildActiveLearningFilter();
   }
-  buildDynamicFilters();
+  // ``buildDynamicFilters()`` reaches `buildFaceFilters` /
+  // `buildLocationFilters` / `buildBurstPeakFilter` which close over
+  // ``faceClustersState`` / ``locationsState`` / ``_REAL_BURSTS`` —
+  // all declared below with `let` / `const`. Function declarations
+  // are hoisted, but the variables they reference aren't (TDZ),
+  // so the call has to wait until all of them are initialized.
+  // See the explicit invocation farther down, right after
+  // ``buildBurstPeakFilter()`` is declared.
 
   // V22.1 — face cluster chip rendering. Out-of-line so we can re-run
   // it after a label edit refreshes the cluster info from /face_clusters.
@@ -2396,6 +2403,20 @@
       });
     });
   }
+
+  // All TDZ-sensitive state that buildDynamicFilters transitively
+  // closes over (faceClustersState, locationsState, locationsNoGps,
+  // _BURST_CLUSTER_SIZES, _REAL_BURSTS, _ACTIVE_LEARNING_N) is now
+  // declared above — safe to populate every filter pill group.
+  //
+  // P-UX-8 — previously this call sat right after buildDynamicFilters
+  // was defined (~line 2009). It crashed with "Cannot access
+  // 'faceClustersState' before initialization" in any browser that
+  // strictly enforces TDZ (Chromium-headless does; Safari is more
+  // forgiving which is why the bug stayed hidden). End-user symptom:
+  // the entire grid silently fails to render — the page draws the
+  // header and filter pills only, leaving the photo area black.
+  buildDynamicFilters();
 
   // Sort key function
   function sortRows(arr) {
