@@ -691,6 +691,20 @@
       border: 1px dashed rgba(251, 191, 36, 0.45);
       background: rgba(251, 191, 36, 0.06);
     }
+    /* P-UX-11 — ± half-width rendered under each axis value when we
+       have at least 2 scoring sources for that axis. Lets the user
+       eyeball "this axis is solid (±0.1)" vs "this axis is a guess
+       (±1.4)" without opening the per-source breakdown. */
+    .lightbox .axis-grid .ax .err {
+      display: block; font-size: 9.5px;
+      color: var(--muted); opacity: 0.85;
+      margin-top: 1px;
+      font-family: ui-monospace, monospace;
+    }
+    .lightbox .axis-grid .ax.noisy .err {
+      color: #f6d166;
+      opacity: 1;
+    }
 
     /* P-UX-4 — chip on the card showing the cull reason once set.
        Lives in row1 alongside the decision badge. Subtle red tint
@@ -3212,9 +3226,16 @@
       const cls = s == null ? "" : `s${Math.round(s)}`;
       const noise = perAxisNoise[n];
       const noisyCls = (noise != null && noise >= 0.7) ? " noisy" : "";
+      // P-UX-11 — show ± half-width when we have a stddev from ≥ 2
+      // sources. Suppress when the value itself is unavailable.
+      // Hides for "trivial" disagreement (<0.05★) — it adds noise.
+      const errChip = (s != null && noise != null && noise >= 0.05)
+        ? `<span class="err">±${noise.toFixed(2)}</span>` : "";
       const noisyTitle = (noise != null && noise >= 0.7)
-        ? ` title="4 个评分源在此维度上分歧 ${noise.toFixed(2)}★ stddev"` : "";
-      return `<div class="ax ${cls}${noisyCls}"${noisyTitle}><span class="k">${axisAbbr[n]}</span><span class="v">${s == null ? '--' : s.toFixed(1)}</span></div>`;
+        ? ` title="4 个评分源在此维度上分歧 ±${noise.toFixed(2)}★ — 建议人工复核"` :
+          (noise != null && noise >= 0.05)
+            ? ` title="4 源在此维度的标准差 ±${noise.toFixed(2)}★"` : "";
+      return `<div class="ax ${cls}${noisyCls}"${noisyTitle}><span class="k">${axisAbbr[n]}</span><span class="v">${s == null ? '--' : s.toFixed(1)}</span>${errChip}</div>`;
     }).join("");
     // Per-source comparison (auto / model / vlm / human if present)
     // V16.0 — labels translated through I18N_SOURCE so users see
