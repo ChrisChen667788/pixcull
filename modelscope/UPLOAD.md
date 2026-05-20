@@ -39,6 +39,28 @@ ModelScope 账号 [@haozi667788](https://www.modelscope.cn/profile/haozi667788)
 
 ## 路径 B:创建「创空间 / Studio」可交互演示
 
+> **更新 (2026-05-20)**: 我已经用 ModelScope 的内部 API
+> (`POST /api/v1/studios`) 帮你**预创建好**了 Studio 外壳:
+> https://www.modelscope.cn/studios/haozi667788/pixcull-demo
+>
+> 创建参数(MIT · public · CPU · Gradio 4.44.0 · 50 GB disk ·
+> 1440min 自动休眠)。你现在只需 **30 秒手动上传 2 个文件**就能
+> 让它跑起来:
+>
+> 1. 打开 https://www.modelscope.cn/studios/haozi667788/pixcull-demo
+> 2. 进 "代码" / "Files" 标签
+> 3. 拖入 `modelscope/app.py` + `modelscope/requirements.txt`
+> 4. 点 "提交并构建" / "Deploy"
+> 5. ModelScope 自动 build (~5 min); 然后 https://...../pixcull-demo
+>    就是一个可交互的 Gradio 单图评分 demo
+>
+> 备注:ModelScope SDK 不支持 Studio repo 类型 (HubApi.create_repo
+> 显式 reject `studio`),Studio 文件上传也没有公开 HTTP 端点 —
+> 上传必须走 web UI。这部分流程截至 2026-05 仍是 ModelScope 平台
+> 设计的硬性手动门槛。
+
+### 下面是 ModelScope 没暴露 Studio 创建 SDK 之前的旧路径(已不需要)
+
 完整版需要本机部署,但 Studio 里跑一个 *单张演示* 是吸引点击的
 最佳方式。
 
