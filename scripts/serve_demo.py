@@ -2115,6 +2115,9 @@ class _Handler(BaseHTTPRequestHandler):
         # INFRA-2 — explicit "configure sync now" trigger
         if sub == "/sync_configure":
             return self._handle_sync_configure()
+        # INFRA-3 — multi-shooter event merge
+        if sub == "/events/merge":
+            return self._handle_event_merge()
         # P2.2 — tether session start / stop
         if sub == "/tether/start":
             return self._handle_tether_start()
@@ -2192,6 +2195,11 @@ class _Handler(BaseHTTPRequestHandler):
                  "doc":    "top-k visually-similar photos for the "
                           "lightbox 'similar' row. Composite score "
                           "over burst+scene+face+GPS+rubric."},
+                # INFRA-3 — multi-shooter event merge (MVP)
+                {"method": "POST", "path": "/api/v1/events/merge",
+                 "body":   "{source_runs: [run_id, ...], name?: str}",
+                 "doc":    "concatenate ≥ 2 source runs into a merged "
+                          "event run; reuses /results UI"},
                 # P-UX-15 — read Lr/C1 XMP edits back into annotations
                 {"method": "POST", "path": "/api/v1/runs/<run_id>/lr_sync",
                  "doc":    "scan each photo's XMP sidecar; treat "
@@ -2561,6 +2569,53 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "max-age=300")
+        self.end_headers()
+        self.wfile.write(body)
+        return True
+
+    def _handle_event_merge(self) -> bool:
+        """INFRA-3 — combine two or more runs into a merged event.
+
+        POST /api/v1/events/merge
+          body: {source_runs: [run_id, ...], name?: str}
+          → {ok, merged_run_id, source_runs, name}
+
+        The merged run lives in /tmp/pixcull_demo/event_XXXX/ and
+        reuses the existing /results/<run> infrastructure (it just
+        IS a normal run, with an event_meta.json sidecar).
+        """
+        clen = int(self.headers.get("Content-Length", "0") or "0")
+        if clen <= 0 or clen > 65536:
+            self._reject_upload(400, "expected JSON body"); return True
+        try:
+            params = json.loads(self.rfile.read(clen).decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            self._reject_upload(400, f"JSON parse failed: {exc}"); return True
+        source_runs = params.get("source_runs") or []
+        name = str(params.get("name") or "") or None
+        if (not isinstance(source_runs, list) or len(source_runs) < 2 or
+                not all(isinstance(s, str) and s for s in source_runs)):
+            self._reject_upload(400, "source_runs must be a list of ≥ 2 run IDs")
+            return True
+        try:
+            from pixcull.events import merge_runs
+            merged_id = merge_runs(source_runs, name=name, demo_root=_DEMO_ROOT)
+        except FileNotFoundError as exc:
+            self._reject_upload(404, str(exc)); return True
+        except (ValueError, OSError) as exc:
+            self._reject_upload(400, str(exc)); return True
+
+        body = _safe_dumps({
+            "ok":             True,
+            "merged_run_id":  merged_id,
+            "source_runs":    source_runs,
+            "name":           name,
+            "url":            f"/results/{merged_id}",
+        }).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
         return True
