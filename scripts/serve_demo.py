@@ -10018,13 +10018,51 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
     if (e.target === overlay) close();
   });
 
-  // Auto-show on first visit, OR if URL has ?tour=1
+  // P-UX-19 — onboarding tour is now OPT-IN. The previous behavior
+  // (auto-show on first visit + modal-block the whole page) was
+  // friction for the 80% of users who'd rather click around than
+  // sit through a tour. New flow:
+  //
+  //   1. First-time visitors see a small dismissible 👋 tip pill
+  //      at the bottom-right of the page. NO modal blocking.
+  //   2. Click the pill → fires the full 5-step tour.
+  //   3. Dismiss the pill → localStorage remembers; pill never
+  //      reappears. The tour stays reachable via ?tour=1.
+  //   4. Returning users see nothing extra.
   const forced = location.search.includes("tour=1");
   let done = false;
   try { done = localStorage.getItem("pixcull_tour_done") === "1"; } catch (e) {}
-  if (forced || !done) {
+
+  if (forced) {
     paint();
     overlay.classList.add("show");
+  } else if (!done) {
+    // Float a small 👋 pill — non-blocking, dismissible.
+    const pill = document.createElement("button");
+    pill.className = "shortcuts-hint";   // reuse existing floating-pill style
+    pill.style.cssText = "bottom: 60px; right: 18px; cursor: pointer; border: 0; background: rgba(59,130,246,0.92); color: white;";
+    pill.type = "button";
+    pill.setAttribute("aria-label", "打开新手引导");
+    pill.innerHTML = "👋 30 秒看完核心用法 <span style=\"opacity:0.6;margin-left:8px;font-size:11px\">✕</span>";
+    document.body.appendChild(pill);
+
+    const dismissAndRemember = () => {
+      pill.remove();
+      try { localStorage.setItem("pixcull_tour_done", "1"); } catch (e) {}
+    };
+    pill.addEventListener("click", e => {
+      // X icon (the trailing ✕) dismisses without showing the tour.
+      // Anything else opens the tour AND marks dismissed.
+      const rect = pill.getBoundingClientRect();
+      const xZone = rect.right - 24;
+      if (e.clientX >= xZone) {
+        dismissAndRemember();
+        return;
+      }
+      paint();
+      overlay.classList.add("show");
+      dismissAndRemember();
+    });
   }
 })();
 </script>
