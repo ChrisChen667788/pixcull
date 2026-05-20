@@ -2139,6 +2139,10 @@ class _Handler(BaseHTTPRequestHandler):
                     self._handle_export(run_id); return True
                 if rest == "auto_caption":
                     self._handle_auto_caption(run_id); return True
+                # P-UX-15 — pull edits from Lr/C1 XMP sidecars back
+                # into PixCull annotations (round-trip).
+                if rest == "lr_sync":
+                    return self._handle_lr_sync(run_id)
                 # P2.1 V0.2 — annotation alias for the iOS swipe-to-
                 # label flow. Forwards to the existing
                 # ``_handle_save_annotation`` which takes "run/filename".
@@ -2188,6 +2192,12 @@ class _Handler(BaseHTTPRequestHandler):
                  "doc":    "top-k visually-similar photos for the "
                           "lightbox 'similar' row. Composite score "
                           "over burst+scene+face+GPS+rubric."},
+                # P-UX-15 — read Lr/C1 XMP edits back into annotations
+                {"method": "POST", "path": "/api/v1/runs/<run_id>/lr_sync",
+                 "doc":    "scan each photo's XMP sidecar; treat "
+                          "xmp:Rating as authoritative human verdict "
+                          "(5/4→keep, 3→maybe, 2/1→cull, 0→skip); "
+                          "append per-row annotations for changes"},
                 {"method": "POST", "path": "/api/v1/runs/<run_id>/annotate/<filename>",
                  "body":   "{overall_label: keep|maybe|cull, "
                           "axes?: {}, overall_rationale?: str, "
@@ -2551,6 +2561,117 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "max-age=300")
+        self.end_headers()
+        self.wfile.write(body)
+        return True
+
+    def _handle_lr_sync(self, run_id: str) -> bool:
+        """P-UX-15 — Lr / Capture One round-trip.
+
+        Walks every photo in the run, looks for its XMP sidecar next
+        to the source image, and treats the sidecar's xmp:Rating as
+        an authoritative human verdict (Lr / C1 are the source of
+        truth once the photographer edits there).
+
+        Mapping (mirrors decision_to_xmp inverted):
+          5★, 4★ → keep
+          3★      → maybe
+          2★, 1★ → cull
+          0★      → no signal, skip
+
+        Writes a human annotation per row whose sidecar rating
+        differs from our current decision. Append-only, latest-wins,
+        same shape as a manual /annotation POST.
+
+        POST body: empty / ignored.
+        Response: {ok, run_id, sidecars_seen, applied, skipped, unchanged}
+        """
+        from pixcull.io.xmp import read_xmp as read_xmp_sidecar  # type: ignore
+
+        run = _get_run(run_id) or _reload_run_from_disk(run_id)
+        if run is None:
+            self._reject_upload(404, f"no such run: {run_id}")
+            return True
+        result = _build_results(run_id)
+        if result is None:
+            self._reject_upload(425, "results not ready"); return True
+        rows, _summary = result
+
+        rating_to_decision = {
+            5: "keep", 4: "keep",
+            3: "maybe",
+            2: "cull", 1: "cull",
+        }
+        applied: list[dict] = []
+        unchanged: list[str] = []
+        skipped: list[str] = []
+        sidecars_seen = 0
+
+        ann_path = Path(run["output_dir"]) / "annotations.jsonl"
+        ann_path.parent.mkdir(parents=True, exist_ok=True)
+        ts = time.time()
+
+        for r in rows:
+            src = r.get("src_path") or ""
+            if not src:
+                # Upload-mode runs without a recoverable source path
+                # can't have an Lr/C1 sidecar to read.
+                skipped.append(r.get("filename") or "")
+                continue
+            try:
+                xmp = read_xmp_sidecar(Path(src))
+            except Exception:
+                skipped.append(r.get("filename") or "")
+                continue
+            rating = xmp.get("rating", 0) or 0
+            if rating == 0:
+                skipped.append(r.get("filename") or "")
+                continue
+            sidecars_seen += 1
+            new_decision = rating_to_decision.get(rating)
+            if new_decision is None:
+                skipped.append(r.get("filename") or "")
+                continue
+            # Skip if PixCull already agrees with Lr
+            if r.get("decision") == new_decision:
+                unchanged.append(r.get("filename") or "")
+                continue
+            label_hint = xmp.get("color_label") or ""
+            rationale = f"Lr/C1 round-trip: rating={rating}★ label={label_hint!r}"
+            record = {
+                "filename":          r.get("filename"),
+                "axes":              {},
+                "overall_label":     new_decision,
+                "overall_rationale": rationale,
+                "cull_reason":       "",
+                "source":            "lr_round_trip",
+                "lr_rating":         rating,
+                "lr_color_label":    label_hint,
+                "timestamp":         ts,
+            }
+            with open(ann_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(record, ensure_ascii=False) + "\n")
+            applied.append({
+                "filename": r.get("filename"),
+                "from":     r.get("decision"),
+                "to":       new_decision,
+                "rating":   rating,
+                "label":    label_hint,
+            })
+
+        body = _safe_dumps({
+            "ok":              True,
+            "run_id":          run_id,
+            "sidecars_seen":   sidecars_seen,
+            "applied":         len(applied),
+            "applied_detail":  applied[:50],
+            "unchanged":       len(unchanged),
+            "skipped":         len(skipped),
+        }).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
         return True

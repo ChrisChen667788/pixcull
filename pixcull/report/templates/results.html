@@ -1421,6 +1421,15 @@
                auto_captions.json; next /export embeds them. -->
           <button class="export-btn" id="captionBtn" role="menuitem"
              title="自动生成 IPTC Caption-Abstract(场景+人物+地点+评价)。Shift-点 = LLM 润色(走 DeepSeek + INFRA-4 预算)">📝 自动 Caption</button>
+          <!-- P-UX-15 — round-trip from Lightroom/Capture One.
+               Reads each photo's XMP sidecar (after you've edited
+               in Lr/C1) and treats the xmp:Rating as authoritative
+               human verdict. Mapping: 5/4★→keep, 3★→maybe,
+               2/1★→cull, 0★→skip. Lets you cull in Lr if you
+               prefer that keyboard rhythm, then come back here
+               with the verdicts already merged. -->
+          <button class="export-btn" id="lrSyncBtn" role="menuitem"
+             title="从 Lr/C1 的 XMP sidecar 读回 rating(5/4★=keep,3★=maybe,2/1★=cull),合并为人工标注 — 让你在 Lr 里选完片回来 PixCull 也认得">↩ 从 Lr/C1 同步评分</button>
         </div>
       </div>
       <span class="export-status" id="exportStatus"></span>
@@ -4325,6 +4334,40 @@
       toast("Caption 生成失败: " + e.message, "error");
     } finally {
       btn.disabled = false; btn.textContent = orig;
+    }
+  });
+
+  // P-UX-15 — Lr/C1 round-trip button. POSTs to /api/v1/runs/<id>/lr_sync
+  // which walks every photo's XMP sidecar, maps Lr rating → PixCull
+  // decision, and appends human annotations for changes. Confirms
+  // before running because it mutates annotations.jsonl irreversibly
+  // (well — undoable per-row via the existing undo stack, but the
+  // pattern is "lots of changes at once" so a confirm is friendly).
+  const lrSyncBtn = document.getElementById("lrSyncBtn");
+  if (lrSyncBtn) lrSyncBtn.addEventListener("click", async () => {
+    if (!confirm(
+        "将扫描每张照片的 XMP sidecar,把 Lr/C1 的 rating 同步成 PixCull 的 keep/maybe/cull " +
+        "标注(5/4★→keep, 3★→maybe, 2/1★→cull, 0★→跳过)。\n\n" +
+        "继续?")) return;
+    const orig = lrSyncBtn.textContent;
+    lrSyncBtn.disabled = true; lrSyncBtn.textContent = "↩ 扫描中…";
+    try {
+      const res = await fetch(`/api/v1/runs/${run_id}/lr_sync`, {
+        method: "POST", headers: {"Content-Type": "application/json"}, body: "{}",
+      });
+      const d = await res.json();
+      if (!res.ok || !d.ok) throw new Error(d.error || "HTTP " + res.status);
+      const msg = `已读 ${d.sidecars_seen} 个 XMP · 应用 ${d.applied} 条变更 · 已一致 ${d.unchanged} · 跳过 ${d.skipped}`;
+      toast(msg, "success");
+      // Refresh local state — easiest is reload, since we just
+      // wrote N annotations and the in-memory row state is stale.
+      if (d.applied > 0) {
+        setTimeout(() => location.reload(), 1200);
+      }
+    } catch (e) {
+      toast("Lr/C1 同步失败: " + e.message, "error");
+    } finally {
+      lrSyncBtn.disabled = false; lrSyncBtn.textContent = orig;
     }
   });
 
