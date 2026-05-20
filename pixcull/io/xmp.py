@@ -237,7 +237,7 @@ def read_xmp(image_path: Path) -> dict:
     import re  # local — read path is rarely hit
 
     sidecar = image_path.with_suffix(".xmp")
-    out = {"rating": 0, "color_label": ""}
+    out = {"rating": 0, "color_label": "", "source": ""}
     if not sidecar.exists():
         return out
     try:
@@ -255,7 +255,87 @@ def read_xmp(image_path: Path) -> dict:
     )
     if m:
         out["color_label"] = (m.group(1) or m.group(2) or "").strip()
+    if out["rating"] or out["color_label"]:
+        out["source"] = "xmp"
     return out
+
+
+def read_c1_session_sidecar(image_path: Path) -> dict:
+    """P-PRO-2 — read a Capture One Session ``.cos`` sidecar.
+
+    C1 stores per-image metadata in either:
+      a) ``.xmp`` next to the image (when "Sync sidecar XMP" is
+         enabled in Preferences — same shape as Lr, handled by
+         ``read_xmp`` above)
+      b) ``.cos`` files in a sibling ``CaptureOne/Cache`` or
+         ``CaptureOne/Settings<N>/`` folder, which is the
+         session's own metadata store
+
+    The ``.cos`` is an XML file but with a different tag scheme
+    than Lr's XMP — uses ``Rating`` and ``ColorTag`` directly,
+    no ``xmp:`` namespace prefix.
+
+    Returns the same shape as ``read_xmp`` so callers can use
+    either interchangeably. The ``source`` field is set to
+    ``"c1_session"`` so audit logs can tell which sidecar fed
+    the verdict.
+    """
+    import re
+
+    out = {"rating": 0, "color_label": "", "source": ""}
+    img_dir = image_path.parent
+    img_name = image_path.name
+    # Common C1 session layout: <session>/CaptureOne/Settings<N>/<image>.cos
+    for settings_dir in img_dir.glob("CaptureOne/Settings*"):
+        cos_path = settings_dir / (img_name + ".cos")
+        if cos_path.is_file():
+            break
+    else:
+        # Catalog layout (less common): <session>/CaptureOne/Cache/...
+        cos_path = img_dir / "CaptureOne" / "Cache" / (img_name + ".cos")
+        if not cos_path.is_file():
+            return out
+    try:
+        text = cos_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return out
+
+    # C1 .cos rating: <Rating>5</Rating> or Rating="5"
+    m = re.search(r'<Rating[^>]*>(\d)</Rating>', text) or \
+        re.search(r'Rating="(\d)"', text)
+    if m:
+        out["rating"] = int(m.group(1))
+    # C1 .cos color tag: integers 0-7 mapped to color labels
+    # 0=None, 1=Red, 2=Yellow, 3=Green, 4=Blue, 5=Purple,
+    # 6=Pink, 7=Orange (matches the C1 UI order)
+    m = re.search(r'<ColorTag[^>]*>(\d)</ColorTag>', text) or \
+        re.search(r'ColorTag="(\d)"', text)
+    if m:
+        tag_int = int(m.group(1))
+        out["color_label"] = {
+            0: "", 1: "Red", 2: "Yellow", 3: "Green", 4: "Blue",
+            5: "Purple", 6: "Pink", 7: "Orange",
+        }.get(tag_int, "")
+    if out["rating"] or out["color_label"]:
+        out["source"] = "c1_session"
+    return out
+
+
+def read_sidecar_any(image_path: Path) -> dict:
+    """Try every supported sidecar format in priority order.
+
+    Returns the first sidecar with non-zero rating; falls back to
+    an empty result if nothing found. ``source`` field tells the
+    caller which format actually had the data.
+
+    Priority:
+      1. ``.xmp``  — universal (Lr + C1 sync-xmp + Bridge)
+      2. ``.cos``  — Capture One session-only fallback
+    """
+    out = read_xmp(image_path)
+    if out.get("rating") or out.get("color_label"):
+        return out
+    return read_c1_session_sidecar(image_path)
 
 
 # ---------------------------------------------------------------------------

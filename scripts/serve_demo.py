@@ -2641,7 +2641,9 @@ class _Handler(BaseHTTPRequestHandler):
         POST body: empty / ignored.
         Response: {ok, run_id, sidecars_seen, applied, skipped, unchanged}
         """
-        from pixcull.io.xmp import read_xmp as read_xmp_sidecar  # type: ignore
+        # P-PRO-2 — read_sidecar_any tries .xmp first (Lr + C1 sync-xmp +
+        # Bridge) then falls back to .cos (Capture One session-only).
+        from pixcull.io.xmp import read_sidecar_any as read_xmp_sidecar  # type: ignore
 
         run = _get_run(run_id) or _reload_run_from_disk(run_id)
         if run is None:
@@ -2692,7 +2694,12 @@ class _Handler(BaseHTTPRequestHandler):
                 unchanged.append(r.get("filename") or "")
                 continue
             label_hint = xmp.get("color_label") or ""
-            rationale = f"Lr/C1 round-trip: rating={rating}★ label={label_hint!r}"
+            sidecar_source = xmp.get("source") or "xmp"   # P-PRO-2
+            tool_label = {
+                "xmp":         "Lr/C1",
+                "c1_session":  "Capture One",
+            }.get(sidecar_source, "sidecar")
+            rationale = f"{tool_label} round-trip: rating={rating}★ label={label_hint!r}"
             record = {
                 "filename":          r.get("filename"),
                 "axes":              {},
@@ -2702,16 +2709,18 @@ class _Handler(BaseHTTPRequestHandler):
                 "source":            "lr_round_trip",
                 "lr_rating":         rating,
                 "lr_color_label":    label_hint,
+                "sidecar_format":    sidecar_source,        # P-PRO-2
                 "timestamp":         ts,
             }
             with open(ann_path, "a", encoding="utf-8") as f:
                 f.write(json.dumps(record, ensure_ascii=False) + "\n")
             applied.append({
-                "filename": r.get("filename"),
-                "from":     r.get("decision"),
-                "to":       new_decision,
-                "rating":   rating,
-                "label":    label_hint,
+                "filename":        r.get("filename"),
+                "from":            r.get("decision"),
+                "to":              new_decision,
+                "rating":          rating,
+                "label":           label_hint,
+                "sidecar_format":  sidecar_source,
             })
 
         body = _safe_dumps({
