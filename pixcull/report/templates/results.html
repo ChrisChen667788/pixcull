@@ -442,6 +442,29 @@
     .card.keep { border-left: 3px solid var(--keep); }
     .card.maybe { border-left: 3px solid var(--maybe); }
     .card.cull { border-left: 3px solid var(--cull); opacity: 0.65; }
+    /* P-UX-18 — virtualized placeholder. Same outer shape + radius as
+       a real card so the layout doesn't jump when materialization
+       happens; subtle pulse so the user knows it's loading rather
+       than blank. */
+    .card-placeholder {
+      background: linear-gradient(
+        100deg,
+        rgba(255,255,255,0.02) 0%,
+        rgba(255,255,255,0.05) 50%,
+        rgba(255,255,255,0.02) 100%
+      );
+      background-size: 200% 100%;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      animation: pcPlaceholderShimmer 1.6s linear infinite;
+    }
+    @keyframes pcPlaceholderShimmer {
+      0%   { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .card-placeholder { animation: none; }
+    }
     .card.cull:hover { opacity: 1; }
     /* V9.1 keyboard focus ring */
     .card.focused {
@@ -2879,9 +2902,19 @@
     // remainder in 80-card slices via requestAnimationFrame so the page
     // becomes interactive while the rest streams in. Skip the dance
     // entirely below the threshold — it's already imperceptible there.
+    //
+    // P-UX-18 — for batches above HUGE_THRESHOLD, switch to a third
+    // strategy: emit placeholder divs for cards past FIRST_BATCH and
+    // materialize them via IntersectionObserver as they scroll near
+    // the viewport. Caps live-card DOM weight at first-batch +
+    // visible-viewport-worth ≈ ~150 even when the batch has 5000+
+    // rows. The placeholder takes the same approximate card height
+    // so the scrollbar position stays accurate.
     const BATCH_THRESHOLD = 200;
     const FIRST_BATCH = 100;
     const CHUNK = 80;
+    const HUGE_THRESHOLD = 500;
+    const PLACEHOLDER_HEIGHT = 340;   // approx card render height
 
     // Cancel any in-flight progressive render from a previous filter
     // change so we don't double-insert cards.
@@ -2939,8 +2972,8 @@
     } else if (segments.length <= BATCH_THRESHOLD) {
       // Small batch: one shot, fastest path.
       grid.innerHTML = html;
-    } else {
-      // Big batch: paint the above-fold portion, then stream the rest
+    } else if (segments.length <= HUGE_THRESHOLD) {
+      // Mid batch: paint the above-fold portion, then stream the rest
       // in chunks so the user can scroll/click immediately.
       grid.innerHTML = segments.slice(0, FIRST_BATCH).join("");
       const remaining = segments.slice(FIRST_BATCH);
@@ -2960,6 +2993,58 @@
         if (idx < remaining.length) requestAnimationFrame(step);
       }
       requestAnimationFrame(step);
+    } else {
+      // P-UX-18 — huge batch (≥ 500 rows). Avoid materializing all
+      // cards: only render the first FIRST_BATCH eagerly, and emit
+      // placeholder divs (with the approximate card height) for
+      // the rest. An IntersectionObserver watches each placeholder
+      // and replaces it with the real card HTML when it's within
+      // 2 viewports of the user's scroll. The total live-card DOM
+      // weight stays roughly proportional to viewport size, not
+      // batch size — a 5000-photo wedding renders just as smoothly
+      // as a 200-photo session.
+      grid.innerHTML = segments.slice(0, FIRST_BATCH).join("");
+      // Emit placeholder divs for the rest. data-idx points back to
+      // the segment array entry; data-fn carries the filename so
+      // keyboard nav can still index by filename even before
+      // materialization.
+      const placeholderFrag = document.createDocumentFragment();
+      for (let i = FIRST_BATCH; i < segments.length; i++) {
+        const ph = document.createElement("div");
+        ph.className = "card-placeholder";
+        ph.style.height = PLACEHOLDER_HEIGHT + "px";
+        ph.dataset.idx = String(i);
+        placeholderFrag.appendChild(ph);
+      }
+      grid.appendChild(placeholderFrag);
+
+      // Tear down a previous observer (filter change → re-render
+      // means new placeholders, the old IO would still hold refs).
+      if (window._pcCardObserver) {
+        try { window._pcCardObserver.disconnect(); } catch (_e) {}
+      }
+      const io = new IntersectionObserver((entries) => {
+        if (token.cancelled) return;
+        for (const ent of entries) {
+          if (!ent.isIntersecting) continue;
+          const ph = ent.target;
+          const idx = parseInt(ph.dataset.idx || "-1", 10);
+          if (idx < 0 || idx >= segments.length) continue;
+          const tmp = document.createElement("div");
+          tmp.innerHTML = segments[idx];
+          // Move the real card into the placeholder's slot.
+          while (tmp.firstChild) ph.parentNode.insertBefore(tmp.firstChild, ph);
+          io.unobserve(ph);
+          ph.remove();
+        }
+      }, {
+        // Materialize 2 viewports ahead so the user never sees an
+        // empty placeholder during normal scrolling.
+        rootMargin: "200% 0px 200% 0px",
+        threshold: 0,
+      });
+      grid.querySelectorAll(".card-placeholder").forEach(el => io.observe(el));
+      window._pcCardObserver = io;
     }
   }
   render();
