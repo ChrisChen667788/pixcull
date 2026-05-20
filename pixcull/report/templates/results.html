@@ -3206,13 +3206,17 @@
     _lbZoom.scale = 1.0;
     _lbZoom.panX = 0; _lbZoom.panY = 0;
     _lbZoom.hiResLoaded = false;
+    _lbZoom.hiResReady = false;
     _lbZoom.hiResUrl = null;
+    _lbZoom.hiResPreloadingUrl = null;
+    _lbZoom.hiResPreloadEl = null;
     // V14.1 — tell the server how big our viewport actually is so it
     // can serve a viewport-bucketed cache (800/1200/1600/...) instead
     // of always 1600 even on a 13" laptop. devicePixelRatio handles
     // retina (a 2× display wants 2× pixels for crispness).
     const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
     const w = Math.round(Math.min(window.innerWidth || 1280, 2400) * dpr);
+    lbImg.style.opacity = "1";  // reset from any in-flight cross-fade
     lbImg.src = `/full/${run_id}/${encodeURIComponent(fn)}?w=${w}`;
     lbInfo.innerHTML = renderInfoPane(r);
     // V16.1 — apply any persisted manual rotation override for this
@@ -3222,6 +3226,13 @@
     // wants a different framing than EXIF intended.
     _applyLbTransform();
     _updateLbZoomBadge();
+    // P-CORE-4 — kick off opportunistic hi-res preload AFTER a beat,
+    // so the visible image loads first (network/decoder prioritized).
+    // setTimeout 200ms is enough for the viewport-bucketed image to
+    // get on screen without competing for bandwidth.
+    setTimeout(() => {
+      if (_lbCurrentFn === fn) _maybeLoadHiRes(true);   // opportunistic
+    }, 200);
     lbImg.classList.remove("zoomed", "dragging");
     const _zt = document.getElementById("lbZoomToggle");
     if (_zt) _zt.classList.remove("active");
@@ -3465,28 +3476,81 @@
     _lbZoom.panY = Math.max(-maxY, Math.min(maxY, _lbZoom.panY));
   }
 
-  // Pre-load the hi-res image once per photo on first zoom-in. The
-  // viewport-bucketed image stays on screen until the hi-res arrives,
-  // then we swap src. This avoids the dreaded "blank → high-res
-  // pop-in" flash and keeps perceived latency near-zero.
-  function _maybeLoadHiRes() {
+  // P-CORE-4 — Hi-res preload + cross-fade swap. Pre-V0.2 behavior
+  // was: wait until the user CLICKS to zoom, THEN fetch the 3600px
+  // image, then hard-swap src. The ~200-400 ms gap between click
+  // and pixel-sharp 1:1 was visible as a flash.
+  //
+  // V0.2 behavior: kick off the hi-res fetch immediately when the
+  // lightbox opens (idle network + decoding="async" so it doesn't
+  // block the main thread). When the user first clicks to zoom,
+  // the hi-res is usually already decoded — swap with a 120ms
+  // cross-fade so the swap itself is invisible.
+  //
+  // ``opportunistic=true`` means "we're not at 1:1 yet, just
+  // pre-warming"; ``opportunistic=false`` is the original first-
+  // zoom path which needs to actually swap now.
+  function _maybeLoadHiRes(opportunistic = false) {
     if (_lbZoom.hiResLoaded) return;
     const fn = _lbCurrentFn;
     if (!fn) return;
     const url = `/full/${run_id}/${encodeURIComponent(fn)}?w=3600`;
-    const pre = new Image();
-    pre.onload = () => {
-      // User may have navigated to another frame while we were
-      // loading; bail if so.
-      if (_lbCurrentFn !== fn) return;
+
+    // If preload is already ready and the user just entered zoom,
+    // swap with a fade right now.
+    if (_lbZoom.hiResReady && _lbZoom.hiResUrl === url && !opportunistic) {
+      _swapToHiResWithFade(url);
+      return;
+    }
+
+    // Start (or reuse) a preload.
+    if (_lbZoom.hiResPreloadingUrl !== url) {
+      const pre = new Image();
+      pre.decoding = "async";
+      pre.onload = () => {
+        if (_lbCurrentFn !== fn) return;     // user navigated away
+        _lbZoom.hiResUrl = url;
+        _lbZoom.hiResReady = true;
+        // If by the time the preload finishes the user has ALREADY
+        // entered zoom (signaled by lbImg having .zoomed class),
+        // swap with fade now. Otherwise we keep the bytes in the
+        // browser cache for whenever they do click.
+        if (lbImg.classList.contains("zoomed")) {
+          _swapToHiResWithFade(url);
+        }
+      };
+      pre.src = url;
+      _lbZoom.hiResPreloadingUrl = url;
+      _lbZoom.hiResPreloadEl = pre;
+    }
+
+    // If the user clicked to zoom but the preload isn't done yet,
+    // we'll get the fade when the onload handler above fires.
+  }
+
+  function _swapToHiResWithFade(url) {
+    if (_lbZoom.hiResLoaded) return;
+    _lbZoom.hiResLoaded = true;
+    // Cross-fade: dial opacity to 0 → swap src → next-frame back to 1.
+    // The transition CSS on lbImg already covers transform; we apply
+    // opacity inline temporarily so we don't pollute the shared rule.
+    const prevTransition = lbImg.style.transition;
+    lbImg.style.transition = "opacity 120ms ease, " + (prevTransition || "transform 220ms cubic-bezier(0.16, 1, 0.3, 1)");
+    lbImg.style.opacity = "0";
+    lbImg.addEventListener("transitionend", function onEnd(e) {
+      if (e.propertyName !== "opacity") return;
+      lbImg.removeEventListener("transitionend", onEnd);
       lbImg.src = url;
-      _lbZoom.hiResLoaded = true;
-      _lbZoom.hiResUrl = url;
-      // Re-paint the badge (naturalWidth now reflects hi-res, so the
-      // "1:1" target scale changes accordingly).
-      lbImg.addEventListener("load", _updateLbZoomBadge, { once: true });
-    };
-    pre.src = url;
+      // Wait for the new src to decode before re-revealing.
+      lbImg.addEventListener("load", () => {
+        requestAnimationFrame(() => {
+          lbImg.style.opacity = "1";
+          // Restore transition rule after the fade-in completes
+          setTimeout(() => { lbImg.style.transition = prevTransition || ""; }, 200);
+          _updateLbZoomBadge();
+        });
+      }, { once: true });
+    });
   }
 
   // Zoom to a target scale around a viewport point (clientX, clientY).
