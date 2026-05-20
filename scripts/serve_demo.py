@@ -2086,6 +2086,10 @@ class _Handler(BaseHTTPRequestHandler):
             if rest.startswith("row/"):
                 fn = rest[len("row/"):]
                 return self._serve_api_v1_row(run_id, fn)
+            # P-AI-2 — text→image CLIP semantic search
+            if rest == "semantic_search":
+                qs = urlparse(self.path).query
+                return self._serve_api_v1_semantic_search(run_id, qs)
             # P-UX-5 — composite-similarity nearest-neighbor lookup
             # ("show me photos like this one") for the lightbox's
             # similar-photos row. Returns up to k=5 by default.
@@ -2189,6 +2193,13 @@ class _Handler(BaseHTTPRequestHandler):
                 {"method": "GET",  "path": "/api/v1/runs/<run_id>/row/<filename>",
                  "doc":    "single rich row (V20 advice + rubric stars + "
                           "GPS + face clusters) for the iOS lightbox"},
+                # P-AI-2 — CLIP-backed text→image semantic search
+                {"method": "GET",  "path": "/api/v1/runs/<run_id>/semantic_search",
+                 "params": {"q":  "free-text query (e.g. 'flying bird' / 'long-exposure waterfall' / 飞鸟展翅)",
+                            "k":  "10 (default), max 50"},
+                 "doc":    "rank photos by CLIP cosine similarity to "
+                          "the query. Lazy-builds embeddings.npz "
+                          "on first hit (slow first call, fast after)."},
                 # P-UX-5 — composite-similarity nearest-neighbor
                 {"method": "GET",  "path": "/api/v1/runs/<run_id>/similar/<filename>",
                  "params": {"k": "5 (default), max 20"},
@@ -2389,6 +2400,106 @@ class _Handler(BaseHTTPRequestHandler):
             "offset":  offset,
             "limit":   limit,
             "rows":    page,
+        }).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+        return True
+
+    def _serve_api_v1_semantic_search(self, run_id: str, qs: str) -> bool:
+        """P-AI-2 — CLIP text→image semantic search.
+
+        URL: GET /api/v1/runs/<run_id>/semantic_search?q=<text>&k=10
+
+        On first call for a given run, walks every photo, CLIP-encodes
+        it, and persists ``output/embeddings.npz`` (~512 floats/photo
+        ≈ 2 KB/photo). Subsequent calls reuse the cache and complete
+        in single-digit ms.
+
+        Returns ranked list of (filename, similarity) plus a build_ms
+        + cached flags so the UI can show "first search builds the
+        cache — ~X seconds" feedback.
+        """
+        from urllib.parse import parse_qs
+
+        result = _build_results(run_id)
+        if result is None:
+            self.send_error(404, "no such run"); return True
+        rows, _ = result
+
+        qparams = parse_qs(qs) if qs else {}
+        query = (qparams.get("q", [""])[0] or "").strip()
+        if not query:
+            self._reject_upload(400, "q (query) is required"); return True
+        try:
+            k = int(qparams.get("k", ["10"])[0])
+        except (ValueError, TypeError):
+            k = 10
+        k = max(1, min(50, k))
+
+        run = _get_run(run_id) or _reload_run_from_disk(run_id)
+        if run is None:
+            self.send_error(404, "no such run"); return True
+        cache_path = Path(run["output_dir"]) / "embeddings.npz"
+
+        from pixcull.scoring.semantic_search import (
+            load_embeddings_cache, build_embeddings_cache, search as _semsearch,
+        )
+        cache = load_embeddings_cache(cache_path)
+        was_cached = cache is not None
+        build_ms = 0.0
+        if cache is None:
+            # Resolve absolute image paths from each row's manifest /
+            # src_path. We only encode photos whose path is reachable;
+            # missing files just get skipped.
+            paths: list[Path] = []
+            for r in rows:
+                fn = r.get("filename")
+                src = r.get("src_path")
+                if src and Path(src).is_file():
+                    paths.append(Path(src))
+                else:
+                    p = _resolve_image_source(run, fn) if fn else None
+                    if p and p.is_file():
+                        paths.append(p)
+            if not paths:
+                self._reject_upload(425,
+                    "no reachable photos to build embeddings cache"); return True
+            t0 = time.time()
+            cache = build_embeddings_cache(paths, cache_path)
+            build_ms = (time.time() - t0) * 1000.0
+
+        try:
+            ranked = _semsearch(query, cache=cache, k=k)
+        except Exception as e:
+            self._reject_upload(500, f"search failed: {e}"); return True
+
+        # Enrich with each match's decision + score_final so the UI
+        # can show context next to the result rows.
+        by_fn = {r.get("filename"): r for r in rows}
+        results = []
+        for fn, sim in ranked:
+            r = by_fn.get(fn) or {}
+            results.append({
+                "filename":     fn,
+                "similarity":   round(sim, 4),
+                "decision":     r.get("decision"),
+                "score_final":  r.get("score_final"),
+                "scene":        r.get("scene"),
+            })
+
+        body = _safe_dumps({
+            "schema":      "pixcull.api.v1.semantic_search.v1",
+            "run_id":      run_id,
+            "query":       query,
+            "k":           k,
+            "cached":      was_cached,
+            "build_ms":    round(build_ms, 1),
+            "n_photos":    int(cache["vectors"].shape[0]),
+            "results":     results,
         }).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json; charset=utf-8")

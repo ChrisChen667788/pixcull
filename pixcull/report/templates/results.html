@@ -1537,6 +1537,18 @@
       </select>
       <button class="export-btn" id="saveViewBtn"
               title="把当前筛选 + 排序 + cull 原因 存为命名预设">★</button>
+      <!-- P-AI-2: CLIP-backed semantic search. Type a query in
+           natural language (or a phrase like "飞鸟展翅" / "long-
+           exposure waterfall") and the grid filters to the top-K
+           photos by CLIP cosine similarity. First search lazily
+           builds embeddings.npz (~50 ms/photo on CPU) and caches
+           it under the run's output/ dir. -->
+      <input id="semSearchInput" class="sort-select" type="search"
+             placeholder="🔎 语义搜索 (自然语言)"
+             title="CLIP 语义搜索 · Enter 执行"
+             style="min-width:180px;font-size:11px" />
+      <button class="export-btn" id="semSearchClearBtn"
+              style="display:none" title="清除语义搜索过滤">✕</button>
 
       <button class="export-btn" id="kbdHelpBtn" title="键盘快捷键 (?)" style="font-family:ui-monospace,monospace">?</button>
       <button class="export-btn" id="annNextBtn" title="按 active learning 优先级标注 — 优先暴露规则与 rescorer 不一致、概率临界、聚类分裂的图">▸ 标注下一张</button>
@@ -2179,6 +2191,10 @@
     // P-UX-4 — when set, only rows whose cull_reason matches pass.
     // null = no filter; one of _CULL_REASONS_LIST tokens otherwise.
     cullReason: null,
+    // P-AI-2 — semantic-search filter. When the user runs a query,
+    // we store the result filenames as a Set so the grid filter can
+    // intersect against it. {q: string, filenames: Set} or null.
+    semSearch: null,
     sort: "default",
   };
 
@@ -2704,6 +2720,15 @@
     if (filterState.cullReason) {
       filtered = filtered.filter(r => r.cull_reason === filterState.cullReason);
     }
+    // P-AI-2 — semantic search filter. Intersect against the CLIP
+    // top-K result set; preserves the existing decision/scene/face
+    // filters so "show keep + matching 'flying bird'" composes
+    // naturally.
+    if (filterState.semSearch && filterState.semSearch.filenames) {
+      filtered = filtered.filter(r =>
+        filterState.semSearch.filenames.has(r.filename)
+      );
+    }
     // V22.1 — face cluster filter. A row passes if any of its face
     // cluster ids is currently selected. Empty set = no filter.
     if (filterState.faceClusters.size > 0) {
@@ -3128,6 +3153,48 @@
       (names.length ? `<option value="__delete__">删除预设…</option>` : "");
   }
   _rebuildPresetDropdown();
+
+  // P-AI-2 — CLIP semantic search input. Enter runs the query; the
+  // first query for a run takes 1-2 minutes to build the embeddings
+  // cache (CLIP encode every photo) — subsequent queries are <100ms.
+  // We show an inline loading state in the input + toast the result.
+  const semSearchInput = document.getElementById("semSearchInput");
+  const semSearchClearBtn = document.getElementById("semSearchClearBtn");
+  async function runSemSearch(query) {
+    if (!query.trim()) return;
+    semSearchInput.disabled = true;
+    const orig = semSearchInput.placeholder;
+    semSearchInput.placeholder = "🔎 搜索中…(首次较慢)";
+    try {
+      const r = await fetch(
+        `/api/v1/runs/${run_id}/semantic_search?q=${encodeURIComponent(query)}&k=50`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const d = await r.json();
+      const names = new Set((d.results || []).map(x => x.filename));
+      filterState.semSearch = { q: query, filenames: names };
+      semSearchClearBtn.style.display = "";
+      const cacheLabel = d.cached ? "cached" : `built in ${(d.build_ms/1000).toFixed(1)}s`;
+      showToast(`找到 ${names.size} 张匹配 "${query}" 的照片 (${cacheLabel})`, "success");
+      render();
+    } catch (e) {
+      showToast("语义搜索失败: " + e.message, "error");
+    } finally {
+      semSearchInput.disabled = false;
+      semSearchInput.placeholder = orig;
+    }
+  }
+  semSearchInput?.addEventListener("keydown", e => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      runSemSearch(semSearchInput.value);
+    }
+  });
+  semSearchClearBtn?.addEventListener("click", () => {
+    filterState.semSearch = null;
+    semSearchInput.value = "";
+    semSearchClearBtn.style.display = "none";
+    render();
+  });
 
   document.getElementById("saveViewBtn")?.addEventListener("click", () => {
     const name = prompt("给这个视图起个名字\n(例: 婚礼 keep + 高分 / 风光 best-of-location)");
