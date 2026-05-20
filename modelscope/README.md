@@ -29,16 +29,12 @@ tasks:
 - image-quality-assessment
 ---
 
-<div align="center">
-  <img src="https://raw.githubusercontent.com/ChrisChen667788/pixcull/main/docs/assets/github-hero.svg" alt="PixCull — 摄影师本地优先的 AI 选片工具" width="100%" />
-</div>
+![PixCull · 摄影师本地优先 AI 选片工具](docs/assets/github-hero.svg)
 
-<p align="center">
-  <a href="https://github.com/ChrisChen667788/pixcull"><img alt="GitHub" src="https://img.shields.io/badge/GitHub-ChrisChen667788%2Fpixcull-181717.svg?style=flat-square&logo=github" /></a>
-  <a href="https://github.com/ChrisChen667788/pixcull/blob/main/LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square" /></a>
-  <img alt="Python" src="https://img.shields.io/badge/python-3.11%20%7C%203.12-3776AB.svg?style=flat-square&logo=python&logoColor=white" />
-  <img alt="本地优先" src="https://img.shields.io/badge/本地优先-照片永不上传-34d399.svg?style=flat-square" />
-</p>
+[![GitHub](https://img.shields.io/badge/GitHub-ChrisChen667788%2Fpixcull-181717.svg?style=flat-square&logo=github)](https://github.com/ChrisChen667788/pixcull)
+[![MIT License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](https://github.com/ChrisChen667788/pixcull/blob/main/LICENSE)
+![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-3776AB.svg?style=flat-square&logo=python&logoColor=white)
+![本地优先](https://img.shields.io/badge/本地优先-照片永不上传-34d399.svg?style=flat-square)
 
 # PixCull · 摄影师专用的本地 AI 选片工具
 
@@ -49,6 +45,41 @@ tasks:
 
 完整源码 + iOS 伴侣 App + Lightroom 插件,均在 GitHub:
 **[github.com/ChrisChen667788/pixcull](https://github.com/ChrisChen667788/pixcull)**
+
+## 实机截图(2022 川西行拍摄数据)
+
+> 下面是用我 2022 年川西行的真实风光 + 野生动物原片(32 张)跑出的结果 ——
+> 不是 mockup,是 PixCull 当前版本的真实运行界面。
+
+### 主界面 · 选片网格
+
+![结果网格视图](docs/screenshots/01-results-grid.png)
+
+每张照片显示决策标签(keep / maybe / cull)、综合分、6 维星级、检测到的场景
++ 风格 chips、AI 建议要点。左侧色条表示决策(绿=keep / 黄=maybe / 红=cull)。
+"标注" 按钮悬停可见,直接进入 rubric 详细打分。
+
+### 大图窗 · V20 建议信封 + 1:1 焦点检查
+
+![大图窗](docs/screenshots/03-lightbox.png)
+
+点任意缩略图打开大图窗。右侧信息面板显示:每维星级 + 自动/模型/VLM/人工 4 路对比、
+DeepSeek meta-judge 推理、V5.2 摄影正典引用的优点 / 缺点 / 改进建议、类似照片快速跳转、
+sticky 决策工具栏(keep / maybe / cull / 撤销)、cull 原因分类选择器。
+
+### 1:1 同步缩放 · 焦点检查
+
+![1:1 焦点检查](docs/screenshots/04-lightbox-zoom.png)
+
+点图任意位置 → 立刻 1:1 放大到该位置,拖动平移,滚轮细调。
+A/B 比较窗内多图同步缩放 —— 专为 "近似帧二选一" 设计。
+
+### 批量上传 · 30 秒得到全 batch verdict
+
+![上传页](docs/screenshots/05-upload-page.png)
+
+拖一个文件夹进来 → 选 vertical(婚礼/野生/风光/...)→ AI 自动跑完 →
+verdict + XMP sidecar + 独立 HTML 相册 + iOS 同步可选。
 
 ---
 

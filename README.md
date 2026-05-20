@@ -154,23 +154,58 @@ PixCull is the alternative that flips all three:
 
 ## Screenshots
 
-The UI is one Jinja-free HTML template
-(`pixcull/report/templates/results.html`) and one SwiftUI app
-(`mobile/PixCullCompanion/`). Both are dark, mouse-and-keyboard
-optimized, and zero-build (no webpack / no Xcode workspace).
+> Real product UI captured against 32 of my own landscape + wildlife
+> photos from a 2022 West-Sichuan trip — not a mockup.
 
-> **Note** — placeholder visuals only at first push. Pull request a
-> screenshot drop here once you've put PixCull on a real shoot.
+### The culling surface
 
-| Surface | Description |
+![Results grid with rubric scores on real landscape + wildlife photos](docs/screenshots/01-results-grid.png)
+
+Drag a folder of JPG / RAW / HEIC into the upload page, pick a vertical,
+and you get this back. Each card carries a decision badge (keep /
+maybe / cull), a final composite score, the 6-axis rubric stars, the
+detected scene + style chips, and the V20 advice one-liner. The colored
+left edge is a glanceable decision indicator.
+
+### Lightbox with V20 advice + sticky decision toolbar
+
+![Lightbox with 6-axis stars, V20 advice, similar photos, decision toolbar](docs/screenshots/03-lightbox.png)
+
+Click any thumbnail and the lightbox opens with the full rubric on the
+right: 6-axis stars + 4-source breakdown (auto / model / VLM / human),
+DeepSeek meta-judge reasoning, V5.2 advice with canon citations (Adams'
+Zone System, Rule of Space, etc), a top-5 similar-photo strip, and
+sticky keep / maybe / cull decision buttons. Click the image to 1:1
+focus-check; mouse-wheel to fine-tune zoom.
+
+### A/B compare with synced 1:1 zoom
+
+![A/B compare modal — two photos with synced 1:1 zoom toolbar](docs/screenshots/04-ab-compare.png)
+
+Pin any two photos via the `⇆` button (or Shift-click a thumb) and
+they open side-by-side. Click either image to 1:1 zoom on both
+simultaneously, drag to pan in lockstep, mouse-wheel to fine-tune.
+Built for "which one of these two near-dupes do I keep?".
+
+### Drag-drop upload
+
+![Upload page — drag-drop area with format support](docs/screenshots/05-upload-page.png)
+
+Two modes: drop a copy into `/tmp` (default, non-destructive) or scan
+an existing folder in place (zero-copy, RAW + DNG friendly).
+
+### Every surface at a glance
+
+| Surface | What it does |
 |---|---|
 | `/` upload page | Drag-drop a folder; live progress as scoring runs. Vertical chooser + active user switcher. |
-| `/results/<run>` | The main culling surface. 3-col grid, swipe-style hotkeys, lightbox with rubric stars + V20 advice + GPS map + face clusters + similar photos + sticky decision toolbar. |
-| `/results/<run>` lightbox 1:1 | Click any photo to zoom to 100%; drag to pan; mouse-wheel to fine-tune. Hi-res image swaps in on the first zoom. |
-| `/results/<run>` A/B compare | Pin any 2 photos via the ⇆ button (or Shift-click a thumb); compare modal opens with synced 1:1 zoom across both cells. |
+| `/results/<run>` | The main culling surface (1st screenshot above). 3-col grid, swipe-style hotkeys. |
+| `/results/<run>` lightbox | Rubric stars + V20 advice + GPS map + face clusters + similar photos + sticky decision toolbar (2nd screenshot above). |
+| `/results/<run>` 1:1 zoom | Click any photo in the lightbox to zoom to 100%; drag to pan; mouse-wheel to fine-tune. Hi-res image swaps in on the first zoom. |
+| `/results/<run>` A/B compare | Pin any 2 photos via ⇆ button; synced 1:1 zoom across both cells (3rd screenshot above). |
 | `/admin` | Storage info; run management; license token; sync configuration. |
 | `/verticals` | Per-genre policy editor; promote a sample to the team bank. |
-| iOS companion | SwiftUI grid + per-photo swipe annotator + rich lightbox (axes + advice + GPS + face clusters). |
+| iOS companion | SwiftUI grid + per-photo swipe annotator + rich lightbox. |
 
 ## Quick start
 
