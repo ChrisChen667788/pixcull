@@ -1557,6 +1557,11 @@
           <div class="shortcut-row"><span class="keys"><kbd>1</kbd></span><span class="desc">标 <span class="tag keep">keep</span></span></div>
           <div class="shortcut-row"><span class="keys"><kbd>2</kbd></span><span class="desc">标 <span class="tag maybe">maybe</span></span></div>
           <div class="shortcut-row"><span class="keys"><kbd>3</kbd></span><span class="desc">标 <span class="tag cull">cull</span>(可补充 cull 原因)</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>Shift</kbd>+<kbd>1/2/3</kbd></span><span class="desc">标 + 自动跳到下一张(Photo Mechanic 节奏)</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>F</kbd></span><span class="desc">单键 <span class="tag keep">keep</span>(flag for review)</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>[</kbd> / <kbd>]</kbd></span><span class="desc">verdict 降一档 / 升一档</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>Backspace</kbd></span><span class="desc">撤销最近标注 + 回到上一张</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>G</kbd></span><span class="desc">跳到下一个连拍组</span></div>
           <div class="shortcut-row"><span class="keys"><kbd>Enter</kbd></span><span class="desc">打开 rubric 详细标注</span></div>
         </div>
         <div class="shortcut-section">
@@ -3882,6 +3887,75 @@
     else if (e.key === "1") { e.preventDefault(); quickLabel("keep"); }
     else if (e.key === "2") { e.preventDefault(); quickLabel("maybe"); }
     else if (e.key === "3") { e.preventDefault(); quickLabel("cull"); }
+    // P-UX-13 — Photo Mechanic-style hotkeys for full-keyboard culling.
+    // Shift+1/2/3 = label AND advance to next visible card (the
+    // "set rhythm" of Photo Mechanic — you never have to think
+    // about moving on, the action does it for you).
+    else if (e.key === "!" || (e.shiftKey && e.key === "1")) {
+      e.preventDefault(); quickLabel("keep"); setTimeout(() => moveFocus(+1), 0);
+    }
+    else if (e.key === "@" || (e.shiftKey && e.key === "2")) {
+      e.preventDefault(); quickLabel("maybe"); setTimeout(() => moveFocus(+1), 0);
+    }
+    else if (e.key === "#" || (e.shiftKey && e.key === "3")) {
+      e.preventDefault(); quickLabel("cull"); setTimeout(() => moveFocus(+1), 0);
+    }
+    // F = "flag" toggle (mapped to keep, mirroring Photo Mechanic
+    // which uses T for tag = "flagged for review"). Without modifier,
+    // F is the most natural single-key keep.
+    else if (e.key === "f" || e.key === "F") {
+      e.preventDefault(); quickLabel("keep");
+    }
+    // G = jump to next burst-cluster group. Walks the visible cards
+    // until cluster_id changes, then focuses the first card of the
+    // new cluster. Crucial for tearing through 1000-frame events.
+    else if (e.key === "g" || e.key === "G") {
+      e.preventDefault();
+      const visible = visibleCards();
+      if (!visible.length) return;
+      const curIdx = focusedFn
+        ? visible.findIndex(c => c.dataset.fn === focusedFn) : -1;
+      const curRow = curIdx >= 0
+        ? rows.find(r => r.filename === visible[curIdx].dataset.fn) : null;
+      const curCluster = curRow ? curRow.cluster_id : null;
+      for (let i = (curIdx >= 0 ? curIdx + 1 : 0); i < visible.length; i++) {
+        const row = rows.find(r => r.filename === visible[i].dataset.fn);
+        if (!row) continue;
+        if (row.cluster_id !== curCluster) {
+          focusCard(visible[i].dataset.fn, true);
+          return;
+        }
+      }
+      // Wrap around to first cluster if we ran off the end
+      if (visible.length > 0) focusCard(visible[0].dataset.fn, true);
+    }
+    // Backspace = undo + go back (Photo Mechanic's "I take it back"
+    // gesture). performUndo restores the prior decision; the focus
+    // step rewinds to the photo that just got undone.
+    else if (e.key === "Backspace") {
+      e.preventDefault();
+      performUndo();
+      moveFocus(-1);
+    }
+    // [ / ] = rank decrease/increase. Mapped onto cycling through
+    // keep → maybe → cull → maybe → keep so a single key tap nudges
+    // the verdict one notch at a time without leaving the keyboard.
+    else if (e.key === "[") {
+      e.preventDefault();
+      if (!focusedFn) return;
+      const r = rows.find(x => x.filename === focusedFn);
+      const cur = r ? r.decision : "maybe";
+      const next = { keep: "maybe", maybe: "cull", cull: "cull" }[cur] || "cull";
+      quickLabel(next);
+    }
+    else if (e.key === "]") {
+      e.preventDefault();
+      if (!focusedFn) return;
+      const r = rows.find(x => x.filename === focusedFn);
+      const cur = r ? r.decision : "maybe";
+      const next = { keep: "keep", maybe: "keep", cull: "maybe" }[cur] || "maybe";
+      quickLabel(next);
+    }
     // P-UX-3 — c on the grid pins the currently focused card for
     // A/B compare. If another card was already pinned, this fires
     // the modal directly. Symmetrical with the lightbox-side c.
