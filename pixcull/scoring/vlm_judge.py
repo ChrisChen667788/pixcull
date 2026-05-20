@@ -112,7 +112,8 @@ _AXIS_HINTS_ZH = {
 
 
 def build_prompt(scene: str | None = None,
-                  style_section: str = "") -> str:
+                  style_section: str = "",
+                  vertical: str | None = None) -> str:
     """Construct the system+user prompt for one image.
 
     V5.0 update: prepends the photography canon (Cartier-Bresson +
@@ -154,13 +155,23 @@ def build_prompt(scene: str | None = None,
         gs = render_genre_section_zh(scene)
         if gs:
             genre_block = "\n" + gs + "\n"
+    # P-AI-3: per-vertical tuning. Each vertical (wedding, sports,
+    # wildlife, etc.) has different axis priorities + tolerance
+    # patterns. The vertical block goes BEFORE the generic genre
+    # block when both exist — vertical is more specific.
+    vertical_block = ""
+    if vertical:
+        from pixcull.scoring.vlm_vertical_prompts import vertical_prompt_block
+        vb = vertical_prompt_block(vertical)
+        if vb:
+            vertical_block = "\n" + vb + "\n"
     # Schema with placeholder values — model has to fill them based on
     # what it actually sees in the image. Numeric placeholders use
     # angle-bracket descriptors so a model that *does* parrot the
     # schema won't accidentally produce systematic bias.
     return f"""你是一位专业摄影编辑。看这张具体的照片,给出基于这张照片实际内容的判断。{scene_hint}
 
-{canon}{genre_block}{style_block}
+{canon}{vertical_block}{genre_block}{style_block}
 每个维度独立打 1-5★ 并给一句话理由(必须基于你在图中看到的具体细节,引用上面的经典原则)。
 
 【重要 — 评论质量要求】
@@ -300,11 +311,13 @@ class MlxQwen3VlJudge:
         scene: str | None = None,
         max_tokens: int = 800,    # Chinese rationale ×6 axes is long
         style_section: str = "",
+        vertical: str | None = None,
     ) -> VlmVerdict:
         from mlx_vlm import generate
         from mlx_vlm.prompt_utils import apply_chat_template
 
-        prompt = build_prompt(scene, style_section=style_section)
+        prompt = build_prompt(scene, style_section=style_section,
+                              vertical=vertical)
         # Qwen3-VL chat template wants the image referenced in the
         # user turn; mlx-vlm's apply_chat_template handles the special
         # tokens. We pass the image path as a list since some templates
@@ -435,6 +448,7 @@ class OpenAICompatibleVlmJudge:
         scene: str | None = None,
         max_tokens: int = 600,
         style_section: str = "",
+        vertical: str | None = None,
     ) -> VlmVerdict:
         verdict = VlmVerdict(
             filename=image_path.name,
@@ -449,7 +463,8 @@ class OpenAICompatibleVlmJudge:
                     "role": "user",
                     "content": [
                         {"type": "text",
-                         "text": build_prompt(scene, style_section=style_section)},
+                         "text": build_prompt(scene, style_section=style_section,
+                                              vertical=vertical)},
                         {"type": "image_url",
                          "image_url": {"url": data_url}},
                     ],
