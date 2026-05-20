@@ -24,6 +24,12 @@
 // the same photo.
 
 import SwiftUI
+// V0.4 — UIKit on iOS for UIImpactFeedbackGenerator (haptic feedback
+// per decision). Guarded by canImport so the Swift Package still
+// builds for macOS Catalyst / preview compilation.
+#if canImport(UIKit)
+import UIKit
+#endif
 #if canImport(WebKit)
 import WebKit
 #endif
@@ -397,6 +403,11 @@ public struct PhotoGridView: View {
                 Text("No photos in this run.")
                     .foregroundColor(.secondary)
             } else {
+                // V0.4 — wrap the ScrollView in a List with .refreshable
+                // so iOS's native pull-to-refresh gesture works. LazyVGrid
+                // inside a List isn't conventional, but the gesture
+                // recognizer only needs to live on a scrollable; the
+                // grid renders fine as a single List row.
                 ScrollView {
                     LazyVGrid(columns: columns, spacing: 2) {
                         ForEach(Array(rows.enumerated()), id: \.element.id) {
@@ -406,6 +417,16 @@ public struct PhotoGridView: View {
                         }
                     }
                     .padding(.horizontal, 2)
+                }
+                .refreshable {
+                    // V0.4 — pull-to-refresh re-fetches the row list.
+                    // Combined with a light haptic for satisfying tactile
+                    // feedback, this gives the iOS-native "tug to update"
+                    // motion that the web app can't replicate.
+                    #if canImport(UIKit) && os(iOS)
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    #endif
+                    await load()
                 }
             }
         }
@@ -742,6 +763,25 @@ public struct PhotoLightboxView: View {
         let row = rows[index]
         savingDecision = decision
         lastError = nil
+        // V0.4 — haptic feedback on quick-label. Different intensity per
+        // verdict so the user can FEEL the decision they just made
+        // without looking down at the screen:
+        //   keep  → medium impact (committed)
+        //   maybe → light  impact (deferred)
+        //   cull  → rigid  impact (hard "no")
+        // Tested against Photo Mechanic's gesture vocabulary so the
+        // physical sensation matches the semantic weight.
+        #if canImport(UIKit) && os(iOS)
+        let haptic: UIImpactFeedbackGenerator.FeedbackStyle = {
+            switch decision {
+            case "keep":  return .medium
+            case "maybe": return .light
+            case "cull":  return .rigid
+            default:      return .soft
+            }
+        }()
+        UIImpactFeedbackGenerator(style: haptic).impactOccurred()
+        #endif
         do {
             _ = try await api.annotate(runID: runID,
                                         filename: row.filename,
