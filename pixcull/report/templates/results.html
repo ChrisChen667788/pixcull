@@ -706,6 +706,24 @@
       opacity: 1;
     }
 
+    /* P-UX-14 — exposure-consistency chip. Lit when this row sits
+       in a burst cluster of ≥ 3 photos and its mean_luma diverges
+       from the cluster median by ≥ ~⅓ stop, OR its highlight-clip
+       jumps by ≥ 4%. The classic "你的手指碰到拨轮了" frame.
+       Cool-blue tint so it doesn't compete with the cull-reason
+       chip semantically. */
+    .row1 .exposure-chip {
+      display: inline-flex; align-items: center;
+      font-size: 9.5px; padding: 1px 6px; border-radius: 3px;
+      background: rgba(59, 130, 246, 0.18);
+      color: #a5c5ff;
+      border: 1px solid rgba(59, 130, 246, 0.45);
+      cursor: help;
+      letter-spacing: 0.02em;
+    }
+    .row1 .exposure-chip.over { color: #ffb59a; border-color: rgba(251, 191, 36, 0.55); background: rgba(251, 191, 36, 0.10); }
+    .row1 .exposure-chip.under { color: #9ab5d6; }
+
     /* P-UX-4 — chip on the card showing the cull reason once set.
        Lives in row1 alongside the decision badge. Subtle red tint
        so it ties visually to the cull verdict without competing. */
@@ -2668,6 +2686,15 @@
               ${styleChips}
               ${r.cull_reason ? `<span class="cull-reason-chip" title="cull 原因: ${esc(_cullReasonLabel(r.cull_reason))}">✕ ${esc(_cullReasonLabel(r.cull_reason))}</span>` : ""}
               ${r.needs_review ? `<span class="review-me-chip" title="自动 / 训练模型 / VLM / DeepSeek 这 4 个评分源对此图分歧大 (累计 ${(r.inconsistency_total || 0).toFixed(1)} ★ stddev) — 值得人工复核">⚠ review me</span>` : ""}
+              ${r.exposure_outlier ? (() => {
+                  const d = r.exposure_deviation || {};
+                  const ld = d.luma_delta || 0;
+                  const hd = d.highlight_delta || 0;
+                  const cls = ld > 0 ? "over" : "under";
+                  const dir = ld > 0 ? "↑" : "↓";
+                  const stops = Math.abs(ld) / 18;
+                  return `<span class="exposure-chip ${cls}" title="此图相对连拍组中位数曝光偏离 ${dir} ${Math.abs(ld).toFixed(0)} luma (~${stops.toFixed(1)} 档) · 高光剪裁差 ${hd >= 0 ? '+' : ''}${hd.toFixed(1)}% · 连拍组共 ${d.cluster_size || '?'} 张">☼ ${dir}${stops.toFixed(1)}EV</span>`;
+                })() : ""}
             </div>
             <div class="row2">
               <span class="scene" title="${esc(r.scene || '')}">${esc(trGenre(r.scene) || "?")}</span>

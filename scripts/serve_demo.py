@@ -799,6 +799,68 @@ def _compute_inconsistency(auto_stars: dict, model_stars: dict,
     }
 
 
+# P-UX-14 — within-burst exposure-consistency thresholds.
+#   mean_luma deviation ≥ 18 (on 0..255 scale ≈ ~⅓ stop)
+#   OR  highlight_clip_pct delta ≥ 4%  (visible blown highlights)
+# Cluster needs ≥ 3 members for the median to be meaningful;
+# singleton "clusters" (cluster_id None) skip the check entirely.
+_EXPOSURE_LUMA_DELTA   = 18.0
+_EXPOSURE_HIGHLIGHT_DELTA = 4.0
+_EXPOSURE_MIN_CLUSTER = 3
+
+
+def _exposure_consistency_pass(rows: list[dict]) -> None:
+    """Mutates rows in place: adds ``exposure_outlier`` (bool) and
+    ``exposure_deviation`` (dict) to each row that's part of a
+    real burst cluster (size ≥ 3) AND deviates from the cluster
+    median by ≥ the thresholds above.
+
+    The cluster_id comes from V9.0's near-duplicate / burst grouping,
+    so "cluster" here means "photos the photographer took within
+    seconds of each other of essentially the same scene" — the
+    only place where exposure consistency is meaningful (totally
+    different scenes will have different luma by design).
+    """
+    from collections import defaultdict
+    import statistics
+
+    by_cluster: dict[int, list[dict]] = defaultdict(list)
+    for r in rows:
+        cid = r.get("cluster_id")
+        if cid is None:
+            continue
+        by_cluster[cid].append(r)
+
+    for cid, members in by_cluster.items():
+        if len(members) < _EXPOSURE_MIN_CLUSTER:
+            continue
+        lumas = [m["mean_luma"] for m in members if m.get("mean_luma") is not None]
+        highs = [m["highlight_clip_pct"] for m in members if m.get("highlight_clip_pct") is not None]
+        if len(lumas) < _EXPOSURE_MIN_CLUSTER:
+            continue
+        med_luma = statistics.median(lumas)
+        med_high = statistics.median(highs) if len(highs) >= _EXPOSURE_MIN_CLUSTER else None
+        for m in members:
+            ml = m.get("mean_luma")
+            mh = m.get("highlight_clip_pct")
+            if ml is None:
+                continue
+            luma_delta = ml - med_luma
+            high_delta = (mh - med_high) if (mh is not None and med_high is not None) else 0.0
+            is_outlier = (
+                abs(luma_delta) >= _EXPOSURE_LUMA_DELTA
+                or abs(high_delta) >= _EXPOSURE_HIGHLIGHT_DELTA
+            )
+            if is_outlier:
+                m["exposure_outlier"] = True
+                m["exposure_deviation"] = {
+                    "luma_delta":      round(luma_delta, 1),
+                    "highlight_delta": round(high_delta, 2),
+                    "cluster_median_luma":  round(med_luma, 1),
+                    "cluster_size":    len(members),
+                }
+
+
 def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
     # V8.5: fall back to disk-reload if the run isn't in memory
     # (e.g. server restarted, or the .app and dev server share runs
@@ -938,6 +1000,14 @@ def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
             "gps_lat":        _f(r.get("gps_lat")),
             "gps_lon":        _f(r.get("gps_lon")),
             "gps_cluster_id": _opt_int(r.get("gps_cluster_id")),
+            # P-UX-14 — raw luma + clip-pct surfaced so we can detect
+            # within-burst exposure outliers after all rows are built.
+            # These are the same metrics the per-photo scorer already
+            # computed; we just plumb them through so a downstream
+            # pass can flag inconsistencies.
+            "mean_luma":          _f(r.get("mean_luma")),
+            "highlight_clip_pct": _f(r.get("highlight_clip_pct")),
+            "shadow_clip_pct":    _f(r.get("shadow_clip_pct")),
             # V27 — per-burst peak rank. peak_rank=0 means "THE peak"
             # in this row's burst cluster; is_burst_peak is the same
             # signal as a bool for cheaper JS access. Singleton
@@ -1007,6 +1077,15 @@ def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
             "meta_confidence": _f(r.get("meta_confidence")),
             "meta_inconsistencies": str(r.get("meta_inconsistencies", "") or ""),
         })
+
+    # P-UX-14 — within-burst exposure-consistency check. For each
+    # cluster of ≥ 3 photos, take the median mean_luma + median
+    # highlight_clip_pct, then flag rows whose deviation exceeds
+    # the (light-relative) threshold. Catches the situation where
+    # a wedding/event series has one frame at +1 stop because the
+    # photographer's finger drifted off the dial — uniquely worth
+    # flagging because the user often hasn't NOTICED themselves.
+    _exposure_consistency_pass(rows)
 
     # Sort: keep first, then maybe, then cull, by score within group.
     order = {"keep": 0, "maybe": 1, "cull": 2, "": 3}
