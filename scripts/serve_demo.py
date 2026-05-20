@@ -3215,6 +3215,12 @@ class _Handler(BaseHTTPRequestHandler):
             return self._handle_analyze_post()
         if path == "/scan_local":
             return self._handle_scan_local()
+        # P-UX-21 — sample-data quick-try. Copies the bundled
+        # samples/ tree into a fresh demo run + returns the
+        # new run_id so the upload page can redirect directly
+        # into /results without any model warm-up.
+        if path == "/sample_demo":
+            return self._handle_sample_demo()
         if path == "/browse":
             return self._handle_browse()
         if path.startswith("/export/"):
@@ -3456,6 +3462,84 @@ class _Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     # --- scan-local mode --------------------------------------------------
+    def _handle_sample_demo(self) -> None:
+        """P-UX-21 — instant sample-data path.
+
+        Copies the bundled ``samples/`` directory (pre-scored 6-photo
+        landscape + wildlife set) into a fresh demo run so visitors
+        can hit /results without uploading anything or waiting on
+        model warm-up.
+
+        The sample scores.csv was generated procedurally with realistic
+        rubric stars per scene. The 6 input JPGs are 1280×853 gradients
+        (~40 KB each) — small enough to ship in the repo, varied enough
+        to demonstrate keep/maybe/cull across landscape + wildlife +
+        architecture verticals.
+
+        POST /sample_demo  → {ok, run_id, url}
+        """
+        import shutil
+        import secrets as _secrets
+
+        # Project root contains a samples/ tree we ship in-repo
+        proj_root = Path(__file__).resolve().parent.parent
+        src = proj_root / "samples" / "output"
+        if not (src / "scores.csv").is_file():
+            self._reject_upload(500, "samples/ not bundled with this build")
+            return
+        run_id = "sample_" + _secrets.token_hex(4)
+        dst = _DEMO_ROOT / run_id / "output"
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(src, dst, dirs_exist_ok=True)
+
+        # Manifest in samples/output points at samples/input/*.jpg with
+        # absolute paths. Those paths were computed at sample-generation
+        # time and may not match this checkout — rewrite them based on
+        # the actual on-disk location now.
+        manifest_path = dst / "manifest.json"
+        if manifest_path.is_file():
+            try:
+                manifest = json.loads(manifest_path.read_text("utf-8"))
+                samples_input = proj_root / "samples" / "input"
+                fixed = {
+                    fn: str(samples_input / fn)
+                    for fn in manifest.keys()
+                    if (samples_input / fn).is_file()
+                }
+                manifest_path.write_text(
+                    json.dumps(fixed, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+            except (OSError, json.JSONDecodeError):
+                pass
+
+        # Register the run with the in-memory store as a "scan-mode"
+        # run so /thumb + /full + /results work without a re-analysis.
+        with _RUNS_LOCK:
+            _RUNS[run_id] = {
+                "run_id":     run_id,
+                "output_dir": str(dst),
+                "input_dir":  "",
+                "mode":       "scan",
+                "source_dir": str(proj_root / "samples" / "input"),
+                "state":      "done",
+                "started_at": time.time(),
+                "finished_at": time.time(),
+                "vertical":   None,
+            }
+
+        body = _safe_dumps({
+            "ok":     True,
+            "run_id": run_id,
+            "url":    f"/results/{run_id}",
+        }).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
     def _handle_scan_local(self) -> None:
         """Analyze a local folder *in place*. No file copy, no upload.
 
@@ -9788,6 +9872,16 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
     <div class="actions">
       <button id="uploadBtn" disabled>开始分析</button>
       <button id="clearBtn" class="secondary">清空</button>
+      <!-- P-UX-21: zero-friction sample data button. Skips upload +
+           model warm-up, drops the visitor straight into a /results
+           view with 6 pre-scored sample images. The single biggest
+           OSS-discoverability win — most visitors never make it past
+           the "wait, do I need to install something first" gate. -->
+      <button id="sampleBtn" class="secondary"
+              title="用 6 张示例数据立刻进入 /results 体验,不需要装环境"
+              style="margin-left:auto;background:rgba(59,130,246,0.15);border-color:#3b82f6;color:#a5c5ff">
+        ⚡ 用示例数据立刻体验
+      </button>
       <span id="hint" style="color:var(--muted);font-size:12px"></span>
     </div>
     </div>
@@ -10648,6 +10742,27 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
     const snapshot = pickedFiles.slice();
     lastAction = { kind: "upload", run: () => runUpload(snapshot) };
     runUpload(snapshot);
+  });
+
+  // P-UX-21 — zero-friction sample-data path. POSTs to a server
+  // endpoint that copies samples/output/ → /tmp/pixcull_demo/<id>/
+  // (already pre-scored) + serves the 6 sample input files in place
+  // via the manifest's absolute paths. Visitor goes from "click" to
+  // "interactive /results page" in under 1 second.
+  const sampleBtn = document.getElementById("sampleBtn");
+  if (sampleBtn) sampleBtn.addEventListener("click", async () => {
+    sampleBtn.disabled = true; const orig = sampleBtn.textContent;
+    sampleBtn.textContent = "⚡ 加载中…";
+    try {
+      const r = await fetch("/sample_demo", { method: "POST" });
+      const d = await r.json();
+      if (!d.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      location.href = `/results/${d.run_id}`;
+    } catch (e) {
+      sampleBtn.textContent = orig;
+      sampleBtn.disabled = false;
+      alert("加载示例数据失败: " + e.message);
+    }
   });
 
   // V14.2 — rolling-window ETA. We collect (timestamp, done) samples
