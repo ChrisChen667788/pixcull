@@ -1572,6 +1572,15 @@
           <button class="export-btn" id="exportAlongsideBtn" role="menuitem"
                   style="display:none"
                   title="把 XMP sidecar 写到原图旁边">写到原图旁边</button>
+          <!-- P-PRO-5: in-file IPTC embedding via exiftool. Same
+               metadata as a sidecar but lives INSIDE the original
+               (single-file workflow for DNG / JPG / TIFF). Only
+               available in scan mode (we know where the original is).
+               Caveat: modifies the original file — irreversible
+               without --no-overwrite-original or a Time Machine. -->
+          <button class="export-btn" id="exportEmbeddedBtn" role="menuitem"
+                  style="display:none"
+                  title="把 XMP/IPTC 内嵌到原图(DNG/JPG/TIFF),不写 sidecar — 单文件工作流。需要 exiftool。会修改原图。">内嵌到原图(单文件)</button>
           <a class="export-btn" id="csvBtn" role="menuitem"
              title="下载完整 scores.csv (Excel/Numbers 友好)">下载 CSV</a>
           <!-- V23.x: standalone HTML gallery export — self-contained
@@ -5729,6 +5738,7 @@
   //   '写到原图旁边'         → target=alongside,  only in scan mode
   const exportZipBtn = document.getElementById("exportZipBtn");
   const exportAlongsideBtn = document.getElementById("exportAlongsideBtn");
+  const exportEmbeddedBtn = document.getElementById("exportEmbeddedBtn");
   const exportStatus = document.getElementById("exportStatus");
 
   if (summary.mode === "scan") {
@@ -5736,6 +5746,7 @@
     // "inline-block"; the alongside button now lives inside the
     // export-menu panel where CSS lays items out vertically.
     exportAlongsideBtn.style.display = "";
+    if (exportEmbeddedBtn) exportEmbeddedBtn.style.display = "";  // P-PRO-5
   }
 
   async function doExport(target, btn, successHtml) {
@@ -5771,6 +5782,23 @@
     if (!confirm(`将 ${summary.n_keep + summary.n_maybe + summary.n_cull} 个 .xmp 写到原图所在文件夹(${summary.origin_folder || "原位置"})?同名文件会被覆盖。`)) return;
     doExport("alongside", exportAlongsideBtn, data =>
       `已写入 <b>${data.written}</b> 个 .xmp 到原图旁边${data.skipped ? `,跳过 ${data.skipped} 个找不到原图的` : ''} · ${summary.origin_folder || ''}`
+    );
+  });
+  // P-PRO-5 — in-file IPTC embed via exiftool. The handler is
+  // identical to "alongside" but posts target="embedded" + uses
+  // stricter confirm copy (this MODIFIES the original file, no
+  // sidecar to delete if you change your mind).
+  if (exportEmbeddedBtn) exportEmbeddedBtn.addEventListener("click", () => {
+    const n = summary.n_keep + summary.n_maybe + summary.n_cull;
+    if (!confirm(
+        `将把 XMP/IPTC 元数据(rating + label + keywords + caption)`
+        + `直接内嵌到 ${n} 个原始照片文件中(${summary.origin_folder || "原位置"})。\n\n`
+        + `⚠ 这会修改原图文件本身,不写 sidecar — 单文件工作流但不可逆。\n`
+        + `如果你想保留备份,先在 Finder/Files 备份这个文件夹再继续。\n\n`
+        + `需要安装 exiftool (brew install exiftool / apt install libimage-exiftool-perl)。\n\n`
+        + `继续?`)) return;
+    doExport("embedded", exportEmbeddedBtn, data =>
+      `已内嵌 <b>${data.written}</b> 个 IPTC 包到原图${data.skipped ? `,跳过 ${data.skipped} 个失败的` : ''}`
     );
   });
 
