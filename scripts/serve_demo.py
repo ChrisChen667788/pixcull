@@ -861,6 +861,27 @@ def _exposure_consistency_pass(rows: list[dict]) -> None:
                 }
 
 
+def _row_has_develop_settings(r) -> bool:
+    """P-PRO-1 — check whether a row's source image has Lr develop
+    edits (crs:*) in its XMP sidecar.
+
+    Lazy + best-effort: returns False whenever the source path is
+    unknown or the sidecar can't be parsed. The actual develop
+    application happens in load_image_for_display via
+    pixcull.io.xmp.read_develop_settings — we just expose a "yes/no"
+    flag on the row so the lightbox can show a "已应用 Lr 调色" badge.
+    """
+    src = r.get("path")
+    if not src:
+        return False
+    try:
+        from pixcull.io.xmp import read_develop_settings
+        dev = read_develop_settings(Path(str(src)))
+        return bool(dev)
+    except Exception:
+        return False
+
+
 def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
     # V8.5: fall back to disk-reload if the run isn't in memory
     # (e.g. server restarted, or the .app and dev server share runs
@@ -1069,6 +1090,12 @@ def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
                     str(human_rec.get("overall_label", "")).strip().lower() == "cull")
                 else ""
             ),
+            # P-PRO-1 — has the user edited develop settings in Lr?
+            # If yes, the lightbox shows a "已应用 Lr 调色" badge so
+            # the user knows the displayed preview reflects their
+            # edit (load_image_for_display picks up crs:* settings
+            # automatically; scoring still uses the RAW for now).
+            "has_develop_settings": _row_has_develop_settings(r),
             # V3.x rationales for the modal's 4-way comparison
             "vlm_overall_rationale": str(r.get("vlm_overall_rationale", "") or ""),
             "vlm_overall_label": str(r.get("vlm_overall_label", "") or ""),

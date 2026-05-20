@@ -3779,11 +3779,23 @@
         + `🏆 连拍峰值</span>`
       : '';
 
+    // P-PRO-1 — Lr develop-settings indicator. When the source XMP
+    // has any crs:* edits (Exposure/Highlights/Shadows/etc),
+    // load_image_for_display() applies them to the lightbox preview.
+    // This badge tells the user "what you see is your Lr edit, not
+    // the RAW" so they don't second-guess the scoring vs preview gap.
+    const developBadge = r.has_develop_settings
+      ? `<span class="badge" title="此预览已应用 Lightroom 的调色设置(crs:Exposure / Highlights / Shadows / Temperature 等)。打分仍基于原 RAW — 见 ROADMAP P-PRO-1 v0.2 计划重新打分基于调色后预览。" `
+        + `style="background:rgba(74,222,128,0.18);color:#88e0a6;border:1px solid rgba(74,222,128,0.35);font-size:9.5px">`
+        + `🎨 已应用 Lr 调色</span>`
+      : '';
+
     return `
       <h2>${esc(r.filename)}</h2>
       <div class="meta-line">
         <span class="badge ${dec}" title="${esc(dec)}">${esc(decLabel)}</span>
         ${peakBadge}
+        ${developBadge}
         <span title="${esc(r.scene || '')}">${esc(trGenre(r.scene) || '?')}</span>
         <span>综合分 ${scoreLine}</span>
         ${styleChips}
