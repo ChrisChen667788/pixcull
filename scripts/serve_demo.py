@@ -1946,6 +1946,10 @@ class _Handler(BaseHTTPRequestHandler):
         # sort by user frequency + admin can show "your cull habits".
         if sub == "/cull_reasons/stats":
             return self._serve_api_v1_cull_reason_stats()
+        # P-UX-12 — per-user taste profile (scene preferences, axis
+        # weights inferred from history, cull-reason distribution).
+        if sub == "/users/preferences":
+            return self._serve_api_v1_user_preferences()
         # INFRA-4 — daily LLM spend ledger
         if sub == "/llm_budget":
             return self._serve_llm_budget()
@@ -2120,6 +2124,10 @@ class _Handler(BaseHTTPRequestHandler):
                 # P-UX-9 — usage stats over the user's annotations history
                 {"method": "GET",  "path": "/api/v1/cull_reasons/stats",
                  "doc":    "accumulated cull-reason counts across all runs"},
+                # P-UX-12 — per-user taste profile
+                {"method": "GET",  "path": "/api/v1/users/preferences",
+                 "doc":    "scene + axis + cull-reason profile derived "
+                          "from your annotation history (admin page card)"},
                 {"method": "GET",  "path": "/api/v1/runs/<run_id>/decisions",
                  "doc":    "{filename: keep|maybe|cull} + src_paths"},
                 {"method": "GET",  "path": "/api/v1/runs/<run_id>/face_clusters",
@@ -2464,6 +2472,122 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "max-age=300")
+        self.end_headers()
+        self.wfile.write(body)
+        return True
+
+    def _serve_api_v1_user_preferences(self) -> bool:
+        """P-UX-12 — per-user taste profile.
+
+        Walks every ``annotations.jsonl`` across all runs and the
+        matching ``scores.csv`` for scene context, then summarizes:
+
+          - cull_reasons:        which reasons you tag most often
+          - scene_decision_counts: keep/maybe/cull breakdown per scene
+          - avg_rubric_when_keep:  for kept photos, the mean star per axis
+          - avg_rubric_when_cull:  same, for culled photos
+          - total_human_annotations
+
+        These let the admin page show "your taste profile" — which
+        kinds of frames you reward vs reject, and what axes you
+        seem to care about most. Feeds an honest "the rescorer
+        could adapt these weights for you" pitch (P-UX-12 v0.2).
+        """
+        from collections import Counter, defaultdict
+        cull_reasons: Counter[str] = Counter()
+        scene_decision: dict[str, Counter[str]] = defaultdict(Counter)
+        # Per-axis stars accumulators, split by user verdict.
+        # Structure: {"keep": {axis: [stars, ...]}, "cull": {...}}
+        per_dec_stars: dict[str, dict[str, list[float]]] = {
+            "keep": defaultdict(list),
+            "maybe": defaultdict(list),
+            "cull": defaultdict(list),
+        }
+        n_human = 0
+
+        # Cache scene lookups so we don't re-parse a scores.csv per
+        # annotation — read once per run into a {filename: scene} dict.
+        for run_dir in sorted(_DEMO_ROOT.glob("*/")):
+            ann_path = run_dir / "output" / "annotations.jsonl"
+            csv_path = run_dir / "output" / "scores.csv"
+            if not ann_path.is_file():
+                continue
+            scene_by_fn: dict[str, str] = {}
+            if csv_path.is_file():
+                try:
+                    import csv as _csv
+                    with open(csv_path, encoding="utf-8") as f:
+                        rdr = _csv.DictReader(f)
+                        for row in rdr:
+                            fn = (row.get("filename") or "").strip()
+                            if fn:
+                                scene_by_fn[fn] = (row.get("scene") or "unknown").strip()
+                except OSError:
+                    pass
+
+            # Latest-wins reducer over annotations
+            latest: dict[str, dict] = {}
+            try:
+                with open(ann_path, encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            rec = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+                        fn = rec.get("filename")
+                        if fn:
+                            latest[fn] = rec
+            except OSError:
+                continue
+
+            for fn, rec in latest.items():
+                label = str(rec.get("overall_label", "")).strip().lower()
+                if label not in ("keep", "maybe", "cull"):
+                    continue
+                n_human += 1
+                scene = scene_by_fn.get(fn, "unknown")
+                scene_decision[scene][label] += 1
+                if label == "cull":
+                    reason = str(rec.get("cull_reason") or "").strip().lower()
+                    if reason and reason in _CULL_REASONS:
+                        cull_reasons[reason] += 1
+                # Per-axis stars from the human's rubric
+                axes = rec.get("axes") or {}
+                for axis_name, ax in axes.items():
+                    if not isinstance(ax, dict):
+                        continue
+                    stars = ax.get("stars")
+                    if stars is None:
+                        continue
+                    try:
+                        per_dec_stars[label][axis_name].append(float(stars))
+                    except (TypeError, ValueError):
+                        continue
+
+        def _mean(xs: list[float]) -> float | None:
+            return round(sum(xs) / len(xs), 2) if xs else None
+
+        avg_when = {
+            label: {ax: _mean(vals) for ax, vals in d.items()}
+            for label, d in per_dec_stars.items()
+        }
+
+        body = _safe_dumps({
+            "schema":  "pixcull.api.v1.user_preferences.v1",
+            "total_human_annotations": n_human,
+            "cull_reasons": dict(cull_reasons),
+            "scene_decision_counts": {
+                scene: dict(counts) for scene, counts in scene_decision.items()
+            },
+            "avg_rubric_when": avg_when,
+        }).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "max-age=30")
         self.end_headers()
         self.wfile.write(body)
         return True
@@ -10419,6 +10543,37 @@ _ADMIN_HTML = r"""<!DOCTYPE html>
     <div class="muted" id="rootHint">--</div>
   </header>
   <main>
+    <!-- P-UX-12 — your taste profile, derived from accumulated
+         human annotations. Helps you see your own selection bias
+         + sets up data-driven rescorer adaptation later. -->
+    <div class="card" id="prefsCard" style="display:none">
+      <h2>你的选片偏好(基于人工标注历史)</h2>
+      <div class="summary-row">
+        <div class="stat"><div class="v" id="prefsTotal">--</div><div class="k">累计人工标注</div></div>
+        <div class="stat"><div class="v" id="prefsKeepRate">--</div><div class="k">人工 keep 占比</div></div>
+        <div class="stat"><div class="v" id="prefsTopScene">--</div><div class="k">最常 keep 的题材</div></div>
+        <div class="stat"><div class="v" id="prefsTopReason">--</div><div class="k">最常 cull 的原因</div></div>
+      </div>
+      <div style="margin-top:14px">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">题材分布</div>
+        <table id="prefsSceneTable" class="global-cache" style="margin-top:4px">
+          <thead><tr><th>场景</th><th>keep</th><th>maybe</th><th>cull</th><th>keep 占比</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div style="margin-top:14px">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">你 keep 时 vs cull 时,各维度的平均星级</div>
+        <table id="prefsAxisTable" class="global-cache" style="margin-top:4px">
+          <thead><tr><th>维度</th><th>keep 时 ★</th><th>cull 时 ★</th><th>差值(你的偏好权重)</th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <div class="muted" style="margin-top:6px">
+          差值越大说明你越在乎这一维 —— 例如 "构图 keep 4.5 / cull 1.8 = +2.7" 表示你对构图非常严格。
+          未来 PixCull 可以按这些权重自动调整 keep/cull 阈值(P-UX-12 v0.2)。
+        </div>
+      </div>
+    </div>
+
     <div class="card">
       <h2>V2.1 多轴 rescorer 训练</h2>
       <div class="muted" style="margin-bottom: 10px">
@@ -10580,6 +10735,84 @@ PYTHONPATH=. python scripts/eval_on_golden_set.py golden/ \
     el.classList.add("show");
     setTimeout(() => el.classList.remove("show"), 3000);
   };
+
+  // P-UX-12 — fetch + render the user preference profile card.
+  // Independent of the storage refresh, fires once on page load.
+  async function loadPreferenceProfile() {
+    let p;
+    try {
+      const res = await fetch("/api/v1/users/preferences");
+      if (!res.ok) return;
+      p = await res.json();
+    } catch (_e) { return; }
+    if (!p || !p.total_human_annotations) return;  // nothing to show yet
+    const card = document.getElementById("prefsCard");
+    if (!card) return;
+    card.style.display = "";
+
+    // Summary row
+    const total = p.total_human_annotations || 0;
+    const scenes = p.scene_decision_counts || {};
+    let keepTotal = 0, allTotal = 0;
+    for (const sc of Object.values(scenes)) {
+      keepTotal += (sc.keep || 0);
+      allTotal  += (sc.keep || 0) + (sc.maybe || 0) + (sc.cull || 0);
+    }
+    document.getElementById("prefsTotal").textContent = total;
+    document.getElementById("prefsKeepRate").textContent =
+      allTotal > 0 ? Math.round(100 * keepTotal / allTotal) + "%" : "--";
+
+    // Top scene by keep count
+    const sceneEntries = Object.entries(scenes).sort(
+      (a, b) => (b[1].keep || 0) - (a[1].keep || 0));
+    document.getElementById("prefsTopScene").textContent =
+      sceneEntries.length > 0
+        ? `${sceneEntries[0][0]} (${sceneEntries[0][1].keep || 0})`
+        : "--";
+
+    // Top cull reason
+    const reasons = p.cull_reasons || {};
+    const topReason = Object.entries(reasons).sort((a, b) => b[1] - a[1])[0];
+    document.getElementById("prefsTopReason").textContent =
+      topReason ? `${topReason[0]} (${topReason[1]})` : "--";
+
+    // Scene table
+    const sceneTbody = document.querySelector("#prefsSceneTable tbody");
+    sceneTbody.innerHTML = sceneEntries.slice(0, 12).map(([scene, c]) => {
+      const k = c.keep || 0, m = c.maybe || 0, x = c.cull || 0;
+      const sum = k + m + x;
+      const pct = sum > 0 ? Math.round(100 * k / sum) + "%" : "--";
+      return `<tr><td>${scene}</td><td>${k}</td><td>${m}</td><td>${x}</td><td>${pct}</td></tr>`;
+    }).join("");
+
+    // Axis table — keep avg vs cull avg + difference (your weight)
+    const ax = p.avg_rubric_when || {};
+    const keepAxes = ax.keep || {};
+    const cullAxes = ax.cull || {};
+    const axisLabels = {
+      technical: "技术", subject: "主体", composition: "构图",
+      light: "光线", moment: "瞬间", aesthetic: "美感",
+    };
+    const axisRows = Object.keys(axisLabels).map(name => {
+      const kv = keepAxes[name], cv = cullAxes[name];
+      const diff = (kv != null && cv != null) ? (kv - cv) : null;
+      return {
+        name, label: axisLabels[name], kv, cv, diff,
+      };
+    }).filter(r => r.kv != null || r.cv != null);
+    // Sort by diff descending so the axis you care about most is at top
+    axisRows.sort((a, b) => (b.diff ?? -99) - (a.diff ?? -99));
+    const axisTbody = document.querySelector("#prefsAxisTable tbody");
+    axisTbody.innerHTML = axisRows.map(r => {
+      const k = r.kv != null ? r.kv.toFixed(2) : "--";
+      const c = r.cv != null ? r.cv.toFixed(2) : "--";
+      const d = r.diff != null
+        ? `<b style="color:${r.diff > 1.5 ? '#34d399' : r.diff > 0.5 ? '#fbbf24' : 'var(--muted)'}">${r.diff >= 0 ? '+' : ''}${r.diff.toFixed(2)}</b>`
+        : "--";
+      return `<tr><td>${r.label}</td><td>${k}</td><td>${c}</td><td>${d}</td></tr>`;
+    }).join("");
+  }
+  loadPreferenceProfile();
 
   async function refresh() {
     let info;
