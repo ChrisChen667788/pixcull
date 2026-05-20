@@ -2029,6 +2029,12 @@ class _Handler(BaseHTTPRequestHandler):
         # weights inferred from history, cull-reason distribution).
         if sub == "/users/preferences":
             return self._serve_api_v1_user_preferences()
+        # P-AI-1 — personalized keep/maybe threshold profile.
+        # Reads /users/preferences then derives a small shift to the
+        # global thresholds based on the user's historical keep-rate
+        # vs the baseline 0.65.
+        if sub == "/users/profile":
+            return self._serve_api_v1_user_profile()
         # INFRA-4 — daily LLM spend ledger
         if sub == "/llm_budget":
             return self._serve_llm_budget()
@@ -2850,6 +2856,123 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
         return True
+
+    def _serve_api_v1_user_profile(self) -> bool:
+        """P-AI-1 — derived personalization profile.
+
+        Same source data as /users/preferences but distilled to the
+        runtime-relevant shape: keep_threshold_shift, axis priorities,
+        is_active. Reuses _serve_api_v1_user_preferences's aggregation
+        logic by calling profile_from_preferences() on the same
+        in-memory dict.
+
+        GET /api/v1/users/profile  → personalized.PersonalProfile json
+        """
+        from pixcull.scoring.personalized import profile_from_preferences
+
+        prefs = self._aggregate_user_preferences()
+        profile = profile_from_preferences(prefs)
+        payload = {
+            "schema":  "pixcull.api.v1.user_profile.v1",
+            "user_id": profile.user_id,
+            "n_annotations":      profile.n_annotations,
+            "is_active":          profile.is_active(),
+            "keep_rate":          profile.keep_rate,
+            "cull_rate":          profile.cull_rate,
+            "keep_threshold_shift": profile.keep_threshold_shift,
+            "axis_keep_means":    profile.axis_keep_means,
+            "axis_cull_means":    profile.axis_cull_means,
+            "most_cared_axis":    profile.most_cared_axis,
+        }
+        body = _safe_dumps(payload).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "max-age=30")
+        self.end_headers()
+        self.wfile.write(body)
+        return True
+
+    def _aggregate_user_preferences(self) -> dict:
+        """Shared aggregation logic used by both /users/preferences
+        and /users/profile so they don't fork."""
+        from collections import Counter, defaultdict
+        cull_reasons: Counter[str] = Counter()
+        scene_decision: dict[str, Counter[str]] = defaultdict(Counter)
+        per_dec_stars: dict[str, dict[str, list[float]]] = {
+            "keep": defaultdict(list),
+            "maybe": defaultdict(list),
+            "cull": defaultdict(list),
+        }
+        n_human = 0
+        for run_dir in sorted(_DEMO_ROOT.glob("*/")):
+            ann_path = run_dir / "output" / "annotations.jsonl"
+            csv_path = run_dir / "output" / "scores.csv"
+            if not ann_path.is_file():
+                continue
+            scene_by_fn: dict[str, str] = {}
+            if csv_path.is_file():
+                try:
+                    import csv as _csv
+                    with open(csv_path, encoding="utf-8") as f:
+                        rdr = _csv.DictReader(f)
+                        for row in rdr:
+                            fn = (row.get("filename") or "").strip()
+                            if fn:
+                                scene_by_fn[fn] = (row.get("scene") or "unknown").strip()
+                except OSError:
+                    pass
+            latest: dict[str, dict] = {}
+            try:
+                with open(ann_path, encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            rec = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+                        fn = rec.get("filename")
+                        if fn:
+                            latest[fn] = rec
+            except OSError:
+                continue
+            for fn, rec in latest.items():
+                label = str(rec.get("overall_label", "")).strip().lower()
+                if label not in ("keep", "maybe", "cull"):
+                    continue
+                n_human += 1
+                scene = scene_by_fn.get(fn, "unknown")
+                scene_decision[scene][label] += 1
+                if label == "cull":
+                    reason = str(rec.get("cull_reason") or "").strip().lower()
+                    if reason and reason in _CULL_REASONS:
+                        cull_reasons[reason] += 1
+                axes = rec.get("axes") or {}
+                for axis_name, ax in axes.items():
+                    if isinstance(ax, dict):
+                        stars = ax.get("stars")
+                        if stars is not None:
+                            try:
+                                per_dec_stars[label][axis_name].append(float(stars))
+                            except (TypeError, ValueError):
+                                continue
+
+        def _mean(xs):
+            return round(sum(xs) / len(xs), 2) if xs else None
+
+        return {
+            "total_human_annotations": n_human,
+            "cull_reasons": dict(cull_reasons),
+            "scene_decision_counts": {
+                s: dict(c) for s, c in scene_decision.items()
+            },
+            "avg_rubric_when": {
+                label: {ax: _mean(vals) for ax, vals in d.items()}
+                for label, d in per_dec_stars.items()
+            },
+        }
 
     def _serve_api_v1_user_preferences(self) -> bool:
         """P-UX-12 — per-user taste profile.
