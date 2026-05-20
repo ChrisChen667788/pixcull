@@ -734,6 +734,71 @@ def _analyze_in_background(
 # Result rendering: read scores.csv off disk, build the rows the HTML grid
 # expects. Mirrors serve_review's row schema (subset) so the same CSS works.
 # ---------------------------------------------------------------------------
+
+# P-UX-10 — inconsistency thresholds. The 4 scoring sources
+# (auto / model / vlm / meta) ought to broadly agree on a frame's
+# rubric stars; large disagreement usually means the frame sits in
+# a corner the rubric isn't calibrated for ("ambiguous moment",
+# "unusual composition") and is worth a human glance.
+#
+# Numbers below picked empirically from the V25 batch:
+#   stddev > 0.7 stars per axis  → call it noisy on that axis
+#   sum of per-axis stddevs > 2.0 → call the whole row noisy
+# A row with no human label yet AND a noisy total → "review me".
+_INCONSISTENCY_AXIS_THRESH = 0.7
+_INCONSISTENCY_TOTAL_THRESH = 2.0
+
+
+def _compute_inconsistency(auto_stars: dict, model_stars: dict,
+                            vlm_stars: dict, meta_stars: dict,
+                            axis_names: list[str],
+                            has_human: bool) -> dict:
+    """Compute per-axis + total stddev across the available scoring
+    sources for one row. Returns a dict with three keys ready to
+    splat into the row payload.
+
+    ``inconsistency_total``     float, sum of per-axis stddevs
+    ``inconsistency_per_axis``  {axis: stddev | None}
+    ``needs_review``            bool — True iff total > threshold
+                                AND no human annotation exists yet
+    """
+    import math
+    per_axis: dict[str, float | None] = {}
+    total = 0.0
+    n_with_signal = 0
+    for axis in axis_names:
+        vals = []
+        for src in (auto_stars, model_stars, vlm_stars, meta_stars):
+            v = src.get(axis) if isinstance(src, dict) else None
+            if v is not None:
+                try:
+                    vals.append(float(v))
+                except (TypeError, ValueError):
+                    pass
+        if len(vals) < 2:
+            per_axis[axis] = None
+            continue
+        mean = sum(vals) / len(vals)
+        var = sum((x - mean) ** 2 for x in vals) / len(vals)
+        std = math.sqrt(var)
+        per_axis[axis] = round(std, 3)
+        total += std
+        n_with_signal += 1
+    total = round(total, 3)
+    return {
+        "inconsistency_total":    total,
+        "inconsistency_per_axis": per_axis,
+        # Only flag for review when the noise is real *and* the user
+        # hasn't already decided. We trust their judgment over the
+        # rubric's stddev.
+        "needs_review": (
+            n_with_signal >= 1
+            and total >= _INCONSISTENCY_TOTAL_THRESH
+            and not has_human
+        ),
+    }
+
+
 def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
     # V8.5: fall back to disk-reload if the run isn't in memory
     # (e.g. server restarted, or the .app and dev server share runs
@@ -909,6 +974,18 @@ def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
             "rubric_meta_stars": meta_stars,
             "rubric_human_stars": {k: human_stars.get(k) for k in rubric_axis_names},
             "rubric_human_labeled": human_rec is not None,
+            # P-UX-10 — disagreement among the available scoring
+            # sources. For each axis, take the stddev across
+            # (auto / model / vlm / meta) wherever a value is present
+            # (skip None). Max across axes is the "noisy axis"; sum
+            # is the row's overall inconsistency. Surfaced as a card
+            # chip + a "review me" hint when ≥ 1.0 stars and no
+            # human annotation has settled the matter yet.
+            **_compute_inconsistency(
+                auto_stars, model_stars, vlm_stars, meta_stars,
+                rubric_axis_names,
+                has_human=(human_rec is not None),
+            ),
             "rubric_overall_rationale": (
                 human_rec.get("overall_rationale") if human_rec else ""
             ),

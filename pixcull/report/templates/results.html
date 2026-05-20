@@ -666,6 +666,32 @@
     }
     .cull-reason-tray .reason-skip:hover { color: var(--fg); }
 
+    /* P-UX-10 — "review me" chip on rows where the 4 scoring sources
+       (auto / model / vlm / meta) disagree by ≥ 2 stars total stddev.
+       Different from the cull-reason chip semantically: this is the
+       AI saying "I'm not sure about this one" rather than the user
+       tagging an outcome. Gold accent so it stands out without
+       implying a decision. */
+    .row1 .review-me-chip {
+      display: inline-flex; align-items: center;
+      font-size: 9.5px; padding: 1px 6px; border-radius: 3px;
+      background: rgba(251, 191, 36, 0.18);
+      color: #f6d166;
+      border: 1px solid rgba(251, 191, 36, 0.45);
+      cursor: help;
+      letter-spacing: 0.02em;
+    }
+    .card.needs-review {
+      box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.30),
+                  0 8px 24px rgba(0,0,0,0.45);
+    }
+    /* Per-axis highlight in the lightbox: dashed border on the axis
+       cells whose source disagreement is above threshold. */
+    .lightbox .axis-grid .ax.noisy {
+      border: 1px dashed rgba(251, 191, 36, 0.45);
+      background: rgba(251, 191, 36, 0.06);
+    }
+
     /* P-UX-4 — chip on the card showing the cull reason once set.
        Lives in row1 alongside the decision badge. Subtle red tint
        so it ties visually to the cull verdict without competing. */
@@ -2588,7 +2614,9 @@
         const cls = `s${s}` + (r.rubric_human_labeled ? " human" : "");
         return `<div class="ax ${cls}" title="${name}: ${stars.toFixed(1)}★${r.rubric_human_labeled?' (human)':''}"><span class="k">${axisAbbr[name]}</span><span class="v">${stars.toFixed(1)}</span></div>`;
       };
-      const cardCls = r.decision + (r.rubric_human_labeled ? " has-human" : "");
+      const cardCls = r.decision
+        + (r.rubric_human_labeled ? " has-human" : "")
+        + (r.needs_review ? " needs-review" : "");
       // V9.0 style chip — V16.0 localized to Chinese label, raw token
       // still in tooltip so users can map to the wire format.
       const styleChips = (r.style_modes || []).map(
@@ -2620,6 +2648,7 @@
               ${metaBadge}
               ${styleChips}
               ${r.cull_reason ? `<span class="cull-reason-chip" title="cull 原因: ${esc(_cullReasonLabel(r.cull_reason))}">✕ ${esc(_cullReasonLabel(r.cull_reason))}</span>` : ""}
+              ${r.needs_review ? `<span class="review-me-chip" title="自动 / 训练模型 / VLM / DeepSeek 这 4 个评分源对此图分歧大 (累计 ${(r.inconsistency_total || 0).toFixed(1)} ★ stddev) — 值得人工复核">⚠ review me</span>` : ""}
             </div>
             <div class="row2">
               <span class="scene" title="${esc(r.scene || '')}">${esc(trGenre(r.scene) || "?")}</span>
@@ -3173,10 +3202,19 @@
     const axisAbbr = {technical:"技术", subject:"主体", composition:"构图",
                        light:"光线", moment:"瞬间", aesthetic:"美感"};
     // Final star strip + per-source detail rows
+    // P-UX-10 — per-axis source disagreement; cells whose stddev is
+    // above _INCONSISTENCY_AXIS_THRESH get a dashed accent so the
+    // user immediately sees WHICH dimension the rubric is unsure
+    // about, not just "this row is noisy".
+    const perAxisNoise = r.inconsistency_per_axis || {};
     const finalStars = axisNames.map(n => {
       const s = r.rubric_stars && r.rubric_stars[n];
       const cls = s == null ? "" : `s${Math.round(s)}`;
-      return `<div class="ax ${cls}"><span class="k">${axisAbbr[n]}</span><span class="v">${s == null ? '--' : s.toFixed(1)}</span></div>`;
+      const noise = perAxisNoise[n];
+      const noisyCls = (noise != null && noise >= 0.7) ? " noisy" : "";
+      const noisyTitle = (noise != null && noise >= 0.7)
+        ? ` title="4 个评分源在此维度上分歧 ${noise.toFixed(2)}★ stddev"` : "";
+      return `<div class="ax ${cls}${noisyCls}"${noisyTitle}><span class="k">${axisAbbr[n]}</span><span class="v">${s == null ? '--' : s.toFixed(1)}</span></div>`;
     }).join("");
     // Per-source comparison (auto / model / vlm / human if present)
     // V16.0 — labels translated through I18N_SOURCE so users see
