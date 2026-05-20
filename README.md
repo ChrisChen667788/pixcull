@@ -2,6 +2,10 @@
   <img src="docs/assets/github-hero.svg" alt="PixCull — AI photo culling for professional photographers" width="100%" />
 </div>
 
+<div align="center">
+  <img src="docs/assets/github-demo.svg" alt="9-second animated demo — drag folder, AI scores, get keep/maybe/cull" width="100%" />
+</div>
+
 <p align="center">
   <a href="https://github.com/ChrisChen667788/pixcull/actions/workflows/tests.yml"><img alt="tests" src="https://img.shields.io/github/actions/workflow/status/ChrisChen667788/pixcull/tests.yml?branch=main&label=tests&style=flat-square" /></a>
   <a href="./LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square" /></a>

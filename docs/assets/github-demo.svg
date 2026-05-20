@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 560" width="1280" height="560" role="img" aria-label="PixCull demo — drag folder, AI scores, get keep/maybe/cull">
+  <defs>
+    <linearGradient id="dbg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b0d10"/>
+      <stop offset="1" stop-color="#14171c"/>
+    </linearGradient>
+    <linearGradient id="dtitle" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#c8d0db"/>
+    </linearGradient>
+    <radialGradient id="dglow" cx="0.5" cy="0.5" r="0.7">
+      <stop offset="0" stop-color="#3b82f6" stop-opacity="0.20"/>
+      <stop offset="1" stop-color="#3b82f6" stop-opacity="0.0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1280" height="560" fill="url(#dbg)"/>
+  <ellipse cx="640" cy="280" rx="640" ry="380" fill="url(#dglow)"/>
+
+  <!-- Stage indicator at top — 3 stages with active dot -->
+  <g transform="translate(440, 32)" font-family="Inter, sans-serif">
+    <g>
+      <circle cx="0" cy="0" r="6" fill="#3b82f6">
+        <animate attributeName="r" values="6;9;6" dur="9s" begin="0s" repeatCount="indefinite"/>
+        <animate attributeName="fill" values="#3b82f6;#3b82f6;#34d399" keyTimes="0;0.33;1" dur="9s" repeatCount="indefinite"/>
+      </circle>
+      <text x="14" y="5" fill="#e9ecf2" font-size="13" font-weight="500">拖入文件夹</text>
+    </g>
+    <line x1="100" y1="0" x2="170" y2="0" stroke="#2a2f38" stroke-width="2"/>
+    <g transform="translate(180, 0)">
+      <circle cx="0" cy="0" r="6" fill="#2a2f38">
+        <animate attributeName="r" values="6;6;9;6" keyTimes="0;0.33;0.5;1" dur="9s" repeatCount="indefinite"/>
+        <animate attributeName="fill" values="#2a2f38;#2a2f38;#3b82f6;#34d399" keyTimes="0;0.33;0.5;1" dur="9s" repeatCount="indefinite"/>
+      </circle>
+      <text x="14" y="5" fill="#a8b2c1" font-size="13" font-weight="500">
+        AI 评分
+        <animate attributeName="fill" values="#a8b2c1;#e9ecf2;#a8b2c1" keyTimes="0;0.5;1" dur="9s" repeatCount="indefinite"/>
+      </text>
+    </g>
+    <line x1="280" y1="0" x2="350" y2="0" stroke="#2a2f38" stroke-width="2"/>
+    <g transform="translate(360, 0)">
+      <circle cx="0" cy="0" r="6" fill="#2a2f38">
+        <animate attributeName="r" values="6;6;6;9" keyTimes="0;0.66;0.8;1" dur="9s" repeatCount="indefinite"/>
+        <animate attributeName="fill" values="#2a2f38;#2a2f38;#3b82f6;#34d399" keyTimes="0;0.66;0.8;1" dur="9s" repeatCount="indefinite"/>
+      </circle>
+      <text x="14" y="5" fill="#a8b2c1" font-size="13" font-weight="500">
+        得 verdict
+        <animate attributeName="fill" values="#a8b2c1;#a8b2c1;#e9ecf2" keyTimes="0;0.66;1" dur="9s" repeatCount="indefinite"/>
+      </text>
+    </g>
+  </g>
+
+  <!-- STAGE 1 (visible 0-3s): Folder drop visualization -->
+  <g opacity="0">
+    <animate attributeName="opacity" values="1;1;0;0;0" keyTimes="0;0.30;0.36;0.9;1" dur="9s" repeatCount="indefinite"/>
+    <!-- Drop area box -->
+    <rect x="380" y="160" width="520" height="280" rx="12" fill="#14171c" stroke="#2a2f38" stroke-dasharray="6 6"/>
+    <!-- Folder icon center -->
+    <g transform="translate(640, 280)">
+      <rect x="-50" y="-30" width="100" height="60" rx="6" fill="#3b82f6" opacity="0.18"/>
+      <rect x="-50" y="-30" width="100" height="60" rx="6" fill="none" stroke="#3b82f6" stroke-width="2"/>
+      <rect x="-50" y="-30" width="40" height="14" rx="3" fill="#3b82f6" opacity="0.3"/>
+      <text x="0" y="56" fill="#e9ecf2" font-family="Inter, sans-serif" font-size="16" font-weight="500" text-anchor="middle">
+        把照片文件夹拖到这里
+        <animate attributeName="opacity" values="0.7;1;0.7" dur="2s" repeatCount="indefinite"/>
+      </text>
+      <text x="0" y="80" fill="#7a8696" font-family="Inter, sans-serif" font-size="12" text-anchor="middle">
+        JPG · RAW · HEIC · CR3 · NEF · ARW
+      </text>
+    </g>
+  </g>
+
+  <!-- STAGE 2 (visible 3-6s): Scoring animation. Photos appear, scores fill in -->
+  <g opacity="0">
+    <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.30;0.36;0.62;0.68;1" dur="9s" repeatCount="indefinite"/>
+    <!-- Photo grid mock — 6 cards with progressive scoring -->
+    <g transform="translate(220, 140)">
+      <!-- Card 1 -->
+      <g>
+        <rect x="0" y="0" width="135" height="125" rx="8" fill="#14171c" stroke="#232830"/>
+        <rect x="0" y="0" width="3" height="125" fill="#34d399"/>
+        <rect x="8" y="8" width="119" height="76" rx="4" fill="#2b3340"/>
+        <text x="68" y="100" fill="#a8b2c1" font-family="ui-monospace, monospace" font-size="9" text-anchor="middle">技 4.7 主 5.0 构 4.5 ★</text>
+        <text x="68" y="115" fill="#e9ecf2" font-family="ui-monospace, monospace" font-size="10" text-anchor="middle">综合分 0.82</text>
+        <!-- Score fill animation -->
+        <rect x="8" y="84" width="0" height="2" fill="#34d399">
+          <animate attributeName="width" values="0;119" dur="0.8s" begin="2.7s" fill="freeze"/>
+        </rect>
+      </g>
+      <!-- Card 2 -->
+      <g transform="translate(150, 0)">
+        <rect x="0" y="0" width="135" height="125" rx="8" fill="#14171c" stroke="#232830"/>
+        <rect x="0" y="0" width="3" height="125" fill="#fbbf24"/>
+        <rect x="8" y="8" width="119" height="76" rx="4" fill="#2b3340"/>
+        <text x="68" y="100" fill="#a8b2c1" font-family="ui-monospace, monospace" font-size="9" text-anchor="middle">技 3.5 主 4.0 构 3.2 ★</text>
+        <text x="68" y="115" fill="#e9ecf2" font-family="ui-monospace, monospace" font-size="10" text-anchor="middle">综合分 0.61</text>
+        <rect x="8" y="84" width="0" height="2" fill="#fbbf24">
+          <animate attributeName="width" values="0;119" dur="0.8s" begin="2.9s" fill="freeze"/>
+        </rect>
+      </g>
+      <!-- Card 3 -->
+      <g transform="translate(300, 0)">
+        <rect x="0" y="0" width="135" height="125" rx="8" fill="#14171c" stroke="#232830"/>
+        <rect x="0" y="0" width="3" height="125" fill="#ef6363"/>
+        <rect x="8" y="8" width="119" height="76" rx="4" fill="#2b3340"/>
+        <text x="68" y="100" fill="#a8b2c1" font-family="ui-monospace, monospace" font-size="9" text-anchor="middle">技 2.0 主 2.5 构 2.8 ★</text>
+        <text x="68" y="115" fill="#e9ecf2" font-family="ui-monospace, monospace" font-size="10" text-anchor="middle">综合分 0.31</text>
+        <rect x="8" y="84" width="0" height="2" fill="#ef6363">
+          <animate attributeName="width" values="0;119" dur="0.8s" begin="3.1s" fill="freeze"/>
+        </rect>
+      </g>
+      <!-- Card 4 -->
+      <g transform="translate(450, 0)">
+        <rect x="0" y="0" width="135" height="125" rx="8" fill="#14171c" stroke="#232830"/>
+        <rect x="0" y="0" width="3" height="125" fill="#34d399"/>
+        <rect x="8" y="8" width="119" height="76" rx="4" fill="#2b3340"/>
+        <text x="68" y="100" fill="#a8b2c1" font-family="ui-monospace, monospace" font-size="9" text-anchor="middle">技 4.5 主 4.8 构 5.0 ★</text>
+        <text x="68" y="115" fill="#e9ecf2" font-family="ui-monospace, monospace" font-size="10" text-anchor="middle">综合分 0.85</text>
+        <rect x="8" y="84" width="0" height="2" fill="#34d399">
+          <animate attributeName="width" values="0;119" dur="0.8s" begin="3.3s" fill="freeze"/>
+        </rect>
+      </g>
+      <!-- Card 5 -->
+      <g transform="translate(600, 0)">
+        <rect x="0" y="0" width="135" height="125" rx="8" fill="#14171c" stroke="#232830"/>
+        <rect x="0" y="0" width="3" height="125" fill="#34d399"/>
+        <rect x="8" y="8" width="119" height="76" rx="4" fill="#2b3340"/>
+        <text x="68" y="100" fill="#a8b2c1" font-family="ui-monospace, monospace" font-size="9" text-anchor="middle">技 4.6 主 4.5 构 4.7 ★</text>
+        <text x="68" y="115" fill="#e9ecf2" font-family="ui-monospace, monospace" font-size="10" text-anchor="middle">综合分 0.78</text>
+        <rect x="8" y="84" width="0" height="2" fill="#34d399">
+          <animate attributeName="width" values="0;119" dur="0.8s" begin="3.5s" fill="freeze"/>
+        </rect>
+      </g>
+      <!-- Status line below -->
+      <text x="420" y="170" fill="#a8b2c1" font-family="Inter, sans-serif" font-size="14" text-anchor="middle">
+        6 维评分 + V20 建议 · 每张 ~1 秒
+      </text>
+    </g>
+  </g>
+
+  <!-- STAGE 3 (visible 6-9s): keep/maybe/cull pills + export options -->
+  <g opacity="0">
+    <animate attributeName="opacity" values="0;0;0;1;1" keyTimes="0;0.62;0.68;0.74;1" dur="9s" repeatCount="indefinite"/>
+    <g transform="translate(290, 200)" font-family="Inter, sans-serif">
+      <text x="350" y="0" fill="#e9ecf2" font-size="22" font-weight="600" text-anchor="middle">
+        32 张照片 · 分类完成
+      </text>
+      <text x="350" y="30" fill="#7a8696" font-size="13" text-anchor="middle">
+        每张照片可看 V20 advice / 1:1 焦点检查 / 与相似图对比 / XMP 直入 Lr·C1
+      </text>
+
+      <!-- Three big pills -->
+      <g transform="translate(45, 70)">
+        <rect x="0" y="0" width="195" height="80" rx="10" fill="rgba(46,168,74,0.16)" stroke="#34d399" stroke-width="2"/>
+        <text x="97" y="32" fill="#34d399" font-size="26" font-weight="700" text-anchor="middle">22</text>
+        <text x="97" y="52" fill="#a8b2c1" font-size="11" text-anchor="middle">KEEP</text>
+        <text x="97" y="68" fill="#7a8696" font-size="10" text-anchor="middle">直接交付客户</text>
+      </g>
+      <g transform="translate(255, 70)">
+        <rect x="0" y="0" width="195" height="80" rx="10" fill="rgba(217,163,12,0.16)" stroke="#fbbf24" stroke-width="2"/>
+        <text x="97" y="32" fill="#fbbf24" font-size="26" font-weight="700" text-anchor="middle">7</text>
+        <text x="97" y="52" fill="#a8b2c1" font-size="11" text-anchor="middle">MAYBE</text>
+        <text x="97" y="68" fill="#7a8696" font-size="10" text-anchor="middle">人工复审</text>
+      </g>
+      <g transform="translate(465, 70)">
+        <rect x="0" y="0" width="195" height="80" rx="10" fill="rgba(239,99,99,0.16)" stroke="#ef6363" stroke-width="2"/>
+        <text x="97" y="32" fill="#ef6363" font-size="26" font-weight="700" text-anchor="middle">3</text>
+        <text x="97" y="52" fill="#a8b2c1" font-size="11" text-anchor="middle">CULL</text>
+        <text x="97" y="68" fill="#7a8696" font-size="10" text-anchor="middle">含焦点/曝光原因</text>
+      </g>
+
+      <!-- Export options -->
+      <g transform="translate(0, 180)" font-size="11">
+        <rect x="0" y="0" width="700" height="32" rx="6" fill="rgba(255,255,255,0.04)" stroke="#2a2f38"/>
+        <text x="350" y="20" fill="#a8b2c1" text-anchor="middle">
+          📥 XMP 进 Lightroom · 📔 独立 HTML 相册发客户 · 📝 IPTC Caption · ↩ Lr 双向同步
+        </text>
+      </g>
+    </g>
+  </g>
+
+  <!-- Footer attribution -->
+  <text x="640" y="525" fill="#7a8696" font-family="Inter, sans-serif" font-size="12" text-anchor="middle">
+    github.com/ChrisChen667788/pixcull · 本地优先 · 照片永不上传 · MIT
+  </text>
+</svg>

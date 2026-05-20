@@ -1,0 +1,45 @@
+version: "3.9"
+
+# PixCull · docker-compose for one-command local trial.
+#
+# Quickstart:
+#   docker compose up --build
+#   open http://localhost:8770
+#
+# Persistence volumes:
+#   ./photos/      drop folders of photos here, scan via the
+#                  "扫描本地文件夹" tab
+#   ./pixcull-data ML model cache + per-user state + face library
+#                  (~500 MB after first run, persistent across
+#                   container restarts)
+#
+# Optional override: set DEEPSEEK_API_KEY in a .env file to enable
+# the V20 meta-judge against DeepSeek. Without it, PixCull still
+# runs — just without the LLM-tier verdict + advice polish.
+
+services:
+  pixcull:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: pixcull:latest
+    container_name: pixcull
+    ports:
+      - "8770:8770"
+    volumes:
+      # User photo input — anything in here is reachable via the
+      # /scan_local upload-page tab.
+      - ./photos:/data/photos:ro
+      # Persistent ML weights + per-user state. PixCull writes
+      # under here so restarts don't lose face libraries / verticals.
+      - ./pixcull-data:/root/.cache
+      - ./pixcull-data/runs:/tmp/pixcull_demo
+    environment:
+      - PIXCULL_DATA_DIR=/data
+      # Optional — only needed if you want DeepSeek meta-judge
+      # active. PixCull degrades gracefully without it.
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      # Optional LAN API key. When set, requests must carry
+      # X-PixCull-API-Key: <value>. Leave empty for trusted-host.
+      - PIXCULL_API_KEY=${PIXCULL_API_KEY:-}
+    restart: unless-stopped
