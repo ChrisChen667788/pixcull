@@ -1527,6 +1527,17 @@
         <option value="cluster">按连拍聚类</option>
       </select>
 
+      <!-- P-UX-20: saved view presets. Persist the current
+           filter combo (decision + scenes + styles + cull-reason +
+           sort) to localStorage so power users don't rebuild the
+           same combo every time. -->
+      <select id="viewPresetBy" class="sort-select"
+              title="视图预设 — 保存/加载常用筛选组合">
+        <option value="">视图预设 ▾</option>
+      </select>
+      <button class="export-btn" id="saveViewBtn"
+              title="把当前筛选 + 排序 + cull 原因 存为命名预设">★</button>
+
       <button class="export-btn" id="kbdHelpBtn" title="键盘快捷键 (?)" style="font-family:ui-monospace,monospace">?</button>
       <button class="export-btn" id="annNextBtn" title="按 active learning 优先级标注 — 优先暴露规则与 rescorer 不一致、概率临界、聚类分裂的图">▸ 标注下一张</button>
       <button class="export-btn" id="batchBtn" title="按总分批量打 keep/cull 标签">批量打分</button>
@@ -3053,6 +3064,104 @@
   document.getElementById("sortBy").addEventListener("change", e => {
     filterState.sort = e.target.value;
     render();
+  });
+
+  // P-UX-20 — saved view presets. Captures the full filter combo
+  // (decision + scenes + styles + cull_reason + sort) as a named
+  // entry in localStorage. Power users build the same combo over
+  // and over ("keep + with-face + score>0.7"); this lets them
+  // build once + recall by name.
+  const _VIEW_PRESETS_KEY = "pixcull_view_presets_v1";
+
+  function _readPresets() {
+    try {
+      return JSON.parse(localStorage.getItem(_VIEW_PRESETS_KEY) || "{}");
+    } catch (_e) { return {}; }
+  }
+  function _writePresets(p) {
+    try { localStorage.setItem(_VIEW_PRESETS_KEY, JSON.stringify(p)); }
+    catch (_e) { /* localStorage full / disabled — silent skip */ }
+  }
+
+  function _captureCurrentView() {
+    return {
+      decision: filterState.decision,
+      scenes:   [...filterState.scenes],
+      styles:   [...filterState.styles],
+      faceClusters:     [...filterState.faceClusters],
+      locationClusters: [...filterState.locationClusters],
+      cullReason: filterState.cullReason,
+      sort:       filterState.sort,
+      burstPeakOnly:    filterState.burstPeakOnly,
+      locationBestOnly: filterState.locationBestOnly,
+    };
+  }
+  function _applyView(view) {
+    if (!view) return;
+    filterState.decision = view.decision || "all";
+    filterState.scenes = new Set(view.scenes || []);
+    filterState.styles = new Set(view.styles || []);
+    filterState.faceClusters     = new Set(view.faceClusters || []);
+    filterState.locationClusters = new Set(view.locationClusters || []);
+    filterState.cullReason = view.cullReason || null;
+    filterState.sort       = view.sort || "default";
+    filterState.burstPeakOnly    = !!view.burstPeakOnly;
+    filterState.locationBestOnly = !!view.locationBestOnly;
+    // Sync UI: decision pill active class
+    document.querySelectorAll("#filters > .pill").forEach(el => {
+      el.classList.toggle("active",
+        el.dataset.d === filterState.decision);
+    });
+    document.getElementById("sortBy").value = filterState.sort;
+    _rebuildPresetDropdown();
+    render();
+  }
+  function _rebuildPresetDropdown() {
+    const sel = document.getElementById("viewPresetBy");
+    if (!sel) return;
+    const presets = _readPresets();
+    const names = Object.keys(presets).sort();
+    sel.innerHTML =
+      `<option value="">视图预设 ▾</option>` +
+      names.map(n =>
+        `<option value="${esc(n)}">${esc(n)}</option>`).join("") +
+      (names.length ? `<option value="__delete__">删除预设…</option>` : "");
+  }
+  _rebuildPresetDropdown();
+
+  document.getElementById("saveViewBtn")?.addEventListener("click", () => {
+    const name = prompt("给这个视图起个名字\n(例: 婚礼 keep + 高分 / 风光 best-of-location)");
+    if (!name || !name.trim()) return;
+    const presets = _readPresets();
+    presets[name.trim()] = _captureCurrentView();
+    _writePresets(presets);
+    _rebuildPresetDropdown();
+    showToast(`已保存视图 "${name.trim()}"`, "success");
+  });
+  document.getElementById("viewPresetBy")?.addEventListener("change", e => {
+    const v = e.target.value;
+    if (!v) return;
+    if (v === "__delete__") {
+      const presets = _readPresets();
+      const names = Object.keys(presets);
+      if (!names.length) { e.target.value = ""; return; }
+      const target = prompt(
+        "要删除哪个预设?(输入名字)\n现有: " + names.join(", "));
+      if (target && presets[target]) {
+        delete presets[target];
+        _writePresets(presets);
+        _rebuildPresetDropdown();
+        showToast(`已删除 "${target}"`, "success");
+      }
+      e.target.value = "";
+      return;
+    }
+    const presets = _readPresets();
+    if (presets[v]) {
+      _applyView(presets[v]);
+      showToast(`已加载视图 "${v}"`, "info");
+    }
+    e.target.value = "";   // reset to header so re-pick works
   });
 
   // Decision filter pills (the original keep/maybe/cull/all set)
