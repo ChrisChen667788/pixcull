@@ -3436,6 +3436,12 @@ class _Handler(BaseHTTPRequestHandler):
         # P-AI-4.1 — face library quality audit page (HTML + JSON).
         if path.startswith("/admin/face_audit/"):
             return self._serve_face_audit(path[len("/admin/face_audit/"):])
+        # P-PRO-7.1 — full delivery audit page (scene + face + wedding
+        # + ICC + EXIF).  Re-uses scripts/cli_audit.py via subprocess
+        # so the markdown output is the single source of truth across
+        # CLI + web.
+        if path.startswith("/admin/delivery/"):
+            return self._serve_delivery_audit(path[len("/admin/delivery/"):])
         if path == "/runs":
             return self._serve_runs_list()
         if path == "/storage_info":
@@ -6795,6 +6801,86 @@ class _Handler(BaseHTTPRequestHandler):
 
         # ---- HTML render ----------------------------------------
         html = _render_face_audit_html(payload)
+        self._send_html(200, html.encode("utf-8"))
+        return True
+
+    # P-PRO-7.1 — full delivery audit page.  Subprocess-runs
+    # ``scripts/cli_audit.py`` on the run's scores.csv + image input
+    # dir, then wraps the resulting Markdown report in a minimal
+    # HTML chrome so the photographer can read it in the browser
+    # without dropping to a terminal.  ``?format=md`` returns the
+    # raw markdown for piping into a PR / issue.
+    def _serve_delivery_audit(self, run_id: str) -> bool:
+        import shlex
+        import subprocess
+        run_id = unquote(run_id).split("?")[0]
+        run = _get_run(run_id) or _reload_run_from_disk(run_id)
+        if run is None:
+            self._reject_upload(404, f"no such run {run_id!r}")
+            return True
+        want_md = "format=md" in (self.path or "")
+        preset = "western"
+        if "preset=chinese" in (self.path or ""):
+            preset = "chinese"
+
+        out_dir = Path(run["output_dir"])
+        scores_csv = out_dir / "scores.csv"
+        if not scores_csv.exists():
+            self._reject_upload(404,
+                f"no scores.csv at {scores_csv} — run hasn't completed?")
+            return True
+        # Image root: prefer input/ for upload-mode runs; scan-mode
+        # runs carry absolute paths in scores.csv so leave None.
+        input_dir = out_dir.parent / "input"
+        cli_path = Path(__file__).resolve().parent / "cli_audit.py"
+
+        cmd = [
+            sys.executable, str(cli_path),
+            "--scores-csv", str(scores_csv),
+            "--mandatory-preset", preset,
+        ]
+        if input_dir.is_dir():
+            cmd += ["--image-root", str(input_dir)]
+        # User-root for the face library audit
+        try:
+            from pixcull.users import get_active_user, user_root as _ur
+            uroot = _ur(get_active_user())
+            if uroot:
+                cmd += ["--user-root", str(uroot)]
+        except ImportError:
+            pass
+
+        # Time-bound the subprocess so a stuck audit doesn't hang the
+        # server.  60s is generous (real audits land in <30s).
+        try:
+            proc = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=90,
+                env={**os.environ, "PYTHONPATH":
+                     str(Path(__file__).resolve().parent.parent) +
+                     ":" + os.environ.get("PYTHONPATH", "")},
+            )
+        except subprocess.TimeoutExpired:
+            self._reject_upload(504, "audit timed out (>90s)")
+            return True
+        if proc.returncode != 0:
+            self._reject_upload(500,
+                f"cli_audit failed (exit {proc.returncode}): "
+                f"{proc.stderr[:500]}")
+            return True
+        md = proc.stdout
+
+        if want_md:
+            self.send_response(200)
+            self.send_header("Content-Type",
+                             "text/markdown; charset=utf-8")
+            self.send_header("Content-Length",
+                             str(len(md.encode("utf-8"))))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(md.encode("utf-8"))
+            return True
+
+        html = _render_delivery_audit_html(run_id, md, preset)
         self._send_html(200, html.encode("utf-8"))
         return True
 
@@ -11361,6 +11447,126 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
 # Loaded via _results_html_template() above; hot-reloadable on edit.
 
 
+def _render_delivery_audit_html(run_id: str, md: str, preset: str) -> str:
+    """P-PRO-7.1 — wrap the cli_audit Markdown output in browser
+    HTML.  Lightweight Markdown→HTML conversion (regex-based) so we
+    don't pull in a markdown library; the CLI output uses a stable
+    subset (## headings, | tables |, ``- bullets``, **bold**).
+    """
+    import html as _html
+    import re as _re
+
+    def _md_to_html(text: str) -> str:
+        # Escape first
+        out = _html.escape(text)
+        # ## Headings → <h2>
+        out = _re.sub(r"^## +(.+)$",
+                      r"<h2>\1</h2>", out, flags=_re.MULTILINE)
+        # # Heading → <h1>
+        out = _re.sub(r"^# +(.+)$",
+                      r"<h1>\1</h1>", out, flags=_re.MULTILINE)
+        # **bold**
+        out = _re.sub(r"\*\*([^*\n]+)\*\*", r"<b>\1</b>", out)
+        # `inline code`
+        out = _re.sub(r"`([^`\n]+)`", r"<code>\1</code>", out)
+        # _italic_ for the timestamp line + similar
+        out = _re.sub(r"(?<!\w)_([^_\n]+)_(?!\w)", r"<i>\1</i>", out)
+
+        # Tables: blocks of | … | lines.  Convert each contiguous
+        # block by detecting the separator line ``| --- | --- |`` etc.
+        def _tablize(block: str) -> str:
+            lines = block.strip().splitlines()
+            if len(lines) < 2:
+                return block
+            head_cells = [c.strip() for c in lines[0].strip("|").split("|")]
+            rows_html = []
+            for ln in lines[2:]:                       # skip separator
+                cells = [c.strip() for c in ln.strip("|").split("|")]
+                tds = "".join(f"<td>{c}</td>" for c in cells)
+                rows_html.append(f"<tr>{tds}</tr>")
+            ths = "".join(f"<th>{c}</th>" for c in head_cells)
+            return ("<table><thead><tr>" + ths + "</tr></thead>"
+                    "<tbody>" + "".join(rows_html) + "</tbody></table>")
+
+        # Find tables (any 2+ consecutive lines starting with |)
+        def _table_repl(m: _re.Match) -> str:
+            return _tablize(m.group(0))
+        out = _re.sub(
+            r"(?:^\|.*\|$\n){2,}",
+            _table_repl, out, flags=_re.MULTILINE,
+        )
+
+        # Bullets:  "  - foo" or "- foo"
+        out = _re.sub(r"^( {0,4})- +(.+)$",
+                      r"\1<li>\2</li>", out, flags=_re.MULTILINE)
+        # Wrap consecutive <li> in <ul>
+        out = _re.sub(r"(?:<li>.+</li>\n)+",
+                      lambda m: "<ul>" + m.group(0) + "</ul>", out)
+
+        # Paragraph break: double newline → </p><p>
+        # (cheap; the markdown is short enough that we just wrap
+        # the whole thing in a div with white-space: pre-line)
+        return out
+
+    body = _md_to_html(md)
+    preset_label = "中式" if preset == "chinese" else "西式"
+    preset_url = ("?preset=western" if preset == "chinese"
+                  else "?preset=chinese")
+    preset_alt = "西式" if preset == "chinese" else "中式"
+
+    return (
+        "<!DOCTYPE html><html lang='zh'><head>"
+        "<meta charset='utf-8'>"
+        f"<title>交付审计 · {_html.escape(run_id)}</title>"
+        "<style>"
+        "body{margin:0;background:#0b0d10;color:#e9ecf2;"
+        "font:13px/1.6 -apple-system,Segoe UI,PingFang SC,sans-serif}"
+        "header{padding:18px 24px;border-bottom:1px solid #232830;"
+        "display:flex;align-items:center;gap:12px;flex-wrap:wrap}"
+        "header h1{margin:0;font-size:16px;font-weight:700;flex:1}"
+        "header a,header span.preset{font-size:11.5px;color:#a8b2c1;"
+        "text-decoration:none;padding:4px 10px;border-radius:6px;"
+        "border:1px solid #232830}"
+        "header a:hover{color:#fff}"
+        "main{padding:18px 24px;max-width:920px;line-height:1.7}"
+        "h1{font-size:20px;margin:0 0 4px}"
+        "h2{font-size:13px;margin:32px 0 12px;color:#a8b2c1;"
+        "text-transform:uppercase;letter-spacing:.04em;"
+        "padding-bottom:6px;border-bottom:1px solid #1c2027}"
+        "b{color:#fff}"
+        "i{color:#7a8696;font-style:normal;font-size:11.5px}"
+        "code{font-family:ui-monospace,monospace;font-size:11.5px;"
+        "padding:1px 5px;background:#11141a;border-radius:3px;"
+        "color:#79c8ff}"
+        "table{width:100%;border-collapse:collapse;font-size:12px;"
+        "background:#11141a;border:1px solid #232830;border-radius:6px;"
+        "overflow:hidden;margin:6px 0 16px}"
+        "th{text-align:left;padding:8px 12px;background:#161a21;"
+        "color:#a8b2c1;font-weight:600;font-size:11px;"
+        "letter-spacing:.04em;text-transform:uppercase;"
+        "border-bottom:1px solid #232830}"
+        "td{padding:7px 12px;border-bottom:1px solid #1c2027}"
+        "tr:last-child td{border-bottom:none}"
+        "ul{margin:6px 0 16px;padding-left:18px}"
+        "li{margin:2px 0}"
+        "footer{padding:18px 24px;color:#7a8696;font-size:11.5px;"
+        "border-top:1px solid #232830}"
+        "</style></head><body>"
+        f"<header><h1>📋 交付审计 · run "
+        f"<code>{_html.escape(run_id)}</code></h1>"
+        f"<span class='preset'>mandatory: {preset_label}</span>"
+        f"<a href='/admin/delivery/{_html.escape(run_id)}{preset_url}'"
+        f">切换 {preset_alt} 预设</a>"
+        f"<a href='/admin/delivery/{_html.escape(run_id)}?format=md'>原 Markdown</a>"
+        "<a href='/admin'>← 返回 admin</a>"
+        "</header>"
+        f"<main>{body}</main>"
+        "<footer>P-PRO-7.1 · 数据来源:scripts/cli_audit.py · 包含 P-CORE-2 / "
+        "P-AI-4 / P-PRO-4 / P-PRO-6 / P-PRO-7 五段审计</footer>"
+        "</body></html>"
+    )
+
+
 def _render_face_audit_html(payload: dict) -> str:
     """P-AI-4.1 — minimal HTML report for the face library audit page.
 
@@ -11899,7 +12105,7 @@ PYTHONPATH=. python scripts/eval_on_golden_set.py golden/ \
           <td>
             <a class="btn" href="/results/${r.run_id}">查看</a>
             <button class="btn rescan-scene" ${isRunning ? "disabled title='running 中'" : "title='重判 stilllife → portrait 等(face_count>0 校正)'"}>重判场景</button>
-            <a class="btn" href="/admin/face_audit/${r.run_id}" ${isRunning ? "style='pointer-events:none;opacity:0.4'" : "title='P-AI-4.1 · 人脸库质量审计(污染 / 碎片化 / 跨run 连续性)'"}>👤 面孔审计</a>
+            <a class="btn" href="/admin/delivery/${r.run_id}" ${isRunning ? "style='pointer-events:none;opacity:0.4'" : "title='P-PRO-7.1 · 完整交付审计(场景 + 人脸 + 婚礼 + ICC + EXIF)'"}>📋 交付审计</a>
             <button class="danger del" ${isRunning ? "disabled title='running 中,等完成再删'" : ""}>删除</button>
           </td>
         </tr>`;
