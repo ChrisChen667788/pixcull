@@ -1039,6 +1039,14 @@ def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
                               if r.get("is_burst_peak") not in
                                  (None, "", float("nan"))
                               else False,
+            # P-AI-5.1 — per-component reason string for the cluster's
+            # winner ("最锐 +1.6σ" / "动作差异最大 +2.1σ"). None on
+            # non-peak rows + on singletons; surfaced as a tooltip on
+            # the 🏆 badge in the lightbox.
+            "burst_peak_reason": (str(r["burst_peak_reason"])
+                                  if r.get("burst_peak_reason") not in
+                                     (None, "", float("nan"))
+                                  else None),
             # V9.0 sort/filter/group fields
             "cluster_id": cluster_id,
             "datetime": dt_str,

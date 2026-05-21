@@ -4150,8 +4150,11 @@
     // aren't meaningful "peaks"). Visible at-a-glance so the user
     // can verify the picker chose the right frame.
     const _clusterSize = _BURST_CLUSTER_SIZES.get(r.cluster_id) || 0;
+    // P-AI-5.1 — append the per-component reason ("最锐 +1.6σ" etc.)
+    // to the badge tooltip when the burst-peak scorer produced one.
+    const _peakReason = r.burst_peak_reason ? ` — ${r.burst_peak_reason}` : "";
     const peakBadge = (r.is_burst_peak && _clusterSize >= 2)
-      ? `<span class="badge keep" title="此连拍组的最佳一张(共 ${_clusterSize} 张)" `
+      ? `<span class="badge keep" title="此连拍组的最佳一张(共 ${_clusterSize} 张)${esc(_peakReason)}" `
         + `style="background:linear-gradient(90deg,#d4a843,#b88a2e);color:#1a1d24">`
         + `🏆 连拍峰值</span>`
       : '';

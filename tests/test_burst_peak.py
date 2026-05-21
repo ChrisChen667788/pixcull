@@ -151,6 +151,51 @@ def test_vector_mean_handles_uneven_dims():
     assert _vector_mean([]) == []
 
 
+def test_annotate_burst_peak_reasons_attaches_to_v27_pick():
+    """P-AI-5.1 — annotate_burst_peak_reasons should add a reason
+    string to whichever row V27 already flagged as the burst peak."""
+    import pandas as pd
+    from pixcull.pipeline.burst_peak import annotate_burst_peak_reasons
+
+    df = pd.DataFrame([
+        # cluster 1 — V27 picks "sharp1"
+        {"filename": "soft1.jpg", "cluster_id": 1,
+         "score_sharpness": 0.3, "score_final": 0.4,
+         "embedding": [1.0, 0.0], "is_burst_peak": False},
+        {"filename": "sharp1.jpg", "cluster_id": 1,
+         "score_sharpness": 0.9, "score_final": 0.8,
+         "embedding": [1.0, 0.0], "is_burst_peak": True},
+        # cluster 2 — singleton, V27 marked True but cluster is size 1
+        {"filename": "solo.jpg", "cluster_id": 2,
+         "score_sharpness": 0.5, "score_final": 0.5,
+         "embedding": [1.0, 0.0], "is_burst_peak": True},
+    ])
+    out = annotate_burst_peak_reasons(df)
+    # Reason attached to the V27 winner in the size-2 cluster
+    sharp_row = out[out["filename"] == "sharp1.jpg"].iloc[0]
+    assert sharp_row["burst_peak_reason"]
+    assert isinstance(sharp_row["burst_peak_reason"], str)
+    # Non-winner gets no reason
+    soft_row = out[out["filename"] == "soft1.jpg"].iloc[0]
+    assert soft_row["burst_peak_reason"] is None or \
+           pd.isna(soft_row["burst_peak_reason"])
+    # Singleton cluster gets no reason — not a meaningful peak
+    solo_row = out[out["filename"] == "solo.jpg"].iloc[0]
+    assert solo_row["burst_peak_reason"] is None or \
+           pd.isna(solo_row["burst_peak_reason"])
+
+
+def test_annotate_burst_peak_reasons_handles_missing_columns():
+    """If cluster_id or is_burst_peak missing, just add a null column."""
+    import pandas as pd
+    from pixcull.pipeline.burst_peak import annotate_burst_peak_reasons
+
+    df = pd.DataFrame([{"filename": "a.jpg", "score_sharpness": 0.5}])
+    out = annotate_burst_peak_reasons(df)
+    assert "burst_peak_reason" in out.columns
+    assert out["burst_peak_reason"].iloc[0] is None
+
+
 def test_custom_weights_change_outcome():
     """When the user tunes weights, the picker respects them.
 

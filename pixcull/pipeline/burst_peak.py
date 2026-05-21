@@ -172,4 +172,81 @@ def burst_peak_summary(df: pd.DataFrame) -> list[dict]:
     return out
 
 
-__all__ = ["rank_burst_peaks", "burst_peak_summary"]
+def annotate_burst_peak_reasons(df: pd.DataFrame) -> pd.DataFrame:
+    """P-AI-5.1 — add ``burst_peak_reason`` to whichever row V27
+    already flagged as ``is_burst_peak`` for each cluster.
+
+    The reason string is produced by the more sophisticated P-AI-5
+    picker in ``pixcull.scoring.burst_peak`` (z-scored sharpness +
+    embedding distinctness + score_final + face evidence).  We do
+    NOT change ``is_burst_peak`` — that stays as V27's authoritative
+    pick to avoid disturbing downstream consumers (the lightbox
+    🏆 badge, the export filter, the iOS app).  Instead we attach
+    a per-component explanation so the user can see *why* a frame
+    is the peak ("最锐 — 簇内 +1.6σ 锐度" / "姿态/动作差异最大 —
+    簇内 +2.1σ" / "综合分高 (0.82)").
+
+    Adds:
+      ``burst_peak_reason``  str | None — explanation, only set on
+                                          rows where is_burst_peak
+                                          is True AND cluster size
+                                          ≥ 2 (singletons aren't
+                                          meaningful peaks).
+
+    Idempotent.  No-op if cluster_id or is_burst_peak is missing.
+    """
+    if df.empty:
+        df["burst_peak_reason"] = None
+        return df
+    if ("cluster_id" not in df.columns
+        or "is_burst_peak" not in df.columns):
+        df["burst_peak_reason"] = None
+        return df
+
+    # Local import — keeps the V27 import surface unchanged for
+    # callers that only want the original ranker, and avoids a
+    # cross-module cycle if scoring.burst_peak ever wants to
+    # import something from pipeline.
+    from pixcull.scoring.burst_peak import rank_burst_peak
+
+    reasons: dict[int, str] = {}   # row index → reason
+    for cid, group in df.groupby("cluster_id"):
+        if len(group) < 2:
+            continue
+        # Build a list of plain row dicts; preserve the original df
+        # index so we can write the reason back to the right row.
+        rows: list[dict] = []
+        for idx, row in group.iterrows():
+            d = row.to_dict()
+            d["_orig_idx"] = idx
+            rows.append(d)
+        try:
+            result = rank_burst_peak(rows)
+        except Exception:
+            # Defensive — never let the explanation step crash the
+            # pipeline.  Pipeline ships fine without reasons.
+            continue
+        # Find the V27-picked winner (is_burst_peak == True) in
+        # this cluster, look up the P-AI-5 reason for that filename.
+        peaks = group[group["is_burst_peak"]]
+        if peaks.empty:
+            continue
+        peak_idx = peaks.index[0]
+        peak_fn = str(group.loc[peak_idx].get("filename", ""))
+        # P-AI-5 result.reasons is keyed by filename — direct lookup.
+        if peak_fn in result.reasons:
+            reasons[peak_idx] = result.reasons[peak_fn]
+
+    # Materialize the column
+    df = df.copy()
+    df["burst_peak_reason"] = df.index.map(
+        lambda i: reasons.get(i)
+    )
+    return df
+
+
+__all__ = [
+    "rank_burst_peaks",
+    "burst_peak_summary",
+    "annotate_burst_peak_reasons",
+]

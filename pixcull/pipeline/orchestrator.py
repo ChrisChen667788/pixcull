@@ -15,7 +15,10 @@ from tqdm import tqdm
 from pixcull.config import PixCullConfig
 from pixcull.detectors.duplicate import cluster_bursts, demote_mediocre_bursts
 from pixcull.io.loader import list_images
-from pixcull.pipeline.burst_peak import rank_burst_peaks
+from pixcull.pipeline.burst_peak import (
+    annotate_burst_peak_reasons,
+    rank_burst_peaks,
+)
 from pixcull.pipeline.face_clustering import cluster_faces_across_rows
 from pixcull.pipeline.location_clustering import cluster_locations_across_rows
 from pixcull.pipeline.parallel import parallel_analyze
@@ -227,6 +230,10 @@ def run_pipeline(
     if progress_cb is not None:
         progress_cb(total, total, "连拍峰值排名…")
     df = rank_burst_peaks(df)
+    # P-AI-5.1 — attach the explanation string ("最锐 +1.6σ" /
+    # "动作差异最大 +2.1σ") to each cluster's winner.  Pure post-hoc
+    # commentary; does NOT change is_burst_peak.
+    df = annotate_burst_peak_reasons(df)
 
     # V1.2: rescorer columns — always emitted when mode != off so downstream
     # tooling (scripts/pick_next_to_label.py, the review viewer, future
