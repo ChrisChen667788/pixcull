@@ -619,25 +619,46 @@
 
     .grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-      gap: 12px;
-      padding: 16px 20px 40px;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: var(--space-3);
+      padding: var(--space-5) var(--space-6) var(--space-8);
     }
+    /* v0.4 — refreshed card visual.  Bigger radius for a softer
+       feel, fuller shadow ramp on hover (matching elevation
+       hierarchy from the new shadow tokens), and the decision-
+       color "tag" moved from a left-border stripe to a top
+       glow so the photo gets the visual weight. */
     .card {
-      background: var(--bg-card); border: 1px solid var(--border);
-      border-radius: 10px; overflow: hidden;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
       display: flex; flex-direction: column;
-      transition: transform 0.18s, box-shadow 0.18s, border-color 0.18s;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+      transition: transform var(--duration-normal) var(--ease-out),
+                  box-shadow var(--duration-normal) var(--ease-out),
+                  border-color var(--duration-fast) var(--ease-out);
+      box-shadow: var(--shadow-sm);
+      position: relative;
     }
     .card:hover {
-      transform: translateY(-2px);
+      transform: translateY(-3px);
       border-color: var(--border-hi);
-      box-shadow: 0 8px 24px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.04);
+      box-shadow: var(--shadow-lg);
     }
-    .card.keep { border-left: 3px solid var(--keep); }
-    .card.maybe { border-left: 3px solid var(--maybe); }
-    .card.cull { border-left: 3px solid var(--cull); opacity: 0.65; }
+    /* Decision tag — a subtle top-edge accent strip that lights
+       up the card without competing with the photo content. */
+    .card::before {
+      content: "";
+      position: absolute; top: 0; left: 0; right: 0;
+      height: 2px;
+      background: transparent;
+      transition: background var(--duration-fast) var(--ease-out);
+      z-index: 2;
+    }
+    .card.keep::before  { background: var(--keep); }
+    .card.maybe::before { background: var(--maybe); }
+    .card.cull::before  { background: var(--cull); }
+    .card.cull          { opacity: 0.62; }
     /* P-UX-18 — virtualized placeholder. Same outer shape + radius as
        a real card so the layout doesn't jump when materialization
        happens; subtle pulse so the user knows it's loading rather
@@ -680,9 +701,20 @@
       font-size: 11px; color: var(--muted); text-overflow: ellipsis;
       overflow: hidden; white-space: nowrap; flex: 1;
     }
+    /* v0.4 — decision badge.  Same family as .chip but bolder
+       (it's the row's primary status indicator) and slightly
+       larger padding.  Keep classes (.badge.keep|maybe|cull)
+       unchanged so render() doesn't have to migrate.  */
     .badge {
-      display: inline-block; padding: 1px 6px; font-size: 10px; font-weight: 600;
-      border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px;
+      display: inline-flex; align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      font-size: 10px;
+      font-weight: 600;
+      border-radius: var(--radius-pill);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      box-shadow: var(--shadow-sm);
     }
     /* P-UX-23 — always-on shape glyphs on decision badges. Even
        for users with normal color vision the glyph reads faster
@@ -922,12 +954,102 @@
        AI saying "I'm not sure about this one" rather than the user
        tagging an outcome. Gold accent so it stands out without
        implying a decision. */
-    .row1 .review-me-chip {
+    /* ============================================================
+       v0.4 P0 (2/3) · UNIFIED CHIP SYSTEM
+       ============================================================
+       Replaces ~6 ad-hoc per-feature chip palettes (cull-reason /
+       review-me / exposure / moment / develop / etc) with one
+       canonical shape + 5 semantic color variants.  Every chip
+       looks like the same family across the UI.
+
+       Usage:
+         <span class="chip chip--warn">⚠ review me</span>
+         <span class="chip chip--info chip--clickable" ...>🪣 桶</span>
+         <span class="chip chip--brand chip--uncertain" ...>💒 ?</span>
+
+       Modifiers:
+         chip--clickable   — pointer cursor + hover-fill
+         chip--active      — filled state (filter is on)
+         chip--uncertain   — dashed border + reduced opacity
+         chip--compact     — tighter padding for in-card row1
+       ============================================================ */
+    .chip {
       display: inline-flex; align-items: center;
-      font-size: 9.5px; padding: 1px 6px; border-radius: 3px;
-      background: rgba(251, 191, 36, 0.18);
-      color: #f6d166;
-      border: 1px solid rgba(251, 191, 36, 0.45);
+      gap: 4px;
+      padding: 2px 8px;
+      font-size: var(--t-tiny);
+      font-weight: 500;
+      letter-spacing: 0.02em;
+      border-radius: var(--radius-pill);
+      border: 1px solid transparent;
+      background: var(--c-neutral-tint);
+      color: var(--c-neutral);
+      border-color: var(--c-neutral-border);
+      cursor: help;
+      transition: background var(--duration-fast) var(--ease-out),
+                  border-color var(--duration-fast) var(--ease-out),
+                  color var(--duration-fast) var(--ease-out),
+                  transform var(--duration-fast) var(--ease-out);
+      max-width: 140px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .chip--success { background: var(--c-success-tint);
+                     color: var(--c-success);
+                     border-color: var(--c-success-border); }
+    .chip--warn    { background: var(--c-warn-tint);
+                     color: var(--c-warn);
+                     border-color: var(--c-warn-border); }
+    .chip--danger  { background: var(--c-danger-tint);
+                     color: var(--c-danger);
+                     border-color: var(--c-danger-border); }
+    .chip--info    { background: var(--c-info-tint);
+                     color: var(--c-info);
+                     border-color: var(--c-info-border); }
+    .chip--neutral { background: var(--c-neutral-tint);
+                     color: var(--c-neutral);
+                     border-color: var(--c-neutral-border); }
+    /* brand = the wedding-moment / brand accent (indigo).
+       Lives separately from the 5 semantic states because it's
+       a feature signal, not a status. */
+    .chip--brand   { background: var(--accent-soft);
+                     color: var(--accent-hi);
+                     border-color: rgba(99,102,241,0.40); }
+    .chip--clickable { cursor: pointer; }
+    .chip--clickable:hover {
+      background: var(--c-info-tint);
+      transform: translateY(-1px);
+    }
+    .chip--success.chip--clickable:hover { background: var(--c-success-tint); filter: brightness(1.15); }
+    .chip--warn.chip--clickable:hover    { background: var(--c-warn-tint);    filter: brightness(1.15); }
+    .chip--danger.chip--clickable:hover  { background: var(--c-danger-tint);  filter: brightness(1.15); }
+    .chip--brand.chip--clickable:hover   { background: rgba(99,102,241,0.24); filter: brightness(1.10); }
+    /* active = "this filter is currently on" — saturated fill +
+       white text for unmistakable contrast against the dim
+       background chips. */
+    .chip--active {
+      background: var(--accent) !important;
+      color: #ffffff !important;
+      border-color: var(--accent-hi) !important;
+    }
+    .chip--uncertain { opacity: 0.7; border-style: dashed; }
+    .chip--compact   { padding: 1px 6px; font-size: 9.5px; }
+    .chip svg { width: 11px; height: 11px; flex-shrink: 0; }
+
+    /* ============================================================
+       LEGACY PER-CHIP SELECTORS — kept as aliases that map to the
+       unified .chip variants above so existing render() emissions
+       work without JS changes.  Migration: any new chip should
+       use class="chip chip--<variant>" directly.
+       ============================================================ */
+    .row1 .review-me-chip {
+      /* warn semantics — "AI sources disagree" */
+      display: inline-flex; align-items: center;
+      gap: 4px;
+      font-size: 9.5px; padding: 1px 6px;
+      border-radius: var(--radius-pill);
+      background: var(--c-warn-tint);
+      color: var(--c-warn);
+      border: 1px solid var(--c-warn-border);
       cursor: help;
       letter-spacing: 0.02em;
     }
@@ -956,66 +1078,74 @@
       opacity: 1;
     }
 
-    /* P-UX-14 — exposure-consistency chip. Lit when this row sits
-       in a burst cluster of ≥ 3 photos and its mean_luma diverges
-       from the cluster median by ≥ ~⅓ stop, OR its highlight-clip
-       jumps by ≥ 4%. The classic "你的手指碰到拨轮了" frame.
-       Cool-blue tint so it doesn't compete with the cull-reason
-       chip semantically. */
+    /* P-UX-14 → v0.4: info-variant chip (cool blue) for normal
+       exposure flag, warn-variant when over-exposed. */
     .row1 .exposure-chip {
       display: inline-flex; align-items: center;
-      font-size: 9.5px; padding: 1px 6px; border-radius: 3px;
-      background: rgba(59, 130, 246, 0.18);
-      color: #a5c5ff;
-      border: 1px solid rgba(59, 130, 246, 0.45);
+      gap: 4px;
+      font-size: 9.5px; padding: 1px 6px;
+      border-radius: var(--radius-pill);
+      background: var(--c-info-tint);
+      color: var(--c-info);
+      border: 1px solid var(--c-info-border);
       cursor: help;
       letter-spacing: 0.02em;
     }
-    .row1 .exposure-chip.over { color: #ffb59a; border-color: rgba(251, 191, 36, 0.55); background: rgba(251, 191, 36, 0.10); }
-    .row1 .exposure-chip.under { color: #9ab5d6; }
+    .row1 .exposure-chip.over {
+      background: var(--c-warn-tint);
+      color: var(--c-warn);
+      border-color: var(--c-warn-border);
+    }
+    .row1 .exposure-chip.under {
+      /* under-exposure is informational; keep the info palette */
+      opacity: 0.85;
+    }
 
-    /* P-UX-4 — chip on the card showing the cull reason once set.
-       Lives in row1 alongside the decision badge. Subtle red tint
-       so it ties visually to the cull verdict without competing. */
+    /* P-UX-4 → v0.4: danger-variant chip for "this is the reason
+       we culled".  Color ties to the cull state semantically. */
     .row1 .cull-reason-chip {
       display: inline-flex; align-items: center;
-      font-size: 9.5px; padding: 1px 6px; border-radius: 3px;
-      background: rgba(239, 99, 99, 0.18);
-      color: #ff9a9a;
-      border: 1px solid rgba(239, 99, 99, 0.35);
+      gap: 4px;
+      font-size: 9.5px; padding: 1px 6px;
+      border-radius: var(--radius-pill);
+      background: var(--c-danger-tint);
+      color: var(--c-danger);
+      border: 1px solid var(--c-danger-border);
       cursor: help;
-      letter-spacing: 0.02em;
-      max-width: 90px;
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    }
-
-    /* P-PRO-4.1 — wedding moment chip on grid cards.  Lives in
-       row1 next to the decision badge.  Subtle pink so it ties
-       visually to "wedding" without competing with cull/keep
-       colors.  Hidden on non-wedding rows by render() guard. */
-    .row1 .moment-chip {
-      display: inline-flex; align-items: center;
-      font-size: 9.5px; padding: 1px 6px; border-radius: 3px;
-      background: rgba(244, 114, 182, 0.16);
-      color: #ffaad4;
-      border: 1px solid rgba(244, 114, 182, 0.40);
-      cursor: pointer;
       letter-spacing: 0.02em;
       max-width: 110px;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-      transition: background 80ms, border-color 80ms;
+    }
+
+    /* P-PRO-4.1 → v0.4: brand-variant chip (indigo) for wedding
+       moment classification.  Distinct from the 5 status variants
+       because moment is a CATEGORY signal, not a status. */
+    .row1 .moment-chip {
+      display: inline-flex; align-items: center;
+      gap: 4px;
+      font-size: 9.5px; padding: 1px 6px;
+      border-radius: var(--radius-pill);
+      background: var(--accent-soft);
+      color: var(--accent-hi);
+      border: 1px solid rgba(99, 102, 241, 0.40);
+      cursor: pointer;
+      letter-spacing: 0.02em;
+      max-width: 130px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      transition: background var(--duration-fast) var(--ease-out),
+                  border-color var(--duration-fast) var(--ease-out),
+                  transform var(--duration-fast) var(--ease-out);
     }
     .row1 .moment-chip:hover {
-      background: rgba(244, 114, 182, 0.28);
-      border-color: rgba(244, 114, 182, 0.65);
+      background: rgba(99, 102, 241, 0.24);
+      border-color: var(--accent-hi);
+      transform: translateY(-1px);
     }
-    /* P-UX-27 — when this moment is in the active filter set,
-       fill the chip and pin a small ✓ so the user can see at a
-       glance which moment is currently being filtered. */
+    /* P-UX-27 — saturated when filter is on */
     .row1 .moment-chip.active {
-      background: rgba(244, 114, 182, 0.60);
-      color: #fff;
-      border-color: rgba(244, 114, 182, 0.90);
+      background: var(--accent);
+      color: #ffffff;
+      border-color: var(--accent-hi);
     }
     .row1 .moment-chip.uncertain {
       opacity: 0.7;
