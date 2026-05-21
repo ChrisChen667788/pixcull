@@ -288,6 +288,62 @@ default.  The new signals are correctly **consumed** when present
 realistic-sharpness-gap-vs-large-smile-gap flip).  The headline
 ceiling lift will land with P-AI-5.6's vertical-aware weighting.
 
+### P-AI-5.7 — exploratory feature-importance on all 52 blendshapes
+
+After P-AI-5.5 showed `mouthSmile` carries the lift, the natural
+question is: what about the OTHER 49 blendshape channels mediapipe
+exposes?  Maybe `eyeWide` (surprise / engagement), `browInnerUp`
+(emotional connection), or `mouthDimple` (gentle smile) carry
+additional signal.
+
+`scripts/analyze_blendshape_importance.py` answers this empirically:
+for each of the 13 tuning bursts, extract all 52 blendshape scores
+on each frame; compute "photographer pick mean − non-pick mean"
+per channel within the burst; average across bursts.
+
+**Result (top-15 channels by abs delta):**
+
+```
+channel                    avg Δ      +bursts
+eyeLookDownLeft           +0.1643      2/3
+mouthPucker               -0.1359      2/3
+browDownRight             -0.1358      0/3
+eyeLookOutLeft            +0.1160      1/3
+eyeLookDownRight          +0.1159      2/3
+eyeLookInRight            +0.1152      1/3
+...
+eyeBlinkLeft              +0.0796      2/3
+browDownLeft              +0.0731      2/3
+```
+
+**Honest interpretation:**
+
+Only **4 of 13 bursts** produced usable landmark data — for the
+other 9, face detection failed or only ran on one frame (faces too
+small / distant / partially occluded in burst frames).  So most
+per-channel averages are over n=3-4 bursts — too small to
+distinguish real signals from noise.
+
+The top channels by raw delta are mostly **eye-direction
+blendshapes** (eyeLookDown / eyeLookIn / eyeLookOut).  In principle
+these encode "subjects looking at each other" or "intimate downward
+glance" — both plausible photographer-pick criteria.  But the n=3
+makes any individual channel's significance dubious.
+
+**Decision: don't ship channel-level weights yet.**  The blendshape
+signal is real but the goldenset is too small to identify which
+channels to wire.  Path forward:
+
+  1. Expand the burst goldenset to ≥ 30 bursts with face data (P-PRO-4.4
+     after we have more wedding shoots).
+  2. Re-run `analyze_blendshape_importance.py` on the expanded set.
+  3. Channels with consistent positive delta in ≥ 80% of bursts
+     get promoted into BurstPeakWeights as new components.
+
+For now, `smile` + `eyes_open` remain the only face-quality
+channels in the picker — they're the only ones with enough
+real-data confidence to ship.
+
 ### Other ship change: reason-string semantics
 
 The reason string changed from "biggest absolute contribution"
