@@ -815,6 +815,87 @@
       color: #fff;
     }
 
+    /* P-UX-26 — animated onboarding hints. First-ever visit shows
+       three pulse rings (buckets / a11y toggle / shortcuts hint) +
+       a small dismissable tip card at bottom-right.  After the
+       first 1/2/3/f/?/F keystroke, the card auto-fades.  After
+       dismissal we set localStorage[pixcull_onboarded_v1]=1 so
+       repeat users never see it again.  No modal — never blocks
+       the page; if a user knows what they're doing the hints
+       just decorate. */
+    @keyframes pix-onboard-pulse {
+      0%   { box-shadow: 0 0 0 0 rgba(59,130,246,0.65); }
+      70%  { box-shadow: 0 0 0 14px rgba(59,130,246,0); }
+      100% { box-shadow: 0 0 0 0 rgba(59,130,246,0); }
+    }
+    .onboard-pulse {
+      animation: pix-onboard-pulse 1.8s ease-out 3;
+    }
+    .onboard-tip {
+      position: fixed; bottom: 70px; right: 22px;
+      z-index: 12;
+      background: linear-gradient(180deg, rgba(31,41,55,0.97), rgba(20,23,28,0.97));
+      border: 1px solid rgba(59,130,246,0.4);
+      border-radius: 10px;
+      padding: 12px 14px;
+      width: 288px;
+      font-size: 12.5px; line-height: 1.5;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.55);
+      transform: translateY(20px) scale(0.96);
+      opacity: 0;
+      transition: transform 280ms cubic-bezier(0.16,1,0.3,1), opacity 240ms;
+    }
+    .onboard-tip.show { transform: translateY(0) scale(1); opacity: 1; }
+    .onboard-tip .onb-head {
+      display: flex; align-items: center; gap: 8px;
+      font-weight: 600; font-size: 12px;
+      margin-bottom: 8px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .onboard-tip .onb-icon { font-size: 14px; }
+    .onboard-tip .onb-head .onb-title { flex: 1; }
+    .onboard-tip .onb-close {
+      background: transparent; color: var(--muted);
+      border: none; cursor: pointer; padding: 0;
+      font-size: 13px; line-height: 1;
+    }
+    .onboard-tip .onb-close:hover { color: var(--fg); }
+    .onboard-tip .onb-list {
+      list-style: none; padding: 0; margin: 0 0 10px;
+    }
+    .onboard-tip .onb-list li {
+      padding: 4px 0; color: var(--fg);
+    }
+    .onboard-tip .onb-list kbd {
+      display: inline-block; min-width: 18px;
+      padding: 1px 5px;
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-bottom-width: 2px;
+      border-radius: 3px;
+      font-family: ui-monospace, monospace;
+      font-size: 10.5px; font-weight: 500;
+    }
+    .onboard-tip .onb-dismiss {
+      width: 100%;
+      padding: 6px 12px;
+      background: rgba(59,130,246,0.18);
+      color: #79c8ff;
+      border: 1px solid rgba(59,130,246,0.35);
+      border-radius: 5px;
+      font-size: 11.5px; font-weight: 500;
+      cursor: pointer;
+    }
+    .onboard-tip .onb-dismiss:hover {
+      background: rgba(59,130,246,0.28);
+    }
+    /* Respect prefers-reduced-motion — flat, no animation */
+    @media (prefers-reduced-motion: reduce) {
+      .onboard-pulse { animation: none; }
+      .onboard-tip { transition: opacity 80ms; }
+    }
+
     /* P-UX-25 — multi-tab conflict banner. Appears top-center when
        another tab on the same machine has the same /results/<run_id>
        page open. Soft amber tint so it's noticed but doesn't drown
@@ -5663,6 +5744,95 @@
     window.addEventListener("beforeunload", () => {
       try { _bc.postMessage({type: "bye", from: _TAB_ID}); } catch (e) {}
     });
+  })();
+
+  // ==================================================================
+  // P-UX-26 — animated onboarding hints. First-ever visit gets:
+  //   - three pulse rings on key affordances (buckets / a11y /
+  //     shortcuts) so the user notices the floating pills
+  //   - a small dismissable tip card at bottom-right listing the
+  //     three highest-value actions (1/2/3 keys, ? help, buckets)
+  // After dismissal — or after the first 1/2/3/f keystroke (the
+  // strongest "I get the flow" signal) — localStorage gets a flag
+  // and the user never sees this again, even across runs.
+  //
+  // Why not a guided tour modal? Modals are the wrong shape for
+  // a tool where the action surface IS the page. A modal would
+  // force a click before the user has even seen the grid. The
+  // pulse + tip combo gives the same hint density without
+  // hijacking attention.
+  // ==================================================================
+  (function _initOnboarding() {
+    const KEY = "pixcull_onboarded_v1";
+    let done = false;
+    try { done = localStorage.getItem(KEY) === "1"; } catch (e) {}
+    if (done) return;
+
+    // 1. Pulse the three floating affordances, staggered so the
+    //    user's eye is drawn from one to the next.
+    setTimeout(() => {
+      const targets = [
+        ["bucketsToggleBtn", 0],
+        ["a11yToggleBtn",    600],
+        ["shortcutsHint",    1200],
+      ];
+      targets.forEach(([id, delay]) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        setTimeout(() => {
+          el.classList.add("onboard-pulse");
+          setTimeout(() => el.classList.remove("onboard-pulse"), 5500);
+        }, delay);
+      });
+    }, 900);
+
+    // 2. Tip card with the three highest-value shortcuts. We build
+    //    it in JS rather than markup so non-first-time users never
+    //    even have it in the DOM.
+    const tip = document.createElement("div");
+    tip.className = "onboard-tip";
+    tip.setAttribute("role", "complementary");
+    tip.setAttribute("aria-label", "新用户提示");
+    tip.innerHTML = `
+      <div class="onb-head">
+        <span class="onb-icon">✨</span>
+        <span class="onb-title">新手提示</span>
+        <button class="onb-close" type="button" aria-label="关闭提示">✕</button>
+      </div>
+      <ul class="onb-list">
+        <li><kbd>1</kbd> / <kbd>2</kbd> / <kbd>3</kbd> 快速标 keep / maybe / cull</li>
+        <li><kbd>?</kbd> 看所有快捷键(根据当前视图自动高亮)</li>
+        <li>右上角 <b>🪣 桶</b>:拖卡片进去整理交付包</li>
+      </ul>
+      <button class="onb-dismiss" type="button">知道了,不再提示</button>`;
+    document.body.appendChild(tip);
+    // Show on next paint so the transition runs
+    requestAnimationFrame(() => tip.classList.add("show"));
+
+    let dismissed = false;
+    function dismiss() {
+      if (dismissed) return;
+      dismissed = true;
+      tip.classList.remove("show");
+      setTimeout(() => tip.remove(), 400);
+      try { localStorage.setItem(KEY, "1"); } catch (e) {}
+    }
+    tip.querySelector(".onb-close").addEventListener("click", dismiss);
+    tip.querySelector(".onb-dismiss").addEventListener("click", dismiss);
+
+    // 3. Auto-dismiss after the first labeling keystroke — that's
+    //    the strongest signal that the user has internalized the
+    //    flow. We give a 4-second grace so they can finish reading
+    //    the tip first.
+    function _onFirstAction(e) {
+      const k = e.key;
+      if (k === "1" || k === "2" || k === "3" ||
+          k === "f" || k === "F" || k === "?") {
+        document.removeEventListener("keydown", _onFirstAction, true);
+        setTimeout(dismiss, 4000);
+      }
+    }
+    document.addEventListener("keydown", _onFirstAction, true);
   })();
 
   // ==================================================================
