@@ -388,6 +388,211 @@ def _emit_wedding_coverage_section(
     return "\n".join(lines)
 
 
+def _emit_delivery_gate(
+    scores_csv: Path,
+    out_dir: Path,
+    user_root: Optional[Path],
+    mandatory_preset: str,
+    image_root: Optional[Path],
+) -> str:
+    """P-PRO-8 — aggregate the 5 audits into a single pass/fail line.
+
+    Thresholds per category (each is a "PASS" / "WARN" / "FAIL"):
+
+      · SCENE — over-firing warning (one scene > 60%) → WARN.
+        Abstain > 50% → WARN.  Neither → PASS.
+      · FACE  — any polluted cluster → WARN.  > 30% clusters
+        polluted → FAIL.  No clusters / no data → PASS (neutral).
+      · WEDDING — mandatory coverage < 80% → WARN.  < 50% → FAIL.
+        Coverage 100% → PASS.  No wedding rows → skipped from
+        the gate.
+      · ICC   — consistency < 95% → WARN.  < 80% → FAIL.
+      · EXIF  — > 10% files missing a critical field → WARN.
+        > 50% → FAIL.
+
+    Overall:
+      PASS — every category is PASS (or N/A)
+      WARN — at least one WARN, no FAIL
+      FAIL — at least one FAIL
+
+    Used as a release gate — CI / pre-delivery scripts can grep
+    for "Overall: PASS" or check exit code.
+    """
+    import json as _json
+    from collections import Counter
+    lines = ["## 🚦 delivery gate (P-PRO-8)\n"]
+
+    if not scores_csv.exists():
+        lines.append("_no scores.csv — gate cannot run_\n")
+        return "\n".join(lines)
+    import pandas as pd
+    df = pd.read_csv(scores_csv)
+
+    statuses: list[tuple[str, str, str]] = []  # (category, status, why)
+
+    # SCENE
+    if "scene" in df.columns and len(df) >= 10:
+        c = Counter(df["scene"].dropna().tolist())
+        n = len(df)
+        top_pct = (c.most_common(1)[0][1] / n) if c else 0
+        unk_pct = (c.get("unknown", 0) / n)
+        if unk_pct > 0.50:
+            statuses.append(("scene", "WARN",
+                             f"abstain rate {unk_pct*100:.0f}% > 50%"))
+        elif top_pct > 0.60:
+            statuses.append(("scene", "WARN",
+                             f"single scene {c.most_common(1)[0][0]} {top_pct*100:.0f}% > 60%"))
+        else:
+            statuses.append(("scene", "PASS", ""))
+    else:
+        statuses.append(("scene", "N/A", "no scene column"))
+
+    # FACE — count clusters + polluted clusters
+    try:
+        from pixcull.pipeline.face_audit import cluster_precision_audit
+        polluted = total = 0
+        if "face_cluster_id" in df.columns \
+           and "face_embeddings" in df.columns:
+            by_cluster: dict[int, list[list[float]]] = {}
+            for _, row in df.iterrows():
+                cid = row.get("face_cluster_id")
+                if cid is None or pd.isna(cid):
+                    continue
+                raw = row.get("face_embeddings")
+                try:
+                    embs = _json.loads(raw) if isinstance(raw, str) else []
+                except (ValueError, TypeError):
+                    embs = []
+                for e in embs:
+                    if isinstance(e, list) and e:
+                        by_cluster.setdefault(int(cid), []).append(e)
+            for cid, embs in by_cluster.items():
+                rpt = cluster_precision_audit(embs, cluster_id=cid)
+                total += 1
+                if rpt.polluted:
+                    polluted += 1
+        if total == 0:
+            statuses.append(("face", "N/A", "no clusters"))
+        elif polluted == 0:
+            statuses.append(("face", "PASS", ""))
+        elif polluted / total > 0.30:
+            statuses.append(("face", "FAIL",
+                             f"{polluted}/{total} clusters polluted"))
+        else:
+            statuses.append(("face", "WARN",
+                             f"{polluted}/{total} clusters polluted"))
+    except (ImportError, OSError, ValueError):
+        statuses.append(("face", "N/A", "audit unavailable"))
+
+    # WEDDING (only if any wedding rows)
+    wedding_rows = df[df.get("scene") == "wedding"] \
+                   if "scene" in df.columns else None
+    if wedding_rows is None or len(wedding_rows) == 0:
+        statuses.append(("wedding", "N/A", "no wedding rows"))
+    elif "wedding_moment" not in df.columns:
+        statuses.append(("wedding", "N/A", "no moment classifier output"))
+    else:
+        from pixcull.scoring.wedding_moments import (
+            MANDATORY_PRESETS, coverage_audit,
+        )
+        mand_keys = MANDATORY_PRESETS.get(mandatory_preset) \
+                    if mandatory_preset != "western" else None
+        rpt = coverage_audit(wedding_rows.to_dict(orient="records"),
+                             mandatory_keys=mand_keys)
+        pct = rpt.coverage_pct
+        if pct < 50:
+            statuses.append(("wedding", "FAIL",
+                             f"mandatory coverage {pct:.0f}% < 50%"))
+        elif pct < 80:
+            statuses.append(("wedding", "WARN",
+                             f"mandatory coverage {pct:.0f}% < 80%"))
+        else:
+            statuses.append(("wedding", "PASS", ""))
+
+    # ICC — re-use the audit logic so the gate doesn't drift from
+    # the per-section thresholds.
+    try:
+        from pixcull.io.icc import audit_color_space, read_color_profile
+        profiles = []
+        for _, row in df.iterrows():
+            fn = row.get("filename")
+            if not fn or pd.isna(fn): continue
+            raw_p = row.get("path")
+            p: Optional[Path] = None
+            if isinstance(raw_p, str) and raw_p:
+                p = Path(raw_p)
+            elif image_root:
+                p = image_root / str(fn)
+            if p is None or not p.is_file(): continue
+            profiles.append(read_color_profile(p))
+        if not profiles:
+            statuses.append(("icc", "N/A", "no images reachable"))
+        else:
+            rpt = audit_color_space(profiles)
+            pct = rpt.consistency_pct
+            if pct < 80:
+                statuses.append(("icc", "FAIL",
+                                 f"{pct:.0f}% consistency"))
+            elif pct < 95:
+                statuses.append(("icc", "WARN",
+                                 f"{pct:.0f}% consistency"))
+            else:
+                statuses.append(("icc", "PASS", ""))
+    except (ImportError, OSError, ValueError):
+        statuses.append(("icc", "N/A", "audit unavailable"))
+
+    # EXIF — same pattern.
+    try:
+        from pixcull.io.exif_audit import (
+            audit_exif_completeness, read_exif_fields,
+        )
+        profiles = []
+        for _, row in df.iterrows():
+            fn = row.get("filename")
+            if not fn or pd.isna(fn): continue
+            raw_p = row.get("path")
+            p: Optional[Path] = None
+            if isinstance(raw_p, str) and raw_p:
+                p = Path(raw_p)
+            elif image_root:
+                p = image_root / str(fn)
+            if p is None or not p.is_file(): continue
+            profiles.append(read_exif_fields(p))
+        if not profiles:
+            statuses.append(("exif", "N/A", "no images reachable"))
+        else:
+            rpt = audit_exif_completeness(profiles)
+            missing_pct = (len(rpt.missing_critical) /
+                           rpt.n_files if rpt.n_files else 0) * 100
+            if missing_pct > 50:
+                statuses.append(("exif", "FAIL",
+                                 f"{missing_pct:.0f}% files missing critical EXIF"))
+            elif missing_pct > 10:
+                statuses.append(("exif", "WARN",
+                                 f"{missing_pct:.0f}% files missing critical EXIF"))
+            else:
+                statuses.append(("exif", "PASS", ""))
+    except (ImportError, OSError, ValueError):
+        statuses.append(("exif", "N/A", "audit unavailable"))
+
+    # Overall
+    has_fail = any(s == "FAIL" for _, s, _ in statuses)
+    has_warn = any(s == "WARN" for _, s, _ in statuses)
+    overall = "FAIL" if has_fail else ("WARN" if has_warn else "PASS")
+    emoji = {"PASS": "🟢", "WARN": "🟡", "FAIL": "🔴", "N/A": "⚪"}
+
+    lines.append(f"### Overall: {emoji[overall]} **{overall}**\n")
+    lines.append("| 类别 | 状态 | 详情 |")
+    lines.append("| --- | --- | --- |")
+    for cat, status, why in statuses:
+        cat_zh = {"scene": "场景", "face": "人脸库",
+                  "wedding": "婚礼覆盖",
+                  "icc": "色彩空间", "exif": "EXIF 完整性"}.get(cat, cat)
+        lines.append(f"| {cat_zh} | {emoji[status]} {status} | {why} |")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def _resolve_run_dir(run_id: str) -> Path:
     """Look for a run output dir under the standard PixCull location."""
     candidates = [
@@ -463,6 +668,11 @@ def main() -> None:
         f"# PixCull audit · run `{run_id}`\n",
         f"_generated: {ts}_  ",
         f"_source: `{scores_csv}`_\n",
+        # P-PRO-8 — top-of-report pass/fail summary so CI / pre-
+        # delivery scripts can grep for "Overall: PASS" without
+        # parsing the full body.
+        _emit_delivery_gate(scores_csv, out_dir, args.user_root,
+                            args.mandatory_preset, image_root),
         _emit_scene_audit_section(scores_csv),
         _emit_face_audit_section(out_dir, args.user_root),
         _emit_wedding_coverage_section(scores_csv,
