@@ -53,33 +53,41 @@ from typing import Optional
 class BurstPeakWeights:
     """Tuneable knobs for the peak-score blend.
 
-    Default weights were re-tuned in P-AI-5.2 against 13 real wedding
-    bursts (3-11 frames each, 80 photos total) cross-referenced
-    against the photographer's curated cut.  Findings:
+    Evolution:
 
-      · Exact agreement with the photographer's pick is hopeless
-        without face / expression signals — flat at 15% regardless
-        of weight blend, because wedding-photographer picks are
-        driven by eyes-open / smile / emotion, not visual
-        distinctness or sharpness.
-      · Sharp-dominant (0.70) achieved the best "close enough"
-        rate: 54% within 1 frame of the photographer's pick, 85%
-        within 3.  In practice this turns a 6-frame burst into a
-        2-frame A/B for the photographer — still a 3× speedup.
-      · Distinctness-dominant performed WORST: within a 1-2 second
-        burst frames are visually almost identical, so the
-        distinctness signal is near-zero across all candidates.
+    · P-AI-5 (initial): 0.40 / 0.30 / 0.20 / 0.10 — naive blend.
+    · P-AI-5.2 (after burst tuning):
+        sharp 0.70 / distinct 0.20 / quality 0.05 / face 0.05.
+        Findings: exact-agreement flat at 15% regardless of weights,
+        because the photographer's pick is driven by EYES OPEN /
+        SMILE / EMOTION which the picker couldn't see.
+        Sharp-dominant still gave best "close enough" rate (54%
+        within 1 frame, 85% within 3 frames).
+    · P-AI-5.3 (this commit): added the two face-quality signals
+        the FaceDetector already produces (``face_max_blink`` +
+        ``face_min_ear``), which is the path to breaking the 15%
+        ceiling.  Re-balanced defaults to give them serious weight:
 
-    Until P-AI-5.3 adds face EAR / smile / expression signals,
-    these are the best blind weights we have.
+        sharpness        0.50  (was 0.70 — leave headroom for eyes)
+        distinctness     0.10  (was 0.20 — barely helps in 1-2s
+                                bursts; small floor only)
+        quality          0.05  (unchanged)
+        face_presence    0.05  (unchanged — "any face at all")
+        face_eyes_open   0.30  (NEW — 1 - face_max_blink, the
+                                primary photographer signal)
+
+      The actual P-AI-5.3 re-tune on real bursts is deferred to
+      P-AI-5.4 because the mediapipe install on the tuning bench
+      hit a protobuf incompatibility (issue tracked in
+      docs/burst-peak-tuning.md).  Unit tests below prove the
+      eyes-open path is correctly weighted; the on-real-data
+      ceiling check ships when mediapipe is unstuck.
     """
-    sharpness:    float = 0.70   # bumped from 0.40 — see docstring
-    distinctness: float = 0.20   # cut from 0.30
-    quality:      float = 0.05   # cut from 0.20 (score_final missing
-                                  # for most rows in the tuning corpus
-                                  # — leans back when face signals land
-                                  # in P-AI-5.3)
-    face:         float = 0.05
+    sharpness:      float = 0.50
+    distinctness:   float = 0.10
+    quality:        float = 0.05
+    face:           float = 0.05      # "any face at all" — legacy presence
+    face_eyes_open: float = 0.30      # P-AI-5.3 — (1 - face_max_blink)
 
 
 DEFAULT_WEIGHTS = BurstPeakWeights()
@@ -100,10 +108,28 @@ class BurstPeakResult:
         return self.winner_filename is not None
 
 
-def _z_score(value: float, mean: float, std: float) -> float:
-    if std <= 1e-9:
-        return 0.0
-    return (value - mean) / std
+def _min_max_norm(values: list[float]) -> list[float]:
+    """Min-max normalize a list of floats into [0, 1].
+
+    P-AI-5.3 replaced z-score normalization with this because real
+    bursts have tiny within-cluster sharpness variance (focal length
+    + aperture pinned → σ < 0.02 over a 1-2s burst).  With z-score,
+    a 0.02-point sharpness lead amplified to +1.2σ and dominated
+    every other signal regardless of weight.  Min-max normalization
+    instead spreads the "best in burst" to 1.0 and "worst" to 0.0
+    so the picker still rewards being sharpest, but the contribution
+    is bounded to the weight × 1.0 and can be overridden by eyes-open
+    or distinctness when the sharpness gap is small.
+
+    Degenerate case (all values identical) → all 0.0; the component
+    becomes a tie, deferring to the other signals or filename order.
+    """
+    if not values:
+        return []
+    lo, hi = min(values), max(values)
+    if hi - lo < 1e-9:
+        return [0.0 for _ in values]
+    return [(v - lo) / (hi - lo) for v in values]
 
 
 def _cosine_distance(a: list[float], b: list[float]) -> float:
@@ -137,6 +163,30 @@ def _face_evidence(row: dict) -> float:
     return min(FACE_EVIDENCE_CAP, n * FACE_EVIDENCE_PER_FACE)
 
 
+def _face_eyes_open(row: dict) -> float:
+    """P-AI-5.3 — eyes-open signal from the FaceDetector's
+    ``face_max_blink`` metric (max blink across all faces in the
+    frame, 0..1, higher = more closed).  We invert it so 1.0 means
+    "everyone's eyes are wide open".
+
+    Returns 0.0 when no signal is available (no face detector run,
+    no faces, NaN value).  This way absent signals don't penalize
+    wildlife / landscape bursts — only frames WITH a positive
+    eyes-open signal benefit from this weight component.
+    """
+    blink = row.get("face_max_blink")
+    if blink is None:
+        return 0.0
+    try:
+        b = float(blink)
+    except (TypeError, ValueError):
+        return 0.0
+    if b != b:   # NaN
+        return 0.0
+    # face_max_blink range guard: clip to [0, 1] then invert
+    return max(0.0, min(1.0, 1.0 - b))
+
+
 def rank_burst_peak(
     rows: list[dict],
     weights: BurstPeakWeights = DEFAULT_WEIGHTS,
@@ -159,49 +209,55 @@ def rank_burst_peak(
             fn, 0, [(fn, 1.0)], {fn: "唯一帧 — 自动入选"}
         )
 
-    # 1. Cluster-internal statistics for z-scoring
-    sharps = [float(r.get("score_sharpness") or 0.0) for r in rows]
-    s_mean = sum(sharps) / len(sharps)
-    s_var  = sum((x - s_mean) ** 2 for x in sharps) / len(sharps)
-    s_std  = sqrt(s_var)
+    # 1. Per-cluster raw signals, then min-max normalize to [0,1]
+    sharps_raw = [float(r.get("score_sharpness") or 0.0) for r in rows]
+    sharps_n   = _min_max_norm(sharps_raw)
 
-    # 2. Embedding centroid (skipping rows missing embeddings)
+    # 2. Embedding centroid + per-row cosine distance, also min-max
+    #    normalized within the burst.
     embs = [r.get("embedding") for r in rows]
     embs_clean = [list(e) for e in embs if isinstance(e, list) and e]
     centroid = _vector_mean(embs_clean) if embs_clean else []
-
-    distinct = []
+    distinct_raw = []
     for emb in embs:
         if isinstance(emb, list) and emb and centroid:
-            distinct.append(_cosine_distance(emb, centroid))
+            distinct_raw.append(_cosine_distance(emb, centroid))
         else:
-            distinct.append(0.0)
-    d_mean = (sum(distinct) / len(distinct)) if distinct else 0.0
-    d_var  = sum((x - d_mean) ** 2 for x in distinct) / len(distinct) \
-             if distinct else 0.0
-    d_std  = sqrt(d_var)
+            distinct_raw.append(0.0)
+    distinct_n = _min_max_norm(distinct_raw)
 
     # 3. Score each row + remember the dominant component for the
-    #    explanation string
+    #    explanation string.  Each weight × normalized signal is in
+    #    [0, weight], so the total max contribution per row is the
+    #    sum of weights (typically 1.0 for default).
     scored: list[tuple[int, str, float, str]] = []
     for i, r in enumerate(rows):
         fn = str(r.get("filename") or f"row_{i}")
-        sharp_z = _z_score(sharps[i], s_mean, s_std)
-        dist_z  = _z_score(distinct[i], d_mean, d_std)
+        sharp_n = sharps_n[i]
+        dist_n  = distinct_n[i] if distinct_n else 0.0
         qual    = float(r.get("score_final") or 0.0)
         face_e  = _face_evidence(r)
+        eyes_op = _face_eyes_open(r)
 
-        s = (weights.sharpness    * sharp_z
-             + weights.distinctness * dist_z
+        s = (weights.sharpness      * sharp_n
+             + weights.distinctness * dist_n
              + weights.quality      * qual
-             + weights.face         * face_e)
+             + weights.face         * face_e
+             + weights.face_eyes_open * eyes_op)
 
-        # Pick the dominant component for the human reason
+        # Pick the dominant component for the human reason.  Order
+        # matters when contributions tie: list eyes-open first so
+        # that's the surfaced reason on ties — it's the one a
+        # wedding photographer actually cares about.
         contribs = [
-            ("最锐 — 簇内 +%.1fσ 锐度" % sharp_z, weights.sharpness * sharp_z),
-            ("姿态/动作差异最大 — 簇内 +%.1fσ" % dist_z,
-             weights.distinctness * dist_z),
-            ("综合分高 (%.2f)" % qual,             weights.quality * qual),
+            ("眼睛睁开 (%.0f%%)" % (eyes_op * 100),
+             weights.face_eyes_open * eyes_op),
+            ("簇内最锐 (%.0f%%)" % (sharp_n * 100),
+             weights.sharpness * sharp_n),
+            ("姿态/动作差异最大 (%.0f%%)" % (dist_n * 100),
+             weights.distinctness * dist_n),
+            ("综合分高 (%.2f)" % qual,
+             weights.quality * qual),
             ("有人脸 (%d 张)" % len(r.get("face_bboxes") or []),
              weights.face * face_e),
         ]

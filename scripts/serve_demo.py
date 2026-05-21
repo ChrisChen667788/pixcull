@@ -1040,9 +1040,9 @@ def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
                                  (None, "", float("nan"))
                               else False,
             # P-AI-5.1 — per-component reason string for the cluster's
-            # winner ("最锐 +1.6σ" / "动作差异最大 +2.1σ"). None on
-            # non-peak rows + on singletons; surfaced as a tooltip on
-            # the 🏆 badge in the lightbox.
+            # winner ("眼睛睁开 95%" / "簇内最锐 100%" / "动作差异
+            # 最大 85%"). None on non-peak rows + on singletons;
+            # surfaced as a tooltip on the 🏆 badge in the lightbox.
             "burst_peak_reason": (str(r["burst_peak_reason"])
                                   if r.get("burst_peak_reason") not in
                                      (None, "", float("nan"))

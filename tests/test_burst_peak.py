@@ -151,6 +151,97 @@ def test_vector_mean_handles_uneven_dims():
     assert _vector_mean([]) == []
 
 
+def test_eyes_open_wins_when_other_signals_tied():
+    """P-AI-5.3 — given two equally sharp + equally distinct frames
+    where only one has eyes open, the eyes-open one MUST win.
+    This is the canonical wedding-burst scenario: the photographer
+    rejects the blinky frame even when it's slightly sharper."""
+    rows = [
+        {"filename": "blinky.jpg",  "score_sharpness": 0.6,
+         "score_final": 0.5, "embedding": [1.0, 0.0],
+         "face_bboxes": [(0, 0, 50, 50, 0.95)],
+         "face_max_blink": 0.85},   # 85% closed
+        {"filename": "eyes_open.jpg", "score_sharpness": 0.6,
+         "score_final": 0.5, "embedding": [1.0, 0.0],
+         "face_bboxes": [(0, 0, 50, 50, 0.95)],
+         "face_max_blink": 0.05},   # 5% closed = wide open
+    ]
+    rpt = rank_burst_peak(rows)
+    assert rpt.winner_filename == "eyes_open.jpg"
+    assert "眼睛睁开" in rpt.reasons["eyes_open.jpg"]
+
+
+def test_eyes_open_can_override_sharper_blinky_frame():
+    """The whole point of P-AI-5.3: in a real burst (small sharpness
+    spread between frames), a slightly softer eyes-open frame beats
+    a slightly sharper eyes-closed frame.  Fixture sharpness gap
+    matches the empirical variance from the 13-burst tuning corpus
+    (typically < 5 pp inside a 1-2s burst because focal length +
+    aperture are pinned)."""
+    rows = [
+        # Sharp burst-mate (anchors the z-score range)
+        {"filename": "decoy.jpg", "score_sharpness": 0.70,
+         "embedding": [1.0, 0.0], "face_max_blink": 0.5},
+        # Sharper but blinking
+        {"filename": "sharp_blink.jpg", "score_sharpness": 0.74,
+         "embedding": [1.0, 0.0],
+         "face_bboxes": [(0,0,50,50,0.95)],
+         "face_max_blink": 0.90},
+        # Slightly less sharp but eyes wide open
+        {"filename": "soft_open.jpg",  "score_sharpness": 0.72,
+         "embedding": [1.0, 0.0],
+         "face_bboxes": [(0,0,50,50,0.95)],
+         "face_max_blink": 0.02},
+    ]
+    rpt = rank_burst_peak(rows)
+    # Realistic sharpness gap (0.74 vs 0.72) → sharpness z-score
+    # advantage for sharp_blink is small (~0.4σ × 0.50 weight = +0.20).
+    # Eyes-open advantage for soft_open is large (0.98 - 0.10 = 0.88
+    # × 0.30 weight = +0.26).  So soft_open wins, exactly as the
+    # wedding photographer would pick.
+    assert rpt.winner_filename == "soft_open.jpg"
+
+
+def test_missing_face_max_blink_falls_back_to_zero():
+    """Rows without ``face_max_blink`` (old format, no face detector
+    run, NaN values) must not crash and must contribute 0 to the
+    eyes-open component."""
+    from pixcull.scoring.burst_peak import _face_eyes_open
+    assert _face_eyes_open({}) == 0.0
+    assert _face_eyes_open({"face_max_blink": None}) == 0.0
+    assert _face_eyes_open({"face_max_blink": "garbage"}) == 0.0
+    assert _face_eyes_open({"face_max_blink": float("nan")}) == 0.0
+    # Sanity: valid values produce sensible inversions
+    assert _face_eyes_open({"face_max_blink": 0.0}) == 1.0
+    assert _face_eyes_open({"face_max_blink": 1.0}) == 0.0
+    assert _face_eyes_open({"face_max_blink": 0.5}) == 0.5
+
+
+def test_face_eyes_open_clips_out_of_range_values():
+    """Defensive: a detector that returns 1.2 or -0.1 shouldn't
+    skew the picker."""
+    from pixcull.scoring.burst_peak import _face_eyes_open
+    assert _face_eyes_open({"face_max_blink": 1.5}) == 0.0   # over → clipped
+    assert _face_eyes_open({"face_max_blink": -0.2}) == 1.0  # under → clipped
+
+
+def test_eyes_open_does_not_penalize_faceless_bursts():
+    """For wildlife / landscape bursts (no faces), the eyes-open
+    weight should contribute 0 across all frames — not flip the
+    picker's choice based on absent data."""
+    rows = [
+        {"filename": "a.jpg", "score_sharpness": 0.4,
+         "embedding": [1.0, 0.0]},
+        {"filename": "b.jpg", "score_sharpness": 0.9,
+         "embedding": [1.0, 0.0]},
+    ]
+    # No face_max_blink fields anywhere → eyes-open contribution = 0
+    rpt = rank_burst_peak(rows)
+    assert rpt.winner_filename == "b.jpg"  # pure sharpness wins
+    # And the reason must not be "眼睛睁开" since we have no signal
+    assert "眼睛睁开" not in rpt.reasons["b.jpg"]
+
+
 def test_annotate_burst_peak_reasons_attaches_to_v27_pick():
     """P-AI-5.1 — annotate_burst_peak_reasons should add a reason
     string to whichever row V27 already flagged as the burst peak."""

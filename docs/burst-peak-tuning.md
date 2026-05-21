@@ -105,6 +105,61 @@ Adding the missing signal:
 Re-running the tuning script with these signals exposed to the picker
 should crack the 15% exact-agreement ceiling.
 
+## P-AI-5.3 (landed) — eyes-open weight + min-max normalization
+
+Two changes that prepare the picker for face-quality signals while
+fixing a deeper bug surfaced by the tuning:
+
+1. **z-score → min-max normalization** for `score_sharpness` and
+   `embedding_distinctness`.  Z-score amplification was punishing
+   the picker: in real bursts σ < 0.02, so a 0.02-point sharpness
+   lead became a +1.22σ contribution that dominated every other
+   signal regardless of weight.  Min-max normalization spreads
+   the burst's best/worst into [0, 1] without amplification;
+   total contribution is bounded by the weight value.
+
+2. **New `face_eyes_open` weight** consuming `face_max_blink`
+   (V27's existing field, inverted to "eyes open in 0..1").
+   Defaults to 0.30 — large enough to override a slight
+   sharpness advantage when the photographer's eyes-open
+   threshold is the actual selection criterion.
+
+New default weights:
+
+```python
+BurstPeakWeights(
+    sharpness      = 0.50,
+    distinctness   = 0.10,
+    quality        = 0.05,
+    face           = 0.05,   # "any face at all"
+    face_eyes_open = 0.30,   # NEW
+)
+```
+
+Synthetic unit tests pin the new behavior:
+- a sharp-but-blinking frame vs slightly-soft eyes-open frame → eyes-open wins
+- faceless bursts (wildlife / landscape) → face_eyes_open contribution = 0,
+  picker falls back to pure sharpness
+- missing / NaN / out-of-range `face_max_blink` → safe default 0.0
+- six tests over `_face_eyes_open` + `_min_max_norm` + the
+  cross-component override scenarios
+
+### On-real-data re-tune deferred to P-AI-5.4
+
+Mediapipe (the FaceDetector backend) hit a `MessageFactory`
+protobuf incompatibility on the local tuning bench
+(pyenv 3.12.12 + transformers 5.x).  Without mediapipe the
+13-burst featurization cache can't carry `face_max_blink` values,
+so we can't measure the actual exact-agreement lift from the
+new weight on real data.
+
+The unit tests prove the picker correctly *consumes* the
+eyes-open signal when it's present; the on-real-data ceiling
+check ships in P-AI-5.4 once mediapipe is unstuck.  Expected
+lift: from 15% exact agreement to ~40-50% (the photographer's
+top selection criterion is eyes-open, so most of the
+flat-15% misses should now flip correctly).
+
 ## Repro
 
 ```bash

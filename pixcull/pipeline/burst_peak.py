@@ -183,8 +183,8 @@ def annotate_burst_peak_reasons(df: pd.DataFrame) -> pd.DataFrame:
     pick to avoid disturbing downstream consumers (the lightbox
     🏆 badge, the export filter, the iOS app).  Instead we attach
     a per-component explanation so the user can see *why* a frame
-    is the peak ("最锐 — 簇内 +1.6σ 锐度" / "姿态/动作差异最大 —
-    簇内 +2.1σ" / "综合分高 (0.82)").
+    is the peak ("眼睛睁开 95%" / "簇内最锐 100%" /
+    "姿态/动作差异最大 85%").
 
     Adds:
       ``burst_peak_reason``  str | None — explanation, only set on
