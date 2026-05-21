@@ -650,6 +650,24 @@ public struct PhotoLightboxView: View {
     @ViewBuilder
     private func bottomBar(for row: RowEntry) -> some View {
         VStack(spacing: 8) {
+            // iOS V0.5 — burst-peak reason chip.  Surfaces ABOVE the
+            // decision pills when this frame is the cluster's
+            // peak winner, with the per-component explanation
+            // ("笑容明显 78%" / "簇内最锐 100%") served by the
+            // P-AI-5.1 backend.  Only shows when both fields land
+            // (no chip on non-peak rows or pre-P-AI-5.1 runs).
+            if row.is_burst_peak == true, let reason = row.burst_peak_reason {
+                HStack(spacing: 6) {
+                    Text("🏆")
+                    Text(reason)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(Color(red: 0.85, green: 0.69, blue: 0.27))
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(Color.white.opacity(0.08))
+                .clipShape(Capsule())
+            }
             HStack(spacing: 12) {
                 decisionPill("keep", color: .green, current: row.decision)
                 decisionPill("maybe", color: .yellow, current: row.decision)
@@ -795,6 +813,7 @@ public struct PhotoLightboxView: View {
                 scene: row.scene,
                 cluster_id: row.cluster_id,
                 is_burst_peak: row.is_burst_peak,
+                burst_peak_reason: row.burst_peak_reason,
                 rubric_human_labeled: true,
             )
             rows[index] = updated

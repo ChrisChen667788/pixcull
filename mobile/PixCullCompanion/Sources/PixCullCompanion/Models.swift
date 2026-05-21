@@ -90,6 +90,11 @@ public struct RowEntry: Decodable, Identifiable, Equatable {
     public let scene: String?
     public let cluster_id: Int?
     public let is_burst_peak: Bool?
+    // P-AI-5.1 / iOS V0.5 — explanation string attached to the
+    // cluster's burst-peak winner (e.g. "笑容明显 78%" / "簇内最锐 100%").
+    // None on non-peak rows + on singleton clusters; surfaced as
+    // a subtitle on the 🏆 badge in the lightbox.
+    public let burst_peak_reason: String?
     public let rubric_human_labeled: Bool?
 }
 
@@ -120,6 +125,8 @@ public struct RichRow: Decodable {
     public let score_composition: Double?
     public let cluster_id: Int?
     public let is_burst_peak: Bool?
+    // P-AI-5.1 / iOS V0.5 — see RowEntry.burst_peak_reason.
+    public let burst_peak_reason: String?
     public let rubric_human_labeled: Bool?
     public let reason: String?
 
