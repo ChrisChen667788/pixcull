@@ -105,6 +105,31 @@ V3 在唯一 moment 数上最高(分布最分散)、abstain 率与 v1 持平,但
 4. 跨婚礼一致性低的 moment(<60% accuracy)需要进一步分子类(比如把
    `first_look` 分成 `first_look_outdoor` / `first_look_indoor`)。
 
+### 状态 · 2026-05-21
+
+尝试在第二场婚礼上跑混淆 — 当前可访问的外置盘
+(`/Volumes/One Touch 1/`)只有一场婚礼(李慧&李翔)。其他大批量
+照片文件夹(2022川西行 / 共青森林公园 / 阿尔山 / 霞浦)都是
+风光 / 街景,没有第二场婚礼可用。
+
+**P-PRO-4.3 加入的 6 个中式 moment** 提示词(敬茶 / 跪拜 / 接亲 /
+梳头 / 红嫁衣 / 鞭炮)目前**完全没有真实数据验证** — 仅靠
+"a kneeling couple serving tea to parents" 这类描述训练 CLIP。
+召回率可能差,精确度可能很差(图像没人脸的"敬茶"场景可能
+无法检测)。
+
+**unblock 路径**:
+- 用户在交付 ≥ 1 场中式婚礼后,把 RAW 或 JPG 文件夹路径告诉这个
+  agent;一行命令跑 `eval_wedding_moments.py` 即可出诊断报告。
+- 或者:用合成图(stable diffusion / Midjourney 生成"中式婚礼
+  敬茶场景")验证 prompt 召回率 — 但合成图与真实婚礼有 visual
+  gap,不如真实数据。
+
+中式 moment 的 i18n 已就位(`results.html I18N_WEDDING_MOMENT`),
+`MANDATORY_CHINESE` preset 已就位(`MANDATORY_PRESETS["chinese"]`),
+`cli_audit --mandatory-preset chinese` 已能输出中式覆盖率报告。
+所以**代码侧准备完毕**,只缺数据。
+
 ---
 
 ## 已知限制
