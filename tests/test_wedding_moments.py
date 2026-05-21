@@ -9,6 +9,9 @@ from __future__ import annotations
 import pytest
 
 from pixcull.scoring.wedding_moments import (
+    MANDATORY_CHINESE,
+    MANDATORY_PRESETS,
+    MANDATORY_WESTERN,
     MOMENT_ABSTAIN_MARGIN,
     MOMENT_UNKNOWN_LABEL,
     WEDDING_MOMENTS,
@@ -161,3 +164,84 @@ def test_alternative_moment_field_name():
     rows = [{"experimental_moment": "vows"}]
     rpt = coverage_audit(rows, moment_field="experimental_moment")
     assert rpt.moment_counts["vows"] == 1
+
+
+# -----------------------------------------------------------------
+# P-PRO-4.3 — MANDATORY_OVERRIDES + Chinese wedding moments
+# -----------------------------------------------------------------
+
+def test_chinese_moments_present_in_vocab():
+    """All 6 Chinese moments should be in the vocabulary with prompts
+    + Chinese labels."""
+    keys = known_moment_keys()
+    for must_have in ("door_block", "hair_combing", "tea_ceremony",
+                      "kneeling_bow", "red_dress", "firecrackers"):
+        assert must_have in keys, f"{must_have} missing from vocab"
+        assert moment_label_zh(must_have) != must_have, \
+            f"{must_have} missing Chinese label"
+
+
+def test_mandatory_presets_have_expected_shape():
+    """Both western and chinese mandatory presets are non-empty lists."""
+    assert isinstance(MANDATORY_WESTERN, list)
+    assert isinstance(MANDATORY_CHINESE, list)
+    assert len(MANDATORY_WESTERN) >= 4
+    assert len(MANDATORY_CHINESE) >= 4
+    # Both presets must reference only known moment keys
+    all_keys = set(known_moment_keys())
+    for k in MANDATORY_WESTERN + MANDATORY_CHINESE:
+        assert k in all_keys, f"unknown key in mandatory list: {k}"
+    # Presets lookup dict is wired up
+    assert "western" in MANDATORY_PRESETS
+    assert "chinese" in MANDATORY_PRESETS
+    assert MANDATORY_PRESETS["chinese"] == MANDATORY_CHINESE
+
+
+def test_coverage_audit_with_chinese_mandatory_overrides_western():
+    """A Chinese wedding shouldn't be docked for missing first_dance —
+    that's not in their mandatory list."""
+    rows = [
+        {"wedding_moment": "tea_ceremony"},
+        {"wedding_moment": "kneeling_bow"},
+        {"wedding_moment": "hair_combing"},
+    ]
+    rpt = coverage_audit(rows, mandatory_keys=MANDATORY_CHINESE)
+    # first_dance / cake_cutting are NOT in the Chinese mandatory list,
+    # so a wedding without them should not be docked for missing them.
+    assert "first_dance" not in rpt.missing_mandatory
+    assert "cake_cutting" not in rpt.missing_mandatory
+    # But things ARE in the Chinese list — ring_exchange / first_kiss /
+    # door_block — should appear as missing.
+    assert "door_block" in rpt.missing_mandatory
+    assert "first_kiss" in rpt.missing_mandatory
+    assert "ring_exchange" in rpt.missing_mandatory
+
+
+def test_coverage_audit_records_used_mandatory_list():
+    """The CoverageReport carries the mandatory_keys it was scored
+    against, so downstream renders ("Western mandatory" vs
+    "Chinese mandatory" label) know which preset was used."""
+    rpt = coverage_audit([], mandatory_keys=MANDATORY_CHINESE)
+    assert rpt.mandatory_keys == MANDATORY_CHINESE
+
+
+def test_coverage_audit_custom_mandatory_list():
+    """A user can pass any custom list — not just a preset."""
+    rows = [{"wedding_moment": "vows"}]
+    custom = ["vows", "first_kiss"]   # niche civil ceremony
+    rpt = coverage_audit(rows, mandatory_keys=custom)
+    assert rpt.coverage_pct == 50.0   # 1 of 2 hit
+    assert "first_kiss" in rpt.missing_mandatory
+    assert "vows" not in rpt.missing_mandatory
+
+
+def test_coverage_audit_default_still_works_pre_p_pro_43():
+    """Backwards-compat: callers from before P-PRO-4.3 (no
+    mandatory_keys arg) must still get the western mandatory list."""
+    rpt = coverage_audit([])
+    assert "ring_exchange" in rpt.missing_mandatory
+    assert "first_dance" in rpt.missing_mandatory
+    assert "cake_cutting" in rpt.missing_mandatory
+    # Should NOT include Chinese-specific moments
+    assert "tea_ceremony" not in rpt.missing_mandatory
+    assert "door_block" not in rpt.missing_mandatory

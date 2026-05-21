@@ -98,7 +98,47 @@ WEDDING_MOMENTS: list[MomentDef] = [
               "a wide overview of a wedding banquet hall full of guests seated at multiple round tables with food being served, chandeliers and decorations visible"),
     MomentDef("candid", "花絮",
               "a candid behind-the-scenes moment between wedding guests, laughing and hugging without posing"),
+    # P-PRO-4.3 — Chinese wedding-specific moments.  These don't
+    # share the western mandatory list (no first_dance / cake_cutting
+    # in a traditional ceremony) so they're added here as separate
+    # vocab; the MANDATORY_CHINESE constant below builds the right
+    # mandatory list for these ceremonies.  All mandatory=False
+    # in the MomentDef itself because the mandatory-ness depends
+    # on which ceremony tradition the user selects — passed into
+    # coverage_audit() via the new ``mandatory_keys`` parameter.
+    MomentDef("door_block",       "堵门 / 接亲",
+              "a groom and groomsmen at a door negotiating with bridesmaids blocking it, traditional Chinese fetching-the-bride ritual"),
+    MomentDef("hair_combing",     "梳头",
+              "a mother combing the bride's hair before her wedding ceremony, traditional Chinese pre-wedding ritual"),
+    MomentDef("tea_ceremony",     "敬茶",
+              "a bride and groom kneeling before parents and serving them tea cups with both hands, traditional Chinese wedding tea ceremony"),
+    MomentDef("kneeling_bow",     "跪拜 / 三鞠躬",
+              "a bride and groom bowing deeply together three times before parents or ancestors, traditional Chinese wedding bow"),
+    MomentDef("red_dress",        "红嫁衣",
+              "a bride wearing a traditional Chinese red qipao or longfeng gua wedding gown with gold embroidery"),
+    MomentDef("firecrackers",     "鞭炮 / 礼炮",
+              "wedding firecrackers being lit, smoke and celebration noise in a traditional Chinese ceremony entrance"),
 ]
+
+
+# P-PRO-4.3 — preset mandatory-keys lists per ceremony tradition.
+# Pass one of these to ``coverage_audit(rows, mandatory_keys=...)``
+# to swap the audit's missing-moment check to that tradition.
+# The default behaviour (no arg) uses the WESTERN list to stay
+# backwards-compatible with code from before P-PRO-4.3.
+MANDATORY_WESTERN: list[str] = [
+    "preparation_bride", "processional", "ring_exchange",
+    "first_kiss", "first_dance", "cake_cutting",
+]
+MANDATORY_CHINESE: list[str] = [
+    "hair_combing", "door_block", "tea_ceremony",
+    "kneeling_bow",  "ring_exchange", "first_kiss",
+]
+# Lookup map so the CLI / admin UI can present a picker.
+MANDATORY_PRESETS: dict[str, list[str]] = {
+    "western": MANDATORY_WESTERN,
+    "chinese": MANDATORY_CHINESE,
+}
 
 
 def known_moment_keys() -> list[str]:
@@ -157,10 +197,15 @@ class CoverageReport:
     moment_counts:    dict[str, int]
     missing_mandatory: list[str]
     n_unknown:        int = 0
+    # P-PRO-4.3 — record which mandatory list this report was scored
+    # against, so downstream (UI / Markdown render) can label it
+    # "Western mandatory" / "Chinese mandatory" / "Custom".
+    mandatory_keys:   list[str] = field(default_factory=list)
+
     @property
     def coverage_pct(self) -> float:
         """% of mandatory moments that have at least one photo."""
-        mand = mandatory_moment_keys()
+        mand = self.mandatory_keys
         if not mand:
             return 100.0
         hit = sum(1 for k in mand if self.moment_counts.get(k, 0) > 0)
@@ -170,13 +215,25 @@ class CoverageReport:
 def coverage_audit(
     rows: Iterable[dict],
     moment_field: str = "wedding_moment",
+    mandatory_keys: Optional[list[str]] = None,
 ) -> CoverageReport:
     """Count moments + flag mandatory misses across a run.
 
     Each row should carry the classifier's chosen moment under
-    ``moment_field`` (default "wedding_moment"). Unknown / missing
-    values feed into n_unknown. Used by the admin coverage panel
-    + the export-to-folders step.
+    ``moment_field`` (default "wedding_moment").  Unknown / missing
+    values feed into n_unknown.
+
+    P-PRO-4.3 — ``mandatory_keys`` lets callers override which
+    moments count as mandatory.  Useful for Chinese / Indian /
+    civil-ceremony weddings whose mandatory list differs from
+    the western default (no first_dance / cake_cutting in a
+    traditional tea-ceremony wedding, for example).
+
+    When omitted, falls back to the legacy behaviour: the
+    ``mandatory=True`` MomentDef flag, which matches the western
+    tradition.  Callers can pass a preset from
+    ``MANDATORY_PRESETS`` ("western" / "chinese") or any custom
+    list of moment keys.
     """
     counts: dict[str, int] = {k: 0 for k in known_moment_keys()}
     n_rows = 0
@@ -188,10 +245,17 @@ def coverage_audit(
             counts[mk] += 1
         else:
             n_unknown += 1
-    missing = [k for k in mandatory_moment_keys() if counts.get(k, 0) == 0]
+    # Resolve mandatory list — explicit override wins; otherwise
+    # default to the western (MomentDef.mandatory=True) list to
+    # preserve pre-P-PRO-4.3 callers' behaviour.
+    mand = (list(mandatory_keys)
+            if mandatory_keys is not None
+            else mandatory_moment_keys())
+    missing = [k for k in mand if counts.get(k, 0) == 0]
     return CoverageReport(
         n_rows=n_rows,
         moment_counts=counts,
         missing_mandatory=missing,
         n_unknown=n_unknown,
+        mandatory_keys=mand,
     )

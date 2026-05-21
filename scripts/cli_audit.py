@@ -185,8 +185,17 @@ def _emit_scene_audit_section(scores_csv: Path) -> str:
     return "\n".join(lines)
 
 
-def _emit_wedding_coverage_section(scores_csv: Path) -> str:
-    """P-PRO-4 — wedding moment coverage (only if any wedding rows)."""
+def _emit_wedding_coverage_section(
+    scores_csv: Path,
+    mandatory_preset: str = "western",
+) -> str:
+    """P-PRO-4 — wedding moment coverage (only if any wedding rows).
+
+    P-PRO-4.3 added the ``mandatory_preset`` arg.  Pass "western"
+    (default) for the original first_dance / cake_cutting list,
+    "chinese" for the tea-ceremony / kneeling-bow list, or any
+    other key from MANDATORY_PRESETS.
+    """
     lines = []
     if not scores_csv.exists():
         return ""
@@ -203,14 +212,21 @@ def _emit_wedding_coverage_section(scores_csv: Path) -> str:
         return "\n".join(lines)
 
     from pixcull.scoring.wedding_moments import (
-        coverage_audit, moment_label_zh,
+        MANDATORY_PRESETS, coverage_audit, moment_label_zh,
     )
+    mandatory_keys = MANDATORY_PRESETS.get(mandatory_preset) \
+                     if mandatory_preset != "western" else None
     rows = wedding.to_dict(orient="records")
-    rpt = coverage_audit(rows)
+    rpt = coverage_audit(rows, mandatory_keys=mandatory_keys)
+
+    preset_label = {"western": "西式", "chinese": "中式"}.get(
+        mandatory_preset, mandatory_preset
+    )
     lines.append(f"- 婚礼总照片: **{rpt.n_rows}**")
     lines.append(f"- 已识别 moment: **{rpt.n_rows - rpt.n_unknown}**")
     lines.append(f"- 抽象 / 未识别: **{rpt.n_unknown}**")
-    lines.append(f"- mandatory moment 覆盖率: **{rpt.coverage_pct:.1f}%**")
+    lines.append(f"- mandatory moment ({preset_label}) "
+                 f"覆盖率: **{rpt.coverage_pct:.1f}%**")
     if rpt.missing_mandatory:
         lines.append("\n⚠ **未覆盖的 mandatory moment:**")
         for k in rpt.missing_mandatory:
@@ -253,6 +269,14 @@ def main() -> None:
     ap.add_argument("--out", type=Path, default=None,
                     help="Write the markdown report to this file. "
                          "Default: stdout.")
+    ap.add_argument("--mandatory-preset", default="western",
+                    choices=("western", "chinese"),
+                    help="P-PRO-4.3 — which wedding tradition's "
+                         "mandatory-moment list to score against. "
+                         "Default: western (first_dance, cake_cutting, "
+                         "ring_exchange, ...). Use 'chinese' for "
+                         "tea-ceremony / kneeling-bow / door-block "
+                         "weddings.")
     args = ap.parse_args()
 
     if args.scores_csv:
@@ -274,7 +298,8 @@ def main() -> None:
         f"_source: `{scores_csv}`_\n",
         _emit_scene_audit_section(scores_csv),
         _emit_face_audit_section(out_dir, args.user_root),
-        _emit_wedding_coverage_section(scores_csv),
+        _emit_wedding_coverage_section(scores_csv,
+                                       mandatory_preset=args.mandatory_preset),
     ]
     report = "\n".join(p for p in parts if p)
     if args.out:
