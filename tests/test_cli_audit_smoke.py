@@ -246,3 +246,52 @@ def test_cli_help_lists_image_root(synthetic_scores_csv):
         env=env, capture_output=True, text=True, timeout=30,
     )
     assert "--image-root" in proc.stdout
+
+
+# -----------------------------------------------------------------
+# P-PRO-7 — EXIF completeness audit smoke
+# -----------------------------------------------------------------
+
+def test_cli_emits_exif_section_when_images_reachable(tmp_path):
+    """A 2-image mini-album via PIL → audit reports EXIF
+    completeness table (everything will be missing since PIL-
+    generated JPGs have no GPS/lens/etc.)."""
+    from PIL import Image
+    img_root = tmp_path / "input"
+    img_root.mkdir(parents=True)
+    out_dir = tmp_path / "output"
+    out_dir.mkdir(parents=True)
+    Image.new("RGB", (32, 32), (128, 0, 0)).save(img_root / "a.jpg", "JPEG")
+    Image.new("RGB", (32, 32), (0, 0, 128)).save(img_root / "b.jpg", "JPEG")
+    scores_csv = out_dir / "scores.csv"
+    with scores_csv.open("w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["filename", "scene", "path"])
+        w.writerow(["a.jpg", "landscape", str(img_root / "a.jpg")])
+        w.writerow(["b.jpg", "landscape", str(img_root / "b.jpg")])
+
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(REPO_ROOT) + ":" + env.get("PYTHONPATH", "")
+    proc = subprocess.run(
+        [sys.executable, str(CLI),
+         "--scores-csv", str(scores_csv),
+         "--image-root", str(img_root)],
+        env=env, capture_output=True, text=True, timeout=60,
+    )
+    assert proc.returncode == 0, proc.stderr
+    out = proc.stdout
+    assert "## 📸 EXIF completeness audit" in out
+    assert "GPS 坐标" in out
+    assert "镜头型号" in out
+    # PIL-generated JPGs have no EXIF → must show 0.0% coverage
+    assert "0.0%" in out
+    # And the missing-critical bullets must surface
+    assert "缺:" in out
+
+
+def test_cli_exif_section_handles_no_images_gracefully(synthetic_scores_csv):
+    """Synthetic scores.csv → exif section reports "no readable
+    image files"."""
+    out = _run_cli(synthetic_scores_csv)
+    assert "## 📸 EXIF completeness audit" in out
+    assert "no readable image files" in out

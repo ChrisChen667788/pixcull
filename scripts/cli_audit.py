@@ -257,6 +257,81 @@ def _emit_icc_section(
     return "\n".join(lines)
 
 
+def _emit_exif_section(
+    scores_csv: Path,
+    image_root: Optional[Path] = None,
+) -> str:
+    """P-PRO-7 — EXIF completeness audit.
+
+    Mirrors the ICC audit shape — same image-resolution path + same
+    graceful-skip semantics when files aren't reachable.
+    """
+    lines = ["## 📸 EXIF completeness audit  (P-PRO-7)\n"]
+    if not scores_csv.exists():
+        lines.append(f"_no scores.csv at {scores_csv}_\n")
+        return "\n".join(lines)
+    try:
+        from pixcull.io.exif_audit import (
+            EXIF_FIELDS_TO_AUDIT,
+            audit_exif_completeness,
+            read_exif_fields,
+        )
+    except ImportError as exc:
+        lines.append(f"_EXIF audit unavailable: {exc}_\n")
+        return "\n".join(lines)
+
+    import pandas as pd
+    df = pd.read_csv(scores_csv)
+    profiles = []
+    n_skip = 0
+    for _, row in df.iterrows():
+        fn = row.get("filename")
+        if not fn or pd.isna(fn):
+            continue
+        raw_path = row.get("path")
+        p: Optional[Path] = None
+        if isinstance(raw_path, str) and raw_path:
+            p = Path(raw_path)
+        elif image_root:
+            p = image_root / str(fn)
+        if p is None or not p.is_file():
+            n_skip += 1
+            continue
+        profiles.append(read_exif_fields(p))
+
+    if not profiles:
+        lines.append(f"_no readable image files referenced (skipped {n_skip})_\n")
+        return "\n".join(lines)
+
+    rpt = audit_exif_completeness(profiles)
+    lines.append(f"- 总 audit 文件数: **{rpt.n_files}**  "
+                 f"(跳过 {n_skip} 张无法解析)")
+    lines.append(f"- 关键字段缺失文件: **{len(rpt.missing_critical)}** "
+                 f"(GPS / 镜头 / 拍摄时间)")
+    lines.append("\n| 字段 | 标签 | 覆盖率 | 缺失数 |")
+    lines.append("| --- | --- | ---: | ---: |")
+    # Sort fields by ascending presence (worst-first) so the report
+    # surfaces problems quickly.
+    sorted_fields = sorted(
+        EXIF_FIELDS_TO_AUDIT.items(),
+        key=lambda kv: rpt.presence_pct(kv[0]),
+    )
+    for key, label in sorted_fields:
+        pct = rpt.presence_pct(key)
+        missing = rpt.n_files - rpt.per_field_present.get(key, 0)
+        emoji = "🔴" if pct < 50 else ("🟡" if pct < 95 else "🟢")
+        lines.append(f"| {key} | {label} | {emoji} {pct:.1f}% | {missing} |")
+    if rpt.missing_critical:
+        lines.append("\n⚠ **关键字段缺失的文件(最严重的前 30):**")
+        for fn, missing in rpt.missing_critical[:30]:
+            zh = [EXIF_FIELDS_TO_AUDIT.get(k, k) for k in missing]
+            lines.append(f"  - `{fn}` 缺: {', '.join(zh)}")
+        if len(rpt.missing_critical) > 30:
+            lines.append(f"  - … 还有 {len(rpt.missing_critical) - 30} 个")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def _emit_wedding_coverage_section(
     scores_csv: Path,
     mandatory_preset: str = "western",
@@ -393,6 +468,7 @@ def main() -> None:
         _emit_wedding_coverage_section(scores_csv,
                                        mandatory_preset=args.mandatory_preset),
         _emit_icc_section(scores_csv, image_root=image_root),
+        _emit_exif_section(scores_csv, image_root=image_root),
     ]
     report = "\n".join(p for p in parts if p)
     if args.out:
