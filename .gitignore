@@ -62,3 +62,8 @@ lr_plugin/*.lrtemplate
 *.npz
 face_library*.npz
 *.bak
+
+# P-PRO-4.2 — wedding-moment eval output (contains real photographer
+# filenames; goldenset CSV is a local artifact, not a public dataset)
+out_wedding_eval/
+predictions*.csv
