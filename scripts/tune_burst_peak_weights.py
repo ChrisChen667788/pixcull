@@ -87,6 +87,62 @@ def featurize_burst(
     return out
 
 
+def add_face_features_in_place(
+    cache_path: Path, folder: Path,
+) -> None:
+    """P-AI-5.4 — augment an existing burst cache with face_max_blink
+    / face_min_ear / face_count via the project's FaceDetector.
+
+    Cheap to run as a second pass because CLIP embeddings are already
+    cached; this only loads PIL images + runs mediapipe Face Landmarker
+    once per frame.  Mutates ``cache_path`` in place.
+    """
+    from pixcull.detectors.face import FaceDetector
+
+    with cache_path.open() as f:
+        cache = json.load(f)
+
+    fd = FaceDetector()
+    n_total = sum(len(b["rows"]) for b in cache)
+    seen = 0
+    for b in cache:
+        for r in b["rows"]:
+            seen += 1
+            # Skip if already augmented (idempotent re-run)
+            if "face_max_blink" in r:
+                continue
+            fn = r["filename"]
+            p = folder / fn
+            if not p.is_file():
+                cand = [c for c in folder.iterdir()
+                        if c.name.lower() == fn.lower()]
+                if not cand:
+                    continue
+                p = cand[0]
+            try:
+                img = Image.open(p).convert("RGB")
+                res = fd.analyze(img)
+            except Exception as exc:
+                print(f"  skip face {fn}: {exc}", file=sys.stderr)
+                continue
+            r["face_count"]     = float(res.metrics.get("face_count", 0))
+            r["face_max_blink"] = float(res.metrics.get("face_max_blink", 0))
+            r["face_min_ear"]   = float(res.metrics.get("face_min_ear", 1.0))
+            # Synthesize a placeholder face_bboxes list with the right
+            # count so _face_evidence picks it up.  The picker doesn't
+            # read individual bbox coords, just the count.
+            n = int(r["face_count"])
+            r["face_bboxes"] = [[0, 0, 0, 0, 1.0]] * n
+
+            if seen % 10 == 0:
+                print(f"  [{seen}/{n_total}] face {fn} blink={r['face_max_blink']:.2f}",
+                      file=sys.stderr)
+
+    with cache_path.open("w") as f:
+        json.dump(cache, f)
+    print(f"  augmented cache → {cache_path}", file=sys.stderr)
+
+
 def evaluate_picker_weights(
     bursts: list[dict],
     folder: Path,
@@ -164,6 +220,13 @@ def main():
                     help="Folder containing the raw JPG burst frames.")
     ap.add_argument("bursts", type=Path,
                     help="bursts.json (output of the burst-detection helper).")
+    ap.add_argument("--add-face", action="store_true",
+                    help="P-AI-5.4 — augment the existing feature cache "
+                         "with face_max_blink / face_min_ear / face_count "
+                         "via the FaceDetector.  Idempotent.")
+    ap.add_argument("--cache-path", type=Path, default=None,
+                    help="Override the default cache location "
+                         "(<folder>/../burst_features_cache.json).")
     args = ap.parse_args()
     with args.bursts.open() as f:
         bursts = json.load(f)
@@ -171,21 +234,36 @@ def main():
         sys.exit("no bursts in input")
     print(f"loaded {len(bursts)} bursts", file=sys.stderr)
 
+    cache_path = args.cache_path or \
+                 (args.folder.parent / "burst_features_cache.json")
+    if args.add_face:
+        if not cache_path.exists():
+            sys.exit(f"can't augment — cache not found at {cache_path}")
+        add_face_features_in_place(cache_path, args.folder)
+        return
+
     # Weight configs to sweep.  All sum to 1.0 so the picker scoring
-    # comparison is apples-to-apples.
+    # comparison is apples-to-apples.  P-AI-5.4 added the
+    # face_eyes_open weight so configs now have 5 components.
     configs = [
-        ("default (P-AI-5)",  {"sharpness": 0.40, "distinctness": 0.30,
-                               "quality": 0.20,   "face": 0.10}),
-        ("sharp-dominant",    {"sharpness": 0.70, "distinctness": 0.20,
-                               "quality": 0.05,   "face": 0.05}),
-        ("distinct-dominant", {"sharpness": 0.20, "distinctness": 0.70,
-                               "quality": 0.05,   "face": 0.05}),
-        ("balanced",          {"sharpness": 0.50, "distinctness": 0.50,
-                               "quality": 0.00,   "face": 0.00}),
-        ("sharp-only",        {"sharpness": 1.00, "distinctness": 0.00,
-                               "quality": 0.00,   "face": 0.00}),
-        ("distinct-only",     {"sharpness": 0.00, "distinctness": 1.00,
-                               "quality": 0.00,   "face": 0.00}),
+        ("baseline P-AI-5 (no face)",
+         {"sharpness": 0.40, "distinctness": 0.30,
+          "quality": 0.20,   "face": 0.10, "face_eyes_open": 0.00}),
+        ("P-AI-5.2 (sharp-dom)",
+         {"sharpness": 0.70, "distinctness": 0.20,
+          "quality": 0.05,   "face": 0.05, "face_eyes_open": 0.00}),
+        ("P-AI-5.3 default (eyes 0.30)",
+         {"sharpness": 0.50, "distinctness": 0.10,
+          "quality": 0.05,   "face": 0.05, "face_eyes_open": 0.30}),
+        ("eyes-dominant (0.50)",
+         {"sharpness": 0.35, "distinctness": 0.05,
+          "quality": 0.05,   "face": 0.05, "face_eyes_open": 0.50}),
+        ("eyes-only",
+         {"sharpness": 0.00, "distinctness": 0.00,
+          "quality": 0.00,   "face": 0.00, "face_eyes_open": 1.00}),
+        ("balanced eyes+sharp",
+         {"sharpness": 0.40, "distinctness": 0.10,
+          "quality": 0.00,   "face": 0.00, "face_eyes_open": 0.50}),
     ]
     evaluate_picker_weights(bursts, args.folder, configs)
 

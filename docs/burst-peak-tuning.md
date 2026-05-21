@@ -144,21 +144,97 @@ Synthetic unit tests pin the new behavior:
 - six tests over `_face_eyes_open` + `_min_max_norm` + the
   cross-component override scenarios
 
-### On-real-data re-tune deferred to P-AI-5.4
+### P-AI-5.4 — on-real-data re-tune with face_eyes_open
 
-Mediapipe (the FaceDetector backend) hit a `MessageFactory`
-protobuf incompatibility on the local tuning bench
-(pyenv 3.12.12 + transformers 5.x).  Without mediapipe the
-13-burst featurization cache can't carry `face_max_blink` values,
-so we can't measure the actual exact-agreement lift from the
-new weight on real data.
+Mediapipe was unstuck by pinning `protobuf==4.25.4` in a one-off
+venv (mediapipe 0.10.35 + protobuf 5.x is broken; the wider
+project env has TF / pymilvus pulling in protobuf 7.x).  Then
+ran `scripts/tune_burst_peak_weights.py --add-face` to augment
+the cache with `face_max_blink` / `face_min_ear` / `face_count`.
 
-The unit tests prove the picker correctly *consumes* the
-eyes-open signal when it's present; the on-real-data ceiling
-check ships in P-AI-5.4 once mediapipe is unstuck.  Expected
-lift: from 15% exact agreement to ~40-50% (the photographer's
-top selection criterion is eyes-open, so most of the
-flat-15% misses should now flip correctly).
+Re-swept with 5 configs that now include `face_eyes_open`:
+
+| config (sharp / dist / qual / face / eyes_open)    | exact | ≤1 | ≤2 | ≤3 | median Δ |
+| -------------------------------------------------- | ----- | -- | -- | -- | -------- |
+| baseline P-AI-5 (pre-eyes) 0.40/0.30/0.20/0.10/0   | 2/13  | 6/13 | 8/13 | 10/13 | 2 |
+| P-AI-5.2 sharp-dom 0.70/0.20/0.05/0.05/0           | 2/13  | **7/13** | 8/13 | 11/13 | **1** |
+| **P-AI-5.3 default 0.50/0.10/0.05/0.05/0.30**      | 2/13  | 6/13 | 8/13 | **12/13** | 2 |
+| eyes-dominant 0.35/0.05/0.05/0.05/0.50             | 2/13  | 5/13 | 7/13 | 11/13 | 2 |
+| eyes-only 0/0/0/0/1.00                             | **3/13** | 5/13 | 7/13 | 10/13 | 2 |
+| balanced eyes+sharp 0.40/0.10/0/0/0.50             | 2/13  | 5/13 | 7/13 | 11/13 | 2 |
+
+### Findings vs the P-AI-5.3 optimistic prediction
+
+The 40-50% exact-agreement target **was wrong**.  Reality:
+
+1. **Eyes-open alone lifts exact agreement only 15% → 23%**
+   (2/13 → 3/13).  One extra burst flips correctly when the
+   picker leans on blink as the only signal.  Adding eyes-open
+   *alongside* sharpness doesn't flip more exact picks because
+   most photographer-pick bursts have all frames in a narrow
+   blink band (0.17-0.28); blink can't differentiate within
+   the band.
+
+2. **The ≤ 3 frame narrowing rate is the real win.**  P-AI-5.3
+   default (eyes 0.30) lifts ≤3 from 77% → **92%** — for a
+   user this means a 6-frame burst now reliably narrows to a
+   3-frame A/B, vs the 4-frame window we shipped at P-AI-5.
+
+3. **The photographer's picks are NOT always low-blink.**
+   B5 (3J0A6119) was picked at blink=0.82 over a burst-mate
+   at blink=0.00.  The photographer is sometimes choosing a
+   blinking frame for the smile / gesture mediapipe's blink
+   blendshape doesn't capture.
+
+### Honest evidence dump (per-burst blink of photographer pick)
+
+```
+burst photographer pick     blink    ear     sharp_lap
+B0    3J0A5580.JPG          0.20    0.27    18      (band: 0.17–0.28)
+B1    3J0A5586.JPG          0.25    0.24    25      ← B0/B1 all in band
+B2    3J0A5590.JPG          0.28    0.22    16
+B3    3J0A5732.JPG          0.09    0.29    19      ← good
+B4    3J0A6007.JPG          0.21    0.26     6
+B5    3J0A6119.JPG          0.82    0.33    28      ← blinking pick
+B6    3J0A6002.JPG          0.52    1.00     9      ← half-closed pick
+B7    3J0A5567.JPG          0.09    0.33    14      ← clean
+B8    3J0A5641.JPG          0.00    1.00    23      ← clean
+B9    3J0A6111.JPG          0.00    1.00    38      ← clean
+B10   3J0A5712.JPG          0.32    0.22    13
+B11   3J0A5769.JPG          0.00    1.00    27      ← clean
+B12   3J0A6081.JPG          0.00    1.00    33      ← clean
+```
+
+7 / 13 picks have blink ≤ 0.10 (eyes truly open).  4 / 13 have
+blink in the 0.20-0.32 band where the rest of the burst is also
+there.  2 / 13 picks are blinking — photographer's expression
+override.
+
+### Default weights kept at P-AI-5.3
+
+```python
+BurstPeakWeights(
+    sharpness      = 0.50,
+    distinctness   = 0.10,
+    quality        = 0.05,
+    face           = 0.05,
+    face_eyes_open = 0.30,
+)
+```
+
+These give the best **≤3 narrowing rate (92%)** while keeping
+exact agreement at 2/13.  Stays the recommendation.
+
+### Next step: P-AI-5.5 — smile + expression signals
+
+The remaining flips (B5, B6) suggest the photographer is using
+smile / expression / interaction signals beyond eyes-open.
+Mediapipe Face Blendshapes (the same pipeline already loaded
+for blink) exposes `mouthSmile`, `browDownLeft`, `eyeWideLeft`
+etc. — 52 channels per face.  P-AI-5.5 should plumb the smile
+signal through `face_smile_score` and re-tune.  Expected lift
+from the 15-23% exact ceiling to ~35-40% (covering the
+expression-driven flips that blink can't reach).
 
 ## Repro
 
