@@ -3433,6 +3433,9 @@ class _Handler(BaseHTTPRequestHandler):
             return self._serve_upload_page()
         if path == "/admin":
             return self._serve_admin_page()
+        # P-AI-4.1 — face library quality audit page (HTML + JSON).
+        if path.startswith("/admin/face_audit/"):
+            return self._serve_face_audit(path[len("/admin/face_audit/"):])
         if path == "/runs":
             return self._serve_runs_list()
         if path == "/storage_info":
@@ -6664,6 +6667,136 @@ class _Handler(BaseHTTPRequestHandler):
     def _serve_admin_page(self) -> None:
         body = _ADMIN_HTML.encode("utf-8")
         self._send_html(200, body)
+
+    # P-AI-4.1 — face library quality audit page.  Loads the run's
+    # face_centroids.npz + the user-root library, applies the three
+    # P-AI-4 audits (cluster precision, fragmentation, cross-run
+    # continuity), renders an HTML report.  ``?format=json`` returns
+    # the same data as JSON for tooling.
+    def _serve_face_audit(self, run_id: str) -> bool:
+        run_id = unquote(run_id).split("?")[0]
+        run = _get_run(run_id) or _reload_run_from_disk(run_id)
+        if run is None:
+            self._reject_upload(404, f"no such run {run_id!r}")
+            return True
+        # Parse the optional ?format=json query string
+        want_json = "format=json" in (self.path or "")
+
+        try:
+            import numpy as np
+            from pixcull.pipeline.face_audit import (
+                CLUSTER_PAIR_OUTLIER_SIM,
+                cluster_precision_audit,
+                cross_run_continuity_audit,
+                library_fragmentation_audit,
+            )
+            from pixcull.pipeline.face_library import (
+                load_library,
+                load_run_centroids,
+            )
+            from pixcull.users import get_active_user, user_root as _user_root_fn
+        except ImportError as exc:
+            self._reject_upload(500, f"face audit imports failed: {exc}")
+            return True
+
+        out_dir = Path(run["output_dir"])
+        user_root = _user_root_fn(get_active_user())
+
+        # ---- Cluster precision ----------------------------------
+        # Need per-cluster member embeddings.  Read rows.parquet /
+        # scores.csv to assemble {cluster_id: [face_embeddings...]}.
+        cluster_reports: list[dict] = []
+        try:
+            scores_path = out_dir / "scores.csv"
+            if scores_path.exists():
+                import pandas as pd
+                df = pd.read_csv(scores_path)
+                if "face_cluster_id" in df.columns \
+                   and "face_embeddings" in df.columns:
+                    import json as _json
+                    by_cluster: dict[int, list[list[float]]] = {}
+                    for _, row in df.iterrows():
+                        cid = row.get("face_cluster_id")
+                        if cid is None or pd.isna(cid):
+                            continue
+                        embs_raw = row.get("face_embeddings")
+                        try:
+                            embs = _json.loads(embs_raw) \
+                                if isinstance(embs_raw, str) else []
+                        except (ValueError, TypeError):
+                            embs = []
+                        # face_embeddings is list-of-list (one per face);
+                        # take all of them
+                        for e in embs:
+                            if isinstance(e, list) and e:
+                                by_cluster.setdefault(int(cid), []).append(e)
+                    for cid, embs in by_cluster.items():
+                        rpt = cluster_precision_audit(embs, cluster_id=cid)
+                        cluster_reports.append({
+                            "cluster_id":      rpt.cluster_id,
+                            "n_members":       rpt.n_members,
+                            "min_pair_sim":    round(rpt.min_pair_sim, 3),
+                            "mean_pair_sim":   round(rpt.mean_pair_sim, 3),
+                            "n_outliers":      len(rpt.outlier_indices),
+                            "polluted":        rpt.polluted,
+                        })
+        except (OSError, ValueError, KeyError):
+            cluster_reports = []
+
+        # ---- Library fragmentation ------------------------------
+        frag_reports: list[dict] = []
+        try:
+            labels, lib_centroids = load_library(user_root)
+            if len(labels) > 0:
+                by_label: dict[str, list[list[float]]] = {}
+                for lab, c in zip(labels, lib_centroids):
+                    by_label.setdefault(str(lab), []).append(list(c))
+                for r in library_fragmentation_audit(by_label):
+                    frag_reports.append({
+                        "label":       r.label,
+                        "n_centroids": r.n_centroids,
+                        "fragmented":  r.fragmented,
+                    })
+        except (OSError, ValueError):
+            frag_reports = []
+
+        # ---- Cross-run continuity -------------------------------
+        continuity: dict = {"n_current_clusters": 0,
+                            "n_matched_to_library": 0,
+                            "match_rate": 0.0}
+        try:
+            this_run = load_run_centroids(out_dir)
+            labels, lib_centroids = load_library(user_root)
+            if this_run is not None and len(lib_centroids) > 0:
+                _, cur_centroids = this_run
+                cur_list = [list(c) for c in cur_centroids]
+                lib_list = [list(c) for c in lib_centroids]
+                cont = cross_run_continuity_audit(cur_list, lib_list)
+                continuity = {
+                    "n_current_clusters":   cont.n_current_clusters,
+                    "n_matched_to_library": cont.n_matched_to_library,
+                    "match_rate":           cont.match_rate,
+                }
+        except (OSError, ValueError):
+            pass
+
+        payload = {
+            "run_id":            run_id,
+            "outlier_threshold": CLUSTER_PAIR_OUTLIER_SIM,
+            "cluster_precision": cluster_reports,
+            "library_fragmentation": frag_reports,
+            "continuity":        continuity,
+        }
+
+        if want_json:
+            self._send_json(200,
+                _safe_dumps(payload).encode("utf-8"))
+            return True
+
+        # ---- HTML render ----------------------------------------
+        html = _render_face_audit_html(payload)
+        self._send_html(200, html.encode("utf-8"))
+        return True
 
     def _serve_runs_list(self) -> None:
         body = json.dumps({"runs": _enumerate_runs()},
@@ -11228,6 +11361,130 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
 # Loaded via _results_html_template() above; hot-reloadable on edit.
 
 
+def _render_face_audit_html(payload: dict) -> str:
+    """P-AI-4.1 — minimal HTML report for the face library audit page.
+
+    Inline CSS / no external dependencies so it works behind the
+    same single-binary serve_demo.py as everything else.  Renders
+    three sections: per-cluster precision, library fragmentation,
+    cross-run continuity.
+    """
+    import html as _html
+    run_id = _html.escape(str(payload.get("run_id", "")))
+    threshold = float(payload.get("outlier_threshold", 0.0))
+    cont = payload.get("continuity", {}) or {}
+    clusters = payload.get("cluster_precision", []) or []
+    frags    = payload.get("library_fragmentation", []) or []
+
+    # --- per-cluster precision rows ---
+    cluster_rows = ""
+    polluted_n = sum(1 for c in clusters if c.get("polluted"))
+    if not clusters:
+        cluster_rows = "<tr><td colspan='5' class='muted'>没有可审计的 face 簇(运行中没有人脸或 face_embeddings 列缺失)</td></tr>"
+    else:
+        for c in clusters:
+            cls = "polluted" if c.get("polluted") else "clean"
+            cluster_rows += (
+                f"<tr class='{cls}'>"
+                f"<td>{_html.escape(str(c.get('cluster_id', '?')))}</td>"
+                f"<td>{c.get('n_members', 0)}</td>"
+                f"<td>{c.get('min_pair_sim', 0):.3f}</td>"
+                f"<td>{c.get('mean_pair_sim', 0):.3f}</td>"
+                f"<td>{'⚠ 污染' if c.get('polluted') else '✓ 干净'} ({c.get('n_outliers', 0)} 离群)</td>"
+                f"</tr>"
+            )
+
+    # --- fragmentation rows ---
+    frag_rows = ""
+    frag_n = sum(1 for f in frags if f.get("fragmented"))
+    if not frags:
+        frag_rows = "<tr><td colspan='3' class='muted'>face library 是空的 —— 还没标注过身份</td></tr>"
+    else:
+        for f in frags:
+            cls = "polluted" if f.get("fragmented") else "clean"
+            frag_rows += (
+                f"<tr class='{cls}'>"
+                f"<td>{_html.escape(str(f.get('label', '')))}</td>"
+                f"<td>{f.get('n_centroids', 0)}</td>"
+                f"<td>{'⚠ 接近上限' if f.get('fragmented') else '✓ 充裕'}</td>"
+                f"</tr>"
+            )
+
+    return (
+        "<!DOCTYPE html><html lang='zh'><head>"
+        "<meta charset='utf-8'>"
+        f"<title>face 库审计 · {run_id}</title>"
+        "<style>"
+        "body{margin:0;background:#0b0d10;color:#e9ecf2;"
+        "font:13px/1.5 -apple-system,Segoe UI,PingFang SC,sans-serif}"
+        "header{padding:18px 24px;border-bottom:1px solid #232830}"
+        "h1{margin:0;font-size:16px;font-weight:700}"
+        "h1 a{color:#a8b2c1;font-weight:400;text-decoration:none;"
+        "margin-left:12px;font-size:12px}"
+        ".muted{color:#7a8696}"
+        "main{padding:18px 24px;max-width:960px}"
+        "section{margin-bottom:28px}"
+        "h2{font-size:13px;font-weight:600;letter-spacing:.04em;"
+        "text-transform:uppercase;color:#a8b2c1;margin:0 0 10px}"
+        ".kpis{display:flex;gap:18px;margin-bottom:10px;flex-wrap:wrap}"
+        ".kpi{padding:8px 12px;background:#11141a;border:1px solid #232830;"
+        "border-radius:6px;font-size:11.5px}"
+        ".kpi b{font-size:14px;color:#fff;display:block;line-height:1.1}"
+        ".kpi.warn b{color:#fbbf24}"
+        ".kpi.bad b{color:#ef6363}"
+        ".kpi.good b{color:#34d399}"
+        "table{width:100%;border-collapse:collapse;font-size:12px;"
+        "background:#11141a;border:1px solid #232830;border-radius:6px;"
+        "overflow:hidden}"
+        "th{text-align:left;padding:8px 12px;background:#161a21;"
+        "color:#a8b2c1;font-weight:600;font-size:11px;"
+        "letter-spacing:.04em;text-transform:uppercase;"
+        "border-bottom:1px solid #232830}"
+        "td{padding:7px 12px;border-bottom:1px solid #1c2027}"
+        "tr:last-child td{border-bottom:none}"
+        "tr.polluted{background:rgba(239,99,99,0.06)}"
+        "tr.polluted td:last-child{color:#ff9a9a}"
+        "tr.clean td:last-child{color:#7fe1b8}"
+        "footer{padding:18px 24px;color:#7a8696;font-size:11.5px;"
+        "border-top:1px solid #232830}"
+        "</style></head><body>"
+        f"<header><h1>👤 face 库审计 · run <code>{run_id}</code>"
+        f"  <a href='/admin'>← 返回 admin</a>"
+        f"  <a href='/admin/face_audit/{run_id}?format=json'>JSON</a>"
+        f"</h1></header>"
+        "<main>"
+        "<section><h2>跨 run 连续性</h2>"
+        "<div class='kpis'>"
+        f"<div class='kpi'>本 run 的 face 簇 <b>{cont.get('n_current_clusters', 0)}</b></div>"
+        f"<div class='kpi'>匹配到历史身份 <b>{cont.get('n_matched_to_library', 0)}</b></div>"
+        f"<div class='kpi {'good' if cont.get('match_rate', 0) >= 70 else 'warn' if cont.get('match_rate', 0) >= 40 else 'bad'}'>"
+        f"匹配率 <b>{cont.get('match_rate', 0):.1f}%</b></div>"
+        "</div>"
+        "<p class='muted'>跨 run 匹配率持续下降是身份漂移的信号 —— 检查光线 / 嵌入模型变更。</p>"
+        "</section>"
+        "<section><h2>本 run 簇精度</h2>"
+        f"<div class='kpis'><div class='kpi {'bad' if polluted_n else 'good'}'>"
+        f"污染簇 <b>{polluted_n}</b></div>"
+        f"<div class='kpi'>总簇数 <b>{len(clusters)}</b></div>"
+        f"<div class='kpi'>离群阈值 <b>{threshold:.2f}</b></div>"
+        "</div>"
+        "<table><thead><tr><th>cluster id</th><th>成员</th>"
+        "<th>最低对相似度</th><th>平均对相似度</th><th>状态</th></tr></thead>"
+        f"<tbody>{cluster_rows}</tbody></table>"
+        "</section>"
+        "<section><h2>身份库碎片化(每标签 ≤ 16 centroid)</h2>"
+        f"<div class='kpis'><div class='kpi {'warn' if frag_n else 'good'}'>"
+        f"接近上限的标签 <b>{frag_n}</b></div>"
+        f"<div class='kpi'>已知标签 <b>{len(frags)}</b></div>"
+        "</div>"
+        "<table><thead><tr><th>标签</th><th>centroid 数</th><th>状态</th></tr></thead>"
+        f"<tbody>{frag_rows}</tbody></table>"
+        "</section>"
+        "</main>"
+        "<footer>P-AI-4.1 · 报表数据来源:本 run 的 face_centroids.npz + 用户 root 下的 face_library</footer>"
+        "</body></html>"
+    )
+
 
 _ADMIN_HTML = r"""<!DOCTYPE html>
 <html lang="zh">
@@ -11642,6 +11899,7 @@ PYTHONPATH=. python scripts/eval_on_golden_set.py golden/ \
           <td>
             <a class="btn" href="/results/${r.run_id}">查看</a>
             <button class="btn rescan-scene" ${isRunning ? "disabled title='running 中'" : "title='重判 stilllife → portrait 等(face_count>0 校正)'"}>重判场景</button>
+            <a class="btn" href="/admin/face_audit/${r.run_id}" ${isRunning ? "style='pointer-events:none;opacity:0.4'" : "title='P-AI-4.1 · 人脸库质量审计(污染 / 碎片化 / 跨run 连续性)'"}>👤 面孔审计</a>
             <button class="danger del" ${isRunning ? "disabled title='running 中,等完成再删'" : ""}>删除</button>
           </td>
         </tr>`;
