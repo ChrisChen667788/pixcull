@@ -3491,6 +3491,11 @@ class _Handler(BaseHTTPRequestHandler):
         # into /results without any model warm-up.
         if path == "/sample_demo":
             return self._handle_sample_demo()
+        # P-UX-22 — deliverable buckets export. Body: {name, filenames}
+        # → server zips the matching photos + returns a downloadable URL.
+        if path.startswith("/buckets/export/"):
+            run_id = path[len("/buckets/export/"):]
+            return self._handle_bucket_export(run_id)
         if path == "/browse":
             return self._handle_browse()
         if path.startswith("/export/"):
@@ -3732,6 +3737,90 @@ class _Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     # --- scan-local mode --------------------------------------------------
+    def _handle_bucket_export(self, run_id: str) -> bool:
+        """P-UX-22 — bundle a deliverable bucket into a single zip.
+
+        Body: {name: str, filenames: [str, ...]}
+          - name:      the bucket name (for the zip filename)
+          - filenames: which photos to include (from the user's
+                       localStorage bucket-assignment state)
+
+        Response: {ok, zip_url, zip_filename, n_files, n_skipped}
+
+        The user-side bucket state lives in localStorage so we don't
+        store it on the server — every call is stateless and just
+        zips the explicit filename list against the run's resolved
+        on-disk source paths.
+        """
+        import io
+        import zipfile
+
+        run = _get_run(run_id) or _reload_run_from_disk(run_id)
+        if run is None:
+            self._reject_upload(404, "no such run"); return True
+
+        clen = int(self.headers.get("Content-Length", "0") or "0")
+        if clen <= 0 or clen > 1_000_000:
+            self._reject_upload(400, "expected JSON body"); return True
+        try:
+            body_raw = self.rfile.read(clen).decode("utf-8")
+            params = json.loads(body_raw)
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            self._reject_upload(400, f"JSON parse failed: {exc}"); return True
+
+        bucket_name = str(params.get("name") or "bucket").strip()
+        filenames   = params.get("filenames") or []
+        if not isinstance(filenames, list) or not filenames:
+            self._reject_upload(400, "filenames must be a non-empty list")
+            return True
+
+        # Sanitize the bucket name for the zip filename
+        safe_name = "".join(c if c.isalnum() or c in "-_." else "_"
+                            for c in bucket_name)[:64] or "bucket"
+
+        # Resolve each filename to an on-disk source. We accept either
+        # the run's manifest (scan mode) or input_dir (upload mode).
+        zip_buf = io.BytesIO()
+        n_files = 0
+        n_skipped = 0
+        with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED, allowZip64=False) as zf:
+            for fn in filenames:
+                if not isinstance(fn, str):
+                    n_skipped += 1
+                    continue
+                src = _resolve_image_source(run, fn)
+                if src is None or not src.is_file():
+                    n_skipped += 1
+                    continue
+                try:
+                    zf.write(src, arcname=fn)
+                    n_files += 1
+                except OSError:
+                    n_skipped += 1
+        zip_bytes = zip_buf.getvalue()
+
+        # Stash the zip under the run's output_dir so /tmp_zip can
+        # serve it; same pattern V1.2's XMP-export uses.
+        out_dir = Path(run["output_dir"])
+        zip_path = out_dir / f"bucket-{safe_name}-{int(time.time())}.zip"
+        zip_path.write_bytes(zip_bytes)
+
+        body = _safe_dumps({
+            "ok":            True,
+            "zip_url":       f"/tmp_zip/{run_id}/{zip_path.name}",
+            "zip_filename":  f"{safe_name}.zip",
+            "n_files":       n_files,
+            "n_skipped":     n_skipped,
+            "size_bytes":    len(zip_bytes),
+        }).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+        return True
+
     def _handle_sample_demo(self) -> None:
         """P-UX-21 — instant sample-data path.
 

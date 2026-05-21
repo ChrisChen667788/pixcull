@@ -780,6 +780,113 @@
       color: #fff;
     }
 
+    /* P-UX-22 — deliverable buckets. Collapsible right-side panel
+       for named output baskets ("Client gallery / Final keepers
+       / Marketing reel / Stock submissions"). User drags cards
+       into a bucket; each bucket gets its own download button
+       that zips just its photos.  No server-state — all bucket
+       assignments live in localStorage so they survive a tab
+       reload and don't pollute annotations. */
+    .buckets-toggle {
+      position: fixed; top: 14px; right: 14px;
+      z-index: 8;
+      background: rgba(20,23,28,0.92);
+      color: #fff; border: 1px solid var(--border-hi);
+      border-radius: 999px;
+      padding: 6px 14px; font-size: 11.5px; font-weight: 500;
+      cursor: pointer;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      transition: background 120ms;
+    }
+    .buckets-toggle:hover { background: rgba(20,23,28,1); }
+    .buckets-toggle .bk-pill {
+      display: inline-block; margin-left: 6px;
+      padding: 1px 7px; border-radius: 999px;
+      background: var(--accent); color: #fff;
+      font-size: 10px; font-weight: 700;
+    }
+    .buckets-panel {
+      position: fixed; top: 0; right: 0; bottom: 0;
+      width: 320px; max-width: 90vw;
+      z-index: 9;
+      background: var(--bg-card);
+      border-left: 1px solid var(--border-hi);
+      transform: translateX(100%);
+      transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+    .buckets-panel.show { transform: translateX(0); }
+    .buckets-panel .bk-head {
+      padding: 14px 16px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 10px;
+    }
+    .buckets-panel .bk-head h3 {
+      margin: 0; font-size: 13px; font-weight: 600;
+      flex: 1;
+    }
+    .buckets-panel .bk-close {
+      cursor: pointer; padding: 4px 10px;
+      border-radius: 5px; color: var(--muted);
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.04);
+      font-size: 13px;
+    }
+    .buckets-panel .bk-close:hover { color: var(--fg); }
+    .buckets-panel .bk-list { flex: 1; overflow-y: auto; padding: 8px; }
+    .buckets-panel .bk-item {
+      padding: 10px 12px; margin-bottom: 8px;
+      border: 1px dashed var(--border);
+      border-radius: 6px;
+      background: rgba(255,255,255,0.02);
+      transition: border-color 120ms, background 120ms;
+    }
+    .buckets-panel .bk-item.drag-over {
+      border-color: var(--accent);
+      background: rgba(59,130,246,0.10);
+    }
+    .buckets-panel .bk-item .bk-name {
+      font-size: 12px; font-weight: 600;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .buckets-panel .bk-item .bk-count {
+      color: var(--muted); font-size: 11px;
+      font-family: ui-monospace, monospace;
+    }
+    .buckets-panel .bk-item .bk-actions {
+      margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap;
+    }
+    .buckets-panel .bk-btn {
+      padding: 3px 9px; font-size: 10.5px;
+      border-radius: 4px; cursor: pointer;
+      background: rgba(255,255,255,0.06);
+      color: var(--fg);
+      border: 1px solid var(--border);
+    }
+    .buckets-panel .bk-btn:hover { border-color: var(--fg); }
+    .buckets-panel .bk-btn.danger { color: #ff9a9a; border-color: rgba(239,99,99,0.4); }
+    .buckets-panel .bk-foot {
+      padding: 10px 16px; border-top: 1px solid var(--border);
+      display: flex; gap: 8px;
+    }
+    .buckets-panel .bk-foot input {
+      flex: 1; padding: 5px 8px; font-size: 11px;
+      background: var(--bg); color: var(--fg);
+      border: 1px solid var(--border); border-radius: 4px;
+    }
+    /* Drag affordance on cards */
+    .card.bk-dragging { opacity: 0.55; }
+    .card.bk-tagged::after {
+      content: attr(data-bk-tags);
+      position: absolute; top: 6px; right: 36px;
+      background: rgba(59,130,246,0.85); color: #fff;
+      padding: 1px 6px; border-radius: 8px;
+      font-size: 9.5px; font-weight: 600;
+      pointer-events: none;
+      max-width: 100px; overflow: hidden; text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
     /* P-UX-5 — similar-photos row in the lightbox info pane. Shows
        up to 5 thumbnails of visually-similar photos with a tiny
        reason badge + decision dot. Click to jump; Shift+click to
@@ -1616,6 +1723,25 @@
   <!-- P-UX-3 — free-pick A/B compare hint tray. Hidden until the
        user pins a 1st photo for compare via the card ⇆ button or
        Shift+click. Tells them what's selected and how to cancel. -->
+  <!-- P-UX-22 — deliverable buckets panel. Hidden by default;
+       opens via the floating "🪣 桶" pill in the top-right.
+       Drag any card from the grid into a bucket; bucket assignments
+       live in localStorage (no annotation pollution). Each bucket
+       has its own "下载 ZIP" + "复制文件名" + "清空" actions. -->
+  <button class="buckets-toggle" id="bucketsToggleBtn" type="button"
+          title="交付桶 — 拖卡片到桶里整理输出">🪣 桶 <span class="bk-pill" id="bucketsTotalPill" style="display:none">0</span></button>
+  <aside class="buckets-panel" id="bucketsPanel" aria-hidden="true">
+    <div class="bk-head">
+      <h3>交付桶</h3>
+      <span class="bk-close" id="bucketsCloseBtn" title="关闭 (Esc)">✕</span>
+    </div>
+    <div class="bk-list" id="bucketsList"></div>
+    <div class="bk-foot">
+      <input id="newBucketName" type="text" placeholder="新桶名(回车创建)" maxlength="32" />
+      <button class="bk-btn" id="newBucketBtn" type="button">+ 新建</button>
+    </div>
+  </aside>
+
   <div class="cmp-pick-tray" id="cmpPickTray" role="status"
        aria-live="polite">
     <span>已选 <b>A</b>:</span>
@@ -5216,6 +5342,271 @@
   }, true);  // capture phase so we get ahead of the existing thumb-click → openLightbox
 
   cmpPickCancel.addEventListener("click", () => cancelComparePick());
+
+  // ==================================================================
+  // P-UX-22 — deliverable buckets. Per-user named output baskets so
+  // a photographer can organize culls into "客户精选 / 营销片 /
+  // 投稿候选 / 留档" buckets and export each as a zip without
+  // re-filtering the grid every time.
+  //
+  // State model:
+  //   localStorage[`pixcull_buckets:${run_id}`] = {
+  //     "客户精选":      ["IMG_001.jpg", "IMG_007.jpg", ...],
+  //     "营销片":        ["IMG_012.jpg"],
+  //     ...
+  //   }
+  // ==================================================================
+
+  const _BUCKETS_KEY = `pixcull_buckets:${run_id}`;
+  const bucketsToggleBtn = document.getElementById("bucketsToggleBtn");
+  const bucketsPanel     = document.getElementById("bucketsPanel");
+  const bucketsCloseBtn  = document.getElementById("bucketsCloseBtn");
+  const bucketsList      = document.getElementById("bucketsList");
+  const bucketsTotalPill = document.getElementById("bucketsTotalPill");
+  const newBucketBtn     = document.getElementById("newBucketBtn");
+  const newBucketName    = document.getElementById("newBucketName");
+
+  function _readBuckets() {
+    try {
+      return JSON.parse(localStorage.getItem(_BUCKETS_KEY) || "{}");
+    } catch (_e) { return {}; }
+  }
+  function _writeBuckets(b) {
+    try { localStorage.setItem(_BUCKETS_KEY, JSON.stringify(b)); }
+    catch (_e) { /* localStorage full / disabled */ }
+  }
+  function _bucketsForFile(filename) {
+    const b = _readBuckets();
+    return Object.keys(b).filter(name => (b[name] || []).includes(filename));
+  }
+  function _bucketsTotal() {
+    const b = _readBuckets();
+    const all = new Set();
+    for (const arr of Object.values(b)) {
+      for (const fn of arr) all.add(fn);
+    }
+    return all.size;
+  }
+
+  function _renderBucketsPill() {
+    const n = _bucketsTotal();
+    if (n > 0) {
+      bucketsTotalPill.style.display = "";
+      bucketsTotalPill.textContent = String(n);
+    } else {
+      bucketsTotalPill.style.display = "none";
+    }
+  }
+  function _renderBucketsPanel() {
+    const b = _readBuckets();
+    const names = Object.keys(b).sort();
+    if (!names.length) {
+      bucketsList.innerHTML = `<div class="muted" style="padding:14px;text-align:center;font-size:11.5px;line-height:1.6">
+        还没有桶。在下面输入名字 + Enter 创建第一个。<br><br>
+        创建后,把卡片拖到桶上即可归属。<br>
+        每个桶可以单独导出 zip / 复制文件名 / 清空。
+      </div>`;
+    } else {
+      bucketsList.innerHTML = names.map(name => {
+        const items = b[name] || [];
+        return `<div class="bk-item" data-bucket="${esc(name)}">
+          <div class="bk-name">
+            🪣 ${esc(name)}
+            <span class="bk-count">${items.length} 张</span>
+          </div>
+          <div class="bk-actions">
+            <button class="bk-btn" data-bk-action="export" data-bucket="${esc(name)}" ${items.length ? '' : 'disabled style="opacity:0.4"'}>下载 ZIP</button>
+            <button class="bk-btn" data-bk-action="copy"   data-bucket="${esc(name)}" ${items.length ? '' : 'disabled style="opacity:0.4"'}>复制文件名</button>
+            <button class="bk-btn" data-bk-action="filter" data-bucket="${esc(name)}" ${items.length ? '' : 'disabled style="opacity:0.4"'}>筛选</button>
+            <button class="bk-btn danger" data-bk-action="clear" data-bucket="${esc(name)}">清空</button>
+            <button class="bk-btn danger" data-bk-action="delete" data-bucket="${esc(name)}">删除桶</button>
+          </div>
+        </div>`;
+      }).join("");
+    }
+    _renderBucketsPill();
+    _refreshCardBucketTags();
+  }
+
+  function _refreshCardBucketTags() {
+    // Show "🪣 客户精选" badge on cards that belong to any bucket.
+    const b = _readBuckets();
+    const fnToBuckets = new Map();
+    for (const [name, items] of Object.entries(b)) {
+      for (const fn of items) {
+        if (!fnToBuckets.has(fn)) fnToBuckets.set(fn, []);
+        fnToBuckets.get(fn).push(name);
+      }
+    }
+    grid.querySelectorAll(".card[data-fn]").forEach(card => {
+      const tags = fnToBuckets.get(card.dataset.fn) || [];
+      if (tags.length) {
+        card.classList.add("bk-tagged");
+        card.dataset.bkTags = "🪣 " + tags.join(" · ");
+      } else {
+        card.classList.remove("bk-tagged");
+        delete card.dataset.bkTags;
+      }
+    });
+  }
+
+  function openBucketsPanel() {
+    bucketsPanel.classList.add("show");
+    bucketsPanel.setAttribute("aria-hidden", "false");
+    _renderBucketsPanel();
+  }
+  function closeBucketsPanel() {
+    bucketsPanel.classList.remove("show");
+    bucketsPanel.setAttribute("aria-hidden", "true");
+  }
+  bucketsToggleBtn.addEventListener("click", openBucketsPanel);
+  bucketsCloseBtn.addEventListener("click", closeBucketsPanel);
+
+  // New bucket
+  function _createBucket() {
+    const name = newBucketName.value.trim();
+    if (!name) return;
+    const b = _readBuckets();
+    if (!b[name]) b[name] = [];
+    _writeBuckets(b);
+    newBucketName.value = "";
+    _renderBucketsPanel();
+  }
+  newBucketBtn.addEventListener("click", _createBucket);
+  newBucketName.addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); _createBucket(); }
+  });
+
+  // Per-bucket action handlers (delegated)
+  bucketsList.addEventListener("click", async e => {
+    const btn = e.target.closest("[data-bk-action]");
+    if (!btn) return;
+    const action = btn.dataset.bkAction;
+    const name = btn.dataset.bucket;
+    const b = _readBuckets();
+    const items = b[name] || [];
+
+    if (action === "clear") {
+      if (!items.length) return;
+      if (!confirm(`清空 "${name}" 桶里的 ${items.length} 张?(桶本身保留)`)) return;
+      b[name] = []; _writeBuckets(b); _renderBucketsPanel();
+    } else if (action === "delete") {
+      if (!confirm(`删除整个 "${name}" 桶?里面 ${items.length} 张照片的归属会被清空。`)) return;
+      delete b[name]; _writeBuckets(b); _renderBucketsPanel();
+    } else if (action === "copy") {
+      try {
+        await navigator.clipboard.writeText(items.join("\n"));
+        showToast(`已复制 ${items.length} 个文件名到剪贴板`, "success");
+      } catch (_e) {
+        showToast("剪贴板写入失败 — 浏览器可能未授权", "error");
+      }
+    } else if (action === "filter") {
+      // Pipe the bucket into a virtual semSearch-style filter
+      filterState.semSearch = {
+        q: `🪣 ${name}`,
+        filenames: new Set(items),
+      };
+      const semInput = document.getElementById("semSearchInput");
+      const semClear = document.getElementById("semSearchClearBtn");
+      if (semInput) semInput.value = `🪣 ${name}`;
+      if (semClear) semClear.style.display = "";
+      render();
+      closeBucketsPanel();
+    } else if (action === "export") {
+      // POST /buckets/export/<run> with the filename list. Server
+      // zips them on the fly + returns a downloadable URL.
+      btn.disabled = true; const orig = btn.textContent; btn.textContent = "导出中…";
+      try {
+        const res = await fetch(`/buckets/export/${run_id}`, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({name, filenames: items}),
+        });
+        const d = await res.json();
+        if (!d.ok) throw new Error(d.error || `HTTP ${res.status}`);
+        // Trigger download
+        const a = document.createElement("a");
+        a.href = d.zip_url;
+        a.download = d.zip_filename || `${name}.zip`;
+        document.body.appendChild(a); a.click(); a.remove();
+        showToast(`已导出 "${name}" 桶 (${items.length} 张)`, "success");
+      } catch (err) {
+        showToast("桶导出失败: " + err.message, "error");
+      } finally {
+        btn.disabled = false; btn.textContent = orig;
+      }
+    }
+  });
+
+  // Drag-and-drop wiring on the grid. We use HTML5 native drag
+  // because every modern browser supports it + Lr/C1 users already
+  // know the gesture from their catalog tools.
+  grid.addEventListener("dragstart", e => {
+    const card = e.target.closest(".card[data-fn]");
+    if (!card) return;
+    e.dataTransfer.effectAllowed = "copyMove";
+    e.dataTransfer.setData("text/pixcull-fn", card.dataset.fn);
+    card.classList.add("bk-dragging");
+    // If panel is closed, slide it in so the user can see where
+    // to drop. (Don't auto-close — they may drop into multiple.)
+    if (!bucketsPanel.classList.contains("show")) openBucketsPanel();
+  });
+  grid.addEventListener("dragend", e => {
+    const card = e.target.closest(".card[data-fn]");
+    if (card) card.classList.remove("bk-dragging");
+  });
+  // Make every card draggable. Set the attribute when cards render.
+  const _origGridSetup = () => {
+    grid.querySelectorAll(".card[data-fn]").forEach(c => c.draggable = true);
+  };
+  _origGridSetup();
+  // Re-apply after every re-render (filter change rebuilds DOM)
+  const _bucketsObserver = new MutationObserver(() => {
+    _origGridSetup();
+    _refreshCardBucketTags();
+  });
+  _bucketsObserver.observe(grid, {childList: true});
+
+  // Drop target wiring on bucket items
+  bucketsList.addEventListener("dragover", e => {
+    const item = e.target.closest(".bk-item[data-bucket]");
+    if (!item) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+    item.classList.add("drag-over");
+  });
+  bucketsList.addEventListener("dragleave", e => {
+    const item = e.target.closest(".bk-item[data-bucket]");
+    if (item) item.classList.remove("drag-over");
+  });
+  bucketsList.addEventListener("drop", e => {
+    e.preventDefault();
+    const item = e.target.closest(".bk-item[data-bucket]");
+    if (!item) return;
+    item.classList.remove("drag-over");
+    const fn = e.dataTransfer.getData("text/pixcull-fn");
+    if (!fn) return;
+    const name = item.dataset.bucket;
+    const b = _readBuckets();
+    if (!b[name]) b[name] = [];
+    if (!b[name].includes(fn)) b[name].push(fn);
+    _writeBuckets(b);
+    _renderBucketsPanel();
+  });
+
+  // Esc closes the buckets panel (when no other modal is hogging Esc)
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && bucketsPanel.classList.contains("show")) {
+      // Yield to other modals first — lightbox, annotation, etc.
+      if (lb.classList.contains("show")) return;
+      if (cmpModal.classList.contains("show")) return;
+      closeBucketsPanel();
+    }
+  });
+
+  // Initial paint + pill update on page load
+  _renderBucketsPill();
+  _refreshCardBucketTags();
 
   // ==================================================================
   // P-UX-4 — reject-reason taxonomy. Three concerns:
