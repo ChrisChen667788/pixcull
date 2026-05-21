@@ -150,6 +150,11 @@ class FaceDetector(Detector):
         # Landmark coverage on any face — used for face_occluded fallback.
         all_max_blink = 0.0
         all_min_ear = 1.0
+        # P-AI-5.5 — smile + brow-down blendshape trackers.
+        # Initialize to 0 (no signal) so faceless / detection-miss
+        # frames don't get a spurious positive smile signal.
+        all_max_smile = 0.0
+        all_max_brow_down = 0.0
         landmarker_hits = 0
 
         largest_meaningful_area = 0.0
@@ -198,10 +203,27 @@ class FaceDetector(Detector):
 
             # Blendshape blink — Google's trained signal, more reliable than EAR.
             blink = 0.0
+            # P-AI-5.5 — extract smile + brow-down blendshapes in the
+            # same block, since mediapipe already returns the full
+            # 52-channel vector each call.  Free signals once we ask.
+            smile = 0.0
+            brow_down = 0.0
             if lm_res.face_blendshapes:
                 bs = {s.category_name: s.score for s in lm_res.face_blendshapes[0]}
                 blink = max(bs.get("eyeBlinkLeft", 0.0), bs.get("eyeBlinkRight", 0.0))
+                # Smile: average of the two sides (asymmetric smiles
+                # are real but small; averaging is the same trick
+                # mediapipe's own examples use).
+                smile = 0.5 * (bs.get("mouthSmileLeft", 0.0)
+                               + bs.get("mouthSmileRight", 0.0))
+                # Brow down = furrowed-brow / concentration / frown.
+                # NEGATIVE signal for wedding photos (we want
+                # relaxed expressions).
+                brow_down = 0.5 * (bs.get("browDownLeft", 0.0)
+                                   + bs.get("browDownRight", 0.0))
             all_max_blink = max(all_max_blink, blink)
+            all_max_smile = max(all_max_smile, smile)
+            all_max_brow_down = max(all_max_brow_down, brow_down)
 
             # Geometric EAR as fallback / cross-check.
             fh, fw = face_arr.shape[:2]
@@ -222,6 +244,12 @@ class FaceDetector(Detector):
         # Record metrics (use "all faces" numbers so downstream has full info).
         result.metrics["face_max_blink"] = all_max_blink
         result.metrics["face_min_ear"] = all_min_ear if landmarker_hits else 1.0
+        # P-AI-5.5 — smile (positive signal for wedding picks) and
+        # brow-down (negative signal — concentration / frown).
+        # Only meaningful when at least one face had landmarks; 0
+        # on faceless / landmarker-miss frames is the safe default.
+        result.metrics["face_max_smile"] = all_max_smile
+        result.metrics["face_max_brow_down"] = all_max_brow_down
         if largest_meaningful_lap is not None:
             result.metrics["face_region_lap_var"] = largest_meaningful_lap
 

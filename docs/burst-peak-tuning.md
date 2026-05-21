@@ -225,16 +225,79 @@ BurstPeakWeights(
 These give the best **≤3 narrowing rate (92%)** while keeping
 exact agreement at 2/13.  Stays the recommendation.
 
-### Next step: P-AI-5.5 — smile + expression signals
+### P-AI-5.5 — mediapipe smile + brow-down blendshapes (landed)
 
-The remaining flips (B5, B6) suggest the photographer is using
-smile / expression / interaction signals beyond eyes-open.
-Mediapipe Face Blendshapes (the same pipeline already loaded
-for blink) exposes `mouthSmile`, `browDownLeft`, `eyeWideLeft`
-etc. — 52 channels per face.  P-AI-5.5 should plumb the smile
-signal through `face_smile_score` and re-tune.  Expected lift
-from the 15-23% exact ceiling to ~35-40% (covering the
-expression-driven flips that blink can't reach).
+Plumbed two new signals into the picker by reading mediapipe's
+FaceLandmarker blendshapes that were already computed for blink:
+
+  · `face_max_smile` — average of mouthSmileLeft + mouthSmileRight,
+    max across faces, range 0..1
+  · `face_max_brow_down` — average of browDownLeft + browDownRight,
+    max across faces.  Inverted in the picker as `_face_no_frown`
+    (1.0 = relaxed brow, 0 = furrowed) so all weights stay positive.
+
+Real signal range in the 80-frame wedding burst corpus:
+  - smile:    0.05 - 0.78 (much more dynamic than blink)
+  - brow_down: 0.00 - 0.25 (small but informative)
+  - blink:     0.00 - 0.92 (already known)
+
+Weight sweep with the new signals on all 13 real bursts:
+
+| config                                   | exact | ≤1 | ≤2 | ≤3 |
+| ---------------------------------------- | ----- | -- | -- | -- |
+| baseline P-AI-5 (pre-face)               | 2/13  | 6  | 8  | 10 |
+| P-AI-5.4 default (eyes 0.30)             | 2/13  | 7  | 8  | 11 |
+| P-AI-5.5 conservative (smile 0.15)       | 2/13  | 7  | 8  | 11 |
+| smile-dominant 0.30                      | 2/13  | 7  | 8  | 11 |
+| smile-only (1.00)                        | **5/13** | **8** | 8 | **12** |
+| smile 0.45 + eyes 0.45 (no sharpness)    | 5/13  | 7  | 9  | 11 |
+| smile 0.60 + sharp 0.10                  | 3/13  | 7  | 8  | 11 |
+
+**Smile-only ceiling = 38.5% exact** — a clean 15% → 38.5% lift
+when sharpness is removed entirely.  This confirms the
+photographer's actual selection criterion: smile, not blink.
+
+### Why the default still keeps sharpness weight
+
+Smile-only mode is only safe on faceful bursts (wedding /
+portrait / event).  On wildlife / sports / landscape there's no
+smile signal — all frames score 0 from the smile component,
+and the picker degenerates to "first filename".  The unit tests
+caught this regression scenario.
+
+A vertical-aware default (smile-heavy when scene == wedding,
+sharp-heavy otherwise) is the right ship.  That's P-AI-5.6's
+job — needs the picker to receive the scene/vertical hint per
+burst.  Until then, the safe blended default ships:
+
+```python
+BurstPeakWeights(
+    sharpness      = 0.40,
+    distinctness   = 0.05,
+    quality        = 0.05,
+    face           = 0.05,
+    face_eyes_open = 0.25,
+    face_smile     = 0.15,    # NEW
+    face_no_frown  = 0.05,    # NEW
+)
+```
+
+Same ≤3 narrowing rate (11/13 = 85%) as the prior P-AI-5.4
+default.  The new signals are correctly **consumed** when present
+(13 unit tests cover the consumption paths including the
+realistic-sharpness-gap-vs-large-smile-gap flip).  The headline
+ceiling lift will land with P-AI-5.6's vertical-aware weighting.
+
+### Other ship change: reason-string semantics
+
+The reason string changed from "biggest absolute contribution"
+to "biggest above-cluster-mean delta".  Before this change,
+"sharpness 71%" was the surfaced reason on a wedding burst
+because raw sharpness is always 0.6-0.7 across all frames,
+and 0.7 × 0.40 weight beats any single-component delta.  Now
+the reason explains what makes THIS frame different from its
+burst-mates ("笑容明显 78%" / "眼睛睁开 95%"), which is what
+the user actually wants to know.
 
 ## Repro
 

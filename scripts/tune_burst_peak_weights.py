@@ -108,8 +108,10 @@ def add_face_features_in_place(
     for b in cache:
         for r in b["rows"]:
             seen += 1
-            # Skip if already augmented (idempotent re-run)
-            if "face_max_blink" in r:
+            # Skip if already augmented to the NEW (P-AI-5.5) shape.
+            # We key on face_max_smile because old cache versions
+            # had face_max_blink but no smile/frown.
+            if "face_max_smile" in r:
                 continue
             fn = r["filename"]
             p = folder / fn
@@ -125,9 +127,12 @@ def add_face_features_in_place(
             except Exception as exc:
                 print(f"  skip face {fn}: {exc}", file=sys.stderr)
                 continue
-            r["face_count"]     = float(res.metrics.get("face_count", 0))
-            r["face_max_blink"] = float(res.metrics.get("face_max_blink", 0))
-            r["face_min_ear"]   = float(res.metrics.get("face_min_ear", 1.0))
+            r["face_count"]         = float(res.metrics.get("face_count", 0))
+            r["face_max_blink"]     = float(res.metrics.get("face_max_blink", 0))
+            r["face_min_ear"]       = float(res.metrics.get("face_min_ear", 1.0))
+            # P-AI-5.5 — new blendshape signals.
+            r["face_max_smile"]     = float(res.metrics.get("face_max_smile", 0))
+            r["face_max_brow_down"] = float(res.metrics.get("face_max_brow_down", 0))
             # Synthesize a placeholder face_bboxes list with the right
             # count so _face_evidence picks it up.  The picker doesn't
             # read individual bbox coords, just the count.
@@ -135,7 +140,10 @@ def add_face_features_in_place(
             r["face_bboxes"] = [[0, 0, 0, 0, 1.0]] * n
 
             if seen % 10 == 0:
-                print(f"  [{seen}/{n_total}] face {fn} blink={r['face_max_blink']:.2f}",
+                print(f"  [{seen}/{n_total}] face {fn} "
+                      f"blink={r['face_max_blink']:.2f} "
+                      f"smile={r['face_max_smile']:.2f} "
+                      f"frown={r['face_max_brow_down']:.2f}",
                       file=sys.stderr)
 
     with cache_path.open("w") as f:
@@ -242,28 +250,39 @@ def main():
         add_face_features_in_place(cache_path, args.folder)
         return
 
-    # Weight configs to sweep.  All sum to 1.0 so the picker scoring
-    # comparison is apples-to-apples.  P-AI-5.4 added the
-    # face_eyes_open weight so configs now have 5 components.
+    # Weight configs to sweep.  P-AI-5.5 added face_smile +
+    # face_no_frown weights — configs now have 7 components.
+    # All sum to 1.0 so the picker scoring comparison is
+    # apples-to-apples.
     configs = [
         ("baseline P-AI-5 (no face)",
          {"sharpness": 0.40, "distinctness": 0.30,
-          "quality": 0.20,   "face": 0.10, "face_eyes_open": 0.00}),
-        ("P-AI-5.2 (sharp-dom)",
-         {"sharpness": 0.70, "distinctness": 0.20,
-          "quality": 0.05,   "face": 0.05, "face_eyes_open": 0.00}),
-        ("P-AI-5.3 default (eyes 0.30)",
+          "quality": 0.20,   "face": 0.10, "face_eyes_open": 0.00,
+          "face_smile": 0.00, "face_no_frown": 0.00}),
+        ("P-AI-5.4 (eyes 0.30)",
          {"sharpness": 0.50, "distinctness": 0.10,
-          "quality": 0.05,   "face": 0.05, "face_eyes_open": 0.30}),
-        ("eyes-dominant (0.50)",
-         {"sharpness": 0.35, "distinctness": 0.05,
-          "quality": 0.05,   "face": 0.05, "face_eyes_open": 0.50}),
-        ("eyes-only",
+          "quality": 0.05,   "face": 0.05, "face_eyes_open": 0.30,
+          "face_smile": 0.00, "face_no_frown": 0.00}),
+        ("P-AI-5.5 default (smile 0.15)",
+         {"sharpness": 0.40, "distinctness": 0.05,
+          "quality": 0.05,   "face": 0.05, "face_eyes_open": 0.25,
+          "face_smile": 0.15, "face_no_frown": 0.05}),
+        ("smile-dominant (0.30)",
+         {"sharpness": 0.30, "distinctness": 0.05,
+          "quality": 0.05,   "face": 0.05, "face_eyes_open": 0.20,
+          "face_smile": 0.30, "face_no_frown": 0.05}),
+        ("face-dominant (eyes+smile=0.55)",
+         {"sharpness": 0.30, "distinctness": 0.05,
+          "quality": 0.05,   "face": 0.05, "face_eyes_open": 0.30,
+          "face_smile": 0.25, "face_no_frown": 0.00}),
+        ("smile-only",
          {"sharpness": 0.00, "distinctness": 0.00,
-          "quality": 0.00,   "face": 0.00, "face_eyes_open": 1.00}),
-        ("balanced eyes+sharp",
-         {"sharpness": 0.40, "distinctness": 0.10,
-          "quality": 0.00,   "face": 0.00, "face_eyes_open": 0.50}),
+          "quality": 0.00,   "face": 0.00, "face_eyes_open": 0.00,
+          "face_smile": 1.00, "face_no_frown": 0.00}),
+        ("smile+eyes balanced",
+         {"sharpness": 0.20, "distinctness": 0.00,
+          "quality": 0.00,   "face": 0.00, "face_eyes_open": 0.40,
+          "face_smile": 0.40, "face_no_frown": 0.00}),
     ]
     evaluate_picker_weights(bursts, args.folder, configs)
 

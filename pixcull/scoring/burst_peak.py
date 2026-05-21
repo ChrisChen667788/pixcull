@@ -83,11 +83,13 @@ class BurstPeakWeights:
       eyes-open path is correctly weighted; the on-real-data
       ceiling check ships when mediapipe is unstuck.
     """
-    sharpness:      float = 0.50
-    distinctness:   float = 0.10
+    sharpness:      float = 0.40
+    distinctness:   float = 0.05
     quality:        float = 0.05
     face:           float = 0.05      # "any face at all" — legacy presence
-    face_eyes_open: float = 0.30      # P-AI-5.3 — (1 - face_max_blink)
+    face_eyes_open: float = 0.25      # P-AI-5.3 — (1 - face_max_blink)
+    face_smile:     float = 0.15      # P-AI-5.5 — mouthSmile blendshape
+    face_no_frown:  float = 0.05      # P-AI-5.5 — (1 - browDown) penalty inverter
 
 
 DEFAULT_WEIGHTS = BurstPeakWeights()
@@ -187,6 +189,55 @@ def _face_eyes_open(row: dict) -> float:
     return max(0.0, min(1.0, 1.0 - b))
 
 
+def _clamped_float(value, default: float = 0.0) -> float:
+    """Coerce ``value`` to a float in [0, 1].  Returns ``default``
+    for None / NaN / unparseable / out-of-range below 0.  Out-of-
+    range above 1 is clipped to 1.  Helper for the new P-AI-5.5
+    blendshape signals which all live in [0, 1] when valid.
+    """
+    if value is None:
+        return default
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return default
+    if v != v:   # NaN
+        return default
+    if v < 0.0:
+        return default
+    return min(1.0, v)
+
+
+def _face_smile(row: dict) -> float:
+    """P-AI-5.5 — smile signal from ``face_max_smile`` (mediapipe
+    blendshape mouthSmile average L+R, max across faces, 0..1).
+    Returns 0 when no signal available.  Direct positive signal —
+    the higher the smile score, the more the picker should prefer
+    this frame."""
+    return _clamped_float(row.get("face_max_smile"))
+
+
+def _face_no_frown(row: dict) -> float:
+    """P-AI-5.5 — inverted brow-down signal.  ``face_max_brow_down``
+    (mediapipe blendshape browDown, 0..1) measures furrowed brow /
+    concentration / mild frown.  We invert so 1.0 means "nobody is
+    frowning" — a positive signal we can weight alongside smile.
+
+    The inversion (rather than subtracting a frown weight) keeps all
+    of BurstPeakWeights positive, which makes the scoring math
+    monotonic and the per-component reason explainer simpler."""
+    brow = row.get("face_max_brow_down")
+    if brow is None:
+        return 0.0
+    try:
+        b = float(brow)
+    except (TypeError, ValueError):
+        return 0.0
+    if b != b:   # NaN
+        return 0.0
+    return max(0.0, min(1.0, 1.0 - b))
+
+
 def rank_burst_peak(
     rows: list[dict],
     weights: BurstPeakWeights = DEFAULT_WEIGHTS,
@@ -209,12 +260,20 @@ def rank_burst_peak(
             fn, 0, [(fn, 1.0)], {fn: "唯一帧 — 自动入选"}
         )
 
-    # 1. Per-cluster raw signals, then min-max normalize to [0,1]
-    sharps_raw = [float(r.get("score_sharpness") or 0.0) for r in rows]
-    sharps_n   = _min_max_norm(sharps_raw)
+    # 1. Per-cluster signals.  P-AI-5.5 — sharpness uses RAW values
+    #    (already in [0, 1] from V18 fusion) instead of min-max-
+    #    normalized: in a tight burst min-max would amplify a 0.02
+    #    sharpness gap to [0, 1] and dominate the face signals.
+    #    Raw values preserve the small actual gap so smile / eyes-open
+    #    have room to flip the pick when the photographer chose on
+    #    expression, not sharpness.
+    sharps_n = [float(r.get("score_sharpness") or 0.0) for r in rows]
 
-    # 2. Embedding centroid + per-row cosine distance, also min-max
-    #    normalized within the burst.
+    # 2. Embedding distinctness still uses min-max — cosine distances
+    #    inside a tight burst are 0.0–0.05 so we DO want the outlier
+    #    frame to surface clearly.  Different semantics from sharpness
+    #    because for sharpness "all roughly equal" is the normal case;
+    #    for distinctness "all roughly equal" means none is the apex.
     embs = [r.get("embedding") for r in rows]
     embs_clean = [list(e) for e in embs if isinstance(e, list) and e]
     centroid = _vector_mean(embs_clean) if embs_clean else []
@@ -226,40 +285,79 @@ def rank_burst_peak(
             distinct_raw.append(0.0)
     distinct_n = _min_max_norm(distinct_raw)
 
-    # 3. Score each row + remember the dominant component for the
-    #    explanation string.  Each weight × normalized signal is in
-    #    [0, weight], so the total max contribution per row is the
-    #    sum of weights (typically 1.0 for default).
+    # 3. Per-component cluster means.  P-AI-5.5 changed the reason
+    #    string from "biggest absolute contribution" to "biggest
+    #    above-cluster-mean delta", which is the right semantic:
+    #    the reason should say what makes THIS frame different from
+    #    its burst-mates, not which signal happens to be the highest
+    #    everywhere (sharpness above 0.6 across the board doesn't
+    #    explain why one frame won).  Compute the means once up
+    #    front; the per-row loop below references them.
+    def _vals(field, default=0.0):
+        out = []
+        for r in rows:
+            v = r.get(field)
+            try:
+                f = float(v) if v is not None else default
+                out.append(default if f != f else f)
+            except (TypeError, ValueError):
+                out.append(default)
+        return out
+    sharps_mean      = sum(sharps_n)   / len(sharps_n)
+    distinct_mean    = (sum(distinct_n) / len(distinct_n)) if distinct_n else 0.0
+    quality_vals     = _vals("score_final")
+    quality_mean     = sum(quality_vals) / len(quality_vals)
+    eyes_vals        = [_face_eyes_open(r)   for r in rows]
+    eyes_mean        = sum(eyes_vals)   / len(eyes_vals)
+    smile_vals       = [_face_smile(r)        for r in rows]
+    smile_mean       = sum(smile_vals)  / len(smile_vals)
+    no_frown_vals    = [_face_no_frown(r)     for r in rows]
+    no_frown_mean    = sum(no_frown_vals) / len(no_frown_vals)
+    face_e_vals      = [_face_evidence(r)     for r in rows]
+    face_e_mean      = sum(face_e_vals) / len(face_e_vals)
+
+    # 4. Score each row + remember the differentiating component
+    #    for the explanation string.
     scored: list[tuple[int, str, float, str]] = []
     for i, r in enumerate(rows):
         fn = str(r.get("filename") or f"row_{i}")
-        sharp_n = sharps_n[i]
-        dist_n  = distinct_n[i] if distinct_n else 0.0
-        qual    = float(r.get("score_final") or 0.0)
-        face_e  = _face_evidence(r)
-        eyes_op = _face_eyes_open(r)
+        sharp_n  = sharps_n[i]
+        dist_n   = distinct_n[i] if distinct_n else 0.0
+        qual     = float(r.get("score_final") or 0.0)
+        face_e   = _face_evidence(r)
+        eyes_op  = _face_eyes_open(r)
+        smile    = _face_smile(r)         # P-AI-5.5
+        no_frown = _face_no_frown(r)      # P-AI-5.5
 
-        s = (weights.sharpness      * sharp_n
-             + weights.distinctness * dist_n
-             + weights.quality      * qual
-             + weights.face         * face_e
-             + weights.face_eyes_open * eyes_op)
+        s = (weights.sharpness        * sharp_n
+             + weights.distinctness   * dist_n
+             + weights.quality        * qual
+             + weights.face           * face_e
+             + weights.face_eyes_open * eyes_op
+             + weights.face_smile     * smile
+             + weights.face_no_frown  * no_frown)
 
-        # Pick the dominant component for the human reason.  Order
-        # matters when contributions tie: list eyes-open first so
-        # that's the surfaced reason on ties — it's the one a
-        # wedding photographer actually cares about.
+        # Pick the differentiating component for the human reason —
+        # i.e., the signal where this row sits FURTHEST above the
+        # cluster mean × its weight.  Order listed first wins on
+        # ties; smile + eyes-open get the front slots since they
+        # encode the wedding-photographer's actual selection
+        # criterion.
         contribs = [
+            ("笑容明显 (%.0f%%)" % (smile * 100),
+             weights.face_smile * (smile - smile_mean)),
             ("眼睛睁开 (%.0f%%)" % (eyes_op * 100),
-             weights.face_eyes_open * eyes_op),
+             weights.face_eyes_open * (eyes_op - eyes_mean)),
+            ("表情放松 (%.0f%%)" % (no_frown * 100),
+             weights.face_no_frown * (no_frown - no_frown_mean)),
             ("簇内最锐 (%.0f%%)" % (sharp_n * 100),
-             weights.sharpness * sharp_n),
+             weights.sharpness * (sharp_n - sharps_mean)),
             ("姿态/动作差异最大 (%.0f%%)" % (dist_n * 100),
-             weights.distinctness * dist_n),
+             weights.distinctness * (dist_n - distinct_mean)),
             ("综合分高 (%.2f)" % qual,
-             weights.quality * qual),
+             weights.quality * (qual - quality_mean)),
             ("有人脸 (%d 张)" % len(r.get("face_bboxes") or []),
-             weights.face * face_e),
+             weights.face * (face_e - face_e_mean)),
         ]
         contribs.sort(key=lambda kv: kv[1], reverse=True)
         reason = contribs[0][0] if contribs[0][1] > 0 else "簇内默认"

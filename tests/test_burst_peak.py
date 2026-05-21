@@ -225,6 +225,92 @@ def test_face_eyes_open_clips_out_of_range_values():
     assert _face_eyes_open({"face_max_blink": -0.2}) == 1.0  # under → clipped
 
 
+def test_smile_signal_wins_when_others_tied():
+    """P-AI-5.5 — given two frames with equal sharpness + equal
+    eyes-open, the one with a bigger smile wins.  Wedding-canonical."""
+    rows = [
+        {"filename": "neutral.jpg", "score_sharpness": 0.6,
+         "embedding": [1.0, 0.0],
+         "face_bboxes": [(0,0,50,50,0.95)],
+         "face_max_blink": 0.05, "face_max_smile": 0.05,
+         "face_max_brow_down": 0.05},
+        {"filename": "smiling.jpg", "score_sharpness": 0.6,
+         "embedding": [1.0, 0.0],
+         "face_bboxes": [(0,0,50,50,0.95)],
+         "face_max_blink": 0.05, "face_max_smile": 0.85,
+         "face_max_brow_down": 0.05},
+    ]
+    rpt = rank_burst_peak(rows)
+    assert rpt.winner_filename == "smiling.jpg"
+    assert "笑容明显" in rpt.reasons["smiling.jpg"]
+
+
+def test_frown_demotes_otherwise_better_frame():
+    """A frame with everything else equal but a furrowed brow
+    (browDown high) loses to the relaxed one via the no-frown
+    weight."""
+    rows = [
+        {"filename": "relaxed.jpg", "score_sharpness": 0.6,
+         "embedding": [1.0, 0.0],
+         "face_bboxes": [(0,0,50,50,0.95)],
+         "face_max_blink": 0.05, "face_max_smile": 0.30,
+         "face_max_brow_down": 0.05},   # no frown
+        {"filename": "furrowed.jpg", "score_sharpness": 0.6,
+         "embedding": [1.0, 0.0],
+         "face_bboxes": [(0,0,50,50,0.95)],
+         "face_max_blink": 0.05, "face_max_smile": 0.30,
+         "face_max_brow_down": 0.90},   # furrowed
+    ]
+    rpt = rank_burst_peak(rows)
+    assert rpt.winner_filename == "relaxed.jpg"
+
+
+def test_smile_outranks_eyes_when_smile_gap_is_large():
+    """Realistic wedding case: sharp_blink vs softer_smile.  The
+    eyes-open signal alone (P-AI-5.3) couldn't fix the 15% ceiling
+    for picks where the photographer chose the smiling frame over
+    the cleaner-eyed but neutral burst-mate."""
+    rows = [
+        {"filename": "decoy.jpg", "score_sharpness": 0.70,
+         "embedding": [1.0, 0.0], "face_max_blink": 0.5,
+         "face_max_smile": 0.10, "face_max_brow_down": 0.0},
+        {"filename": "clean_eyes_no_smile.jpg",
+         "score_sharpness": 0.73,
+         "embedding": [1.0, 0.0],
+         "face_bboxes": [(0,0,50,50,0.95)],
+         "face_max_blink": 0.05, "face_max_smile": 0.10,
+         "face_max_brow_down": 0.0},
+        {"filename": "big_smile.jpg",
+         "score_sharpness": 0.71,
+         "embedding": [1.0, 0.0],
+         "face_bboxes": [(0,0,50,50,0.95)],
+         "face_max_blink": 0.10, "face_max_smile": 0.85,
+         "face_max_brow_down": 0.0},
+    ]
+    rpt = rank_burst_peak(rows)
+    assert rpt.winner_filename == "big_smile.jpg"
+    assert "笑容明显" in rpt.reasons["big_smile.jpg"]
+
+
+def test_smile_missing_falls_back_to_zero():
+    """Rows without ``face_max_smile`` (old format, no FaceDetector
+    run, NaN values) must not crash and must contribute 0."""
+    from pixcull.scoring.burst_peak import _face_smile, _face_no_frown
+    assert _face_smile({}) == 0.0
+    assert _face_smile({"face_max_smile": None}) == 0.0
+    assert _face_smile({"face_max_smile": "junk"}) == 0.0
+    assert _face_smile({"face_max_smile": float("nan")}) == 0.0
+    assert _face_smile({"face_max_smile": -0.1}) == 0.0
+    # Sanity: valid values pass through with clipping
+    assert _face_smile({"face_max_smile": 0.0}) == 0.0
+    assert _face_smile({"face_max_smile": 0.7}) == 0.7
+    assert _face_smile({"face_max_smile": 1.5}) == 1.0
+    # Frown inverter — note 0 brow_down → 1.0 "no frown" signal
+    assert _face_no_frown({"face_max_brow_down": 0.0}) == 1.0
+    assert _face_no_frown({"face_max_brow_down": 1.0}) == 0.0
+    assert _face_no_frown({}) == 0.0   # absent → no signal contribution
+
+
 def test_eyes_open_does_not_penalize_faceless_bursts():
     """For wildlife / landscape bursts (no faces), the eyes-open
     weight should contribute 0 across all frames — not flip the
