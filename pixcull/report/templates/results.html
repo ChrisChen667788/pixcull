@@ -1163,6 +1163,41 @@
     }
     .shortcut-section { margin-bottom: 14px; }
     .shortcut-section:last-child { margin-bottom: 0; }
+    /* P-UX-24 — context-aware shortcut overlay. Active context's
+       sections get a soft accent ring + the badge in the header
+       labels which context the user is in. Inactive sections stay
+       visible (so the user still has the full reference) but are
+       dimmed and pushed below. Pure CSS state — JS just sets
+       data-active-ctx + reorders via flex-order. */
+    .shortcuts-ctx-badge {
+      display: inline-flex; align-items: center;
+      padding: 3px 10px; border-radius: 999px;
+      font-size: 11px; font-weight: 500; letter-spacing: 0.02em;
+      background: rgba(59,130,246,0.14);
+      color: var(--accent-hi, #79c8ff);
+      border: 1px solid rgba(59,130,246,0.34);
+    }
+    .shortcuts-ctx-badge:empty { display: none; }
+    .shortcuts-body { display: flex; flex-direction: column; }
+    .shortcut-section { order: 2; }
+    /* sections that match the current context float to the top */
+    .shortcut-section.ctx-active {
+      order: 1;
+      padding: 10px 12px; margin: 0 0 14px;
+      background: rgba(59,130,246,0.06);
+      border: 1px solid rgba(59,130,246,0.28);
+      border-radius: 6px;
+    }
+    .shortcut-section.ctx-active .shortcut-section-title {
+      color: var(--accent-hi, #79c8ff);
+    }
+    /* sections that aren't relevant to the current context stay
+       visible but dimmed; the user can still scroll to reference
+       them */
+    .shortcut-section.ctx-dim {
+      opacity: 0.55;
+    }
+    .shortcut-section.ctx-dim:hover { opacity: 1; }
     .shortcut-section-title {
       font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
       color: var(--muted); margin-bottom: 6px; font-weight: 600;
@@ -1948,16 +1983,22 @@
     <div class="shortcuts-card">
       <div class="shortcuts-header">
         <h3 class="modal-title">键盘快捷键</h3>
+        <!-- P-UX-24 — context-aware label populated by showShortcuts():
+             "网格 / 放大窗 / A/B 比较". The active section above gets
+             a highlight ring + is reordered to the top so users with
+             an open lightbox don't scroll past 4 sections to find
+             the relevant keys. -->
+        <span class="shortcuts-ctx-badge" id="shortcutsCtxBadge" aria-live="polite"></span>
         <button class="close" id="shortcutsClose" aria-label="关闭快捷键面板">✕</button>
       </div>
-      <div class="shortcuts-body">
-        <div class="shortcut-section">
+      <div class="shortcuts-body" id="shortcutsBody">
+        <div class="shortcut-section" data-ctx="grid">
           <div class="shortcut-section-title">浏览</div>
           <div class="shortcut-row"><span class="keys"><kbd>j</kbd> 或 <kbd>→</kbd></span><span class="desc">下一张</span></div>
           <div class="shortcut-row"><span class="keys"><kbd>k</kbd> 或 <kbd>←</kbd></span><span class="desc">上一张</span></div>
           <div class="shortcut-row"><span class="keys"><kbd>Space</kbd></span><span class="desc">放大查看完整评分</span></div>
         </div>
-        <div class="shortcut-section">
+        <div class="shortcut-section" data-ctx="grid">
           <div class="shortcut-section-title">快速标注</div>
           <div class="shortcut-row"><span class="keys"><kbd>1</kbd></span><span class="desc">标 <span class="tag keep">keep</span></span></div>
           <div class="shortcut-row"><span class="keys"><kbd>2</kbd></span><span class="desc">标 <span class="tag maybe">maybe</span></span></div>
@@ -1969,18 +2010,18 @@
           <div class="shortcut-row"><span class="keys"><kbd>G</kbd></span><span class="desc">跳到下一个连拍组</span></div>
           <div class="shortcut-row"><span class="keys"><kbd>Enter</kbd></span><span class="desc">打开 rubric 详细标注</span></div>
         </div>
-        <div class="shortcut-section">
+        <div class="shortcut-section" data-ctx="universal">
           <div class="shortcut-section-title">编辑</div>
           <div class="shortcut-row"><span class="keys"><kbd>⌘</kbd>+<kbd>Z</kbd></span><span class="desc">撤销最近一次标注</span></div>
         </div>
-        <div class="shortcut-section">
+        <div class="shortcut-section" data-ctx="grid">
           <div class="shortcut-section-title">A/B 比较</div>
           <div class="shortcut-row"><span class="keys"><kbd>c</kbd></span><span class="desc">选当前为 A;再按 <kbd>c</kbd> 另一张 = 打开 A/B 比较</span></div>
           <div class="shortcut-row"><span class="keys">Shift+点击</span><span class="desc">缩略图直接进 A 槽(网格上的快捷手势)</span></div>
           <div class="shortcut-row"><span class="keys">⇆ 按钮</span><span class="desc">卡片悬停可见;点一次选 A,点第二张开比较</span></div>
           <div class="shortcut-row"><span class="keys"><kbd>Esc</kbd></span><span class="desc">取消 A 选择</span></div>
         </div>
-        <div class="shortcut-section">
+        <div class="shortcut-section" data-ctx="compare">
           <div class="shortcut-section-title">比较窗内(同步缩放)</div>
           <div class="shortcut-row"><span class="keys"><kbd>z</kbd></span><span class="desc">所有照片同步 1:1 放大 / 复原</span></div>
           <div class="shortcut-row"><span class="keys"><kbd>+</kbd> / <kbd>−</kbd></span><span class="desc">同步细调缩放</span></div>
@@ -1988,7 +2029,7 @@
           <div class="shortcut-row"><span class="keys">点击图片</span><span class="desc">所有照片同步 1:1 缩放到该相对位置</span></div>
           <div class="shortcut-row"><span class="keys">拖动 / 滚轮</span><span class="desc">所有照片同步平移 / 缩放</span></div>
         </div>
-        <div class="shortcut-section">
+        <div class="shortcut-section" data-ctx="lightbox">
           <div class="shortcut-section-title">放大窗内</div>
           <div class="shortcut-row"><span class="keys"><kbd>r</kbd></span><span class="desc">顺时针旋转 90°</span></div>
           <div class="shortcut-row"><span class="keys"><kbd>R</kbd></span><span class="desc">逆时针旋转 90°</span></div>
@@ -1999,7 +2040,7 @@
           <div class="shortcut-row"><span class="keys">拖动图片</span><span class="desc">在 1:1 模式下平移</span></div>
           <div class="shortcut-row"><span class="keys">滚轮</span><span class="desc">以光标为中心放大/缩小</span></div>
         </div>
-        <div class="shortcut-section">
+        <div class="shortcut-section" data-ctx="universal">
           <div class="shortcut-section-title">通用</div>
           <div class="shortcut-row"><span class="keys"><kbd>Esc</kbd></span><span class="desc">关闭当前面板</span></div>
           <div class="shortcut-row"><span class="keys"><kbd>?</kbd></span><span class="desc">显示本面板</span></div>
@@ -4461,8 +4502,43 @@
   const shortcutsHint = document.getElementById("shortcutsHint");
   if (shortcutsModal) registerModal(shortcutsModal);
 
+  // P-UX-24 — figure out which surface is active at the moment the
+  // shortcuts overlay is requested. Priority: compare-modal > lightbox
+  // > grid (a compare modal lives on top of a lightbox-or-grid; the
+  // lightbox lives on top of the grid). Fallback "grid" covers the
+  // bare results page state with no modal open.
+  function _activeShortcutCtx() {
+    const cmpEl = document.getElementById("cmpModal");
+    if (cmpEl && cmpEl.classList.contains("show")) return "compare";
+    const lbEl = document.getElementById("lightbox");
+    if (lbEl && lbEl.classList.contains("show")) return "lightbox";
+    return "grid";
+  }
+  const _CTX_LABELS = {
+    grid:     "网格视图",
+    lightbox: "放大窗",
+    compare:  "A/B 比较窗",
+  };
+  function _applyShortcutsContext(ctx) {
+    const sections = shortcutsModal.querySelectorAll(".shortcut-section");
+    sections.forEach(sec => {
+      const secCtx = sec.dataset.ctx || "universal";
+      sec.classList.remove("ctx-active", "ctx-dim");
+      if (secCtx === ctx) {
+        sec.classList.add("ctx-active");
+      } else if (secCtx !== "universal") {
+        // not active + not universal → dim. Universal stays clear so
+        // Esc / ⌘Z / ? are always legibly available.
+        sec.classList.add("ctx-dim");
+      }
+    });
+    const badge = document.getElementById("shortcutsCtxBadge");
+    if (badge) badge.textContent = "当前:" + (_CTX_LABELS[ctx] || ctx);
+  }
+
   function showShortcuts() {
     if (!shortcutsModal) return;
+    _applyShortcutsContext(_activeShortcutCtx());
     shortcutsModal.classList.add("show");
   }
   function hideShortcuts() {
