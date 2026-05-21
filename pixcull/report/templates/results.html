@@ -811,10 +811,23 @@
       background: rgba(244, 114, 182, 0.16);
       color: #ffaad4;
       border: 1px solid rgba(244, 114, 182, 0.40);
-      cursor: help;
+      cursor: pointer;
       letter-spacing: 0.02em;
       max-width: 110px;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      transition: background 80ms, border-color 80ms;
+    }
+    .row1 .moment-chip:hover {
+      background: rgba(244, 114, 182, 0.28);
+      border-color: rgba(244, 114, 182, 0.65);
+    }
+    /* P-UX-27 — when this moment is in the active filter set,
+       fill the chip and pin a small ✓ so the user can see at a
+       glance which moment is currently being filtered. */
+    .row1 .moment-chip.active {
+      background: rgba(244, 114, 182, 0.60);
+      color: #fff;
+      border-color: rgba(244, 114, 182, 0.90);
     }
     .row1 .moment-chip.uncertain {
       opacity: 0.7;
@@ -2610,6 +2623,10 @@
     // we store the result filenames as a Set so the grid filter can
     // intersect against it. {q: string, filenames: Set} or null.
     semSearch: null,
+    // P-UX-27 — wedding-moment filter.  Set of moment keys (e.g.
+    // {"first_kiss", "ring_exchange"}).  Empty = no filter.
+    // Populated by clicking the 💒 chip on any grid card.
+    weddingMoments: new Set(),
     sort: "default",
   };
 
@@ -3128,6 +3145,13 @@
         (r.style_modes || []).some(s => filterState.styles.has(s))
       );
     }
+    // P-UX-27 — wedding moment filter.  Set populated by clicking
+    // the 💒 chip on any grid card; empty = no filter.
+    if (filterState.weddingMoments.size > 0) {
+      filtered = filtered.filter(r =>
+        r.wedding_moment && filterState.weddingMoments.has(r.wedding_moment)
+      );
+    }
     // P-UX-4 — cull-reason filter. Active when the user has clicked
     // a pill in the "因为 X 而 cull" group; passes rows whose
     // cull_reason matches (and which are themselves cull — the
@@ -3292,8 +3316,13 @@
                   const uncertain = r.wedding_moment === "unknown";
                   const conf = r.wedding_moment_confidence != null
                     ? ` · 置信度 ${(r.wedding_moment_confidence * 100).toFixed(0)}%` : "";
-                  return `<span class="moment-chip ${uncertain ? "uncertain" : ""}"
-                          title="婚礼 moment: ${esc(mLabel)}${esc(conf)}">💒 ${esc(mLabel)}</span>`;
+                  // P-UX-27 — clickable filter.  data-moment carries the
+                  // moment key; the click handler in the grid delegate
+                  // adds/removes from filterState.weddingMoments.
+                  const active = filterState.weddingMoments.has(r.wedding_moment) ? "active" : "";
+                  return `<span class="moment-chip ${uncertain ? "uncertain" : ""} ${active}"
+                          data-moment="${esc(r.wedding_moment)}"
+                          title="婚礼 moment: ${esc(mLabel)}${esc(conf)} · 点击只看此 moment">💒 ${esc(mLabel)}</span>`;
                 })() : ""}
               ${r.needs_review ? `<span class="review-me-chip" title="自动 / 训练模型 / VLM / DeepSeek 这 4 个评分源对此图分歧大 (累计 ${(r.inconsistency_total || 0).toFixed(1)} ★ stddev) — 值得人工复核">⚠ review me</span>` : ""}
               ${r.exposure_outlier ? (() => {
@@ -3402,6 +3431,7 @@
           </div>`;
       } else {
         const totalFilters = filterState.scenes.size + filterState.styles.size +
+                             filterState.weddingMoments.size +
                              (filterState.decision !== "all" ? 1 : 0);
         emptyHtml = `
           <div class="empty-state">
@@ -3423,6 +3453,8 @@
         filterState.styles.clear();
         // P-UX-4 — also clear the cull-reason filter on full reset
         filterState.cullReason = null;
+        // P-UX-27 — same for the wedding-moment filter
+        filterState.weddingMoments.clear();
         document.querySelectorAll("#filters .pill, #sceneFilters .pill, #styleFilters .pill, #cullReasonFilter .pill")
           .forEach(el => el.classList.remove("active"));
         document.querySelector('#filters .pill[data-d="all"]')?.classList.add("active");
@@ -3542,6 +3574,8 @@
       sort:       filterState.sort,
       burstPeakOnly:    filterState.burstPeakOnly,
       locationBestOnly: filterState.locationBestOnly,
+      // P-UX-27 — persist the wedding-moment filter in saved presets
+      weddingMoments:   [...filterState.weddingMoments],
     };
   }
   function _applyView(view) {
@@ -3555,6 +3589,7 @@
     filterState.sort       = view.sort || "default";
     filterState.burstPeakOnly    = !!view.burstPeakOnly;
     filterState.locationBestOnly = !!view.locationBestOnly;
+    filterState.weddingMoments   = new Set(view.weddingMoments || []);
     // Sync UI: decision pill active class
     document.querySelectorAll("#filters > .pill").forEach(el => {
       el.classList.toggle("active",
@@ -4347,6 +4382,22 @@
 
   grid.addEventListener("click", e => {
     const t = e.target;
+    // P-UX-27 — clickable wedding moment chip.  Toggle the
+    // matching moment in filterState.weddingMoments + re-render.
+    // Stops propagation so the underlying card thumb click
+    // (which would open the lightbox) doesn't also fire.
+    const momentChip = t.closest(".moment-chip");
+    if (momentChip && momentChip.dataset.moment) {
+      e.stopPropagation();
+      const mk = momentChip.dataset.moment;
+      if (filterState.weddingMoments.has(mk)) {
+        filterState.weddingMoments.delete(mk);
+      } else {
+        filterState.weddingMoments.add(mk);
+      }
+      render();
+      return;
+    }
     // V16.2 — card-hover rotate button. Bumps rotation by +90° and
     // updates BOTH the inline transform on the matching <img.thumb>
     // AND the localStorage state, so a subsequent lightbox open
