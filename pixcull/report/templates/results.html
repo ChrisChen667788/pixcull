@@ -963,6 +963,42 @@
       background: rgba(251,191,36,0.18);
     }
 
+    /* P-CORE-3 — scene-distribution anomaly banner.  Appears at
+       page-open when the run's scene distribution is unusually
+       skewed (one scene > 60% OR > 95% of frames in a small
+       cluster of 2 scenes) — surfaces "your scene classifier
+       might be over-firing, double-check before annotating".
+       Same shape as multi-tab-banner but blue tint to distinguish
+       (informational vs warning). */
+    .scene-anomaly-banner {
+      position: fixed; top: 60px; left: 50%; transform: translateX(-50%);
+      z-index: 10;
+      max-width: 620px;
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 14px;
+      background: rgba(59, 130, 246, 0.14);
+      border: 1px solid rgba(59, 130, 246, 0.55);
+      color: #79c8ff;
+      border-radius: 8px;
+      font-size: 12px; line-height: 1.4;
+      box-shadow: 0 8px 28px rgba(0,0,0,0.45);
+    }
+    .scene-anomaly-banner.hidden { display: none; }
+    .scene-anomaly-banner .sab-icon  { font-size: 14px; }
+    .scene-anomaly-banner .sab-msg   { flex: 1; }
+    .scene-anomaly-banner .sab-msg b { color: #fff; }
+    .scene-anomaly-banner .sab-close {
+      background: transparent; color: #79c8ff;
+      border: 1px solid rgba(59, 130, 246, 0.4);
+      width: 22px; height: 22px;
+      border-radius: 4px; cursor: pointer;
+      font-size: 12px; line-height: 1;
+      padding: 0;
+    }
+    .scene-anomaly-banner .sab-close:hover {
+      background: rgba(59, 130, 246, 0.18);
+    }
+
     /* P-UX-23 — floating accessibility / color-blind toggle.
        Bottom-left of the viewport (away from the buckets-toggle at
        top-right). Click → toggle body.a11y-cb + persist preference.
@@ -5844,6 +5880,96 @@
     window.addEventListener("beforeunload", () => {
       try { _bc.postMessage({type: "bye", from: _TAB_ID}); } catch (e) {}
     });
+  })();
+
+  // ==================================================================
+  // P-CORE-3 — scene-distribution anomaly banner.
+  //
+  // P-CORE-2 added prior calibration + abstain on the SCENE
+  // CLASSIFIER itself (one frame at a time).  This banner adds a
+  // RUN-LEVEL sanity check: at page open, look at the scene
+  // distribution across all rows and flag distributions that
+  // suggest the classifier might be over-firing in this run.
+  //
+  // Heuristics (any of these triggers the banner):
+  //   - any single scene > 60% of all rows
+  //   - top-2 scenes combined > 95% AND total rows >= 30
+  //     (small runs may legitimately be all-portrait)
+  //   - "unknown" > 30% (P-CORE-2 abstained on >30% of frames —
+  //     the classifier is genuinely uncertain about this run)
+  //
+  // Soft banner only; the user dismisses with X, or it
+  // auto-hides after first card annotation.  Goal is to set
+  // expectations BEFORE the user starts labeling, so they don't
+  // mid-stream realize "wait, why are all my landscape shots
+  // tagged stilllife".
+  // ==================================================================
+  (function _initSceneAnomalyBanner() {
+    if (!rows || rows.length < 10) return;     // too few to judge
+
+    // Count scenes
+    const counts = new Map();
+    for (const r of rows) {
+      const s = r.scene || "(missing)";
+      counts.set(s, (counts.get(s) || 0) + 1);
+    }
+    const n = rows.length;
+    const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+    const [topScene, topN]       = sorted[0] || [null, 0];
+    const [secondScene, secondN] = sorted[1] || [null, 0];
+    const topPct    = topN / n;
+    const top2Pct   = (topN + secondN) / n;
+    const unknownN  = counts.get("unknown") || 0;
+    const unknownPct = unknownN / n;
+
+    let reason = null;
+    if (topPct > 0.60) {
+      reason = `单一场景 <b>${topScene}</b> 占了 <b>${(topPct*100).toFixed(0)}%</b> ` +
+               `(${topN} / ${n})。如果与实际场景相符则忽略;否则建议重判场景。`;
+    } else if (top2Pct > 0.95 && n >= 30) {
+      reason = `<b>${topScene}</b> + <b>${secondScene}</b> 占了 <b>${(top2Pct*100).toFixed(0)}%</b>。` +
+               `可能 scene 分类器把多种场景误归到这两类;先抽查再大批量标注。`;
+    } else if (unknownPct > 0.30) {
+      reason = `场景分类器在 <b>${(unknownPct*100).toFixed(0)}%</b> 的图片上 abstain ` +
+               `(标为 unknown)。这一批光线 / 场景对 CLIP 来说不典型,人工复核优先。`;
+    }
+    if (!reason) return;
+
+    const banner = document.createElement("div");
+    banner.className = "scene-anomaly-banner";
+    banner.setAttribute("role", "status");
+    banner.setAttribute("aria-live", "polite");
+    banner.innerHTML = `
+      <span class="sab-icon">📊</span>
+      <span class="sab-msg">${reason}</span>
+      <button class="sab-close" type="button" aria-label="关闭场景分布提示">✕</button>`;
+    document.body.appendChild(banner);
+    const close = () => {
+      banner.classList.add("hidden");
+      // Persist dismissal per-run so reopening the same tab
+      // doesn't re-prompt
+      try {
+        localStorage.setItem("pixcull_scene_anomaly_dismissed:" + run_id, "1");
+      } catch (_e) {}
+    };
+    banner.querySelector(".sab-close").addEventListener("click", close);
+    // Auto-dismiss when the user starts annotating (first 1/2/3/f)
+    function _onFirstAnnot(e) {
+      const k = e.key;
+      if (k === "1" || k === "2" || k === "3" ||
+          k === "f" || k === "F") {
+        document.removeEventListener("keydown", _onFirstAnnot, true);
+        close();
+      }
+    }
+    document.addEventListener("keydown", _onFirstAnnot, true);
+
+    // Honor persisted dismissal (same run reopened)
+    try {
+      if (localStorage.getItem("pixcull_scene_anomaly_dismissed:" + run_id) === "1") {
+        banner.classList.add("hidden");
+      }
+    } catch (_e) {}
   })();
 
   // ==================================================================
