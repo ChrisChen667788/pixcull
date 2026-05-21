@@ -295,13 +295,41 @@
     .stats .keep b { color: var(--keep); }
     .stats .maybe b { color: var(--maybe); }
     .stats .cull b { color: var(--cull); }
-    .filters { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
-    .filters .pill {
-      padding: 4px 10px; border: 1px solid var(--border); border-radius: 4px;
-      background: var(--bg-card); color: var(--muted); cursor: pointer;
-      font-size: 11px; user-select: none;
+    .filters {
+      display: flex; gap: var(--space-2);
+      margin-top: var(--space-3); flex-wrap: wrap;
+      align-items: center;
     }
-    .filters .pill.active { color: var(--fg); border-color: var(--fg); background: var(--bg-card-hi); }
+    /* v0.4 — filter pill.  Pill radius, subtle border, soft hover
+       lift, saturated accent fill when active.  Matches the chip
+       family hover behavior so the whole UI feels consistent. */
+    .filters .pill {
+      padding: 4px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-pill);
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: var(--t-small);
+      font-weight: 500;
+      user-select: none;
+      transition: background var(--duration-fast) var(--ease-out),
+                  border-color var(--duration-fast) var(--ease-out),
+                  color var(--duration-fast) var(--ease-out),
+                  transform var(--duration-fast) var(--ease-out);
+    }
+    .filters .pill:hover {
+      color: var(--fg);
+      border-color: var(--border-hi);
+      background: var(--surface-2);
+      transform: translateY(-1px);
+    }
+    .filters .pill.active {
+      color: #ffffff;
+      border-color: var(--accent-hi);
+      background: var(--accent);
+      box-shadow: 0 0 0 4px var(--accent-soft);
+    }
     /* V9.0 sort + filter UI */
     .filters .filter-divider {
       width: 1px; align-self: stretch; background: var(--border);
@@ -342,60 +370,169 @@
     }
     .cluster-divider .compare-btn:hover { background: rgba(59,130,246,0.25); }
 
-    /* V14.0 — empty-state placeholders */
+    /* v0.4 — empty state.  Refreshed with token spacing + larger
+       icon + more generous typography hierarchy.  No more dashed
+       border; instead a soft surface with the brand accent glow
+       behind the icon, so empty doesn't feel like an error. */
     .empty-state {
       grid-column: 1 / -1;
       display: flex; flex-direction: column; align-items: center;
-      justify-content: center; gap: 10px;
-      padding: 56px 24px; margin: 16px 0;
-      background: rgba(255,255,255,0.02);
-      border: 1px dashed var(--border);
-      border-radius: 12px;
+      justify-content: center;
+      gap: var(--space-3);
+      padding: var(--space-8) var(--space-6);
+      margin: var(--space-4) 0;
+      background:
+        radial-gradient(circle at center top,
+          var(--accent-soft) 0%,
+          transparent 50%),
+        var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xl);
       text-align: center;
     }
-    .empty-icon { font-size: 38px; opacity: 0.7; line-height: 1; }
+    .empty-icon {
+      font-size: 42px;
+      line-height: 1;
+      filter: drop-shadow(0 4px 12px var(--accent-glow));
+    }
     .empty-title {
-      font-size: 16px; font-weight: 600; color: var(--fg);
+      font-family: var(--font-display);
+      font-size: var(--t-h2);
+      font-weight: 600;
+      color: var(--fg);
+      letter-spacing: -0.015em;
     }
     .empty-hint {
-      color: var(--muted); font-size: 13px; max-width: 420px;
-      line-height: 1.55;
+      color: var(--muted);
+      font-size: var(--t-body);
+      max-width: 460px;
+      line-height: var(--lh-loose);
     }
     .empty-actions {
-      display: flex; gap: 10px; margin-top: 12px;
+      display: flex; gap: var(--space-3);
+      margin-top: var(--space-4);
       flex-wrap: wrap; justify-content: center;
+    }
+
+    /* ============================================================
+       v0.4 P0 (3/3) · BUTTON SYSTEM
+       ============================================================
+       The .btn class was referenced in markup ("class='btn primary'"
+       in empty-state CTAs + admin table) but had NO matching CSS —
+       buttons fell back to default UA styling.  Now defined as a
+       three-tier system: default / primary / danger / ghost.
+
+       Usage:
+         <button class="btn">Cancel</button>
+         <button class="btn btn--primary">Save</button>
+         <button class="btn btn--danger">Delete</button>
+         <a class="btn btn--ghost" href="...">View</a>
+
+       Aliases: "btn primary" (no double-dash) is kept as a legacy
+       alias so existing markup keeps working without a JS sweep.
+       ============================================================ */
+    .btn, a.btn, button.btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      gap: var(--space-2);
+      padding: var(--space-2) var(--space-4);
+      font-family: var(--font-body);
+      font-size: var(--t-body);
+      font-weight: 500;
+      line-height: 1;
+      letter-spacing: 0.01em;
+      color: var(--fg);
+      background: var(--surface-2);
+      border: 1px solid var(--border-hi);
+      border-radius: var(--radius-md);
+      text-decoration: none;
+      cursor: pointer;
+      user-select: none;
+      transition: background var(--duration-fast) var(--ease-out),
+                  border-color var(--duration-fast) var(--ease-out),
+                  color var(--duration-fast) var(--ease-out),
+                  transform var(--duration-fast) var(--ease-out),
+                  box-shadow var(--duration-fast) var(--ease-out);
+    }
+    .btn:hover {
+      background: var(--surface-3);
+      border-color: var(--muted-soft);
+      transform: translateY(-1px);
+    }
+    .btn:active { transform: translateY(0); }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+    /* Primary — accent fill, white text.  Use sparingly: one per
+       row, this is the "main action" affordance. */
+    .btn.primary, .btn--primary {
+      background: var(--accent);
+      color: #ffffff;
+      border-color: var(--accent-hi);
+      box-shadow: 0 0 0 0 var(--accent-soft);
+    }
+    .btn.primary:hover, .btn--primary:hover {
+      background: var(--accent-hi);
+      border-color: var(--accent-hi);
+      box-shadow: 0 6px 18px var(--accent-glow);
+    }
+
+    /* Danger — red fill for destructive actions (delete). */
+    .btn.danger, .btn--danger {
+      background: var(--c-danger);
+      color: #ffffff;
+      border-color: var(--c-danger);
+    }
+    .btn.danger:hover, .btn--danger:hover {
+      background: #ff7878;
+      border-color: #ff7878;
+    }
+
+    /* Ghost — no fill, no border emphasis.  For tertiary actions. */
+    .btn--ghost {
+      background: transparent;
+      border-color: transparent;
+      color: var(--muted);
+    }
+    .btn--ghost:hover {
+      background: var(--surface-2);
+      color: var(--fg);
     }
 
     /* V14.2 — toast notification stack. Replaces native alert() for
        non-blocking ops (annotation save, export ack, retry trigger).
        Stacks bottom-right; auto-dismisses after 3-5s; click to remove. */
+    /* v0.4 — refreshed toast.  Borrowed shadow + radius from the
+       export menu so all "elevated overlay" surfaces share visual
+       weight.  Soft accent stripe replaces the hard 3px border. */
     .toast-stack {
       position: fixed;
-      right: 18px; bottom: 18px;
-      display: flex; flex-direction: column-reverse; gap: 8px;
+      right: var(--space-5); bottom: var(--space-5);
+      display: flex; flex-direction: column-reverse;
+      gap: var(--space-2);
       z-index: 50; pointer-events: none;
     }
     .toast {
       pointer-events: auto;
-      min-width: 240px; max-width: 380px;
-      padding: 10px 14px;
-      background: rgba(20,23,28,0.96);
-      border: 1px solid var(--border);
+      min-width: 260px; max-width: 400px;
+      padding: var(--space-3) var(--space-4);
+      background: rgba(20,23,28,0.94);
+      border: 1px solid var(--border-hi);
       border-left: 3px solid var(--accent);
-      border-radius: 6px;
-      color: var(--fg); font-size: 13px;
-      box-shadow: 0 4px 16px rgba(0,0,0,0.45);
-      backdrop-filter: blur(8px);
-      animation: toastIn 180ms ease-out;
+      border-radius: var(--radius-md);
+      color: var(--fg);
+      font-size: var(--t-body);
+      line-height: var(--lh-normal);
+      box-shadow: var(--shadow-lg);
+      backdrop-filter: blur(10px);
+      animation: toastIn var(--duration-normal) var(--ease-out);
       cursor: pointer;
     }
-    .toast.success { border-left-color: var(--keep); }
-    .toast.error   { border-left-color: var(--cull); }
-    .toast.warning { border-left-color: var(--maybe); }
-    .toast.fading { animation: toastOut 220ms ease-in forwards; }
+    .toast.success { border-left-color: var(--c-success); }
+    .toast.error   { border-left-color: var(--c-danger); }
+    .toast.warning { border-left-color: var(--c-warn); }
+    .toast.fading { animation: toastOut var(--duration-normal) var(--ease-in-out) forwards; }
     @keyframes toastIn {
-      from { transform: translateX(20px); opacity: 0; }
-      to   { transform: translateX(0);    opacity: 1; }
+      from { transform: translateX(20px) scale(0.96); opacity: 0; }
+      to   { transform: translateX(0) scale(1);       opacity: 1; }
     }
     @keyframes toastOut {
       from { transform: translateX(0);    opacity: 1; }
@@ -547,13 +684,37 @@
       background: rgba(168, 85, 247, 0.18); color: #c4b5fd;
       letter-spacing: 0.02em;
     }
+    /* v0.4 — toolbar button used throughout the header.  Same
+       pill-like shape as filter pills but with the surface
+       (instead of transparent) background to read as primary
+       actions vs filters.  Hover ramps to the accent. */
     .filters button.export-btn {
-      padding: 4px 10px; border: 1px solid var(--border); border-radius: 4px;
-      background: var(--bg-card); color: var(--fg); cursor: pointer;
-      font-size: 11px; font-weight: 500;
+      padding: 4px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-pill);
+      background: var(--bg-card);
+      color: var(--fg);
+      cursor: pointer;
+      font-size: var(--t-small);
+      font-weight: 500;
+      letter-spacing: 0.01em;
+      transition: background var(--duration-fast) var(--ease-out),
+                  border-color var(--duration-fast) var(--ease-out),
+                  color var(--duration-fast) var(--ease-out),
+                  transform var(--duration-fast) var(--ease-out);
     }
-    .filters button.export-btn:hover { border-color: var(--fg); }
-    .filters button.export-btn:disabled { opacity: 0.5; cursor: wait; }
+    .filters button.export-btn:hover {
+      border-color: var(--accent-hi);
+      background: var(--accent-soft);
+      color: var(--accent-hi);
+      transform: translateY(-1px);
+    }
+    .filters button.export-btn:active {
+      transform: translateY(0);
+    }
+    .filters button.export-btn:disabled {
+      opacity: 0.4; cursor: wait; transform: none;
+    }
     .filters .export-status { font-size: 11px; color: var(--muted); }
     .filters .export-status a { color: #4b9aff; text-decoration: none; }
     .filters .export-status a:hover { text-decoration: underline; }
@@ -577,22 +738,33 @@
       border-color: var(--fg);
       background: var(--bg-card-hi);
     }
+    /* v0.4 — export menu panel.  Now uses the elevation token
+       shadow and the larger radius for a tile-y dropdown feel
+       instead of the previous 6px-rounded plain panel. */
     .filters .export-menu-panel {
       position: absolute;
-      top: calc(100% + 6px); right: 0;
-      min-width: 200px;
+      top: calc(100% + 8px); right: 0;
+      min-width: 220px;
       z-index: 12;
       background: var(--bg-card);
       border: 1px solid var(--border-hi);
-      border-radius: 6px;
-      padding: 6px;
+      border-radius: var(--radius-lg);
+      padding: var(--space-2);
       display: none;
       flex-direction: column;
-      gap: 3px;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.55),
-                  0 0 0 1px rgba(255,255,255,0.03);
+      gap: 2px;
+      box-shadow: var(--shadow-xl);
+      transform-origin: top right;
+      animation: menu-pop var(--duration-fast) var(--ease-spring);
     }
     .filters .export-menu-panel.show { display: flex; }
+    @keyframes menu-pop {
+      from { transform: translateY(-4px) scale(0.96); opacity: 0; }
+      to   { transform: translateY(0) scale(1); opacity: 1; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .filters .export-menu-panel { animation: none; }
+    }
     .filters .export-menu-panel .export-btn {
       display: block; width: 100%;
       text-align: left;
