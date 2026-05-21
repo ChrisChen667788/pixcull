@@ -8,42 +8,161 @@
   <meta name="theme-color" content="#0b0d10">
   <title>PixCull — 分析结果</title>
   <style>
+    /* ============================================================
+       v0.4 P0 · DESIGN TOKENS
+       ============================================================
+       Single source of truth for visual style.  Every chip / pill /
+       button / surface / typography decision references one of
+       these tokens.  Replaces the ~12 ad-hoc colors and 6 hard-
+       coded chip palettes that accreted through v0.2 / v0.3 prep.
+       Charter: docs/ROADMAP-v0.4-charter.md
+       ============================================================ */
     :root {
-      --bg: #0b0d10;
-      --bg-card: #14171c;
-      --bg-card-hi: #1a1e25;
-      --fg: #e9ecf2;
-      /* V14.2 — same contrast bump as upload page */
-      --muted: #a8b2c1;
-      --muted-soft: #7a8696;
-      --border: #232830;
-      --border-hi: #2f3742;
-      --keep: #34d399;
-      --maybe: #fbbf24;
-      --cull: #ef6363;
-      /* P-UX-23 — color-blind / a11y palette, applied when body has
-         .a11y-cb. We use Wong's safe-for-deuteranopia + protanopia
-         palette: keep=sky-blue, maybe=orange (already differentiable),
-         cull=magenta. Combined with the always-on shape glyphs
-         (✓/?/✕) the UI no longer relies on red/green discrimination. */
-      --keep-cb:  #0ea5e9;
+      /* —— SURFACES ——————————————————————————————————————— */
+      --bg:           #0b0d10;
+      --bg-card:      #14171c;
+      --bg-card-hi:   #1a1e25;
+      --surface-2:    #1a1e25;     /* alias for hover / raised cards */
+      --surface-3:    #232830;     /* third tier for inset blocks */
+
+      /* —— TEXT ——————————————————————————————————————————— */
+      --fg:           #f1f3f7;     /* primary text (was #e9ecf2 — bumped contrast) */
+      --fg-2:         #c5cad4;     /* secondary text (was missing — for chip labels) */
+      --muted:        #a8b2c1;
+      --muted-soft:   #7a8696;
+
+      /* —— BORDERS ———————————————————————————————————————— */
+      --border:       #232830;
+      --border-hi:    #2f3742;
+
+      /* —— BRAND + ACCENT ————————————————————————————————————
+         v0.4: single canonical accent.  --accent-hi for hover /
+         focus emphasis.  All ad-hoc rgba(59,130,246,0.x) calls
+         should migrate to these. */
+      --accent:       #6366f1;       /* indigo-500 — modern + works on dark + light */
+      --accent-hi:    #818cf8;       /* indigo-400 hover / active */
+      --accent-soft:  rgba(99,102,241,0.14);
+      --accent-glow:  rgba(99,102,241,0.40);
+      --focus-ring:   rgba(129,140,248,0.55);
+
+      /* —— SEMANTIC COLOR PALETTE ————————————————————————————
+         5 states for the unified `.chip` system.  Each state has
+         (a) a base color, (b) a translucent tint for backgrounds,
+         (c) a border tint.  All chips look the same shape; only
+         the palette changes. */
+      --c-success:        #34d399;
+      --c-success-tint:   rgba(52,211,153,0.14);
+      --c-success-border: rgba(52,211,153,0.40);
+      --c-warn:           #fbbf24;
+      --c-warn-tint:      rgba(251,191,36,0.14);
+      --c-warn-border:    rgba(251,191,36,0.40);
+      --c-danger:         #ef6363;
+      --c-danger-tint:    rgba(239,99,99,0.14);
+      --c-danger-border:  rgba(239,99,99,0.40);
+      --c-info:           #38bdf8;
+      --c-info-tint:      rgba(56,189,248,0.14);
+      --c-info-border:    rgba(56,189,248,0.40);
+      --c-neutral:        #a8b2c1;
+      --c-neutral-tint:   rgba(168,178,193,0.10);
+      --c-neutral-border: rgba(168,178,193,0.30);
+
+      /* —— LEGACY KEEP / MAYBE / CULL ————————————————————————
+         These remain for V14 backwards compat (badges in results
+         data are keyed on "keep" / "maybe" / "cull").  They alias
+         to the semantic palette so any future palette tweak
+         flows through. */
+      --keep:  var(--c-success);
+      --maybe: var(--c-warn);
+      --cull:  var(--c-danger);
+      --keep-cb:  #0ea5e9;     /* P-UX-23 color-blind palette unchanged */
       --maybe-cb: #f59e0b;
       --cull-cb:  #d946ef;
-      --accent: #3b82f6;
-      --accent-glow: rgba(59,130,246,0.18);
-      --focus-ring: rgba(96,165,250,0.55);
+
+      /* —— TYPOGRAPHY SCALE ——————————————————————————————————
+         Modern product rhythm: hero 28px at top, section 18px,
+         body 13px, small 11.5px, tiny 10.5px.  Line-heights
+         tightened for headlines, loosened for body. */
+      --font-display:
+        "Inter Display", "Inter", -apple-system, BlinkMacSystemFont,
+        "Segoe UI Variable", "Segoe UI", "PingFang SC",
+        "Microsoft Yahei UI", sans-serif;
+      --font-body:
+        "Inter", -apple-system, BlinkMacSystemFont,
+        "Segoe UI Variable", "Segoe UI", "PingFang SC",
+        "Microsoft Yahei UI", sans-serif;
+      --font-mono:
+        ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+      --t-hero:    28px;
+      --t-h2:      18px;
+      --t-h3:      14px;
+      --t-body:    13px;
+      --t-small:   11.5px;
+      --t-tiny:    10.5px;
+      --lh-tight:  1.25;
+      --lh-normal: 1.55;
+      --lh-loose:  1.7;
+
+      /* —— SPACING ——————————————————————————————————————————
+         Existing scale kept (v0.2 chip CSS already references it).
+         Add space-7 / space-8 for hero-level padding. */
       --space-1: 4px;  --space-2: 8px;  --space-3: 12px;
       --space-4: 16px; --space-5: 20px; --space-6: 24px;
-      --radius-sm: 4px; --radius-md: 6px; --radius-lg: 10px;
+      --space-7: 32px; --space-8: 48px;
+
+      /* —— RADIUS ——————————————————————————————————————————— */
+      --radius-sm:  4px;
+      --radius-md:  6px;
+      --radius-lg:  10px;
+      --radius-xl:  14px;
+      --radius-pill: 999px;
+
+      /* —— SHADOWS ——————————————————————————————————————————
+         Soft layered shadows tuned for dark surfaces.  Each ramps
+         in shadow + blur for elevation depth. */
+      --shadow-sm: 0 1px 2px rgba(0,0,0,0.30);
+      --shadow-md: 0 4px 12px rgba(0,0,0,0.40);
+      --shadow-lg: 0 12px 32px rgba(0,0,0,0.50);
+      --shadow-xl: 0 24px 56px rgba(0,0,0,0.55);
+
+      /* —— MOTION ——————————————————————————————————————————
+         v0.4 will sprinkle these into chip toggle / modal / filter
+         transitions in P1.  Single duration scale + ease values
+         so motion feels consistent across surfaces. */
+      --duration-fast:   120ms;
+      --duration-normal: 220ms;
+      --duration-slow:   320ms;
+      --ease-out:        cubic-bezier(0.16, 1, 0.3, 1);
+      --ease-in-out:     cubic-bezier(0.4, 0, 0.2, 1);
+      --ease-spring:     cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    /* Honor system color-scheme + reduce-motion preferences */
+    @media (prefers-reduced-motion: reduce) {
+      :root {
+        --duration-fast: 1ms;
+        --duration-normal: 1ms;
+        --duration-slow: 1ms;
+      }
     }
     * { box-sizing: border-box; }
     body {
-      margin: 0; background: var(--bg); color: var(--fg);
-      font: 13px/1.5 "Inter", -apple-system, BlinkMacSystemFont,
-            "Segoe UI Variable", "Segoe UI", "PingFang SC",
-            "Microsoft Yahei UI", "Microsoft Yahei",
-            "Helvetica Neue", sans-serif;
-      letter-spacing: 0.01em;
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: var(--font-body);
+      font-size: var(--t-body);
+      line-height: var(--lh-normal);
+      letter-spacing: 0.005em;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    /* v0.4 P0 — typography rhythm.  Hero / section / sub headings
+       map to the type scale so every page has a clear hierarchy
+       instead of every text being 11.5-16px Inter. */
+    h1, h2, h3, h4 {
+      font-family: var(--font-display);
+      font-weight: 600;
+      letter-spacing: -0.015em;
+      line-height: var(--lh-tight);
     }
     /* V14.2 — visible focus ring */
     *:focus-visible {
@@ -52,24 +171,93 @@
       border-radius: var(--radius-sm);
     }
     button, input, select, a, [tabindex] { outline: none; }
+
+    /* v0.4 P0 — refreshed header.
+       Brand mark (SVG aperture logo) + product wordmark, then
+       page title in subdued weight + tag (run id, photo count).
+       Replaces the V14.2 "分析结果 ← 上传新一批" single-line
+       cramped title that read as a debug tool. */
     header {
       position: sticky; top: 0; z-index: 5;
       background: rgba(11, 13, 16, 0.85);
       backdrop-filter: blur(14px) saturate(180%);
       -webkit-backdrop-filter: blur(14px) saturate(180%);
       border-bottom: 1px solid var(--border);
-      padding: 16px 24px 14px;
+      padding: var(--space-5) var(--space-6) var(--space-4);
+    }
+    .brand-row {
+      display: flex; align-items: center;
+      gap: var(--space-3);
+      margin-bottom: var(--space-2);
+    }
+    .brand-mark {
+      display: inline-flex; align-items: center;
+      gap: var(--space-2);
+      text-decoration: none;
+    }
+    .brand-mark svg {
+      width: 22px; height: 22px;
+      color: var(--accent);
+      transition: transform var(--duration-normal) var(--ease-spring),
+                  color var(--duration-fast) var(--ease-out);
+    }
+    .brand-mark:hover svg {
+      transform: rotate(-8deg) scale(1.05);
+      color: var(--accent-hi);
+    }
+    .brand-mark .wordmark {
+      font-family: var(--font-display);
+      font-size: 15px; font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--fg);
+      line-height: 1;
+    }
+    .brand-mark .wordmark span {
+      color: var(--accent);
+    }
+    .brand-divider {
+      width: 1px; height: 14px; background: var(--border-hi);
+    }
+    .brand-back {
+      font-size: var(--t-small);
+      color: var(--muted);
+      text-decoration: none;
+      padding: var(--space-1) var(--space-2);
+      border-radius: var(--radius-sm);
+      transition: color var(--duration-fast) var(--ease-out),
+                  background var(--duration-fast) var(--ease-out);
+    }
+    .brand-back:hover {
+      color: var(--fg);
+      background: var(--surface-2);
     }
     h1 {
-      font-size: 16px; margin: 0 0 10px; font-weight: 700;
-      letter-spacing: -0.01em;
-      background: linear-gradient(180deg, #ffffff, #c8d0db);
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      font-size: var(--t-hero);
+      margin: 0;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      line-height: var(--lh-tight);
+      background: linear-gradient(180deg, #ffffff, #b8c0cc 95%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
       background-clip: text;
     }
-    h1 a { color: var(--muted); text-decoration: none; font-weight: 400; margin-left: 12px; font-size: 12px;
-           -webkit-text-fill-color: var(--muted); }
-    h1 a:hover { color: var(--fg); -webkit-text-fill-color: var(--fg); }
+    h1 .run-tag {
+      display: inline-flex; align-items: center;
+      gap: var(--space-2);
+      margin-left: var(--space-3);
+      padding: var(--space-1) var(--space-3);
+      font-family: var(--font-mono);
+      font-size: var(--t-small);
+      font-weight: 400;
+      letter-spacing: 0;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      border-radius: var(--radius-pill);
+      -webkit-text-fill-color: var(--muted);
+      vertical-align: middle;
+    }
     .stats { display: flex; gap: 18px; color: var(--muted); font-size: 12px; flex-wrap: wrap; }
     /* V17.2 — vertical policy badge: small accent pill that hovers
        to reveal the policy notes ("风光提高 keep 门槛 +3pp..."). */
@@ -1915,7 +2103,32 @@
 </head>
 <body>
   <header>
-    <h1 id="title">分析结果 <a href="/">← 上传新一批</a></h1>
+    <!-- v0.4 P0 — brand row.  Aperture-glyph SVG logomark + the
+         PixCull wordmark (accented "C") + back link.  Replaces
+         the old single-line "分析结果 ← 上传新一批" which read
+         as a debug-tool title bar instead of a product header. -->
+    <div class="brand-row">
+      <a href="/" class="brand-mark" title="返回上传">
+        <!-- Aperture / iris logomark.  6 blades around a center,
+             evokes both "camera aperture" and "AI eye".  Inline
+             SVG so we don't ship an extra HTTP request. -->
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="1.6" stroke-linecap="round"
+             stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M14.31 8 20.05 17.94"/>
+          <path d="M9.69 8h11.48"/>
+          <path d="M7.38 12 13.12 2.06"/>
+          <path d="M9.69 16 3.95 6.06"/>
+          <path d="M14.31 16H2.83"/>
+          <path d="M16.62 12 10.88 21.94"/>
+        </svg>
+        <span class="wordmark">Pix<span>Cull</span></span>
+      </a>
+      <span class="brand-divider"></span>
+      <a href="/" class="brand-back">← 上传新一批</a>
+    </div>
+    <h1 id="title">分析结果<span id="runTag" class="run-tag" style="display:none"></span></h1>
     <div class="stats" id="stats"></div>
     <div class="filters" id="filters">
       <span class="pill active" data-d="all">全部</span>
@@ -2336,6 +2549,20 @@
     }));
   })();
   const { run_id, rows, summary } = PAYLOAD;
+
+  // v0.4 P0 — populate the brand-row run pill with the run id +
+  // photo count.  Hero h1 now reads "分析结果 [✦ 1500 张 · run abc]".
+  (function _populateRunTag() {
+    const el = document.getElementById("runTag");
+    if (!el) return;
+    const n = rows.length;
+    const shortId = (run_id || "").slice(0, 12);
+    el.textContent = `${n} 张 · ${shortId}`;
+    el.style.display = "inline-flex";
+    el.title = `run id: ${run_id}`;
+    // Also update document.title so the browser tab is meaningful
+    document.title = `PixCull · ${n} 张 · ${shortId}`;
+  })();
 
   // P-UX-25 — multi-tab annotation conflict guard. Public surface
   // declared here at the top of the IIFE so quickLabel() / _lbLabel()
