@@ -21,6 +21,14 @@
       --keep: #34d399;
       --maybe: #fbbf24;
       --cull: #ef6363;
+      /* P-UX-23 — color-blind / a11y palette, applied when body has
+         .a11y-cb. We use Wong's safe-for-deuteranopia + protanopia
+         palette: keep=sky-blue, maybe=orange (already differentiable),
+         cull=magenta. Combined with the always-on shape glyphs
+         (✓/?/✕) the UI no longer relies on red/green discrimination. */
+      --keep-cb:  #0ea5e9;
+      --maybe-cb: #f59e0b;
+      --cull-cb:  #d946ef;
       --accent: #3b82f6;
       --accent-glow: rgba(59,130,246,0.18);
       --focus-ring: rgba(96,165,250,0.55);
@@ -488,9 +496,36 @@
       display: inline-block; padding: 1px 6px; font-size: 10px; font-weight: 600;
       border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px;
     }
+    /* P-UX-23 — always-on shape glyphs on decision badges. Even
+       for users with normal color vision the glyph reads faster
+       than the color, and for the ~8% of men with red-green CVD
+       it's the only reliable signal. The glyph is inserted via
+       ::before so we don't have to touch every render() site. */
+    .badge.keep::before  { content: "✓ "; }
+    .badge.maybe::before { content: "? "; }
+    .badge.cull::before  { content: "✕ "; }
     .badge.keep { background: var(--keep); color: white; }
     .badge.maybe { background: var(--maybe); color: white; }
     .badge.cull { background: var(--cull); color: white; }
+    /* P-UX-23 — when the user enables color-blind mode (body.a11y-cb),
+       remap keep/maybe/cull to a deuteranopia-safe palette + add a
+       diagonal-stripe texture to .badge.cull so even a fully
+       achromatic eye can tell cull apart from keep. The class is
+       applied by JS reading localStorage[`pixcull_a11y_pref`]. */
+    body.a11y-cb {
+      --keep:  var(--keep-cb);
+      --maybe: var(--maybe-cb);
+      --cull:  var(--cull-cb);
+    }
+    body.a11y-cb .badge.cull {
+      background-image: repeating-linear-gradient(
+        135deg,
+        rgba(255,255,255,0.0) 0px,
+        rgba(255,255,255,0.0) 4px,
+        rgba(255,255,255,0.22) 4px,
+        rgba(255,255,255,0.22) 6px
+      );
+    }
     .row1 .rs {
       font-size: 9px; padding: 1px 5px; border-radius: 2px;
       background: rgba(255,255,255,0.07); color: var(--muted);
@@ -780,6 +815,29 @@
       color: #fff;
     }
 
+    /* P-UX-23 — floating accessibility / color-blind toggle.
+       Bottom-left of the viewport (away from the buckets-toggle at
+       top-right). Click → toggle body.a11y-cb + persist preference.
+       Tiny, unobtrusive; the always-on shape glyphs already give
+       the baseline a11y win, this just swaps the palette for users
+       who want it. */
+    .a11y-toggle {
+      position: fixed; bottom: 14px; left: 14px;
+      z-index: 8;
+      background: rgba(20,23,28,0.85);
+      color: var(--muted); border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 5px 11px; font-size: 11px; font-weight: 500;
+      cursor: pointer; opacity: 0.55;
+      transition: opacity 120ms, background 120ms, color 120ms;
+    }
+    .a11y-toggle:hover { opacity: 1; }
+    .a11y-toggle.on {
+      background: rgba(14,165,233,0.18);
+      color: #79c8ff; border-color: rgba(14,165,233,0.40);
+      opacity: 1;
+    }
+
     /* P-UX-22 — deliverable buckets. Collapsible right-side panel
        for named output baskets ("Client gallery / Final keepers
        / Marketing reel / Stock submissions"). User drags cards
@@ -1012,6 +1070,17 @@
       background: var(--cull); color: #2a0606;
       border-color: var(--cull);
     }
+    /* P-UX-23 — glyph prefix on the lightbox decision toolbar so
+       the active button is identifiable even with the colors
+       remapped or muted by an OS-level filter. */
+    .lightbox .info-pane .decision-btn.keep  .label::before { content: "✓ "; }
+    .lightbox .info-pane .decision-btn.maybe .label::before { content: "? "; }
+    .lightbox .info-pane .decision-btn.cull  .label::before { content: "✕ "; }
+    /* P-UX-23 — same glyph treatment on the header stats row
+       (the keep <N> / maybe <N> / cull <N> summary). */
+    .stats .keep::before  { content: "✓ "; opacity: 0.55; }
+    .stats .maybe::before { content: "? "; opacity: 0.55; }
+    .stats .cull::before  { content: "✕ "; opacity: 0.55; }
     .lightbox .info-pane .decision-btn.active .hk {
       background: rgba(0,0,0,0.18); color: rgba(0,0,0,0.7);
     }
@@ -1728,6 +1797,15 @@
        Drag any card from the grid into a bucket; bucket assignments
        live in localStorage (no annotation pollution). Each bucket
        has its own "下载 ZIP" + "复制文件名" + "清空" actions. -->
+  <!-- P-UX-23 — accessibility / color-blind toggle. Bottom-left so it
+       never collides with the buckets-toggle (top-right) or the
+       cull-reason tray (bottom-center). Click swaps the keep/maybe/cull
+       palette to a deuteranopia-safe one; preference persists via
+       localStorage. The always-on glyphs on .badge keep / maybe / cull
+       give the baseline a11y win even when this toggle is off. -->
+  <button class="a11y-toggle" id="a11yToggleBtn" type="button"
+          aria-pressed="false"
+          title="色盲友好配色 — 切换为蓝/橙/紫高对比方案(配合 ✓/?/✕ 形状标记)">♿ 配色</button>
   <button class="buckets-toggle" id="bucketsToggleBtn" type="button"
           title="交付桶 — 拖卡片到桶里整理输出">🪣 桶 <span class="bk-pill" id="bucketsTotalPill" style="display:none">0</span></button>
   <aside class="buckets-panel" id="bucketsPanel" aria-hidden="true">
@@ -5342,6 +5420,59 @@
   }, true);  // capture phase so we get ahead of the existing thumb-click → openLightbox
 
   cmpPickCancel.addEventListener("click", () => cancelComparePick());
+
+  // ==================================================================
+  // P-UX-23 — color-blind / a11y mode toggle. Tiny floating button at
+  // bottom-left flips body.a11y-cb on/off; the CSS rules then remap
+  // the keep/maybe/cull palette to Wong's deuteranopia-safe palette
+  // (sky-blue / orange / magenta). Combined with the always-on shape
+  // glyphs (✓/?/✕) on every decision badge — also added in this
+  // ticket — the UI never depends on red/green discrimination.
+  //
+  // Why a single bool instead of a 3-way picker:
+  //   - the deuteranopia-safe palette is also a fine palette for the
+  //     ~92% of users with typical color vision, so "off / cb" covers
+  //     the real use cases without a confusing options surface
+  //   - if anyone needs a different palette they can override via a
+  //     userscript / custom CSS; ours is just the audit-passing default
+  // ==================================================================
+  const _A11Y_PREF_KEY = "pixcull_a11y_pref";
+  const a11yToggleBtn = document.getElementById("a11yToggleBtn");
+
+  function _applyA11yPref(pref) {
+    const cb = (pref === "cb");
+    document.body.classList.toggle("a11y-cb", cb);
+    if (a11yToggleBtn) {
+      a11yToggleBtn.classList.toggle("on", cb);
+      a11yToggleBtn.setAttribute("aria-pressed", cb ? "true" : "false");
+    }
+  }
+
+  // Apply persisted preference before first paint of grid colors —
+  // the CSS class on <body> is purely a paint hint so even setting
+  // it after grid render is visually instant, but doing it here
+  // avoids a one-frame palette flash on slow devices.
+  try {
+    const _saved = localStorage.getItem(_A11Y_PREF_KEY);
+    if (_saved === "cb") _applyA11yPref("cb");
+  } catch (e) { /* localStorage disabled — silently skip */ }
+
+  if (a11yToggleBtn) {
+    a11yToggleBtn.addEventListener("click", () => {
+      const next = document.body.classList.contains("a11y-cb") ? "" : "cb";
+      try { localStorage.setItem(_A11Y_PREF_KEY, next); }
+      catch (e) { /* private / disabled — still apply for this tab */ }
+      _applyA11yPref(next);
+      // Surface the change to the user via the toast system so they
+      // know the toggle did something (the palette change can be
+      // subtle on darker monitors).
+      if (typeof toast === "function") {
+        toast(next === "cb"
+          ? "色盲友好配色已开启(蓝 / 橙 / 紫 + ✓ / ? / ✕)"
+          : "已切换回默认配色", "info");
+      }
+    });
+  }
 
   // ==================================================================
   // P-UX-22 — deliverable buckets. Per-user named output baskets so
