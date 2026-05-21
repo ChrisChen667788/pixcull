@@ -185,6 +185,78 @@ def _emit_scene_audit_section(scores_csv: Path) -> str:
     return "\n".join(lines)
 
 
+def _emit_icc_section(
+    scores_csv: Path,
+    image_root: Optional[Path] = None,
+) -> str:
+    """P-PRO-6 — color-space consistency audit.
+
+    Reads ICC profile + EXIF ColorSpace tag from each photo
+    referenced in scores.csv (under the optional image_root, or
+    using the absolute path stored in the ``path`` column when
+    it exists).  Flags inconsistency (≥ 5% files in a non-majority
+    color space) so the photographer can re-export before
+    delivery.
+    """
+    lines = ["## 🎨 color-space audit  (P-PRO-6)\n"]
+    if not scores_csv.exists():
+        lines.append(f"_no scores.csv at {scores_csv}_\n")
+        return "\n".join(lines)
+    try:
+        from pixcull.io.icc import audit_color_space, read_color_profile
+    except ImportError as exc:
+        lines.append(f"_color-space audit unavailable: {exc}_\n")
+        return "\n".join(lines)
+
+    import pandas as pd
+    df = pd.read_csv(scores_csv)
+    # Prefer the ``path`` column (absolute) when present; fall back
+    # to image_root/filename for scan-mode runs.
+    profiles = []
+    n_skip = 0
+    for _, row in df.iterrows():
+        fn = row.get("filename")
+        if not fn or pd.isna(fn):
+            continue
+        # Try absolute path first
+        raw_path = row.get("path")
+        p: Optional[Path] = None
+        if isinstance(raw_path, str) and raw_path:
+            p = Path(raw_path)
+        elif image_root:
+            p = image_root / str(fn)
+        if p is None or not p.is_file():
+            n_skip += 1
+            continue
+        profiles.append(read_color_profile(p))
+
+    if not profiles:
+        lines.append(f"_no readable image files referenced (skipped {n_skip})_\n")
+        return "\n".join(lines)
+
+    rpt = audit_color_space(profiles)
+    emoji = "🟢" if rpt.is_consistent else "🔴"
+    lines.append(f"- 总 audit 文件数: **{rpt.n_files}**  "
+                 f"(跳过 {n_skip} 张无法解析)")
+    lines.append(f"- 一致性: {emoji} **{rpt.consistency_pct:.1f}%** "
+                 f"({'一致' if rpt.is_consistent else '混杂'})")
+    lines.append(f"- 主色彩空间: **{rpt.canonical_majority or 'unknown'}**")
+    lines.append(f"- 缺少 ICC profile 的文件: **{rpt.n_no_icc}**")
+    lines.append("\n| 色彩空间 | 数量 |")
+    lines.append("| --- | --- |")
+    for cs, cnt in sorted(rpt.counts.items(), key=lambda kv: -kv[1]):
+        lines.append(f"| {cs} | {cnt} |")
+    if not rpt.is_consistent:
+        lines.append("\n⚠ **少数派文件(色彩空间与多数不一致):**")
+        # Cap at 30 lines so the report doesn't explode on big runs
+        for fn in rpt.minority_files[:30]:
+            lines.append(f"  - {fn}")
+        if len(rpt.minority_files) > 30:
+            lines.append(f"  - ... 还有 {len(rpt.minority_files) - 30} 个")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def _emit_wedding_coverage_section(
     scores_csv: Path,
     mandatory_preset: str = "western",
@@ -277,20 +349,40 @@ def main() -> None:
                          "ring_exchange, ...). Use 'chinese' for "
                          "tea-ceremony / kneeling-bow / door-block "
                          "weddings.")
+    ap.add_argument("--image-root", type=Path, default=None,
+                    help="P-PRO-6 — root folder containing the actual "
+                         "image files (used by the ICC color-space "
+                         "audit).  Defaults to the run's input/ "
+                         "directory if not specified.  Skipped silently "
+                         "when no images are reachable.")
     args = ap.parse_args()
 
     if args.scores_csv:
         out_dir = args.scores_csv.parent
         run_id = out_dir.parent.name if out_dir.parent.name != "/" \
                  else "unknown"
+        # P-PRO-6 fix — when --scores-csv points to a custom filename
+        # (not literally "scores.csv"), use that path directly.
+        # The previous code rebuilt out_dir / "scores.csv" which broke
+        # callers passing e.g. predictions.csv or audit_input.csv.
+        scores_csv = args.scores_csv
     elif args.run_id:
         out_dir = _resolve_run_dir(args.run_id)
         run_id = args.run_id
+        scores_csv = out_dir / "scores.csv"
     else:
         ap.print_help(sys.stderr)
         sys.exit(2)
+    # Default image root for the ICC audit: the run's input/ folder
+    # which exists in upload-mode runs.  Scan-mode runs store
+    # absolute paths in scores.csv's "path" column so image_root
+    # isn't required there.
+    image_root = args.image_root
+    if image_root is None:
+        candidate = out_dir.parent / "input"
+        if candidate.is_dir():
+            image_root = candidate
 
-    scores_csv = out_dir / "scores.csv"
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     parts = [
         f"# PixCull audit · run `{run_id}`\n",
@@ -300,6 +392,7 @@ def main() -> None:
         _emit_face_audit_section(out_dir, args.user_root),
         _emit_wedding_coverage_section(scores_csv,
                                        mandatory_preset=args.mandatory_preset),
+        _emit_icc_section(scores_csv, image_root=image_root),
     ]
     report = "\n".join(p for p in parts if p)
     if args.out:

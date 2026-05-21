@@ -186,3 +186,63 @@ def test_cli_help_lists_mandatory_preset(synthetic_scores_csv):
     assert "--mandatory-preset" in proc.stdout
     assert "chinese" in proc.stdout
     assert "western" in proc.stdout
+
+
+# -----------------------------------------------------------------
+# P-PRO-6 — ICC color-space audit smoke
+# -----------------------------------------------------------------
+
+def test_cli_emits_icc_section_when_images_reachable(tmp_path):
+    """Build a 2-image mini-album (1× untagged JPG + 1× sRGB-tagged
+    JPG via PIL), point cli_audit at it, assert the ICC section
+    renders + lists the count by canonical name."""
+    from PIL import Image
+
+    img_root = tmp_path / "input"
+    img_root.mkdir(parents=True)
+    out_dir = tmp_path / "output"
+    out_dir.mkdir(parents=True)
+    # Two real JPGs.  Without an ICC blob, PIL writes them as
+    # untagged → audit reports "unknown".
+    Image.new("RGB", (32, 32), (128, 0, 0)).save(img_root / "a.jpg", "JPEG")
+    Image.new("RGB", (32, 32), (0, 0, 128)).save(img_root / "b.jpg", "JPEG")
+
+    scores_csv = out_dir / "scores.csv"
+    with scores_csv.open("w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["filename", "scene", "path"])
+        w.writerow(["a.jpg", "landscape", str(img_root / "a.jpg")])
+        w.writerow(["b.jpg", "landscape", str(img_root / "b.jpg")])
+
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(REPO_ROOT) + ":" + env.get("PYTHONPATH", "")
+    proc = subprocess.run(
+        [sys.executable, str(CLI),
+         "--scores-csv", str(scores_csv),
+         "--image-root", str(img_root)],
+        env=env, capture_output=True, text=True, timeout=60,
+    )
+    assert proc.returncode == 0, proc.stderr
+    out = proc.stdout
+    assert "## 🎨 color-space audit" in out
+    assert "总 audit 文件数" in out
+    assert "主色彩空间" in out
+
+
+def test_cli_icc_section_handles_no_images_gracefully(synthetic_scores_csv):
+    """When scores.csv references files that don't exist on disk
+    (synthetic test data), the section should report "no readable
+    image files" instead of crashing."""
+    out = _run_cli(synthetic_scores_csv)
+    assert "## 🎨 color-space audit" in out
+    assert "no readable image files" in out
+
+
+def test_cli_help_lists_image_root(synthetic_scores_csv):
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(REPO_ROOT) + ":" + env.get("PYTHONPATH", "")
+    proc = subprocess.run(
+        [sys.executable, str(CLI), "--help"],
+        env=env, capture_output=True, text=True, timeout=30,
+    )
+    assert "--image-root" in proc.stdout
