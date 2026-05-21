@@ -815,6 +815,40 @@
       color: #fff;
     }
 
+    /* P-UX-25 — multi-tab conflict banner. Appears top-center when
+       another tab on the same machine has the same /results/<run_id>
+       page open. Soft amber tint so it's noticed but doesn't drown
+       out the working area; dismissible with the X. Annotation
+       changes from the other tab still apply (via BroadcastChannel
+       → render()), this banner just sets expectations. */
+    .multi-tab-banner {
+      position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+      z-index: 11;
+      max-width: 560px;
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 14px;
+      background: rgba(251,191,36,0.14);
+      border: 1px solid rgba(251,191,36,0.55);
+      color: #ffd784;
+      border-radius: 8px;
+      font-size: 12px; line-height: 1.4;
+      box-shadow: 0 8px 28px rgba(0,0,0,0.45);
+    }
+    .multi-tab-banner.hidden { display: none; }
+    .multi-tab-banner .mtb-icon { font-size: 14px; }
+    .multi-tab-banner .mtb-msg  { flex: 1; }
+    .multi-tab-banner .mtb-close {
+      background: transparent; color: #ffd784;
+      border: 1px solid rgba(251,191,36,0.4);
+      width: 22px; height: 22px;
+      border-radius: 4px; cursor: pointer;
+      font-size: 12px; line-height: 1;
+      padding: 0;
+    }
+    .multi-tab-banner .mtb-close:hover {
+      background: rgba(251,191,36,0.18);
+    }
+
     /* P-UX-23 — floating accessibility / color-blind toggle.
        Bottom-left of the viewport (away from the buckets-toggle at
        top-right). Click → toggle body.a11y-cb + persist preference.
@@ -2097,6 +2131,14 @@
     }));
   })();
   const { run_id, rows, summary } = PAYLOAD;
+
+  // P-UX-25 — multi-tab annotation conflict guard. Public surface
+  // declared here at the top of the IIFE so quickLabel() / _lbLabel()
+  // can call broadcastAnnotation() unconditionally; the real
+  // BroadcastChannel + UI wiring is in the _initMultiTab() block
+  // further down (it needs toast()/render() to be defined first).
+  // Until init runs, broadcastAnnotation is a no-op stub.
+  const _pixMultiTab = { broadcastAnnotation: () => {} };
 
   // V14.0 — shared HTML escape. Used everywhere a server-supplied
   // string (filename, scene name, rationale text) lands in innerHTML
@@ -4355,6 +4397,9 @@
         r.decision = label;
         if (label !== "cull") r.cull_reason = "";
       }
+      // P-UX-25 — same broadcast as quickLabel(); see the comment
+      // on the keyboard path for rationale.
+      _pixMultiTab.broadcastAnnotation(fn, label);
       // Sync the matching grid card so closing the lightbox lands
       // on a card with the right decision border + has-human class.
       const card = grid.querySelector(`.card[data-fn="${CSS.escape(fn)}"]`);
@@ -4482,6 +4527,10 @@
         // P-UX-4 — flipping away from cull clears any stale reason.
         if (label !== "cull") r.cull_reason = "";
       }
+      // P-UX-25 — broadcast to any sibling tab on the same run_id so
+      // the user sees the change live in the other window instead of
+      // discovering a stale decision on next reload.
+      _pixMultiTab.broadcastAnnotation(focusedFn, label);
       // Quick visual feedback: flash a label badge near the card.
       const card = grid.querySelector(`.card[data-fn="${CSS.escape(focusedFn)}"]`);
       if (card) {
@@ -5496,6 +5545,125 @@
   }, true);  // capture phase so we get ahead of the existing thumb-click → openLightbox
 
   cmpPickCancel.addEventListener("click", () => cancelComparePick());
+
+  // ==================================================================
+  // P-UX-25 — multi-tab annotation conflict guard. Two scenarios this
+  // handles:
+  //
+  //   1. User opens the same /results/<run_id> in a second tab (a
+  //      reasonable workflow: one tab for grid, one for lightbox).
+  //      Both tabs read the same annotations.jsonl on the server, so
+  //      "1" labeled in tab A doesn't appear in tab B until reload.
+  //      The user makes a different verdict in B → A's stale view
+  //      gets overwritten by B's POST.
+  //
+  //   2. Two photographers on the same machine reviewing the same
+  //      shoot at the same time (shared-account scenario in studios).
+  //      Same conflict pattern as 1.
+  //
+  // Our remedy: BroadcastChannel + a small banner. We never block
+  // saves — that would surprise the user. Instead we:
+  //
+  //   - announce presence on page load; if another tab replies,
+  //     show a soft amber banner ("annotations sync — keep editing
+  //     in one tab to avoid overwrites")
+  //   - broadcast every annotation save → other tabs update their
+  //     in-memory rows[] + re-render. Users see live changes from
+  //     their sibling tab without a manual reload.
+  //   - clean up on beforeunload so the surviving tab can hide the
+  //     banner once it's the last one standing.
+  //
+  // BroadcastChannel is available everywhere except very old Safari
+  // (< 15.4) and some embedded webviews. On those we silently no-op;
+  // the user gets the same experience as today.
+  // ==================================================================
+  (function _initMultiTab() {
+    if (typeof BroadcastChannel === "undefined") return;
+    const _TAB_ID = (typeof crypto !== "undefined" && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : (Date.now() + "-" + Math.random().toString(36).slice(2, 10));
+    let _bc;
+    try { _bc = new BroadcastChannel("pixcull-tab-coord:" + run_id); }
+    catch (e) { return; }
+
+    const _seenTabs = new Set();
+    let _bannerEl = null;
+
+    function _showBanner() {
+      if (_bannerEl) {
+        _bannerEl.classList.remove("hidden");
+        return;
+      }
+      _bannerEl = document.createElement("div");
+      _bannerEl.className = "multi-tab-banner";
+      _bannerEl.setAttribute("role", "status");
+      _bannerEl.setAttribute("aria-live", "polite");
+      _bannerEl.innerHTML = `
+        <span class="mtb-icon">⚠</span>
+        <span class="mtb-msg">同一批结果已在其它 tab 打开 — 标注会双向同步,但建议只在一个 tab 内编辑以避免覆盖</span>
+        <button class="mtb-close" type="button" aria-label="关闭多 tab 提示">✕</button>`;
+      document.body.appendChild(_bannerEl);
+      _bannerEl.querySelector(".mtb-close").addEventListener("click", () => {
+        _bannerEl.classList.add("hidden");
+      });
+    }
+
+    function _hideBannerIfAlone() {
+      if (_seenTabs.size === 0 && _bannerEl) {
+        _bannerEl.remove();
+        _bannerEl = null;
+      }
+    }
+
+    _bc.addEventListener("message", e => {
+      const m = e.data || {};
+      if (!m.type || !m.from || m.from === _TAB_ID) return;
+
+      if (m.type === "hello") {
+        _seenTabs.add(m.from);
+        // Echo back so the newcomer learns about us too
+        try { _bc.postMessage({type: "echo", from: _TAB_ID}); } catch (e) {}
+        _showBanner();
+      }
+      else if (m.type === "echo") {
+        _seenTabs.add(m.from);
+        _showBanner();
+      }
+      else if (m.type === "bye") {
+        _seenTabs.delete(m.from);
+        _hideBannerIfAlone();
+      }
+      else if (m.type === "annot" && m.fn) {
+        // Sibling tab labeled fn → reflect locally so the user sees
+        // the change live in this tab.
+        const r = rows.find(x => x.filename === m.fn);
+        if (r && r.decision !== m.dec) {
+          r.decision = m.dec;
+          r.rubric_human_labeled = true;
+          if (m.dec !== "cull") r.cull_reason = "";
+          try { render(); } catch (err) {}
+          try {
+            if (typeof toast === "function") {
+              toast(`其它 tab 标注:${m.fn.length > 40 ? m.fn.slice(0,38)+"…" : m.fn} → ${m.dec}`,
+                    "info", 2400);
+            }
+          } catch (err) {}
+        }
+      }
+    });
+
+    _pixMultiTab.broadcastAnnotation = function (fn, dec) {
+      try { _bc.postMessage({type: "annot", from: _TAB_ID, fn, dec}); }
+      catch (e) {}
+    };
+
+    // Announce ourselves; existing tabs will reply with "echo".
+    try { _bc.postMessage({type: "hello", from: _TAB_ID}); } catch (e) {}
+    // Politely depart on unload so the survivor can drop the banner.
+    window.addEventListener("beforeunload", () => {
+      try { _bc.postMessage({type: "bye", from: _TAB_ID}); } catch (e) {}
+    });
+  })();
 
   // ==================================================================
   // P-UX-23 — color-blind / a11y mode toggle. Tiny floating button at
