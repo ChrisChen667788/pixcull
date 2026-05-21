@@ -51,11 +51,35 @@ from typing import Optional
 
 @dataclass
 class BurstPeakWeights:
-    """Tuneable knobs for the peak-score blend."""
-    sharpness:    float = 0.40
-    distinctness: float = 0.30
-    quality:      float = 0.20
-    face:         float = 0.10
+    """Tuneable knobs for the peak-score blend.
+
+    Default weights were re-tuned in P-AI-5.2 against 13 real wedding
+    bursts (3-11 frames each, 80 photos total) cross-referenced
+    against the photographer's curated cut.  Findings:
+
+      · Exact agreement with the photographer's pick is hopeless
+        without face / expression signals — flat at 15% regardless
+        of weight blend, because wedding-photographer picks are
+        driven by eyes-open / smile / emotion, not visual
+        distinctness or sharpness.
+      · Sharp-dominant (0.70) achieved the best "close enough"
+        rate: 54% within 1 frame of the photographer's pick, 85%
+        within 3.  In practice this turns a 6-frame burst into a
+        2-frame A/B for the photographer — still a 3× speedup.
+      · Distinctness-dominant performed WORST: within a 1-2 second
+        burst frames are visually almost identical, so the
+        distinctness signal is near-zero across all candidates.
+
+    Until P-AI-5.3 adds face EAR / smile / expression signals,
+    these are the best blind weights we have.
+    """
+    sharpness:    float = 0.70   # bumped from 0.40 — see docstring
+    distinctness: float = 0.20   # cut from 0.30
+    quality:      float = 0.05   # cut from 0.20 (score_final missing
+                                  # for most rows in the tuning corpus
+                                  # — leans back when face signals land
+                                  # in P-AI-5.3)
+    face:         float = 0.05
 
 
 DEFAULT_WEIGHTS = BurstPeakWeights()
