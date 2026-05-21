@@ -998,6 +998,61 @@
     .scene-anomaly-banner .sab-close:hover {
       background: rgba(59, 130, 246, 0.18);
     }
+    /* P-UX-28 — "查看分布详情" expandable pie chart panel.
+       Slides down beneath the banner when the user clicks the
+       "查看分布详情" link; inline SVG, no external chart lib. */
+    .scene-anomaly-banner .sab-toggle {
+      background: transparent; color: #79c8ff;
+      border: 1px solid rgba(59, 130, 246, 0.40);
+      padding: 2px 8px; font-size: 11px;
+      border-radius: 5px; cursor: pointer;
+      white-space: nowrap;
+    }
+    .scene-anomaly-banner .sab-toggle:hover {
+      background: rgba(59, 130, 246, 0.14);
+    }
+    .scene-distribution-panel {
+      position: fixed; top: 110px; left: 50%; transform: translateX(-50%);
+      z-index: 10;
+      max-width: 620px; width: 90%;
+      background: rgba(20, 23, 28, 0.97);
+      border: 1px solid rgba(59, 130, 246, 0.40);
+      border-radius: 10px;
+      padding: 16px 20px;
+      box-shadow: 0 12px 36px rgba(0,0,0,0.55);
+      display: none;
+    }
+    .scene-distribution-panel.show { display: block; }
+    .scene-distribution-panel h4 {
+      margin: 0 0 10px; font-size: 12px; color: var(--muted);
+      letter-spacing: .04em; text-transform: uppercase;
+      font-weight: 600;
+    }
+    .scene-distribution-panel .sdp-content {
+      display: flex; gap: 16px; align-items: center;
+    }
+    .scene-distribution-panel svg {
+      flex-shrink: 0;
+      width: 140px; height: 140px;
+    }
+    .scene-distribution-panel .sdp-legend {
+      flex: 1;
+      font-size: 11.5px;
+      max-height: 200px; overflow-y: auto;
+    }
+    .scene-distribution-panel .sdp-legend-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 2px 0;
+    }
+    .scene-distribution-panel .sdp-swatch {
+      display: inline-block; width: 10px; height: 10px;
+      border-radius: 2px; flex-shrink: 0;
+    }
+    .scene-distribution-panel .sdp-name  { flex: 1; color: var(--fg); }
+    .scene-distribution-panel .sdp-pct   {
+      font-family: ui-monospace, monospace;
+      color: var(--muted); font-size: 11px;
+    }
 
     /* P-UX-23 — floating accessibility / color-blind toggle.
        Bottom-left of the viewport (away from the buckets-toggle at
@@ -5942,10 +5997,69 @@
     banner.innerHTML = `
       <span class="sab-icon">📊</span>
       <span class="sab-msg">${reason}</span>
+      <button class="sab-toggle" type="button">查看分布详情</button>
       <button class="sab-close" type="button" aria-label="关闭场景分布提示">✕</button>`;
     document.body.appendChild(banner);
+
+    // P-UX-28 — pie chart panel.  Lazy-built on first click.
+    let pieEl = null;
+    function _buildPiePanel() {
+      // Generate distinct hues evenly spaced around the wheel
+      const entries = sorted;   // [[name, count], ...]
+      const total   = n;
+      const N       = entries.length;
+      const hue = i => Math.round((i * 360) / N);
+      const fill = i => `hsl(${hue(i)}, 62%, 55%)`;
+
+      // Build SVG pie via cumulative-angle-to-arc math.  conic-
+      // gradient would be simpler but doesn't support per-segment
+      // titles + a screenreader-friendly title on hover.
+      const cx = 70, cy = 70, r = 60;
+      let acc = 0;
+      const slices = entries.map(([name, cnt], i) => {
+        const frac = cnt / total;
+        const a0   = acc * 2 * Math.PI - Math.PI / 2;
+        const a1   = (acc + frac) * 2 * Math.PI - Math.PI / 2;
+        acc += frac;
+        const x0 = cx + r * Math.cos(a0), y0 = cy + r * Math.sin(a0);
+        const x1 = cx + r * Math.cos(a1), y1 = cy + r * Math.sin(a1);
+        const large = frac > 0.5 ? 1 : 0;
+        const d = `M${cx},${cy} L${x0.toFixed(2)},${y0.toFixed(2)} ` +
+                  `A${r},${r} 0 ${large} 1 ${x1.toFixed(2)},${y1.toFixed(2)} Z`;
+        const title = `${esc(name)}: ${cnt} (${(frac * 100).toFixed(1)}%)`;
+        return `<path d="${d}" fill="${fill(i)}" stroke="#0b0d10" stroke-width="1">` +
+               `<title>${title}</title></path>`;
+      }).join("");
+      const legend = entries.map(([name, cnt], i) => {
+        const frac = cnt / total;
+        return `<div class="sdp-legend-row">
+          <span class="sdp-swatch" style="background:${fill(i)}"></span>
+          <span class="sdp-name">${esc(name)}</span>
+          <span class="sdp-pct">${cnt} · ${(frac*100).toFixed(1)}%</span>
+        </div>`;
+      }).join("");
+      const panel = document.createElement("div");
+      panel.className = "scene-distribution-panel";
+      panel.innerHTML = `
+        <h4>场景分布 (共 ${total} 张)</h4>
+        <div class="sdp-content">
+          <svg viewBox="0 0 140 140" aria-label="场景分布饼图">
+            ${slices}
+          </svg>
+          <div class="sdp-legend">${legend}</div>
+        </div>`;
+      document.body.appendChild(panel);
+      return panel;
+    }
+
+    banner.querySelector(".sab-toggle").addEventListener("click", () => {
+      if (!pieEl) pieEl = _buildPiePanel();
+      pieEl.classList.toggle("show");
+    });
     const close = () => {
       banner.classList.add("hidden");
+      // P-UX-28 — also hide the expanded pie panel if open
+      if (pieEl) pieEl.classList.remove("show");
       // Persist dismissal per-run so reopening the same tab
       // doesn't re-prompt
       try {
