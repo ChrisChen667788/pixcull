@@ -328,6 +328,150 @@ def test_eyes_open_does_not_penalize_faceless_bursts():
     assert "眼睛睁开" not in rpt.reasons["b.jpg"]
 
 
+def test_pick_weights_for_scene_uses_preset_for_wedding():
+    """P-AI-5.6 — wedding scene should get the smile-dominant preset."""
+    from pixcull.scoring.burst_peak import (
+        WEIGHT_PRESETS, pick_weights_for_scene,
+    )
+    w = pick_weights_for_scene("wedding")
+    assert w.face_smile >= 0.40  # smile must dominate
+    assert w.face_smile == WEIGHT_PRESETS["wedding"].face_smile
+    # sanity: sharp weight must be lower than smile weight
+    assert w.sharpness < w.face_smile
+
+
+def test_pick_weights_for_scene_uses_preset_for_sports():
+    """Sports preset: sharp dominates, smile/eyes zeroed (peak-action
+    frames are often strained / blinking)."""
+    from pixcull.scoring.burst_peak import pick_weights_for_scene
+    w = pick_weights_for_scene("sports")
+    assert w.sharpness >= 0.50
+    assert w.face_smile == 0.0
+    assert w.face_eyes_open == 0.0
+
+
+def test_pick_weights_for_scene_uses_preset_for_landscape():
+    """Landscape preset: sharp + distinct, faces zeroed."""
+    from pixcull.scoring.burst_peak import pick_weights_for_scene
+    w = pick_weights_for_scene("landscape")
+    assert w.sharpness >= 0.50
+    assert w.face_smile == 0.0
+
+
+def test_pick_weights_for_scene_case_insensitive():
+    """Scene matching shouldn't be case-sensitive."""
+    from pixcull.scoring.burst_peak import pick_weights_for_scene
+    w_lc = pick_weights_for_scene("wedding")
+    w_uc = pick_weights_for_scene("Wedding")
+    w_mc = pick_weights_for_scene("WEDDING")
+    assert w_lc.face_smile == w_uc.face_smile == w_mc.face_smile
+
+
+def test_pick_weights_for_scene_unknown_falls_back():
+    """An unknown scene → default blended preset."""
+    from pixcull.scoring.burst_peak import (
+        DEFAULT_WEIGHTS, WEIGHT_PRESETS, pick_weights_for_scene,
+    )
+    w_unknown = pick_weights_for_scene("not_a_real_scene")
+    w_none    = pick_weights_for_scene(None)
+    # Both should return default-shaped weights
+    assert w_unknown.sharpness      == DEFAULT_WEIGHTS.sharpness
+    assert w_unknown.face_smile     == DEFAULT_WEIGHTS.face_smile
+    assert w_none.sharpness         == DEFAULT_WEIGHTS.sharpness
+
+
+def test_pick_weights_for_scene_respects_fallback_arg():
+    """Caller can override the fallback (e.g. CLI tool wants a
+    "strict-sharp" custom fallback)."""
+    from pixcull.scoring.burst_peak import (
+        BurstPeakWeights, pick_weights_for_scene,
+    )
+    custom = BurstPeakWeights(sharpness=0.99)
+    w = pick_weights_for_scene("not_a_real_scene", fallback=custom)
+    assert w.sharpness == 0.99
+    # But explicit wedding should still pick the preset, NOT the fallback
+    w2 = pick_weights_for_scene("wedding", fallback=custom)
+    assert w2.face_smile >= 0.40
+
+
+def test_wedding_preset_flips_smile_over_sharp_on_real_shape():
+    """End-to-end: a wedding-scene burst where the photographer would
+    pick the soft-but-smiling frame.  The fixture sharpness gap is
+    LARGE (0.95 vs 0.75 = 0.20) while the smile gap is moderate
+    (0.50 vs 0.20 = 0.30) — at default weights, sharpness × 0.40
+    contribution (0.08) beats smile × 0.15 contribution (0.045) so
+    sharp wins.  At wedding preset weights, smile × 0.50 (0.15)
+    crushes sharpness × 0.10 (0.02) so smile wins.  Pins the
+    divergence numerically."""
+    from pixcull.scoring.burst_peak import (
+        WEIGHT_PRESETS, rank_burst_peak,
+    )
+    rows = [
+        # Decoy to anchor the burst stats
+        {"filename": "decoy.jpg", "score_sharpness": 0.70,
+         "embedding": [1.0, 0.0], "scene": "wedding",
+         "face_max_blink": 0.5, "face_max_smile": 0.20,
+         "face_max_brow_down": 0.0},
+        {"filename": "sharp_neutral.jpg",
+         "score_sharpness": 0.95,
+         "embedding": [1.0, 0.0], "scene": "wedding",
+         "face_bboxes": [(0,0,50,50,0.95)],
+         "face_max_blink": 0.05, "face_max_smile": 0.20,
+         "face_max_brow_down": 0.0},
+        {"filename": "soft_smiling.jpg",
+         "score_sharpness": 0.75,
+         "embedding": [1.0, 0.0], "scene": "wedding",
+         "face_bboxes": [(0,0,50,50,0.95)],
+         "face_max_blink": 0.10, "face_max_smile": 0.50,
+         "face_max_brow_down": 0.0},
+    ]
+    rpt_default = rank_burst_peak(rows)
+    rpt_wedding = rank_burst_peak(rows,
+                                   weights=WEIGHT_PRESETS["wedding"])
+    # Default's heavy sharp weight picks the sharp frame
+    assert rpt_default.winner_filename == "sharp_neutral.jpg"
+    # Wedding preset's heavy smile weight flips the pick
+    assert rpt_wedding.winner_filename == "soft_smiling.jpg"
+
+
+def test_annotate_burst_peak_reasons_uses_scene_preset():
+    """P-AI-5.6 — annotate_burst_peak_reasons should consult the
+    cluster's dominant scene to pick weights, not always the default."""
+    import pandas as pd
+    from pixcull.pipeline.burst_peak import annotate_burst_peak_reasons
+
+    df = pd.DataFrame([
+        # 3-frame wedding burst.  V27's is_burst_peak flips between
+        # configs; this test just confirms the reason machinery runs
+        # without exception with the scene preset.
+        {"filename": "a.jpg", "cluster_id": 7, "scene": "wedding",
+         "score_sharpness": 0.70, "score_final": 0.5,
+         "embedding": [1.0, 0.0],
+         "face_max_blink": 0.05, "face_max_smile": 0.85,
+         "face_max_brow_down": 0.0, "is_burst_peak": True,
+         "face_bboxes": [(0,0,50,50,0.95)]},
+        {"filename": "b.jpg", "cluster_id": 7, "scene": "wedding",
+         "score_sharpness": 0.75, "score_final": 0.6,
+         "embedding": [1.0, 0.0],
+         "face_max_blink": 0.50, "face_max_smile": 0.05,
+         "face_max_brow_down": 0.10, "is_burst_peak": False,
+         "face_bboxes": [(0,0,50,50,0.95)]},
+        {"filename": "c.jpg", "cluster_id": 7, "scene": "wedding",
+         "score_sharpness": 0.72, "score_final": 0.5,
+         "embedding": [1.0, 0.0],
+         "face_max_blink": 0.05, "face_max_smile": 0.20,
+         "face_max_brow_down": 0.05, "is_burst_peak": False,
+         "face_bboxes": [(0,0,50,50,0.95)]},
+    ])
+    out = annotate_burst_peak_reasons(df)
+    # The peak ("a.jpg") should get a reason populated; since it's
+    # the biggest-smile frame in a wedding cluster, the reason ought
+    # to surface smile.
+    a_row = out[out["filename"] == "a.jpg"].iloc[0]
+    assert a_row["burst_peak_reason"]
+    assert "笑容" in a_row["burst_peak_reason"]
+
+
 def test_annotate_burst_peak_reasons_attaches_to_v27_pick():
     """P-AI-5.1 — annotate_burst_peak_reasons should add a reason
     string to whichever row V27 already flagged as the burst peak."""

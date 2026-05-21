@@ -97,6 +97,99 @@ FACE_EVIDENCE_PER_FACE = 0.15
 FACE_EVIDENCE_CAP      = 1.0
 
 
+# P-AI-5.6 — vertical-aware weight presets.
+# Real-world bursts split into shapes that need different signal
+# blends.  These presets are the picker's heuristic for "given
+# this is a wedding burst / sports burst / landscape burst, what
+# weights produce the photographer-like pick?"  Picked from the
+# 13-burst tuning corpus (P-AI-5.4 / 5.5):
+#
+#   · WEDDING  — smile is the dominant photographer signal.  Drop
+#     sharpness weight to give smile + eyes room.  This is the
+#     config that scored 5/13 = 38.5% exact on the tuning corpus
+#     vs 2/13 = 15.4% for the blended default.
+#
+#   · SPORTS   — peak action moment, faces likely strained/blinking.
+#     Sharpness IS the signal.  Don't use smile/eyes (they'll
+#     anti-correlate with peak-action).
+#
+#   · WILDLIFE — same as SPORTS — animals don't have smile signals
+#     mediapipe can read.  Sharp + distinct dominate; distinct
+#     helps because wildlife bursts often have one frame at peak
+#     pose / wing position.
+#
+#   · LANDSCAPE — usually faceless.  Sharp dominates with a small
+#     distinct floor in case there's a bracketed exposure series
+#     and we want the cleanest version.
+#
+#   · DEFAULT  — the safe blend ship from P-AI-5.5, used when
+#     the scene doesn't match a preset.
+WEIGHT_PRESETS: dict[str, "BurstPeakWeights"] = {
+    "wedding":      BurstPeakWeights(
+        # Real-data finding: ANY positive sharpness weight prevents
+        # the smile lift on tight bursts (sharpness gap < 0.03 but
+        # smile gap up to 0.75 — sharpness wins by raw magnitude).
+        # Zero'd sharpness gives 5/13 = 38.5% exact agreement vs
+        # 3/13 = 23% with even 0.10 sharp weight.
+        sharpness=0.00, distinctness=0.00, quality=0.05,
+        face=0.05,      face_eyes_open=0.30,
+        face_smile=0.60, face_no_frown=0.00,
+    ),
+    "sports":       BurstPeakWeights(
+        sharpness=0.65, distinctness=0.20, quality=0.10,
+        face=0.05,      face_eyes_open=0.00,
+        face_smile=0.00, face_no_frown=0.00,
+    ),
+    "event":        BurstPeakWeights(
+        sharpness=0.40, distinctness=0.10, quality=0.10,
+        face=0.05,      face_eyes_open=0.25,
+        face_smile=0.10, face_no_frown=0.00,
+    ),
+    "wildlife":     BurstPeakWeights(
+        sharpness=0.55, distinctness=0.30, quality=0.10,
+        face=0.05,      face_eyes_open=0.00,
+        face_smile=0.00, face_no_frown=0.00,
+    ),
+    "bird":         BurstPeakWeights(
+        sharpness=0.55, distinctness=0.30, quality=0.10,
+        face=0.05,      face_eyes_open=0.00,
+        face_smile=0.00, face_no_frown=0.00,
+    ),
+    "landscape":    BurstPeakWeights(
+        sharpness=0.70, distinctness=0.10, quality=0.15,
+        face=0.05,      face_eyes_open=0.00,
+        face_smile=0.00, face_no_frown=0.00,
+    ),
+    "portrait":     BurstPeakWeights(
+        # portrait bursts are like wedding but with less smile
+        # specificity (e.g. headshots can be neutral expressions)
+        sharpness=0.25, distinctness=0.05, quality=0.05,
+        face=0.05,      face_eyes_open=0.30,
+        face_smile=0.25, face_no_frown=0.05,
+    ),
+    "default":      BurstPeakWeights(),    # the v0.5.5 blended default
+}
+
+
+def pick_weights_for_scene(
+    scene: Optional[str],
+    fallback: Optional[BurstPeakWeights] = None,
+) -> BurstPeakWeights:
+    """P-AI-5.6 — return the right preset for a scene name.
+
+    ``scene`` is the detector's output ("wedding", "sports",
+    "landscape", "stilllife", ..., or None / "unknown" / a typo).
+    Unknown scenes fall back to the blended default — which is
+    also a sensible choice for "we can't tell".
+    """
+    if scene is None:
+        return fallback or WEIGHT_PRESETS["default"]
+    s = str(scene).lower().strip()
+    if s in WEIGHT_PRESETS:
+        return WEIGHT_PRESETS[s]
+    return fallback or WEIGHT_PRESETS["default"]
+
+
 @dataclass
 class BurstPeakResult:
     """Outcome of running rank_burst_peak() on a cluster."""

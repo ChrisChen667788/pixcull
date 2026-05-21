@@ -207,7 +207,10 @@ def annotate_burst_peak_reasons(df: pd.DataFrame) -> pd.DataFrame:
     # callers that only want the original ranker, and avoids a
     # cross-module cycle if scoring.burst_peak ever wants to
     # import something from pipeline.
-    from pixcull.scoring.burst_peak import rank_burst_peak
+    from pixcull.scoring.burst_peak import (
+        pick_weights_for_scene,
+        rank_burst_peak,
+    )
 
     reasons: dict[int, str] = {}   # row index → reason
     for cid, group in df.groupby("cluster_id"):
@@ -220,8 +223,20 @@ def annotate_burst_peak_reasons(df: pd.DataFrame) -> pd.DataFrame:
             d = row.to_dict()
             d["_orig_idx"] = idx
             rows.append(d)
+        # P-AI-5.6 — pick the weight preset based on the cluster's
+        # dominant scene.  Wedding bursts get smile-heavy weights,
+        # sports get sharpness-only, etc.  Fallback to default
+        # blend when the cluster has no dominant scene or it's
+        # an unrecognized vertical.
+        scenes = [str(r.get("scene") or "").lower() for r in rows
+                  if r.get("scene")]
+        dominant_scene = None
+        if scenes:
+            from collections import Counter
+            dominant_scene = Counter(scenes).most_common(1)[0][0]
+        weights = pick_weights_for_scene(dominant_scene)
         try:
-            result = rank_burst_peak(rows)
+            result = rank_burst_peak(rows, weights=weights)
         except Exception:
             # Defensive — never let the explanation step crash the
             # pipeline.  Pipeline ships fine without reasons.
