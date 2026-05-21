@@ -1047,6 +1047,14 @@ def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
                                   if r.get("burst_peak_reason") not in
                                      (None, "", float("nan"))
                                   else None),
+            # P-PRO-4.1 — wedding moment (only set on rows where
+            # scene == wedding).  "unknown" means the classifier
+            # abstained on a tight-margin top-2.  None on non-wedding.
+            "wedding_moment": (str(r["wedding_moment"])
+                               if r.get("wedding_moment") not in
+                                  (None, "", float("nan"))
+                               else None),
+            "wedding_moment_confidence": _f(r.get("wedding_moment_confidence")),
             # V9.0 sort/filter/group fields
             "cluster_id": cluster_id,
             "datetime": dt_str,

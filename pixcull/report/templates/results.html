@@ -801,6 +801,26 @@
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
 
+    /* P-PRO-4.1 — wedding moment chip on grid cards.  Lives in
+       row1 next to the decision badge.  Subtle pink so it ties
+       visually to "wedding" without competing with cull/keep
+       colors.  Hidden on non-wedding rows by render() guard. */
+    .row1 .moment-chip {
+      display: inline-flex; align-items: center;
+      font-size: 9.5px; padding: 1px 6px; border-radius: 3px;
+      background: rgba(244, 114, 182, 0.16);
+      color: #ffaad4;
+      border: 1px solid rgba(244, 114, 182, 0.40);
+      cursor: help;
+      letter-spacing: 0.02em;
+      max-width: 110px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .row1 .moment-chip.uncertain {
+      opacity: 0.7;
+      border-style: dashed;
+    }
+
     /* P-UX-4 — filter pill for "show only photos culled because X".
        Same .pill styling as the existing filter groups; just the
        red-themed accent border. */
@@ -2284,6 +2304,20 @@
   const I18N_DECISION = {
     keep: "保留", maybe: "待定", cull: "剔除",
   };
+  // P-PRO-4.1 — wedding-moment i18n. Mirrors WEDDING_MOMENTS.label_zh
+  // server-side; kept in sync by hand because the vocabulary is
+  // small and stable. "unknown" is the abstain sentinel.
+  const I18N_WEDDING_MOMENT = {
+    preparation_bride: "新娘准备", preparation_groom: "新郎准备",
+    first_look: "First Look", processional: "入场",
+    vows: "宣誓", ring_exchange: "交换戒指",
+    first_kiss: "第一吻", recessional: "退场",
+    group_portraits: "合影", first_dance: "第一支舞",
+    speeches: "致辞", toast: "敬酒",
+    cake_cutting: "切蛋糕", bouquet_toss: "捧花",
+    reception_general: "宴席", candid: "花絮",
+    unknown: "未识别",
+  };
 
   // P-UX-4 — cull-reason taxonomy. Loaded from /api/v1/taxonomy on
   // page-init; cached here so render() can call _cullReasonLabel()
@@ -3249,6 +3283,14 @@
               ${metaBadge}
               ${styleChips}
               ${r.cull_reason ? `<span class="cull-reason-chip" title="cull 原因: ${esc(_cullReasonLabel(r.cull_reason))}">✕ ${esc(_cullReasonLabel(r.cull_reason))}</span>` : ""}
+              ${r.wedding_moment ? (() => {
+                  const mLabel = I18N_WEDDING_MOMENT[r.wedding_moment] || r.wedding_moment;
+                  const uncertain = r.wedding_moment === "unknown";
+                  const conf = r.wedding_moment_confidence != null
+                    ? ` · 置信度 ${(r.wedding_moment_confidence * 100).toFixed(0)}%` : "";
+                  return `<span class="moment-chip ${uncertain ? "uncertain" : ""}"
+                          title="婚礼 moment: ${esc(mLabel)}${esc(conf)}">💒 ${esc(mLabel)}</span>`;
+                })() : ""}
               ${r.needs_review ? `<span class="review-me-chip" title="自动 / 训练模型 / VLM / DeepSeek 这 4 个评分源对此图分歧大 (累计 ${(r.inconsistency_total || 0).toFixed(1)} ★ stddev) — 值得人工复核">⚠ review me</span>` : ""}
               ${r.exposure_outlier ? (() => {
                   const d = r.exposure_deviation || {};

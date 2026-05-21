@@ -11,6 +11,7 @@ from pixcull.detectors.exposure import ExposureDetector
 from pixcull.detectors.face import FaceDetector
 from pixcull.detectors.scene import SceneDetector
 from pixcull.detectors.subject import SubjectDetector
+from pixcull.detectors.wedding_moment import WeddingMomentDetector
 from pixcull.io.exif import read_exif_gps, read_exif_time
 from pixcull.io.loader import load_image
 from pixcull.scoring.aesthetic import AestheticScorer
@@ -28,6 +29,11 @@ def _detectors():
         "face":        FaceDetector(),
         "composition": CompositionDetector(),
         "canon":       CanonDetector(),
+        # P-PRO-4.1 — wedding moment classifier.  Cached at module
+        # level like the others; only called from analyze_one()
+        # when scene/vertical is "wedding" so non-wedding runs pay
+        # zero CLIP cost beyond the existing SceneDetector pass.
+        "wedding_moment": WeddingMomentDetector(),
     }
 
 
@@ -113,6 +119,31 @@ def analyze_one(path: Path) -> Optional[dict]:
     gps_lat = gps[0] if gps else None
     gps_lon = gps[1] if gps else None
 
+    # P-PRO-4.1 — wedding moment classifier.  Only fires when the
+    # scene resolves to "wedding" — wastes no CLIP cycles on
+    # landscape / wildlife / stilllife runs.  The vertical-override
+    # path (vertical=wedding even when scene came back something
+    # else) will be wired in P-PRO-4.2 once the worker has access
+    # to the per-run vertical hint (currently a pipeline-level
+    # arg, not per-image).
+    wedding_moment: Optional[str] = None
+    wedding_moment_confidence: Optional[float] = None
+    moment_uncertain: bool = False
+    if scene_name == "wedding":
+        try:
+            wm = d["wedding_moment"].analyze(img)
+            wedding_moment            = wm.extras.get("wedding_moment")
+            wedding_moment_confidence = wm.metrics.get(
+                "wedding_moment_confidence")
+            moment_uncertain = "moment_uncertain" in (wm.flags or [])
+            if moment_uncertain:
+                flags.append("moment_uncertain")
+        except Exception:
+            # Never let the moment classifier crash the per-frame
+            # pipeline.  Skip the moment annotation; the rest of
+            # the row still lands cleanly.
+            pass
+
     return {
         "path": str(path),
         "filename": path.name,
@@ -120,6 +151,11 @@ def analyze_one(path: Path) -> Optional[dict]:
         "scene": scene_name,
         "scene_probs": scene.extras["scene_probs"],
         "embedding": dup.extras["embedding"],
+        # P-PRO-4.1 — wedding moment annotation. None on non-wedding
+        # frames; the column still exists so CSV round-trips don't
+        # have to None-check.
+        "wedding_moment":            wedding_moment,
+        "wedding_moment_confidence": wedding_moment_confidence,
         # V22 — face data for downstream clustering. ``face_bboxes`` is
         # the per-face (x1,y1,x2,y2,conf) tuples from FaceDetector;
         # ``face_embeddings`` is the matching CLIP image features.
