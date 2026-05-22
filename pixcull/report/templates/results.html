@@ -2753,6 +2753,95 @@
     }
 
     /* ============================================================
+       v0.5 LR-grade (3/3) · FILMSTRIP IN LIGHTBOX
+       ============================================================
+       LR Loupe view shows a small horizontal strip of all the
+       visible photos at the bottom of the screen so the
+       photographer never loses spatial context for "what's
+       next" / "what was I just looking at".  Click a thumb
+       to jump.  The current photo is centered + highlighted.
+
+       PixCull's lightbox previously had only the nav chevrons
+       (‹ / ›) for navigation — Photoshop UI level, not Photo-
+       grapher UI level.  This adds the strip.
+       ============================================================ */
+    .lightbox .filmstrip {
+      position: absolute; left: 0; right: 0; bottom: 0;
+      height: 92px;
+      display: flex; align-items: center;
+      gap: 4px;
+      padding: 8px 12px;
+      background: linear-gradient(180deg,
+        rgba(0,0,0,0) 0%,
+        rgba(10,11,13,0.72) 30%,
+        rgba(10,11,13,0.92) 100%);
+      overflow-x: auto;
+      overflow-y: hidden;
+      scroll-behavior: smooth;
+      z-index: 4;
+      pointer-events: auto;
+      /* hide ugly scrollbars on macOS — strip still scrollable
+         via wheel + click drag */
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255,255,255,0.20) transparent;
+    }
+    .lightbox .filmstrip::-webkit-scrollbar { height: 6px; }
+    .lightbox .filmstrip::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,0.20);
+      border-radius: 999px;
+    }
+    .lightbox .filmstrip::-webkit-scrollbar-track { background: transparent; }
+
+    .lightbox .fs-thumb {
+      position: relative;
+      flex-shrink: 0;
+      width: 100px; height: 75px;
+      border-radius: 4px;
+      overflow: hidden;
+      cursor: pointer;
+      opacity: 0.55;
+      transition: opacity var(--duration-fast) var(--ease-out),
+                  transform var(--duration-fast) var(--ease-out),
+                  box-shadow var(--duration-fast) var(--ease-out);
+      background: #000;
+    }
+    .lightbox .fs-thumb:hover {
+      opacity: 0.85;
+      transform: translateY(-1px);
+    }
+    .lightbox .fs-thumb.current {
+      opacity: 1;
+      box-shadow: 0 0 0 2px var(--accent),
+                  0 0 0 4px rgba(99,102,241,0.45);
+      transform: translateY(-3px);
+    }
+    .lightbox .fs-thumb img {
+      width: 100%; height: 100%; object-fit: cover;
+      display: block;
+    }
+    /* Decision dot top-left of each filmstrip thumb (echoes the
+       grid card glyph; smaller). */
+    .lightbox .fs-thumb .fs-dot {
+      position: absolute; top: 3px; left: 3px;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      box-shadow: 0 0 0 1px rgba(0,0,0,0.5);
+    }
+    .lightbox .fs-thumb .fs-dot.keep  { background: var(--c-success); }
+    .lightbox .fs-thumb .fs-dot.maybe { background: var(--c-warn); }
+    .lightbox .fs-thumb .fs-dot.cull  { background: var(--c-danger); }
+
+    /* When the filmstrip is present, the img-pane reserves space
+       above it so the photo isn't covered. */
+    .lightbox.with-filmstrip .img-pane { bottom: 92px; }
+
+    @media (max-width: 640px) {
+      .lightbox .filmstrip { height: 64px; padding: 4px 8px; }
+      .lightbox .fs-thumb { width: 72px; height: 54px; }
+      .lightbox.with-filmstrip .img-pane { bottom: 64px; }
+    }
+
+    /* ============================================================
        v0.4 P2 (3/4) · MOBILE POLISH
        ============================================================
        P-UX-17 made the layout responsive (the grid collapses, the
@@ -3308,6 +3397,12 @@
     </div>
     <div class="img-pane"><img id="lbImg" alt=""></div>
     <div class="info-pane" id="lbInfo"></div>
+    <!-- v0.5 LR-grade (3/3) — LR Loupe-style filmstrip.  Populated
+         on lightbox open with the currently-visible (i.e. filtered)
+         grid photos.  Auto-scrolls to keep the current photo
+         centered as the user navigates ← / →. -->
+    <div class="filmstrip" id="lbFilmstrip" role="list"
+         aria-label="filmstrip — prev/next photos"></div>
   </div>
 
   <!-- V9.2 cluster compare modal · P0.3 added next/prev burst nav -->
@@ -5145,11 +5240,65 @@
     const _zt = document.getElementById("lbZoomToggle");
     if (_zt) _zt.classList.remove("active");
     lb.classList.add("show");
+    lb.classList.add("with-filmstrip");
+    // v0.5 LR-grade (3/3) — build / refresh the filmstrip
+    _buildLbFilmstrip(fn);
     // P-UX-5 — kick the similar-photos lookup. Doesn't block lightbox
     // open; the section above shows a "寻找类似…" placeholder until
     // this returns. Each photo's result is cached so flipping back
     // and forth doesn't re-hit the endpoint.
     _loadLbSimilar(fn);
+  }
+
+  // v0.5 LR-grade (3/3) — populate the lightbox filmstrip with the
+  // currently-visible (filtered) grid order.  Builds once per open
+  // then only updates the .current highlight on navigation.
+  const _lbFilmstrip = document.getElementById("lbFilmstrip");
+  let _lbFsBuiltFor = null;   // filename of the photo we last built FOR
+  function _buildLbFilmstrip(currentFn) {
+    if (!_lbFilmstrip) return;
+    const fns = _lbVisibleFns();
+    if (!fns.length) return;
+    // Rebuild if (a) first time, (b) the visible set changed
+    const shouldRebuild = _lbFsBuiltFor === null ||
+      _lbFilmstrip.children.length !== fns.length;
+    if (shouldRebuild) {
+      _lbFilmstrip.innerHTML = fns.map(fn => {
+        const r = rows.find(x => x.filename === fn);
+        const dec = r && r.decision;
+        const dotCls = dec === "keep" ? "keep"
+                      : dec === "maybe" ? "maybe"
+                      : dec === "cull" ? "cull" : "";
+        const thumbUrl = `/thumb/${run_id}/${encodeURIComponent(fn)}`;
+        const isCurrent = fn === currentFn;
+        return `<div class="fs-thumb${isCurrent ? " current" : ""}" data-fn="${esc(fn)}"
+                     role="listitem" title="${esc(fn)}">
+                  <img loading="lazy" alt="" src="${thumbUrl}">
+                  ${dotCls ? `<span class="fs-dot ${dotCls}"></span>` : ""}
+                </div>`;
+      }).join("");
+      _lbFsBuiltFor = currentFn;
+      // Wire click delegation once
+      if (!_lbFilmstrip._wired) {
+        _lbFilmstrip.addEventListener("click", e => {
+          const t = e.target.closest(".fs-thumb");
+          if (!t || !t.dataset.fn) return;
+          openLightbox(t.dataset.fn);
+        });
+        _lbFilmstrip._wired = true;
+      }
+    } else {
+      // Just shift the .current highlight
+      _lbFilmstrip.querySelectorAll(".fs-thumb").forEach(el => {
+        el.classList.toggle("current", el.dataset.fn === currentFn);
+      });
+    }
+    // Center the current thumb in view
+    const cur = _lbFilmstrip.querySelector(".fs-thumb.current");
+    if (cur) {
+      cur.scrollIntoView({behavior: "smooth", block: "nearest",
+                          inline: "center"});
+    }
   }
 
   // P-UX-5 — async lookup + render for the lightbox's similar-photos
