@@ -1207,6 +1207,22 @@
     .chip--compact   { padding: 1px 6px; font-size: 9.5px; }
     .chip svg { width: 11px; height: 11px; flex-shrink: 0; }
 
+    /* v0.4 P1 (1/4) — generic icon class.  Use inside chips,
+       buttons, toggles, banners — wherever a SVG <use href> was
+       previously an emoji.  Inherits currentColor so the parent
+       semantic class drives the tint. */
+    .icon {
+      display: inline-block;
+      width: 14px; height: 14px;
+      flex-shrink: 0;
+      stroke: currentColor;
+      fill: none;
+      vertical-align: -0.15em;
+    }
+    .icon--sm { width: 11px; height: 11px; }
+    .icon--lg { width: 18px; height: 18px; }
+    .icon--xl { width: 22px; height: 22px; }
+
     /* ============================================================
        LEGACY PER-CHIP SELECTORS — kept as aliases that map to the
        unified .chip variants above so existing render() emissions
@@ -2404,6 +2420,100 @@
   </style>
 </head>
 <body>
+  <!-- ============================================================
+       v0.4 P1 (1/4) · SVG ICON SPRITE
+       ============================================================
+       Inline once at the top of <body>; reference anywhere via
+       <svg class="icon"><use href="#icon-NAME"/></svg>.
+
+       Lucide-style 24×24 outlined glyphs.  Inherit currentColor
+       so chips / buttons set their own color via class.  Browser-
+       cached after the first paint — total cost is the bytes
+       below (well under 4 KB gzipped).
+
+       Replaces the previous emoji-as-icon usage (🪣 / 🏆 / 💒 /
+       ♿ / ✨ / ⇆) which had inconsistent visual weight across
+       fonts + render targets (iOS Safari emoji ≠ macOS Chrome
+       emoji ≠ Windows Edge emoji).
+       ============================================================ -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <defs>
+      <!-- Archive / bucket — for the P-UX-22 deliverable buckets toggle -->
+      <symbol id="icon-archive" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="1.8"
+              stroke-linecap="round" stroke-linejoin="round">
+        <rect x="2" y="4" width="20" height="5" rx="1"/>
+        <path d="M4 9v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9"/>
+        <path d="M10 13h4"/>
+      </symbol>
+      <!-- Trophy — for the P-AI-5.1 burst peak badge -->
+      <symbol id="icon-trophy" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="1.8"
+              stroke-linecap="round" stroke-linejoin="round">
+        <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/>
+        <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/>
+        <path d="M4 22h16"/>
+        <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/>
+        <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/>
+        <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>
+      </symbol>
+      <!-- Heart — for the P-PRO-4.1 wedding moment chip -->
+      <symbol id="icon-heart" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="1.8"
+              stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+      </symbol>
+      <!-- Contrast — for the P-UX-23 a11y toggle -->
+      <symbol id="icon-contrast" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="1.8"
+              stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M12 2a10 10 0 0 1 0 20Z" fill="currentColor"/>
+      </symbol>
+      <!-- Sparkles — for the P-UX-26 onboarding tip -->
+      <symbol id="icon-sparkles" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="1.8"
+              stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9.94 14.34 12 22l2.06-7.66L22 12.28l-7.94-2.06L12 2.55l-2.06 7.67L2 12.28l7.94 2.06Z"/>
+        <path d="M20 3v4"/>
+        <path d="M22 5h-4"/>
+        <path d="M4 17v2"/>
+        <path d="M5 18H3"/>
+      </symbol>
+      <!-- Swap / compare — for the card-cmp-btn -->
+      <symbol id="icon-swap" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+        <path d="M7 16V4M3 8l4-4 4 4"/>
+        <path d="M17 8v12M13 16l4 4 4-4"/>
+      </symbol>
+      <!-- Bar-chart-3 — for the P-CORE-3 scene anomaly banner -->
+      <symbol id="icon-chart" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="1.8"
+              stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 3v18h18"/>
+        <path d="M7 16V8"/>
+        <path d="M12 16v-5"/>
+        <path d="M17 16V5"/>
+      </symbol>
+      <!-- Alert-triangle — for P-UX-10 review-me + multi-tab banner -->
+      <symbol id="icon-alert" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="1.8"
+              stroke-linecap="round" stroke-linejoin="round">
+        <path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+        <path d="M12 9v4"/>
+        <path d="M12 17h.01"/>
+      </symbol>
+      <!-- Map-pin — for the location-best-only filter -->
+      <symbol id="icon-pin" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="1.8"
+              stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/>
+        <circle cx="12" cy="10" r="3"/>
+      </symbol>
+    </defs>
+  </svg>
+
   <header>
     <!-- v0.4 P0 — brand row.  Aperture-glyph SVG logomark + the
          PixCull wordmark (accented "C") + back link.  Replaces
@@ -2594,9 +2704,16 @@
        give the baseline a11y win even when this toggle is off. -->
   <button class="a11y-toggle" id="a11yToggleBtn" type="button"
           aria-pressed="false"
-          title="色盲友好配色 — 切换为蓝/橙/紫高对比方案(配合 ✓/?/✕ 形状标记)">♿ 配色</button>
+          title="色盲友好配色 — 切换为蓝/橙/紫高对比方案(配合 ✓/?/✕ 形状标记)">
+    <svg class="icon"><use href="#icon-contrast"/></svg>
+    <span>配色</span>
+  </button>
   <button class="buckets-toggle" id="bucketsToggleBtn" type="button"
-          title="交付桶 — 拖卡片到桶里整理输出">🪣 桶 <span class="bk-pill" id="bucketsTotalPill" style="display:none">0</span></button>
+          title="交付桶 — 拖卡片到桶里整理输出">
+    <svg class="icon"><use href="#icon-archive"/></svg>
+    <span>交付桶</span>
+    <span class="bk-pill" id="bucketsTotalPill" style="display:none">0</span>
+  </button>
   <aside class="buckets-panel" id="bucketsPanel" aria-hidden="true">
     <div class="bk-head">
       <h3>交付桶</h3>
@@ -3922,7 +4039,7 @@
           <button class="annotate-btn" data-fn="${fnEsc}" title="人工标注 (rubric)">${r.rubric_human_labeled ? "✓ 已标" : "标注"}</button>
           <button class="card-rot-btn" data-fn="${fnEsc}" type="button" title="顺时针旋转 90°(在放大窗中可继续微调)">↻</button>
           <button class="card-cmp-btn" data-fn="${fnEsc}" type="button"
-            title="选这张进入 A/B 比较(Shift+点击缩略图同效;c 键也可)">⇆</button>
+            title="选这张进入 A/B 比较(Shift+点击缩略图同效;c 键也可)"><svg class="icon icon--sm"><use href="#icon-swap"/></svg></button>
           <div class="body">
             <div class="row1">
               <span class="badge ${r.decision}" title="${esc(r.decision)}">${esc(tr(r.decision, I18N_DECISION) || r.decision)}</span>
@@ -3942,7 +4059,9 @@
                   const active = filterState.weddingMoments.has(r.wedding_moment) ? "active" : "";
                   return `<span class="moment-chip ${uncertain ? "uncertain" : ""} ${active}"
                           data-moment="${esc(r.wedding_moment)}"
-                          title="婚礼 moment: ${esc(mLabel)}${esc(conf)} · 点击只看此 moment">💒 ${esc(mLabel)}</span>`;
+                          title="婚礼 moment: ${esc(mLabel)}${esc(conf)} · 点击只看此 moment">` +
+                          `<svg class="icon icon--sm"><use href="#icon-heart"/></svg>` +
+                          `<span>${esc(mLabel)}</span></span>`;
                 })() : ""}
               ${r.needs_review ? `<span class="review-me-chip" title="自动 / 训练模型 / VLM / DeepSeek 这 4 个评分源对此图分歧大 (累计 ${(r.inconsistency_total || 0).toFixed(1)} ★ stddev) — 值得人工复核">⚠ review me</span>` : ""}
               ${r.exposure_outlier ? (() => {
@@ -4857,7 +4976,8 @@
     const peakBadge = (r.is_burst_peak && _clusterSize >= 2)
       ? `<span class="badge keep" title="此连拍组的最佳一张(共 ${_clusterSize} 张)${esc(_peakReason)}" `
         + `style="background:linear-gradient(90deg,#d4a843,#b88a2e);color:#1a1d24">`
-        + `🏆 连拍峰值</span>`
+        + `<svg class="icon icon--sm"><use href="#icon-trophy"/></svg>`
+        + `<span>连拍峰值</span></span>`
       : '';
 
     // P-PRO-1 — Lr develop-settings indicator. When the source XMP
@@ -6400,7 +6520,7 @@
       _bannerEl.setAttribute("role", "status");
       _bannerEl.setAttribute("aria-live", "polite");
       _bannerEl.innerHTML = `
-        <span class="mtb-icon">⚠</span>
+        <span class="mtb-icon"><svg class="icon"><use href="#icon-alert"/></svg></span>
         <span class="mtb-msg">同一批结果已在其它 tab 打开 — 标注会双向同步,但建议只在一个 tab 内编辑以避免覆盖</span>
         <button class="mtb-close" type="button" aria-label="关闭多 tab 提示">✕</button>`;
       document.body.appendChild(_bannerEl);
@@ -6524,7 +6644,7 @@
     banner.setAttribute("role", "status");
     banner.setAttribute("aria-live", "polite");
     banner.innerHTML = `
-      <span class="sab-icon">📊</span>
+      <span class="sab-icon"><svg class="icon"><use href="#icon-chart"/></svg></span>
       <span class="sab-msg">${reason}</span>
       <button class="sab-toggle" type="button">查看分布详情</button>
       <button class="sab-close" type="button" aria-label="关闭场景分布提示">✕</button>`;
@@ -6664,7 +6784,7 @@
     tip.setAttribute("aria-label", "新用户提示");
     tip.innerHTML = `
       <div class="onb-head">
-        <span class="onb-icon">✨</span>
+        <span class="onb-icon"><svg class="icon"><use href="#icon-sparkles"/></svg></span>
         <span class="onb-title">新手提示</span>
         <button class="onb-close" type="button" aria-label="关闭提示">✕</button>
       </div>
