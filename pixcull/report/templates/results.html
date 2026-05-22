@@ -4119,13 +4119,23 @@
       <!-- P-UX-20: saved view presets. Persist the current
            filter combo (decision + scenes + styles + cull-reason +
            sort) to localStorage so power users don't rebuild the
-           same combo every time. -->
+           same combo every time.
+           v0.7-P1-3: + JSON import/export buttons so presets
+           travel across runs / browsers / users. Built-in starter
+           presets auto-populate on first load. -->
       <select id="viewPresetBy" class="sort-select"
               title="视图预设 — 保存/加载常用筛选组合">
         <option value="">视图预设 ▾</option>
       </select>
       <button class="export-btn" id="saveViewBtn"
               title="把当前筛选 + 排序 + cull 原因 存为命名预设">★</button>
+      <button class="export-btn" id="exportPresetsBtn"
+              title="导出所有预设为 JSON 文件,可在别的 run / 浏览器导入">↓</button>
+      <button class="export-btn" id="importPresetsBtn"
+              title="从 JSON 文件导入预设">↑</button>
+      <input type="file" id="importPresetsInput" accept="application/json"
+             style="display:none">
+
       <!-- P-AI-2: CLIP-backed semantic search. Type a query in
            natural language (or a phrase like "飞鸟展翅" / "long-
            exposure waterfall") and the grid filters to the top-K
@@ -6226,7 +6236,128 @@
         `<option value="${esc(n)}">${esc(n)}</option>`).join("") +
       (names.length ? `<option value="__delete__">删除预设…</option>` : "");
   }
+
+  // v0.7-P1-3 — built-in starter presets, seeded once on first
+  // load.  These cover the 4 most-asked-for combos across every
+  // run; users can delete them just like their own presets if
+  // they don't like them. The "★ 起" prefix marks them as
+  // starters so they don't get confused with user-built ones.
+  const _STARTER_PRESETS_SEED_KEY = "pixcull_starter_presets_seeded_v1";
+  const _STARTER_PRESETS = {
+    "★ 起 · 仪式 only": {
+      decision: "all", scenes: [], styles: [],
+      faceClusters: [], locationClusters: [],
+      cullReason: null, sort: "default",
+      burstPeakOnly: false, locationBestOnly: false,
+      weddingMoments: ["ceremony", "vows", "rings", "kiss"],
+    },
+    "★ 起 · 废片二审": {
+      decision: "cull", scenes: [], styles: [],
+      faceClusters: [], locationClusters: [],
+      cullReason: null, sort: "score_desc",
+      burstPeakOnly: false, locationBestOnly: false,
+      weddingMoments: [],
+    },
+    "★ 起 · 连拍峰值 only": {
+      decision: "all", scenes: [], styles: [],
+      faceClusters: [], locationClusters: [],
+      cullReason: null, sort: "default",
+      burstPeakOnly: true, locationBestOnly: false,
+      weddingMoments: [],
+    },
+    "★ 起 · 高置信 keep": {
+      decision: "keep", scenes: [], styles: [],
+      faceClusters: [], locationClusters: [],
+      cullReason: null, sort: "score_desc",
+      burstPeakOnly: false, locationBestOnly: false,
+      weddingMoments: [],
+    },
+  };
+  function _seedStarterPresets() {
+    if (localStorage.getItem(_STARTER_PRESETS_SEED_KEY)) return;
+    const current = _readPresets();
+    let dirty = false;
+    for (const [name, view] of Object.entries(_STARTER_PRESETS)) {
+      if (!current[name]) {
+        current[name] = view;
+        dirty = true;
+      }
+    }
+    if (dirty) _writePresets(current);
+    try { localStorage.setItem(_STARTER_PRESETS_SEED_KEY, "1"); } catch (_e) {}
+  }
+  _seedStarterPresets();
+
   _rebuildPresetDropdown();
+
+  // v0.7-P1-3 — JSON import / export. Lets users move presets
+  // across browsers, runs, and machines. Schema is the raw map of
+  // {name → view}, wrapped in {schema: "pixcull.view_presets/v1",
+  // exported_at: ISO, presets: {...}} so future migrations have a
+  // version hook.
+  document.getElementById("exportPresetsBtn")?.addEventListener("click", () => {
+    const presets = _readPresets();
+    const names = Object.keys(presets);
+    if (!names.length) {
+      showToast("还没有预设可导出", "info");
+      return;
+    }
+    const payload = {
+      schema: "pixcull.view_presets/v1",
+      exported_at: new Date().toISOString(),
+      presets,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)],
+                         { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `pixcull-view-presets-${new Date().toISOString().slice(0,10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    showToast(`已导出 ${names.length} 个视图预设`, "success");
+  });
+  document.getElementById("importPresetsBtn")?.addEventListener("click", () => {
+    document.getElementById("importPresetsInput")?.click();
+  });
+  document.getElementById("importPresetsInput")?.addEventListener("change", e => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(reader.result);
+        // Accept either {schema, presets} (v1) or a raw {name → view} map.
+        const incoming = (data && data.presets && typeof data.presets === "object")
+          ? data.presets
+          : (data && typeof data === "object" ? data : null);
+        if (!incoming) throw new Error("invalid file");
+        const names = Object.keys(incoming);
+        if (!names.length) throw new Error("empty");
+        const current = _readPresets();
+        // Merge: existing keys are overwritten (the user pulled
+        // them in deliberately).  Track new vs replaced.
+        let added = 0, replaced = 0;
+        for (const [name, view] of Object.entries(incoming)) {
+          if (current[name]) replaced++;
+          else added++;
+          current[name] = view;
+        }
+        _writePresets(current);
+        _rebuildPresetDropdown();
+        showToast(`已导入 ${added} 个新预设 + 覆盖 ${replaced} 个同名预设`, "success");
+      } catch (err) {
+        showToast("导入失败:不是有效的预设 JSON", "error");
+      } finally {
+        // Reset input so the same file can be re-picked.
+        e.target.value = "";
+      }
+    };
+    reader.onerror = () => showToast("读取文件失败", "error");
+    reader.readAsText(f);
+  });
 
   // P-AI-2 — CLIP semantic search input. Enter runs the query; the
   // first query for a run takes 1-2 minutes to build the embeddings
