@@ -593,6 +593,179 @@ def _emit_delivery_gate(
     return "\n".join(lines)
 
 
+def _markdown_to_print_html(md: str, run_id: str) -> str:
+    """v0.4 P2 (4/4) — minimal Markdown → print-ready HTML.
+
+    Same regex-based converter shape as the admin /delivery page
+    uses, but with A4 / Letter print stylesheet so the output
+    prints cleanly when fed to Chrome headless or the user's
+    browser Save-as-PDF flow.  Branded header + footer.
+    """
+    import html as _html
+    import re as _re
+
+    def _md_to_html(text: str) -> str:
+        out = _html.escape(text)
+        out = _re.sub(r"^## +(.+)$", r"<h2>\1</h2>", out, flags=_re.MULTILINE)
+        out = _re.sub(r"^# +(.+)$",  r"<h1>\1</h1>", out, flags=_re.MULTILINE)
+        out = _re.sub(r"\*\*([^*\n]+)\*\*", r"<b>\1</b>", out)
+        out = _re.sub(r"`([^`\n]+)`", r"<code>\1</code>", out)
+        out = _re.sub(r"(?<!\w)_([^_\n]+)_(?!\w)", r"<i>\1</i>", out)
+        def _tablize(block: str) -> str:
+            lines = block.strip().splitlines()
+            if len(lines) < 2:
+                return block
+            head = [c.strip() for c in lines[0].strip("|").split("|")]
+            rows = []
+            for ln in lines[2:]:
+                cells = [c.strip() for c in ln.strip("|").split("|")]
+                tds = "".join(f"<td>{c}</td>" for c in cells)
+                rows.append(f"<tr>{tds}</tr>")
+            ths = "".join(f"<th>{c}</th>" for c in head)
+            return ("<table><thead><tr>" + ths + "</tr></thead>"
+                    "<tbody>" + "".join(rows) + "</tbody></table>")
+        out = _re.sub(r"(?:^\|.*\|$\n){2,}",
+                      lambda m: _tablize(m.group(0)), out, flags=_re.MULTILINE)
+        out = _re.sub(r"^( {0,4})- +(.+)$",
+                      r"\1<li>\2</li>", out, flags=_re.MULTILINE)
+        out = _re.sub(r"(?:<li>.+</li>\n)+",
+                      lambda m: "<ul>" + m.group(0) + "</ul>", out)
+        return out
+
+    body = _md_to_html(md)
+    return (
+        "<!DOCTYPE html><html lang='zh'><head><meta charset='utf-8'>"
+        f"<title>PixCull audit · {_html.escape(run_id)}</title>"
+        "<style>"
+        "@page { size: A4; margin: 18mm 16mm 22mm; }"
+        # Use print-friendly light theme regardless of system pref
+        "@media print {"
+        "  body { background: white !important; color: #1a1d24 !important; }"
+        "  table, th, td { background: white !important; color: #1a1d24 !important; }"
+        "  .page-header, .page-footer { display: none !important; }"
+        "  thead { display: table-header-group; }"
+        "  tr, table { page-break-inside: avoid; }"
+        "  h1, h2 { page-break-after: avoid; }"
+        "  .pixcull-page-meta { display: block !important; }"
+        "}"
+        # Screen styles match the design system
+        "body { font: 11pt/1.55 -apple-system, BlinkMacSystemFont, "
+        "       'Segoe UI', 'PingFang SC', sans-serif;"
+        "       color: #1a1d24; background: #f8f9fb;"
+        "       margin: 0; padding: 24px; max-width: 780px; "
+        "       margin-left: auto; margin-right: auto; }"
+        ".pixcull-page-head {"
+        "  display: flex; align-items: center; gap: 10px;"
+        "  margin-bottom: 16px; padding-bottom: 10px;"
+        "  border-bottom: 1.5px solid #e0e3e8;"
+        "}"
+        ".pixcull-mark {"
+        "  width: 24px; height: 24px; color: #4f46e5;"
+        "}"
+        ".pixcull-wordmark {"
+        "  font-weight: 700; font-size: 14pt;"
+        "  letter-spacing: -0.02em;"
+        "}"
+        ".pixcull-wordmark b { color: #4f46e5; font-weight: 700; }"
+        ".pixcull-page-meta {"
+        "  font-size: 9pt; color: #6b7280;"
+        "  margin-left: auto;"
+        "}"
+        "h1 { font-size: 20pt; font-weight: 700; letter-spacing: -0.02em; margin: 12px 0 6px; }"
+        "h2 { font-size: 12pt; color: #6b7280; text-transform: uppercase;"
+        "     letter-spacing: 0.04em; margin: 22px 0 8px; "
+        "     padding-bottom: 4px; border-bottom: 1px solid #e0e3e8; }"
+        "b { color: #1a1d24; }"
+        "i { color: #6b7280; font-style: normal; font-size: 9.5pt; }"
+        "code { font-family: ui-monospace, 'SF Mono', Menlo, monospace;"
+        "       font-size: 9.5pt; padding: 1px 5px; background: #f0f2f5;"
+        "       border-radius: 3px; color: #4f46e5; }"
+        "table { width: 100%; border-collapse: collapse; font-size: 9.5pt;"
+        "        margin: 4px 0 12px; border: 1px solid #e0e3e8;"
+        "        border-radius: 6px; overflow: hidden; }"
+        "th { text-align: left; padding: 6px 10px; background: #f0f2f5;"
+        "     color: #6b7280; font-weight: 600; font-size: 8pt;"
+        "     letter-spacing: 0.04em; text-transform: uppercase;"
+        "     border-bottom: 1px solid #e0e3e8; }"
+        "td { padding: 5px 10px; border-bottom: 1px solid #ebedf0; }"
+        "tr:last-child td { border-bottom: none; }"
+        "ul { margin: 4px 0 12px; padding-left: 18px; }"
+        "li { margin: 1px 0; }"
+        ".pixcull-foot { margin-top: 24px; padding-top: 12px;"
+        "                border-top: 1px solid #e0e3e8; font-size: 8.5pt;"
+        "                color: #9ca3af; text-align: center; }"
+        "</style></head><body>"
+        # Header
+        "<div class='pixcull-page-head'>"
+        "<svg class='pixcull-mark' viewBox='0 0 24 24' fill='none' "
+        "stroke='currentColor' stroke-width='1.6' stroke-linecap='round' "
+        "stroke-linejoin='round'>"
+        "<circle cx='12' cy='12' r='10'/>"
+        "<path d='M14.31 8 20.05 17.94'/><path d='M9.69 8h11.48'/>"
+        "<path d='M7.38 12 13.12 2.06'/><path d='M9.69 16 3.95 6.06'/>"
+        "<path d='M14.31 16H2.83'/><path d='M16.62 12 10.88 21.94'/>"
+        "</svg>"
+        "<span class='pixcull-wordmark'>Pix<b>Cull</b></span>"
+        f"<span class='pixcull-page-meta'>delivery audit · {_html.escape(run_id)}</span>"
+        "</div>"
+        # Body
+        f"<main>{body}</main>"
+        # Footer
+        "<div class='pixcull-foot'>"
+        "Generated by PixCull cli_audit.py · all checks run locally · "
+        "no photo data left this machine"
+        "</div>"
+        "</body></html>"
+    )
+
+
+def _try_chrome_headless_pdf(html: str, out_pdf: Path) -> bool:
+    """Try to print the HTML to PDF via Chrome headless.
+
+    Looks for chromium / google-chrome / Chrome.app on PATH or in
+    macOS default locations.  Returns True on success, False if
+    no compatible browser is reachable.
+    """
+    import shutil
+    import subprocess
+    import tempfile
+    candidates = []
+    # macOS canonical paths
+    for app in (
+        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        "/Applications/Chromium.app/Contents/MacOS/Chromium",
+        "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+        "/Applications/Arc.app/Contents/MacOS/Arc",
+    ):
+        if Path(app).exists():
+            candidates.append(app)
+    # PATH fallbacks
+    for bin_name in ("chromium", "chrome", "google-chrome", "chromium-browser"):
+        p = shutil.which(bin_name)
+        if p:
+            candidates.append(p)
+    if not candidates:
+        return False
+    chrome = candidates[0]
+    with tempfile.NamedTemporaryFile(suffix=".html", delete=False,
+                                      mode="w", encoding="utf-8") as f:
+        f.write(html)
+        html_path = f.name
+    try:
+        result = subprocess.run(
+            [chrome, "--headless=new", "--disable-gpu",
+             "--no-pdf-header-footer",
+             f"--print-to-pdf={out_pdf}", f"file://{html_path}"],
+            capture_output=True, timeout=60,
+        )
+        return out_pdf.exists() and out_pdf.stat().st_size > 0
+    except (subprocess.TimeoutExpired, OSError):
+        return False
+    finally:
+        try: Path(html_path).unlink()
+        except OSError: pass
+
+
 def _resolve_run_dir(run_id: str) -> Path:
     """Look for a run output dir under the standard PixCull location."""
     candidates = [
@@ -635,6 +808,12 @@ def main() -> None:
                          "audit).  Defaults to the run's input/ "
                          "directory if not specified.  Skipped silently "
                          "when no images are reachable.")
+    ap.add_argument("--pdf", type=Path, default=None,
+                    help="v0.4 P2 (4/4) — also export the report as a "
+                         "PDF at this path.  Uses Chrome / Chromium / "
+                         "Edge headless (auto-detected).  If no browser "
+                         "is reachable, writes the print-ready HTML "
+                         "instead and tells you to Cmd+P / Ctrl+P it.")
     args = ap.parse_args()
 
     if args.scores_csv:
@@ -681,11 +860,30 @@ def main() -> None:
         _emit_exif_section(scores_csv, image_root=image_root),
     ]
     report = "\n".join(p for p in parts if p)
+
+    # v0.4 P2 (4/4) — optional PDF render via Chrome headless.
+    if args.pdf:
+        args.pdf.parent.mkdir(parents=True, exist_ok=True)
+        html_for_print = _markdown_to_print_html(report, run_id)
+        if _try_chrome_headless_pdf(html_for_print, args.pdf):
+            print(f"wrote {args.pdf}", file=sys.stderr)
+        else:
+            # No Chrome — drop the HTML next to the requested PDF
+            # path with a .print.html suffix; tell the user how
+            # to finish manually.
+            html_path = args.pdf.with_suffix(".print.html")
+            html_path.write_text(html_for_print, encoding="utf-8")
+            print(f"⚠ no Chrome/Chromium/Edge found — wrote print-ready HTML to:",
+                  file=sys.stderr)
+            print(f"  {html_path}", file=sys.stderr)
+            print(f"  Open it in your browser → File → Print → Save as PDF",
+                  file=sys.stderr)
+
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(report, encoding="utf-8")
         print(f"wrote {args.out}", file=sys.stderr)
-    else:
+    elif not args.pdf:
         sys.stdout.write(report)
 
 

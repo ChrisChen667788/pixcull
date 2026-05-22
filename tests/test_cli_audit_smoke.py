@@ -248,6 +248,44 @@ def test_cli_help_lists_image_root(synthetic_scores_csv):
     assert "--image-root" in proc.stdout
 
 
+def test_cli_help_lists_pdf(synthetic_scores_csv):
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(REPO_ROOT) + ":" + env.get("PYTHONPATH", "")
+    proc = subprocess.run(
+        [sys.executable, str(CLI), "--help"],
+        env=env, capture_output=True, text=True, timeout=30,
+    )
+    assert "--pdf" in proc.stdout
+
+
+def test_cli_pdf_writes_print_html_or_pdf(synthetic_scores_csv, tmp_path):
+    """v0.4 P2 (4/4) — --pdf path either produces a PDF (if Chrome
+    is reachable) or a .print.html sidecar that the user can
+    manually convert."""
+    pdf_path = tmp_path / "report.pdf"
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(REPO_ROOT) + ":" + env.get("PYTHONPATH", "")
+    proc = subprocess.run(
+        [sys.executable, str(CLI),
+         "--scores-csv", str(synthetic_scores_csv),
+         "--pdf", str(pdf_path)],
+        env=env, capture_output=True, text=True, timeout=120,
+    )
+    assert proc.returncode == 0, proc.stderr
+    # Either the PDF lands OR we got a print HTML sidecar with the
+    # corresponding "no Chrome found" stderr.
+    html_fallback = pdf_path.with_suffix(".print.html")
+    if pdf_path.exists() and pdf_path.stat().st_size > 0:
+        # Chrome was on the bench — PDF rendered successfully
+        assert pdf_path.read_bytes().startswith(b"%PDF")
+    else:
+        assert html_fallback.exists()
+        content = html_fallback.read_text(encoding="utf-8")
+        assert "<title>PixCull audit" in content
+        assert "pixcull-wordmark" in content
+        assert "no Chrome" in proc.stderr or "Chromium" in proc.stderr
+
+
 # -----------------------------------------------------------------
 # P-PRO-7 — EXIF completeness audit smoke
 # -----------------------------------------------------------------
