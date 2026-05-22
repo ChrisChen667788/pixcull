@@ -4202,6 +4202,11 @@
             aria-live="polite"></span>
     </div>
     <div class="img-pane"><img id="lbImg" alt=""></div>
+    <!-- v0.7-P1-1 — Loupe RGB readout. Visible only when lbImg is
+         in zoomed (1:1) mode + the cursor is over the image.
+         Same .cmp-rgb-readout styling, scoped via .lb-rgb-readout
+         so it doesn't conflict with the compare-modal one. -->
+    <div class="cmp-rgb-readout lb-rgb-readout" id="lbRgbReadout" aria-hidden="true"></div>
     <div class="info-pane" id="lbInfo"></div>
     <!-- v0.5 LR-grade (3/3) — LR Loupe-style filmstrip.  Populated
          on lightbox open with the currently-visible (i.e. filtered)
@@ -7144,6 +7149,61 @@
     const target = (_lbZoom.scale || 1) * factor;
     _lbZoomToPoint(target, e.clientX, e.clientY);
   }, { passive: false });
+
+  // ============================================================
+  // v0.7-P1-1 — Loupe RGB readout (lightbox).  Mirrors the
+  // cmpModal RGB readout shipped in v0.7-P0-1: visible only when
+  // lbImg is in `.zoomed` (1:1) state AND the cursor is inside
+  // the image rect.  Reuses _ensureRgbCanvas / _samplePixel
+  // helpers defined for the cmpModal so we don't duplicate
+  // canvas-sampling logic.
+  // ============================================================
+  const lbRgbReadout = document.getElementById("lbRgbReadout");
+  function _hideLbRgbReadout() {
+    if (lbRgbReadout) lbRgbReadout.classList.remove("show");
+  }
+  function _updateLbRgbReadout(e) {
+    if (!lbRgbReadout || !lbImg) return;
+    if (!lb.classList.contains("show")) { _hideLbRgbReadout(); return; }
+    if (!lbImg.classList.contains("zoomed")) { _hideLbRgbReadout(); return; }
+    const rect = lbImg.getBoundingClientRect();
+    if (e.clientX < rect.left || e.clientX > rect.right ||
+        e.clientY < rect.top  || e.clientY > rect.bottom) {
+      _hideLbRgbReadout();
+      return;
+    }
+    const nx = ((e.clientX - rect.left) / rect.width)  * lbImg.naturalWidth;
+    const ny = ((e.clientY - rect.top)  / rect.height) * lbImg.naturalHeight;
+    const px = _samplePixel(lbImg, nx, ny);
+    if (!px) { _hideLbRgbReadout(); return; }
+    const y = Math.round(0.299*px.r + 0.587*px.g + 0.114*px.b);
+    const hex = "#" + [px.r, px.g, px.b]
+      .map(v => v.toString(16).padStart(2, "0").toUpperCase()).join("");
+    lbRgbReadout.innerHTML = `
+      <div class="rgb-line">
+        <span class="swatch" style="background:rgb(${px.r},${px.g},${px.b})"></span>
+        <span class="rgb-vals">R ${px.r}&nbsp;&nbsp;G ${px.g}&nbsp;&nbsp;B ${px.b}</span>
+      </div>
+      <div class="rgb-hex">${hex}</div>
+      <div class="rgb-y">Y ${y} · ${Math.round((y/255)*100)}%</div>
+    `;
+    const READ_W = 160, READ_H = 64;
+    let left = e.clientX + 14;
+    let top  = e.clientY + 14;
+    if (left + READ_W > window.innerWidth)  left = e.clientX - READ_W - 12;
+    if (top  + READ_H > window.innerHeight) top  = e.clientY - READ_H - 12;
+    lbRgbReadout.style.left = left + "px";
+    lbRgbReadout.style.top  = top  + "px";
+    lbRgbReadout.classList.add("show");
+  }
+  // Bind on the img-pane so the readout still fires inside the
+  // padding around lbImg when zoomed (and hides cleanly when the
+  // cursor wanders outside the actual image rect).
+  lbImg.parentElement.addEventListener("mousemove", _updateLbRgbReadout);
+  lbImg.parentElement.addEventListener("mouseleave", _hideLbRgbReadout);
+  // Lightbox close → hide readout (avoid a phantom panel hanging
+  // on screen after the lightbox transitions out).
+  lb.addEventListener("transitionend", _hideLbRgbReadout);
 
   lb.addEventListener("click", e => {
     // Only close on backdrop or img-pane padding click — not on info-
