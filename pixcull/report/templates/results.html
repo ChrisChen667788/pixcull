@@ -2701,6 +2701,68 @@
       font-size: 10.5px; color: var(--muted); margin-bottom: 6px;
       text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;
     }
+
+    /* v0.6 (2/5) — LR Develop-style collapsible info sections in the
+       Inspector pane.  Each <details class="info-section"> behaves
+       like an LR module (Basic / Tone Curve / HSL …): tap the
+       header to fold/unfold; user state persists per-run via
+       localStorage.  Sections are dividerless above + below
+       — separation comes from the small chevron rotation and the
+       label's all-caps muted tone, giving the pane an Lr-grade
+       rhythm without harsh underlines. */
+    .lightbox .info-pane .info-section {
+      padding: 12px 0;
+      border-top: 1px solid var(--border);
+    }
+    .lightbox .info-pane .info-section:first-of-type { border-top: 0; padding-top: 4px; }
+    .lightbox .info-pane .info-section > summary {
+      list-style: none;
+      cursor: pointer;
+      display: flex; align-items: center; gap: 8px;
+      font-size: 10.5px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 600;
+      user-select: none;
+      padding: 2px 0;
+      transition: color 160ms var(--ease-out, ease-out);
+    }
+    .lightbox .info-pane .info-section > summary::-webkit-details-marker { display: none; }
+    /* CSS-only chevron — right when closed, down when open */
+    .lightbox .info-pane .info-section > summary::after {
+      content: "";
+      width: 7px; height: 7px;
+      margin-left: auto;
+      border-right: 1.5px solid currentColor;
+      border-bottom: 1.5px solid currentColor;
+      transform: rotate(-45deg);
+      transition: transform 200ms var(--ease-out, ease-out);
+      opacity: 0.72;
+    }
+    .lightbox .info-pane .info-section[open] > summary::after {
+      transform: rotate(45deg);
+    }
+    .lightbox .info-pane .info-section:hover > summary,
+    .lightbox .info-pane .info-section[open] > summary {
+      color: var(--fg-2, var(--fg));
+    }
+    /* Body of an open section — slight fade-in so the expand
+       feels like a real disclosure, not a hard jump.  No layout
+       animation because details/summary collapse is height-implicit
+       and animating that requires JS height math. */
+    .lightbox .info-pane .info-section > .lb-body {
+      margin-top: 8px;
+      animation: lb-section-in 200ms var(--ease-out, ease-out);
+    }
+    @keyframes lb-section-in {
+      from { opacity: 0; transform: translateY(-2px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .lightbox .info-pane .info-section > summary::after,
+      .lightbox .info-pane .info-section > .lb-body { animation: none; transition: none; }
+    }
     .lightbox .axis-grid {
       display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px;
       margin-bottom: 8px;
@@ -5632,6 +5694,22 @@
   const lbImg = document.getElementById("lbImg");
   const lbInfo = document.getElementById("lbInfo");
   const lbClose = document.getElementById("lbClose");
+  // v0.6 (2/5) — persist user fold/unfold choices on each
+  // info-section so the Inspector pane feels like LR Develop
+  // (your "I never look at Raw Flags" stays remembered across
+  // photos AND across page reloads).  Delegated so we don't
+  // re-attach per renderInfoPane() rebuild.
+  if (lbInfo) {
+    lbInfo.addEventListener("toggle", e => {
+      const det = e.target;
+      if (!det || !det.classList || !det.classList.contains("info-section")) return;
+      const sec = det.dataset.sec;
+      if (!sec) return;
+      const st = _readInspectorState();
+      st[sec] = !!det.open;
+      _writeInspectorState(st);
+    }, true);  // capture — <details> toggle doesn't bubble in some engines
+  }
   // V14.4 — register for ARIA + focus trap. Existing call sites that
   // do ``lb.classList.add("show")`` continue to work; the observer
   // handles a11y reactively.
@@ -6141,6 +6219,50 @@
     if (typeof focusCard === "function") focusCard(visible[nextI], false);
   }
 
+  // v0.6 (2/5) — LR Develop-style Inspector pane.  Each section
+  // is a <details> that the user can collapse independently; state
+  // is keyed by section id and persisted across lightbox opens so
+  // the user's "I never look at Raw Flags" choice sticks.  Defaults
+  // bias toward "show useful stuff, hide diagnostics".
+  const _INSPECTOR_DEFAULTS = {
+    scores:     true,    // 评分
+    similar:    true,    // 类似照片
+    "ai-judge": true,    // AI judgment (DeepSeek + VLM)
+    rationale:  true,    // 为何 maybe
+    warnings:   true,    // 矛盾警示
+    strengths:  true,    // 优点
+    weaknesses: true,    // 改进建议
+    flags:      false,   // 检测器旗标 (closed by default)
+    reason:     false,   // 规则栈说明 (closed by default)
+  };
+  const _INSPECTOR_KEY = `pixcull_inspector_state:${run_id}`;
+  function _readInspectorState() {
+    try { return JSON.parse(localStorage.getItem(_INSPECTOR_KEY) || "{}"); }
+    catch (_e) { return {}; }
+  }
+  function _writeInspectorState(s) {
+    try { localStorage.setItem(_INSPECTOR_KEY, JSON.stringify(s)); }
+    catch (_e) { /* full / disabled */ }
+  }
+  function _sectionOpen(secId) {
+    const st = _readInspectorState();
+    if (Object.prototype.hasOwnProperty.call(st, secId)) {
+      return !!st[secId];
+    }
+    return !!_INSPECTOR_DEFAULTS[secId];
+  }
+  // Markup helper for one collapsible section.  Use this instead
+  // of the legacy `<div class="section">` template so the user
+  // gets disclose/collapse + state persistence for free.
+  function _sec(secId, title, bodyHtml) {
+    if (!bodyHtml) return "";
+    const open = _sectionOpen(secId) ? " open" : "";
+    return `<details class="info-section" data-sec="${esc(secId)}"${open}>
+      <summary>${esc(title)}</summary>
+      <div class="lb-body">${bodyHtml}</div>
+    </details>`;
+  }
+
   function renderInfoPane(r) {
     const axisNames = ["technical","subject","composition","light","moment","aesthetic"];
     const axisAbbr = {technical:"技术", subject:"主体", composition:"构图",
@@ -6239,6 +6361,73 @@
         + `🎨 已应用 Lr 调色</span>`
       : '';
 
+    // v0.6 (2/5) — sections are now LR Develop-style <details>
+    // blocks emitted via _sec() so users can fold the diagnostics
+    // they never read.  Header (filename + meta + decision toolbar)
+    // stays uncollapsible.
+    const scoresBody = `<div class="axis-grid">${finalStars}</div>
+        ${detailHtml ? `<div class="axis-grid-detail">${detailHtml}</div>` : ''}`;
+    const similarBody = `<div id="lbSimilarBody" class="similar-loading">寻找类似…</div>
+        <div class="similar-hint">点击跳转 · Shift+点击 = 加入 A/B 比较</div>`;
+
+    // Combined "AI 判读" section: DeepSeek + VLM merged so the user
+    // doesn't have two near-identical paragraph blocks.
+    const aiJudgeParts = [];
+    if (r.meta_overall_rationale) {
+      const confChip = r.meta_confidence != null
+        ? ` <span class="canon-cite">置信 ${(r.meta_confidence*100).toFixed(0)}%</span>`
+        : '';
+      aiJudgeParts.push(
+        `<div class="rationale"><strong style="color:var(--fg)">DeepSeek ⌬</strong>${confChip}<br>${esc(r.meta_overall_rationale)}</div>`
+      );
+    }
+    if (r.vlm_overall_rationale) {
+      aiJudgeParts.push(
+        `<div class="rationale" style="margin-top:8px"><strong style="color:var(--fg)">VLM 视觉</strong><br>${esc(r.vlm_overall_rationale)}</div>`
+      );
+    }
+    const aiJudgeBody = aiJudgeParts.join("");
+
+    const warningsBody = inconsistencies.length
+      ? `<div class="rationale warn">${inconsistencies.map(esc).join('<br>')}</div>`
+      : "";
+
+    const rationaleBody = rationale
+      ? `<div class="rationale">${esc(rationale)}</div>`
+      : "";
+
+    const strengthsBody = strengths.length
+      ? `<ul class="strengths-list">${
+          (strengthsDetail || strengths.map(s => ({phrase: s}))).map(d => `
+            <li>
+              ${esc(d.phrase || d)}
+              ${d.source ? `<span class="canon-cite" title="正典出处">— ${esc(d.source)}</span>` : ''}
+            </li>
+          `).join('')
+        }</ul>`
+      : "";
+
+    const weaknessesBody = (weaknesses.length || suggestions.length)
+      ? `<ul class="weak-list">${
+          weaknessesDetail
+            ? weaknessesDetail.map(d => `
+                <li>
+                  ${esc(d.phrase)}
+                  ${d.source ? `<span class="canon-cite">— ${esc(d.source)}</span>` : ''}
+                  ${d.fix ? `<div class="fix-line">→ ${esc(d.fix)}</div>` : ''}
+                </li>`).join('')
+            : [...weaknesses, ...suggestions].map(s => `<li>${esc(s)}</li>`).join('')
+        }</ul>`
+      : "";
+
+    const flagsBody = r.flags
+      ? `<div class="rationale" title="${esc(r.flags)}">${esc(trReason(r.flags))}</div>`
+      : "";
+
+    const reasonBody = r.reason
+      ? `<div class="rationale" title="${esc(r.reason)}">${esc(trReason(r.reason))}</div>`
+      : "";
+
     return `
       <h2>${esc(r.filename)}</h2>
       <div class="meta-line">
@@ -6252,90 +6441,19 @@
         ${r.rubric_human_labeled ? '<span style="color:var(--keep)">✓ 人工已标</span>' : ''}
       </div>
 
-      <div class="section">
-        <div class="section-title">最终评分(优先级:人工 → DeepSeek → VLM → 模型 → 自动)</div>
-        <div class="axis-grid">${finalStars}</div>
-        ${detailHtml ? `<div class="axis-grid-detail">${detailHtml}</div>` : ''}
+      <div class="inspector-sections">
+        ${_sec("scores", "★ 评分 · 人工 → DeepSeek → VLM → 模型 → 自动", scoresBody)}
+        <div id="lbSimilarSection">
+          ${_sec("similar", "↳ 类似照片", similarBody)}
+        </div>
+        ${_sec("ai-judge", "⌬ AI 判读", aiJudgeBody)}
+        ${_sec("warnings",  "⚠ 矛盾警示", warningsBody)}
+        ${_sec("rationale", "⊕ 为何 maybe", rationaleBody)}
+        ${_sec("strengths", "✓ 优点", strengthsBody)}
+        ${_sec("weaknesses","✎ 改进建议", weaknessesBody)}
+        ${_sec("flags",     "⚑ 检测器旗标", flagsBody)}
+        ${_sec("reason",    "⚙ 规则栈说明", reasonBody)}
       </div>
-
-      <!-- P-UX-5 — similar-photos row. Populated asynchronously by
-           _loadLbSimilar() once the lightbox is shown so renderInfoPane
-           stays sync + cheap. Empty state collapses into a faint hint. -->
-      <div class="section" id="lbSimilarSection">
-        <div class="section-title">↳ 类似照片</div>
-        <div id="lbSimilarBody" class="similar-loading">寻找类似…</div>
-        <div class="similar-hint">点击跳转 · Shift+点击 = 加入 A/B 比较</div>
-      </div>
-
-      ${r.meta_overall_rationale ? `
-      <div class="section">
-        <div class="section-title">⌬ DeepSeek meta-judge ${r.meta_confidence != null ? `(置信 ${(r.meta_confidence*100).toFixed(0)}%)` : ''}</div>
-        <div class="rationale">${esc(r.meta_overall_rationale)}</div>
-      </div>
-      ` : ''}
-
-      ${r.vlm_overall_rationale ? `
-      <div class="section">
-        <div class="section-title">VLM 视觉判断</div>
-        <div class="rationale">${esc(r.vlm_overall_rationale)}</div>
-      </div>
-      ` : ''}
-
-      ${inconsistencies.length ? `
-      <div class="section">
-        <div class="section-title">⚠ 矛盾警示</div>
-        <div class="rationale warn">${inconsistencies.map(esc).join('<br>')}</div>
-      </div>
-      ` : ''}
-
-      ${rationale ? `
-      <div class="section">
-        <div class="section-title">⊕ 为何 maybe</div>
-        <div class="rationale">${esc(rationale)}</div>
-      </div>
-      ` : ''}
-
-      ${strengths.length ? `
-      <div class="section">
-        <div class="section-title">优点</div>
-        <ul class="strengths-list">${(strengthsDetail || strengths.map(s => ({phrase: s}))).map(d => `
-          <li>
-            ${esc(d.phrase || d)}
-            ${d.source ? `<span class="canon-cite" title="正典出处">— ${esc(d.source)}</span>` : ''}
-          </li>
-        `).join('')}</ul>
-      </div>
-      ` : ''}
-
-      ${(weaknesses.length || suggestions.length) ? `
-      <div class="section">
-        <div class="section-title">改进建议</div>
-        <ul class="weak-list">${
-          weaknessesDetail
-            ? weaknessesDetail.map(d => `
-                <li>
-                  ${esc(d.phrase)}
-                  ${d.source ? `<span class="canon-cite">— ${esc(d.source)}</span>` : ''}
-                  ${d.fix ? `<div class="fix-line">→ ${esc(d.fix)}</div>` : ''}
-                </li>`).join('')
-            : [...weaknesses, ...suggestions].map(s => `<li>${esc(s)}</li>`).join('')
-        }</ul>
-      </div>
-      ` : ''}
-
-      ${r.flags ? `
-      <div class="section">
-        <div class="section-title">检测器旗标</div>
-        <div class="rationale" title="${esc(r.flags)}">${esc(trReason(r.flags))}</div>
-      </div>
-      ` : ''}
-
-      ${r.reason ? `
-      <div class="section">
-        <div class="section-title">规则栈说明</div>
-        <div class="rationale" title="${esc(r.reason)}">${esc(trReason(r.reason))}</div>
-      </div>
-      ` : ''}
 
       <!-- P-UX-6 — sticky decision toolbar. Mirrors the 1/2/3 hotkeys
            with explicit buttons + active state so mouse users + new
