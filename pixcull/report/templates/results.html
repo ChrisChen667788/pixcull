@@ -3405,6 +3405,114 @@
       .lightbox.with-filmstrip .img-pane { bottom: 64px; }
     }
 
+    /* v0.7-P1-2 — Inspector mobile bottom-sheet.
+       Replaces the ≤640px "info-pane stacks below image" layout
+       with a LR Mobile-Library-style pull-up drawer. Image keeps
+       the full viewport (so the photo is the hero); the info-pane
+       peeks ~140px from the bottom (filename + decision toolbar
+       are immediately tappable) and expands to ~80vh on tap of
+       the handle / swipe up. Scrim background dims the image
+       when expanded. Desktop / tablet (>640px) layout is
+       untouched. */
+    @media (max-width: 640px) {
+      /* Make .lightbox a positioning context for the drawer */
+      .lightbox.show {
+        grid-template-columns: 1fr;
+        grid-template-rows: 1fr;
+        display: block;   /* override grid for bottom-sheet stacking */
+      }
+      .lightbox .img-pane {
+        position: absolute;
+        inset: 0;
+        bottom: 140px;   /* leave peek space for the drawer */
+        padding: 16px 12px;
+      }
+      .lightbox.with-filmstrip .img-pane { bottom: calc(140px + 64px); }
+      .lightbox.info-expanded .img-pane {
+        /* When expanded, drawer covers the bottom 80vh; image
+           shrinks above. Scrim is via .img-pane::after below. */
+        bottom: 80vh;
+      }
+      .lightbox.with-filmstrip.info-expanded .img-pane { bottom: calc(80vh + 64px); }
+      /* Dimming scrim — appears on the img-pane while drawer is
+         expanded. Keeps the image visible (faint) so the user
+         doesn't lose context. */
+      .lightbox .img-pane::after {
+        content: "";
+        position: absolute; inset: 0;
+        background: rgba(0,0,0,0);
+        pointer-events: none;
+        transition: background var(--duration-normal, 240ms) var(--ease-out);
+      }
+      .lightbox.info-expanded .img-pane::after {
+        background: rgba(0,0,0,0.45);
+      }
+
+      /* The drawer itself */
+      .lightbox .info-pane {
+        position: absolute;
+        left: 0; right: 0; bottom: 0;
+        height: 140px;
+        max-height: 140px;
+        border-top: 1px solid var(--border);
+        border-left: 0;
+        background: var(--bg-card);
+        box-shadow: 0 -10px 30px rgba(0,0,0,0.45);
+        overflow: hidden;
+        transition: height var(--duration-normal, 240ms) var(--ease-out, ease-out),
+                    max-height var(--duration-normal, 240ms) var(--ease-out, ease-out);
+        z-index: 2;
+        padding: 0 16px 12px;
+      }
+      .lightbox.info-expanded .info-pane {
+        height: 80vh;
+        max-height: 80vh;
+        overflow-y: auto;
+      }
+      .lightbox.with-filmstrip .info-pane { bottom: 64px; }
+
+      /* Drag handle bar — sticky at the top of the drawer so the
+         tap target stays under the user's thumb even when the
+         drawer is mid-scroll. Tap toggles expansion. */
+      .lightbox .info-pane::before {
+        content: "";
+        display: block;
+        width: 44px; height: 4px;
+        background: var(--surface-3, rgba(255,255,255,0.18));
+        border-radius: 2px;
+        margin: 8px auto 10px;
+        transition: background var(--duration-fast, 160ms) var(--ease-out);
+      }
+      .lightbox.info-expanded .info-pane::before {
+        background: var(--accent);
+      }
+      /* Hide the chunkier inspector sections when collapsed —
+         the peek shows just the filename + meta-line +
+         decision toolbar. Sections come back when expanded. */
+      .lightbox:not(.info-expanded) .info-pane .inspector-sections {
+        display: none;
+      }
+      /* When collapsed, the meta-line + filename + decision
+         toolbar should all fit in 140px. Tighten them up. */
+      .lightbox:not(.info-expanded) .info-pane h2 {
+        font-size: 13px; margin: 0 0 4px;
+        white-space: nowrap;
+        overflow: hidden; text-overflow: ellipsis;
+      }
+      .lightbox:not(.info-expanded) .info-pane .meta-line {
+        font-size: 11px; gap: 6px;
+        white-space: nowrap;
+        overflow-x: auto;
+      }
+      .lightbox:not(.info-expanded) .info-pane .meta-line::-webkit-scrollbar { display: none; }
+    }
+    /* Drawer should never appear on desktop / tablet — kill the
+       handle there too (it would render through the border-left
+       on the side info-pane). */
+    @media (min-width: 641px) {
+      .lightbox .info-pane::before { display: none; }
+    }
+
     /* ============================================================
        v0.4 P2 (3/4) · MOBILE POLISH
        ============================================================
@@ -7204,6 +7312,60 @@
   // Lightbox close → hide readout (avoid a phantom panel hanging
   // on screen after the lightbox transitions out).
   lb.addEventListener("transitionend", _hideLbRgbReadout);
+
+  // ============================================================
+  // v0.7-P1-2 — Inspector mobile bottom-sheet.
+  // On ≤640px the .info-pane is a 140px peek drawer; tap the
+  // drag-handle area (top ~22px) to expand to 80vh. Tap again
+  // (or tap the image area) to collapse. Swiping the drawer
+  // up/down is handled by browser scroll once it's expanded
+  // (overflow-y: auto), so no custom touch math required.
+  // ============================================================
+  const _LB_BOTTOMSHEET_MQ = window.matchMedia("(max-width: 640px)");
+  function _lbToggleInfoExpanded() {
+    if (!_LB_BOTTOMSHEET_MQ.matches) return;
+    lb.classList.toggle("info-expanded");
+  }
+  if (lbInfo) {
+    lbInfo.addEventListener("click", e => {
+      if (!_LB_BOTTOMSHEET_MQ.matches) return;
+      // Only the top 22px (the drag-handle band) triggers toggle.
+      // Clicks inside expanded content keep working (links, pills,
+      // section toggles, etc.).
+      if (!lb.classList.contains("info-expanded")) {
+        // Collapsed: any tap on the peek area expands.
+        _lbToggleInfoExpanded();
+        e.preventDefault();
+        return;
+      }
+      // Expanded: tap on the top handle band collapses.
+      const rect = lbInfo.getBoundingClientRect();
+      if (e.clientY - rect.top < 22) {
+        _lbToggleInfoExpanded();
+        e.preventDefault();
+      }
+    });
+  }
+  // Tapping the dimmed image area while expanded → collapse.
+  // Capture: true so this fires before the lightbox close handler
+  // (which would otherwise dismiss the lightbox on mobile when
+  // the user just meant to dismiss the drawer).
+  lbImg.parentElement.addEventListener("click", e => {
+    if (!_LB_BOTTOMSHEET_MQ.matches) return;
+    if (!lb.classList.contains("info-expanded")) return;
+    // Only the scrim (NOT the image itself) collapses.
+    if (e.target === lbImg) return;
+    lb.classList.remove("info-expanded");
+    e.stopPropagation();
+  }, true);
+  // Reset drawer state every time the lightbox opens so a
+  // previously-expanded session doesn't leak into the next photo.
+  const _lbOpenObserver = new MutationObserver(() => {
+    if (!lb.classList.contains("show")) {
+      lb.classList.remove("info-expanded");
+    }
+  });
+  _lbOpenObserver.observe(lb, { attributes: true, attributeFilter: ["class"] });
 
   lb.addEventListener("click", e => {
     // Only close on backdrop or img-pane padding click — not on info-
