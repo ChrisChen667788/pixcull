@@ -3475,9 +3475,18 @@ class _Handler(BaseHTTPRequestHandler):
             # V23 — GPS location cluster summary for a run.
             return self._serve_locations(path[len("/locations/"):])
         if path.startswith("/thumb/"):
-            return self._serve_image(path[len("/thumb/"):], _THUMB_SIZE)
+            # v0.6 (4/5) — pass self.path (query string intact) so the
+            # ``?w=<bucket>`` clamp inside _serve_image actually fires.
+            # The original V14.1 wiring used the already-query-stripped
+            # `path` variable, which silently dropped every viewport
+            # hint we ever sent (only the 420 default was ever cached).
+            return self._serve_image(
+                self.path[len("/thumb/"):], _THUMB_SIZE
+            )
         if path.startswith("/full/"):
-            return self._serve_image(path[len("/full/"):], _FULL_SIZE)
+            return self._serve_image(
+                self.path[len("/full/"):], _FULL_SIZE
+            )
         if path.startswith("/xmp_zip/"):
             return self._serve_xmp_zip(path[len("/xmp_zip/"):])
         if path.startswith("/gallery_zip/"):
@@ -4830,10 +4839,28 @@ class _Handler(BaseHTTPRequestHandler):
         # to a few buckets so caches can be reused across slightly
         # different client widths (1280 + 1300 + 1320 all hit the same
         # 1280 bucket).
+        #
+        # v0.6 (4/5) — also support sub-_THUMB_SIZE buckets [200, 280,
+        # 420] so callers that already know they need a tiny thumb
+        # (filmstrip strip is 64px tall = ~120-180px wide; similar-
+        # photos row is similar) can pull a 200px JPEG instead of the
+        # default 420. Halves the bytes per filmstrip photo and cuts
+        # decode time on long batches; the new cache key (".200.v3.jpg")
+        # never collides with the existing 420 cache.
         if req_w > 0:
-            buckets = [800, 1200, 1600, 2000, 2400, 3200, 4000]
-            chosen = next((b for b in buckets if req_w <= b), buckets[-1])
-            size = min(chosen, size) if size > _THUMB_SIZE else size
+            if req_w <= _THUMB_SIZE:
+                small_buckets = [200, 280, _THUMB_SIZE]
+                chosen = next(
+                    (b for b in small_buckets if req_w <= b),
+                    small_buckets[-1],
+                )
+                size = min(chosen, size)
+            else:
+                buckets = [800, 1200, 1600, 2000, 2400, 3200, 4000]
+                chosen = next(
+                    (b for b in buckets if req_w <= b), buckets[-1]
+                )
+                size = min(chosen, size) if size > _THUMB_SIZE else size
         if "/" not in rel_path:
             self.send_error(400, "expected run_id/filename")
             return

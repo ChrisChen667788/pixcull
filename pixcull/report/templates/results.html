@@ -1976,12 +1976,50 @@
       border: 1px dashed var(--border);
       border-radius: 6px;
       background: rgba(255,255,255,0.02);
-      transition: border-color 120ms, background 120ms;
+      transition: border-color 120ms, background 120ms,
+                  transform 160ms, opacity 160ms;
+      position: relative;
     }
+    /* v0.6 (4/5) — card-into-bucket drop highlight (existing) */
     .buckets-panel .bk-item.drag-over {
       border-color: var(--accent);
       background: rgba(59,130,246,0.10);
     }
+    /* v0.6 (4/5) — bucket-reorder visual states */
+    .buckets-panel .bk-item.bk-reordering {
+      opacity: 0.45;
+      transform: scale(0.98);
+    }
+    .buckets-panel .bk-item.bk-drop-above {
+      border-top: 2px solid var(--accent);
+      margin-top: 6px;
+    }
+    .buckets-panel .bk-item.bk-drop-below {
+      border-bottom: 2px solid var(--accent);
+      margin-bottom: 10px;
+    }
+    /* v0.6 (4/5) — six-dot grip handle on the left of each item.
+       Hidden by default to keep visual noise low; reveals on item
+       hover.  Larger tap target (full item height) than the visual
+       dots, so touch / pen drags still pick it up. */
+    .buckets-panel .bk-grip {
+      position: absolute; left: 2px; top: 0; bottom: 0;
+      width: 22px;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--muted);
+      cursor: grab;
+      opacity: 0;
+      transition: opacity 120ms, color 120ms;
+      touch-action: none;
+    }
+    .buckets-panel .bk-grip:active { cursor: grabbing; }
+    .buckets-panel .bk-grip svg { width: 14px; height: 14px; }
+    .buckets-panel .bk-item:hover .bk-grip,
+    .buckets-panel .bk-item:focus-within .bk-grip { opacity: 1; }
+    .buckets-panel .bk-grip:hover { color: var(--fg); }
+    /* Reserve a 22px gutter on the left for the grip handle */
+    .buckets-panel .bk-item .bk-name,
+    .buckets-panel .bk-item .bk-actions { padding-left: 18px; }
     .buckets-panel .bk-item .bk-name {
       font-size: 12px; font-weight: 600;
       display: flex; align-items: center; gap: 6px;
@@ -3225,6 +3263,19 @@
               stroke-linecap="round" stroke-linejoin="round">
         <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/>
         <circle cx="12" cy="10" r="3"/>
+      </symbol>
+      <!-- v0.6 (4/5) — six-dot grip handle for drag-reorder
+           affordance on bucket items.  Echoes the canonical "drag
+           handle" gesture used by Linear, Notion, Trello, GitHub
+           Projects … users immediately recognise the dots = grab. -->
+      <symbol id="icon-grip" viewBox="0 0 24 24" fill="currentColor"
+              stroke="none">
+        <circle cx="9"  cy="6"  r="1.4"/>
+        <circle cx="15" cy="6"  r="1.4"/>
+        <circle cx="9"  cy="12" r="1.4"/>
+        <circle cx="15" cy="12" r="1.4"/>
+        <circle cx="9"  cy="18" r="1.4"/>
+        <circle cx="15" cy="18" r="1.4"/>
       </symbol>
 
       <!-- v0.4 P1 (3/4) · EMPTY-STATE ILLUSTRATIONS
@@ -5583,7 +5634,10 @@
         const dotCls = dec === "keep" ? "keep"
                       : dec === "maybe" ? "maybe"
                       : dec === "cull" ? "cull" : "";
-        const thumbUrl = `/thumb/${run_id}/${encodeURIComponent(fn)}`;
+        // v0.6 (4/5) — pull a 200px JPEG instead of the default 420.
+        // Filmstrip thumbs render at ~80x60 CSS px so 200px source is
+        // crisp on retina yet ~3.5× smaller payload + faster decode.
+        const thumbUrl = `/thumb/${run_id}/${encodeURIComponent(fn)}?w=200`;
         const isCurrent = fn === currentFn;
         return `<div class="fs-thumb${isCurrent ? " current" : ""}" data-fn="${esc(fn)}"
                      role="listitem" title="${esc(fn)}">
@@ -5664,7 +5718,9 @@
     body.className = "similar-row";
     body.innerHTML = similar.map(s => {
       const fnEsc = esc(s.filename);
-      const thumb = `/thumb/${run_id}/${encodeURIComponent(s.filename)}`;
+      // v0.6 (4/5) — similar-photos row is ~80px tall, same 200-bucket
+      // as filmstrip works fine.
+      const thumb = `/thumb/${run_id}/${encodeURIComponent(s.filename)}?w=200`;
       const simPct = Math.round((s.similarity || 0) * 100);
       const dec = s.decision || "";
       const reasonsText = (s.reasons || [])
@@ -8101,6 +8157,11 @@
   // ==================================================================
 
   const _BUCKETS_KEY = `pixcull_buckets:${run_id}`;
+  // v0.6 (4/5) — user-defined bucket ordering, persisted alongside the
+  // buckets map.  Lives in a separate key because the buckets map is
+  // already shaped {name: filenames[]} and we don't want to break
+  // round-trip with older clients that still expect the old shape.
+  const _BUCKETS_ORDER_KEY = `pixcull_buckets_order:${run_id}`;
   const bucketsToggleBtn = document.getElementById("bucketsToggleBtn");
   const bucketsPanel     = document.getElementById("bucketsPanel");
   const bucketsCloseBtn  = document.getElementById("bucketsCloseBtn");
@@ -8117,6 +8178,26 @@
   function _writeBuckets(b) {
     try { localStorage.setItem(_BUCKETS_KEY, JSON.stringify(b)); }
     catch (_e) { /* localStorage full / disabled */ }
+  }
+  // v0.6 (4/5) — read the stored bucket order, reconciled against the
+  // current set of bucket names.  Unknown names (added since the order
+  // was last saved) get appended in alphabetical order; stale names
+  // (deleted) drop out.  Net effect: drag order survives panel
+  // re-renders without manual upkeep at create / delete sites.
+  function _readBucketOrder(buckets) {
+    let stored;
+    try { stored = JSON.parse(localStorage.getItem(_BUCKETS_ORDER_KEY) || "[]"); }
+    catch (_e) { stored = []; }
+    if (!Array.isArray(stored)) stored = [];
+    const present = new Set(Object.keys(buckets));
+    const kept = stored.filter(n => present.has(n));
+    const known = new Set(kept);
+    const extras = [...present].filter(n => !known.has(n)).sort();
+    return kept.concat(extras);
+  }
+  function _writeBucketOrder(order) {
+    try { localStorage.setItem(_BUCKETS_ORDER_KEY, JSON.stringify(order)); }
+    catch (_e) { /* ignore */ }
   }
   function _bucketsForFile(filename) {
     const b = _readBuckets();
@@ -8142,7 +8223,9 @@
   }
   function _renderBucketsPanel() {
     const b = _readBuckets();
-    const names = Object.keys(b).sort();
+    // v0.6 (4/5) — honour user-drag order, falling back to alphabetical
+    // for names not yet in the order array.
+    const names = _readBucketOrder(b);
     if (!names.length) {
       bucketsList.innerHTML = `<div class="muted" style="padding:14px;text-align:center;font-size:11.5px;line-height:1.6">
         还没有桶。在下面输入名字 + Enter 创建第一个。<br><br>
@@ -8153,6 +8236,11 @@
       bucketsList.innerHTML = names.map(name => {
         const items = b[name] || [];
         return `<div class="bk-item" data-bucket="${esc(name)}">
+          <span class="bk-grip" role="button" tabindex="0" draggable="true"
+                aria-label="拖动以重新排序 “${esc(name)}” 桶"
+                title="拖动以重新排序">
+            <svg aria-hidden="true"><use href="#icon-grip"/></svg>
+          </span>
           <div class="bk-name">
             🪣 ${esc(name)}
             <span class="bk-count">${items.length} 张</span>
@@ -8210,8 +8298,16 @@
     const name = newBucketName.value.trim();
     if (!name) return;
     const b = _readBuckets();
-    if (!b[name]) b[name] = [];
+    const isNew = !b[name];
+    if (isNew) b[name] = [];
     _writeBuckets(b);
+    // v0.6 (4/5) — append new buckets to the end of the user-drag
+    // order so creation never reshuffles existing positions.
+    if (isNew) {
+      const order = _readBucketOrder(b);
+      if (!order.includes(name)) order.push(name);
+      _writeBucketOrder(order);
+    }
     newBucketName.value = "";
     _renderBucketsPanel();
   }
@@ -8235,7 +8331,12 @@
       b[name] = []; _writeBuckets(b); _renderBucketsPanel();
     } else if (action === "delete") {
       if (!confirm(`删除整个 "${name}" 桶?里面 ${items.length} 张照片的归属会被清空。`)) return;
-      delete b[name]; _writeBuckets(b); _renderBucketsPanel();
+      delete b[name]; _writeBuckets(b);
+      // v0.6 (4/5) — also drop the name from the persisted drag order
+      // so future reads don't keep a phantom slot.
+      const order = _readBucketOrder(b).filter(n => n !== name);
+      _writeBucketOrder(order);
+      _renderBucketsPanel();
     } else if (action === "copy") {
       try {
         await navigator.clipboard.writeText(items.join("\n"));
@@ -8310,8 +8411,25 @@
   });
   _bucketsObserver.observe(grid, {childList: true});
 
-  // Drop target wiring on bucket items
+  // v0.6 (4/5) — distinguish card-into-bucket vs bucket-reorder by
+  // looking at which payload is in dataTransfer. dataTransfer.types
+  // is the only cross-browser reliable check during dragover (you
+  // can't getData(...) until drop). Both gestures live on the same
+  // bucketsList; this guard makes them coexist without crosstalk.
+  function _dragHasType(e, t) {
+    if (!e.dataTransfer || !e.dataTransfer.types) return false;
+    // .contains() handles DataTransferItemList; .indexOf() handles
+    // the (legacy) array form. Both exist in modern browsers.
+    if (typeof e.dataTransfer.types.contains === "function") {
+      return e.dataTransfer.types.contains(t);
+    }
+    return Array.prototype.indexOf.call(e.dataTransfer.types, t) >= 0;
+  }
+
+  // Drop target wiring on bucket items (card-into-bucket)
   bucketsList.addEventListener("dragover", e => {
+    // Skip if this is a bucket-reorder drag, not a card.
+    if (_dragHasType(e, "text/pixcull-bucket-name")) return;
     const item = e.target.closest(".bk-item[data-bucket]");
     if (!item) return;
     e.preventDefault();
@@ -8323,9 +8441,12 @@
     if (item) item.classList.remove("drag-over");
   });
   bucketsList.addEventListener("drop", e => {
-    e.preventDefault();
     const item = e.target.closest(".bk-item[data-bucket]");
     if (!item) return;
+    // Bucket-reorder drop is handled by the reorder block below;
+    // this branch only consumes card-into-bucket drops.
+    if (_dragHasType(e, "text/pixcull-bucket-name")) return;
+    e.preventDefault();
     item.classList.remove("drag-over");
     const fn = e.dataTransfer.getData("text/pixcull-fn");
     if (!fn) return;
@@ -8335,6 +8456,83 @@
     if (!b[name].includes(fn)) b[name].push(fn);
     _writeBuckets(b);
     _renderBucketsPanel();
+  });
+
+  // v0.6 (4/5) — bucket-reorder DnD. The user grabs the six-dot
+  // handle on the left of a bucket item; while dragging over other
+  // items we show a thick top/bottom border to communicate the drop
+  // slot (above / below the hovered item). On drop, we compute the
+  // new order, persist it, and re-render the panel.
+  let _bkReorderName = null;
+  function _bkClearReorderHints() {
+    bucketsList.querySelectorAll(
+      ".bk-item.bk-drop-above, .bk-item.bk-drop-below, .bk-item.bk-reordering"
+    ).forEach(el => {
+      el.classList.remove("bk-drop-above", "bk-drop-below", "bk-reordering");
+    });
+  }
+  bucketsList.addEventListener("dragstart", e => {
+    const grip = e.target.closest(".bk-grip");
+    if (!grip) return;
+    const item = grip.closest(".bk-item[data-bucket]");
+    if (!item) return;
+    _bkReorderName = item.dataset.bucket;
+    e.dataTransfer.effectAllowed = "move";
+    // Carry the source name as the *type*; the value is also the
+    // name so a graceful fallback still works if the payload is the
+    // only thing the receiver checks.
+    e.dataTransfer.setData("text/pixcull-bucket-name", _bkReorderName);
+    // Hide the default drag image's text so the user sees the actual
+    // bucket row tracking the cursor.
+    try { e.dataTransfer.setDragImage(item, 12, 18); } catch (_e) {}
+    item.classList.add("bk-reordering");
+  });
+  bucketsList.addEventListener("dragend", () => {
+    _bkReorderName = null;
+    _bkClearReorderHints();
+  });
+  bucketsList.addEventListener("dragover", e => {
+    if (!_dragHasType(e, "text/pixcull-bucket-name")) return;
+    const item = e.target.closest(".bk-item[data-bucket]");
+    if (!item) return;
+    if (item.dataset.bucket === _bkReorderName) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    // Decide above-or-below based on cursor Y within the item.
+    const r = item.getBoundingClientRect();
+    const above = (e.clientY - r.top) < r.height / 2;
+    bucketsList.querySelectorAll(".bk-item.bk-drop-above, .bk-item.bk-drop-below")
+      .forEach(el => el.classList.remove("bk-drop-above", "bk-drop-below"));
+    item.classList.add(above ? "bk-drop-above" : "bk-drop-below");
+  });
+  bucketsList.addEventListener("drop", e => {
+    if (!_dragHasType(e, "text/pixcull-bucket-name")) return;
+    const item = e.target.closest(".bk-item[data-bucket]");
+    if (!item) return;
+    e.preventDefault();
+    const dragName = e.dataTransfer.getData("text/pixcull-bucket-name") || _bkReorderName;
+    const dropName = item.dataset.bucket;
+    if (!dragName || dragName === dropName) {
+      _bkClearReorderHints();
+      return;
+    }
+    const r = item.getBoundingClientRect();
+    const above = (e.clientY - r.top) < r.height / 2;
+    const buckets = _readBuckets();
+    const order = _readBucketOrder(buckets);
+    const from = order.indexOf(dragName);
+    if (from < 0) { _bkClearReorderHints(); return; }
+    order.splice(from, 1);
+    // Re-find the drop index AFTER removing the source — splice
+    // shifts indices so the insertion target moves with it.
+    let to = order.indexOf(dropName);
+    if (to < 0) to = order.length;
+    if (!above) to += 1;
+    order.splice(to, 0, dragName);
+    _writeBucketOrder(order);
+    _bkClearReorderHints();
+    _renderBucketsPanel();
+    showToast(`已重排 “${dragName}”`, "success");
   });
 
   // Esc closes the buckets panel (when no other modal is hogging Esc)
