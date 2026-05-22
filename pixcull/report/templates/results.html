@@ -2898,6 +2898,205 @@
       .card-cmp-btn { min-width: 32px; min-height: 32px; }
     }
 
+    /* ============================================================
+       v0.6 · LR-STYLE LEFT LIBRARY PANEL
+       ============================================================
+       Replaces the V14 top-spanning filter row with a Lightroom-
+       Library-shaped layout: a fixed left sidebar holding
+       collapsible filter groups + a main center pane that owns
+       the grid + a tighter top tools bar (sort / search / save
+       view / density).
+
+       The sidebar can collapse to a 36px rail (icon-only) so
+       photographers reviewing 1500 photos can reclaim screen
+       real-estate for the grid.  Persisted in localStorage.
+
+       Visual reference: Lightroom Library module's "Catalog /
+       Folders / Collections" left panel.
+       ============================================================ */
+    .workspace-layout {
+      display: flex;
+      align-items: stretch;
+      min-height: calc(100vh - 96px);   /* fill below sticky header */
+    }
+    .library-panel {
+      flex-shrink: 0;
+      width: 236px;
+      background: var(--chrome);
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      position: sticky; top: 48px;   /* under workspace-bar */
+      align-self: flex-start;
+      height: calc(100vh - 48px);
+      transition: width var(--duration-normal) var(--ease-out);
+      z-index: 4;
+    }
+    .library-panel.collapsed { width: 36px; }
+    .library-panel.collapsed .lp-scroll,
+    .library-panel.collapsed .lp-title { display: none; }
+    .library-panel.collapsed .lp-collapse svg { transform: rotate(180deg); }
+    .lp-header {
+      display: flex; align-items: center;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      gap: 8px;
+      flex-shrink: 0;
+      height: 40px;
+    }
+    .lp-title {
+      font-family: var(--font-display);
+      font-size: 11.5px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--muted);
+      flex: 1;
+    }
+    .lp-collapse {
+      width: 22px; height: 22px;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: transparent;
+      color: var(--muted-soft);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      cursor: pointer;
+      padding: 0;
+      transition: color var(--duration-fast) var(--ease-out),
+                  border-color var(--duration-fast) var(--ease-out),
+                  background var(--duration-fast) var(--ease-out);
+    }
+    .lp-collapse:hover {
+      color: var(--fg);
+      background: var(--surface-2);
+      border-color: var(--border-hi);
+    }
+    .lp-collapse svg {
+      width: 12px; height: 12px;
+      transition: transform var(--duration-normal) var(--ease-out);
+    }
+    .lp-scroll {
+      flex: 1 1 auto;
+      overflow-y: auto;
+      padding: 6px 0 var(--space-5);
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255,255,255,0.10) transparent;
+    }
+    .lp-scroll::-webkit-scrollbar { width: 6px; }
+    .lp-scroll::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,0.10); border-radius: 999px;
+    }
+    .lp-group {
+      border-bottom: 1px solid var(--border);
+      padding: 0;
+    }
+    .lp-group[style*="display:none"],
+    .lp-group[style*="display: none"] { border-bottom: none; }
+    .lp-group > summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 10px 14px;
+      font-size: 11.5px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+      display: flex; align-items: center; gap: 6px;
+      user-select: none;
+      transition: color var(--duration-fast) var(--ease-out);
+    }
+    .lp-group > summary:hover { color: var(--fg); }
+    .lp-group > summary::-webkit-details-marker { display: none; }
+    .lp-group > summary::before {
+      content: "›";
+      display: inline-block;
+      transition: transform var(--duration-fast) var(--ease-out);
+      color: var(--muted-soft);
+      font-weight: 400;
+      font-size: 13px;
+      line-height: 1;
+    }
+    .lp-group[open] > summary::before { transform: rotate(90deg); }
+    .lp-group .lp-count {
+      margin-left: auto;
+      font-size: 10.5px;
+      color: var(--muted-soft);
+      font-weight: 400;
+      font-variant-numeric: tabular-nums;
+    }
+    .lp-content {
+      padding: 0 14px 12px 22px;
+      display: flex; gap: 6px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    /* Filter pills inside the library panel look like compact
+       chips, stacking nicely in the narrow sidebar. */
+    .library-panel .pill,
+    .library-panel .filter-group .pill {
+      padding: 4px 10px;
+      font-size: 11.5px;
+      max-width: 100%;
+    }
+    .library-panel .filter-group {
+      display: contents;   /* let chips lay out as direct children of .lp-content */
+    }
+
+    /* Main grid pane.  Holds the tools bar (sort, density, etc)
+       and the photo grid.  Flexes to fill the space the panel
+       doesn't occupy. */
+    .grid-pane {
+      flex: 1 1 auto;
+      min-width: 0;            /* prevents flex item from blowing out */
+      display: flex; flex-direction: column;
+    }
+    .tools-bar {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      flex-wrap: wrap;
+      padding: 10px var(--space-5);
+      border-bottom: 1px solid var(--border);
+      background: var(--chrome);
+      position: sticky; top: 48px;
+      z-index: 3;
+    }
+    /* When the workspace-layout takes over, the legacy .filters
+       row gets repurposed as the tools-bar (id="filters" carries
+       a class="tools-bar" now).  Direct-child decision pills
+       moved out to the library panel, so the tools-bar holds
+       only sort / search / actions. */
+
+    /* Sidebar collapses to a drawer on mobile */
+    @media (max-width: 900px) {
+      .library-panel {
+        position: fixed;
+        left: 0; top: 0; bottom: 0;
+        width: 280px;
+        height: 100vh;
+        transform: translateX(-100%);
+        transition: transform var(--duration-normal) var(--ease-out);
+        background: var(--chrome);
+        z-index: 30;
+        box-shadow: var(--shadow-xl);
+      }
+      .library-panel.open { transform: translateX(0); }
+      .library-panel.collapsed {
+        width: 280px;
+        transform: translateX(-100%);
+      }
+      .workspace-layout { display: block; }
+      .library-panel-backdrop {
+        position: fixed; inset: 0;
+        background: rgba(0,0,0,0.55);
+        backdrop-filter: blur(4px);
+        z-index: 29;
+        opacity: 0; pointer-events: none;
+        transition: opacity var(--duration-fast) var(--ease-out);
+      }
+      .library-panel-backdrop.show {
+        opacity: 1; pointer-events: auto;
+      }
+    }
+
     @media (max-width: 640px) {
       /* Stats row gets aggressive when narrow: hide non-essential
          counters so the keep/maybe/cull triplet doesn't wrap. */
@@ -3143,54 +3342,83 @@
     </div>
     <!-- legacy h1 kept (hidden) for any JS that probes #title -->
     <h1 id="title">分析结果<span id="runTag" class="run-tag" style="display:none"></span></h1>
-    <div class="filters" id="filters">
-      <span class="pill active" data-d="all">全部</span>
-      <span class="pill" data-d="keep">keep</span>
-      <span class="pill" data-d="maybe">maybe</span>
-      <span class="pill" data-d="cull">cull</span>
+  </header>
 
-      <!-- V9.0: scene + style filter chips populated dynamically from rows -->
-      <span class="filter-divider"></span>
-      <span class="filter-group" id="sceneFilters"></span>
-      <span class="filter-group" id="styleFilters"></span>
+  <!-- v0.6 — LR-style 2-column workspace.  Library panel on the
+       left holds all filter chip groups; main pane on the right
+       holds the (now tighter) tools bar + photo grid. -->
+  <div class="workspace-layout">
+    <div class="library-panel-backdrop" id="libraryPanelBackdrop"></div>
+    <aside class="library-panel" id="libraryPanel">
+      <div class="lp-header">
+        <span class="lp-title">筛选 · Filters</span>
+        <button class="lp-collapse" id="lpCollapseBtn"
+                type="button"
+                title="收起 / 展开筛选面板 (B)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2.2" stroke-linecap="round"
+               stroke-linejoin="round" aria-hidden="true">
+            <path d="m15 18-6-6 6-6"/>
+          </svg>
+        </button>
+      </div>
+      <div class="lp-scroll">
+        <details class="lp-group" open data-group="decision">
+          <summary>决定 · Decision</summary>
+          <div class="lp-content" id="decisionPills">
+            <span class="pill active" data-d="all">全部</span>
+            <span class="pill" data-d="keep">keep</span>
+            <span class="pill" data-d="maybe">maybe</span>
+            <span class="pill" data-d="cull">cull</span>
+          </div>
+        </details>
+        <details class="lp-group" open data-group="scene">
+          <summary>场景 · Scene</summary>
+          <div class="lp-content">
+            <span class="filter-group" id="sceneFilters"></span>
+          </div>
+        </details>
+        <details class="lp-group" data-group="style">
+          <summary>风格 · Style</summary>
+          <div class="lp-content">
+            <span class="filter-group" id="styleFilters"></span>
+          </div>
+        </details>
+        <details class="lp-group" data-group="face" id="lpFaceGroup" style="display:none">
+          <summary>人脸 · Faces</summary>
+          <div class="lp-content">
+            <span class="filter-group" id="faceFilters"></span>
+          </div>
+        </details>
+        <details class="lp-group" data-group="location" id="lpLocationGroup" style="display:none">
+          <summary>位置 · Location</summary>
+          <div class="lp-content">
+            <span class="filter-group" id="locationFilters"></span>
+          </div>
+        </details>
+        <details class="lp-group" data-group="burst" id="lpBurstGroup" style="display:none">
+          <summary>连拍 · Bursts</summary>
+          <div class="lp-content">
+            <span class="filter-group" id="burstPeakFilter"></span>
+          </div>
+        </details>
+        <details class="lp-group" data-group="reason" id="lpReasonGroup" style="display:none">
+          <summary>剔除原因 · Cull-reason</summary>
+          <div class="lp-content">
+            <span class="filter-group" id="cullReasonFilter"></span>
+          </div>
+        </details>
+        <details class="lp-group" data-group="al">
+          <summary>主动学习 · Active Learning</summary>
+          <div class="lp-content">
+            <span class="filter-group" id="activeLearningFilter"></span>
+          </div>
+        </details>
+      </div>
+    </aside>
+    <main class="grid-pane">
 
-      <!-- V22.1: face cluster filter chips. Shown only when the run
-           has ≥1 cluster (DBSCAN found at least 2 photos sharing a
-           face). Each pill: "👤 <label-or-N> <count>". Click toggles
-           filter; ✏ icon opens inline rename. -->
-      <span class="filter-divider" id="faceFiltersDivider" style="display:none"></span>
-      <span class="filter-group" id="faceFilters"></span>
-
-      <!-- V23: GPS location filter chips. One pill per location
-           cluster (~100 m radius haversine DBSCAN). Each pill:
-           "📍 <lat,lon-or-label> <count>". Click toggles filter.
-           "选每地点一张" button highlights the highest-score photo
-           in each location. -->
-      <span class="filter-divider" id="locationFiltersDivider" style="display:none"></span>
-      <span class="filter-group" id="locationFilters"></span>
-
-      <!-- V27: per-burst peak ranking. One toggle button "🎯 每连拍
-           峰值" — when active, only the top-ranked frame in each
-           burst cluster passes the filter. Shown only when the run
-           actually has clusters of size ≥ 2 (real bursts). -->
-      <span class="filter-divider" id="burstPeakDivider" style="display:none"></span>
-      <span class="filter-group" id="burstPeakFilter"></span>
-
-      <!-- P-UX-4: cull-reason filters. One pill per token currently
-           present in the batch (e.g. "因为焦点不准而 cull"). Hidden
-           when no row carries a cull_reason. -->
-      <span class="filter-divider" id="cullReasonDivider" style="display:none"></span>
-      <span class="filter-group" id="cullReasonFilter"></span>
-
-      <!-- P2.4: active-learning queue. Click to fetch the top-N
-           highest-information-gain photos to label next (rescorer
-           disagrees with rule, uncertain rescorer probability,
-           score near threshold). When active, the grid filters to
-           those N photos sorted by priority + each card shows an
-           "AL #N" badge. -->
-      <span class="filter-divider" id="activeLearningDivider"></span>
-      <span class="filter-group" id="activeLearningFilter"></span>
-
+    <div class="tools-bar" id="filters">
       <span style="flex:1"></span>
 
       <!-- V9.0: sort + group dropdowns -->
@@ -3292,8 +3520,9 @@
         <button type="button" data-density="l" title="宽松 (340px)">L</button>
       </div>
     </div>
-  </header>
-  <div class="grid density-m" id="grid"></div>
+    <div class="grid density-m" id="grid"></div>
+    </main>
+  </div>
   <!-- V14.2 — toast container; populated by ``toast(msg, kind)`` in JS -->
   <div class="toast-stack" id="toastStack" aria-live="polite"></div>
 
@@ -4065,15 +4294,21 @@
   // it after a label edit refreshes the cluster info from /face_clusters.
   let faceClustersState = (PAYLOAD.face_clusters && PAYLOAD.face_clusters.clusters) || [];
   function buildFaceFilters() {
+    // v0.6 — legacy divider (#faceFiltersDivider) is now gone from
+    // the markup since filter groups moved to the Library panel.
+    // We toggle the new .lp-group container instead (#lpFaceGroup).
     const divider = document.getElementById("faceFiltersDivider");
+    const lpGroup = document.getElementById("lpFaceGroup");
     const el = document.getElementById("faceFilters");
     const real = faceClustersState.filter(c => c.id >= 0);
     if (!real.length) {
-      divider.style.display = "none";
+      if (divider) divider.style.display = "none";
+      if (lpGroup) lpGroup.style.display = "none";
       el.innerHTML = "";
       return;
     }
-    divider.style.display = "block";
+    if (divider) divider.style.display = "block";
+    if (lpGroup) lpGroup.style.display = "";
     el.innerHTML = real.map(c => {
       const isActive = filterState.faceClusters.has(c.id);
       // V22.2 — when there's no user label but the centroid matched
@@ -4190,14 +4425,18 @@
   let locationsState = (PAYLOAD.locations && PAYLOAD.locations.clusters) || [];
   const locationsNoGps = (PAYLOAD.locations && PAYLOAD.locations.n_no_gps) || 0;
   function buildLocationFilters() {
+    // v0.6 — see buildFaceFilters for the lp-group migration note.
     const divider = document.getElementById("locationFiltersDivider");
+    const lpGroup = document.getElementById("lpLocationGroup");
     const el = document.getElementById("locationFilters");
     if (!locationsState.length) {
-      divider.style.display = "none";
+      if (divider) divider.style.display = "none";
+      if (lpGroup) lpGroup.style.display = "none";
       el.innerHTML = "";
       return;
     }
-    divider.style.display = "block";
+    if (divider) divider.style.display = "block";
+    if (lpGroup) lpGroup.style.display = "";
     // Each pill: "📍 <label-or-lat,lon> <count> ✎"
     const pills = locationsState.map(c => {
       const isActive = filterState.locationClusters.has(c.id);
@@ -4353,13 +4592,17 @@
   })();
   const _REAL_BURSTS = [..._BURST_CLUSTER_SIZES.entries()].filter(([_, n]) => n >= 2);
   function buildBurstPeakFilter() {
+    // v0.6 — see buildFaceFilters
     const divider = document.getElementById("burstPeakDivider");
+    const lpGroup = document.getElementById("lpBurstGroup");
     const el = document.getElementById("burstPeakFilter");
     if (_REAL_BURSTS.length === 0) {
-      divider.style.display = "none";
+      if (divider) divider.style.display = "none";
+      if (lpGroup) lpGroup.style.display = "none";
       el.innerHTML = "";
       return;
     }
+    if (lpGroup) lpGroup.style.display = "";
     divider.style.display = "block";
     const totalBurstPhotos = _REAL_BURSTS.reduce((s, [_, n]) => s + n, 0);
     el.innerHTML =
@@ -4505,6 +4748,77 @@
 
   // Grid
   const grid = document.getElementById("grid");
+
+  // v0.6 (1/5) — Library panel collapse / mobile drawer.
+  // On desktop, the panel collapses to a 36px rail with just the
+  // expand button.  On mobile (<= 900px) it becomes a drawer
+  // that slides in from the left.  Both states persist in
+  // localStorage[pixcull_lib_panel] = "open" | "collapsed".
+  (function _initLibraryPanel() {
+    const panel = document.getElementById("libraryPanel");
+    const backdrop = document.getElementById("libraryPanelBackdrop");
+    const btn = document.getElementById("lpCollapseBtn");
+    if (!panel || !btn) return;
+    const _LP_KEY = "pixcull_lib_panel";
+    const isMobile = () => window.matchMedia("(max-width: 900px)").matches;
+
+    function _apply(state) {
+      if (isMobile()) {
+        // Mobile: "open" shows the drawer, anything else hides it
+        panel.classList.toggle("open", state === "open");
+        if (backdrop) backdrop.classList.toggle("show", state === "open");
+        panel.classList.remove("collapsed");
+      } else {
+        // Desktop: "collapsed" shrinks to rail, default expanded
+        panel.classList.toggle("collapsed", state === "collapsed");
+        panel.classList.remove("open");
+        if (backdrop) backdrop.classList.remove("show");
+      }
+    }
+    let _state = "expanded";
+    try { _state = localStorage.getItem(_LP_KEY) || "expanded"; }
+    catch (e) {}
+    _apply(_state);
+
+    btn.addEventListener("click", () => {
+      if (isMobile()) {
+        // Mobile click closes the drawer
+        _state = "expanded";   // i.e. "not open"
+      } else {
+        _state = _state === "collapsed" ? "expanded" : "collapsed";
+      }
+      try { localStorage.setItem(_LP_KEY, _state); } catch (e) {}
+      _apply(_state);
+    });
+    // Mobile: tap backdrop to close
+    if (backdrop) {
+      backdrop.addEventListener("click", () => {
+        _state = "expanded";   // i.e. not "open"
+        try { localStorage.setItem(_LP_KEY, _state); } catch (e) {}
+        _apply(_state);
+      });
+    }
+    // Keyboard: "B" toggles the panel (LR-style)
+    document.addEventListener("keydown", e => {
+      // Ignore when typing in inputs
+      if (e.target.matches("input, textarea, select")) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === "b" || e.key === "B") {
+        e.preventDefault();
+        if (isMobile()) {
+          // Open / close drawer
+          _state = panel.classList.contains("open") ? "expanded" : "open";
+        } else {
+          _state = _state === "collapsed" ? "expanded" : "collapsed";
+        }
+        try { localStorage.setItem(_LP_KEY, _state); } catch (e) {}
+        _apply(_state);
+      }
+    });
+    // Re-apply on viewport changes so the same persisted state
+    // makes sense after a resize across the mobile breakpoint.
+    window.addEventListener("resize", () => _apply(_state));
+  })();
 
   // v0.5 LR-grade (2/3) — density toolbar.  LR Library has a
   // 4-step grid-size slider that's been the standard photographer
@@ -4933,9 +5247,9 @@
         filterState.cullReason = null;
         // P-UX-27 — same for the wedding-moment filter
         filterState.weddingMoments.clear();
-        document.querySelectorAll("#filters .pill, #sceneFilters .pill, #styleFilters .pill, #cullReasonFilter .pill")
+        document.querySelectorAll("#decisionPills .pill, #sceneFilters .pill, #styleFilters .pill, #cullReasonFilter .pill")
           .forEach(el => el.classList.remove("active"));
-        document.querySelector('#filters .pill[data-d="all"]')?.classList.add("active");
+        document.querySelector('#decisionPills .pill[data-d="all"]')?.classList.add("active");
         render();
       });
     } else if (segments.length <= BATCH_THRESHOLD) {
@@ -5069,7 +5383,7 @@
     filterState.locationBestOnly = !!view.locationBestOnly;
     filterState.weddingMoments   = new Set(view.weddingMoments || []);
     // Sync UI: decision pill active class
-    document.querySelectorAll("#filters > .pill").forEach(el => {
+    document.querySelectorAll("#decisionPills .pill").forEach(el => {
       el.classList.toggle("active",
         el.dataset.d === filterState.decision);
     });
@@ -5168,9 +5482,9 @@
   });
 
   // Decision filter pills (the original keep/maybe/cull/all set)
-  document.querySelectorAll("#filters > .pill").forEach(el => {
+  document.querySelectorAll("#decisionPills .pill").forEach(el => {
     el.addEventListener("click", () => {
-      document.querySelectorAll("#filters > .pill").forEach(x => x.classList.remove("active"));
+      document.querySelectorAll("#decisionPills .pill").forEach(x => x.classList.remove("active"));
       el.classList.add("active");
       filterState.decision = el.dataset.d;
       render();
@@ -8159,9 +8473,11 @@
   // ----- Filter pill row for "因为 X 而 cull" -----
 
   function _renderCullReasonFilters() {
+    // v0.6 — see buildFaceFilters
     const wrap = document.getElementById("cullReasonFilter");
     const divider = document.getElementById("cullReasonDivider");
-    if (!wrap || !divider) return;
+    const lpGroup = document.getElementById("lpReasonGroup");
+    if (!wrap) return;
     // Tally tokens actually present in the batch so we only show
     // pills the user can meaningfully click. {token: count}
     const tally = new Map();
@@ -8170,11 +8486,13 @@
       if (t) tally.set(t, (tally.get(t) || 0) + 1);
     }
     if (tally.size === 0) {
-      divider.style.display = "none";
+      if (divider) divider.style.display = "none";
+      if (lpGroup) lpGroup.style.display = "none";
       wrap.innerHTML = "";
       return;
     }
-    divider.style.display = "";
+    if (divider) divider.style.display = "";
+    if (lpGroup) lpGroup.style.display = "";
     // Render in the taxonomy's declared order, then any unknown
     // tokens at the end (defensive — schema drift).
     const known = _CULL_REASONS_LIST.map(e => e.token);
