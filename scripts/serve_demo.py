@@ -3433,6 +3433,14 @@ class _Handler(BaseHTTPRequestHandler):
             return self._serve_upload_page()
         if path == "/admin":
             return self._serve_admin_page()
+        # v0.7-P0-3 — large-batch (5k+) performance debug page.
+        # Surfaces: process RSS, # of active runs, /tmp/pixcull_demo
+        # disk usage, per-run row count, observer throttle stats
+        # (relayed client-side via window.PixCullStorage / _pcBucketsObsFn).
+        if path == "/admin/perf":
+            return self._serve_admin_perf_page()
+        if path == "/admin/perf.json":
+            return self._serve_admin_perf_json()
         # P-AI-4.1 — face library quality audit page (HTML + JSON).
         if path.startswith("/admin/face_audit/"):
             return self._serve_face_audit(path[len("/admin/face_audit/"):])
@@ -6700,6 +6708,72 @@ class _Handler(BaseHTTPRequestHandler):
     def _serve_admin_page(self) -> None:
         body = _ADMIN_HTML.encode("utf-8")
         self._send_html(200, body)
+
+    # v0.7-P0-3 — performance debug page.  Lightweight: same template
+    # frame as /admin, but populated with process RSS, # active runs,
+    # /tmp/pixcull_demo size, and per-run row counts. Refreshes every
+    # 4 s via fetch() to /admin/perf.json so the operator can watch
+    # how big-batch runs grow over time.
+    def _serve_admin_perf_page(self) -> None:
+        body = _ADMIN_PERF_HTML.encode("utf-8")
+        self._send_html(200, body)
+
+    def _serve_admin_perf_json(self) -> None:
+        import resource
+        import shutil
+        snap: dict = {}
+        # Process RSS (Linux: KB; macOS: bytes).
+        try:
+            r = resource.getrusage(resource.RUSAGE_SELF)
+            rss = r.ru_maxrss
+            if sys.platform != "darwin":
+                rss *= 1024  # KB → bytes on Linux
+            snap["rss_bytes"] = rss
+        except Exception:
+            snap["rss_bytes"] = None
+        # /tmp/pixcull_demo total bytes (cap shallow-walk depth so
+        # this stays fast even on 5k-photo runs).
+        demo_root = Path("/tmp/pixcull_demo")
+        try:
+            total = 0
+            run_sizes: dict = {}
+            if demo_root.exists():
+                for entry in demo_root.iterdir():
+                    if not entry.is_dir():
+                        continue
+                    sz = sum(
+                        f.stat().st_size for f in entry.rglob("*")
+                        if f.is_file()
+                    )
+                    total += sz
+                    run_sizes[entry.name] = sz
+            snap["disk_total_bytes"] = total
+            snap["disk_per_run"] = run_sizes
+        except Exception:
+            snap["disk_total_bytes"] = None
+            snap["disk_per_run"] = {}
+        # Active runs in memory.
+        try:
+            with _RUNS_LOCK:
+                snap["active_runs"] = len(_RUNS)
+                snap["run_row_counts"] = {
+                    rid: int(r.get("summary", {}).get("n_total", 0))
+                    for rid, r in _RUNS.items()
+                }
+        except Exception:
+            snap["active_runs"] = None
+            snap["run_row_counts"] = {}
+        # Free disk on the demo partition.
+        try:
+            du = shutil.disk_usage(demo_root if demo_root.exists() else "/tmp")
+            snap["disk_free_bytes"] = du.free
+            snap["disk_total_partition_bytes"] = du.total
+        except Exception:
+            snap["disk_free_bytes"] = None
+            snap["disk_total_partition_bytes"] = None
+        self._send_json(
+            200, _safe_dumps(snap).encode("utf-8")
+        )
 
     # P-AI-4.1 — face library quality audit page.  Loads the run's
     # face_centroids.npz + the user-root library, applies the three
@@ -12626,6 +12700,180 @@ PYTHONPATH=. python scripts/eval_on_golden_set.py golden/ \
   refresh();
   refreshRetrain();
 })();
+</script>
+</body>
+</html>
+""")
+
+
+# v0.7-P0-3 — performance debug page.  Self-contained HTML with the
+# same _DESIGN_TOKENS_CSS palette as upload/admin so light/dark
+# themes apply uniformly.  Auto-refreshes every 4 s via /admin/perf.json.
+_ADMIN_PERF_HTML = (r"""<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>PixCull · 性能监控</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+""" + _DESIGN_TOKENS_CSS + r"""
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font: var(--t-body, 13px)/1.55 -apple-system, "PingFang SC",
+          "Hiragino Sans", "Microsoft YaHei", sans-serif;
+    margin: 0; padding: 28px 32px;
+  }
+  h1 { font-size: var(--t-hero, 22px); margin: 0 0 4px; }
+  .lead { color: var(--muted); margin-bottom: 22px; font-size: var(--t-small); }
+  .panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
+    padding: 18px 22px;
+    margin-bottom: 16px;
+  }
+  .panel h2 {
+    font-size: var(--t-h3); margin: 0 0 14px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .panel h2 .dot {
+    width: 8px; height: 8px; border-radius: 999px;
+    background: var(--keep);
+    box-shadow: 0 0 6px var(--keep);
+  }
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+  }
+  .stat {
+    background: var(--surface-2); padding: 12px 14px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+  }
+  .stat .label {
+    color: var(--muted); font-size: var(--t-small);
+    text-transform: uppercase; letter-spacing: 0.05em;
+    margin-bottom: 4px;
+  }
+  .stat .val {
+    font-size: 20px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    color: var(--fg);
+  }
+  .stat .sub {
+    font-size: var(--t-small); color: var(--muted-soft, var(--muted));
+    margin-top: 2px;
+  }
+  table {
+    width: 100%; border-collapse: collapse;
+    font-size: var(--t-small);
+  }
+  th, td {
+    padding: 6px 10px; text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  th {
+    color: var(--muted); font-weight: 600;
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  tr:last-child td { border-bottom: 0; }
+  .back {
+    color: var(--muted); text-decoration: none;
+    font-size: var(--t-small); margin-bottom: 12px; display: inline-block;
+  }
+  .back:hover { color: var(--fg); }
+  .mono {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    color: var(--fg-2, var(--fg));
+  }
+  .gauge {
+    height: 4px; border-radius: 2px;
+    background: var(--surface-3);
+    overflow: hidden; margin-top: 6px;
+  }
+  .gauge .fill {
+    height: 100%; background: var(--accent);
+    box-shadow: 0 0 6px var(--accent-soft);
+  }
+  .gauge .fill.warn { background: var(--maybe); box-shadow: 0 0 6px var(--maybe); }
+  .gauge .fill.bad  { background: var(--cull);  box-shadow: 0 0 6px var(--cull);  }
+</style>
+</head>
+<body>
+<a class="back" href="/admin">← 返回管理面板</a>
+<h1>性能监控 · /admin/perf</h1>
+<p class="lead">每 4 秒刷新。打开开发者控制台后输入 <span class="mono">window.PixCullStorage._stats()</span> 可查看 localStorage 容量。</p>
+
+<div class="panel">
+  <h2><span class="dot"></span>进程状态</h2>
+  <div class="stat-grid" id="processGrid">
+    <div class="stat"><div class="label">Resident memory</div><div class="val" id="rssVal">…</div><div class="sub" id="rssSub"></div></div>
+    <div class="stat"><div class="label">Active runs</div><div class="val" id="runsVal">…</div></div>
+  </div>
+</div>
+
+<div class="panel">
+  <h2><span class="dot"></span>磁盘 · /tmp/pixcull_demo</h2>
+  <div class="stat-grid">
+    <div class="stat"><div class="label">Cache total</div><div class="val" id="diskTotal">…</div></div>
+    <div class="stat"><div class="label">Partition free</div><div class="val" id="diskFree">…</div>
+      <div class="gauge"><div class="fill" id="diskGauge" style="width:0%"></div></div>
+    </div>
+  </div>
+</div>
+
+<div class="panel">
+  <h2><span class="dot"></span>Per-run 行数 + 缓存大小</h2>
+  <table id="runsTable">
+    <thead>
+      <tr><th>run_id</th><th style="text-align:right">行数</th><th style="text-align:right">缓存</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<script>
+function fmtBytes(n) {
+  if (n == null) return "—";
+  if (n < 1024) return n + " B";
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
+  if (n < 1024 * 1024 * 1024) return (n / 1024 / 1024).toFixed(1) + " MB";
+  return (n / 1024 / 1024 / 1024).toFixed(2) + " GB";
+}
+async function refresh() {
+  try {
+    const res = await fetch("/admin/perf.json");
+    const d = await res.json();
+    document.getElementById("rssVal").textContent = fmtBytes(d.rss_bytes);
+    document.getElementById("runsVal").textContent = String(d.active_runs ?? "—");
+    document.getElementById("diskTotal").textContent = fmtBytes(d.disk_total_bytes);
+    document.getElementById("diskFree").textContent  = fmtBytes(d.disk_free_bytes);
+    const tot = d.disk_total_partition_bytes;
+    const free = d.disk_free_bytes;
+    const usedPct = (tot && free != null) ? Math.min(100, ((tot - free) / tot) * 100) : 0;
+    const g = document.getElementById("diskGauge");
+    g.style.width = usedPct.toFixed(1) + "%";
+    g.classList.remove("warn", "bad");
+    if (usedPct > 90) g.classList.add("bad");
+    else if (usedPct > 75) g.classList.add("warn");
+    const rows = Object.entries(d.run_row_counts || {})
+      .sort((a, b) => (b[1] || 0) - (a[1] || 0));
+    const sizes = d.disk_per_run || {};
+    document.querySelector("#runsTable tbody").innerHTML = rows.length
+      ? rows.map(([rid, n]) => `
+          <tr>
+            <td class="mono">${rid}</td>
+            <td class="mono" style="text-align:right">${n}</td>
+            <td class="mono" style="text-align:right">${fmtBytes(sizes[rid])}</td>
+          </tr>`).join("")
+      : `<tr><td colspan="3" style="color:var(--muted);text-align:center;padding:14px">(无活跃 run)</td></tr>`;
+  } catch (_e) {}
+}
+refresh();
+setInterval(refresh, 4000);
 </script>
 </body>
 </html>
