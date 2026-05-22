@@ -143,6 +143,95 @@
         --duration-slow: 1ms;
       }
     }
+
+    /* ============================================================
+       v0.4 P2 (1/4) · LIGHT THEME
+       ============================================================
+       Token overrides applied via data-theme="light" on <html>.
+       Auto-applied when (a) the user toggles via the new
+       theme-toggle pill, OR (b) prefers-color-scheme: light AND
+       the user hasn't explicitly chosen "dark" (persisted in
+       localStorage[pixcull_theme]).
+
+       Same semantic colors (success / warn / danger / info /
+       neutral) — only the tint + border alphas shift.  Surface
+       backgrounds invert: bg becomes #f5f6f8 (warm off-white),
+       cards become #ffffff with subtle borders.  Shadow ramps
+       lighten dramatically (0.06–0.12 alpha vs dark's 0.30–0.55)
+       since white surfaces don't need heavy shadows to elevate.
+       ============================================================ */
+    html[data-theme="light"] {
+      /* —— SURFACES —— */
+      --bg:           #f5f6f8;
+      --bg-card:      #ffffff;
+      --bg-card-hi:   #f0f2f5;
+      --surface-2:    #ebedf0;
+      --surface-3:    #e0e3e8;
+      /* —— TEXT —— */
+      --fg:           #1a1d24;
+      --fg-2:         #3c4250;
+      --muted:        #5b6473;
+      --muted-soft:   #8c95a3;
+      /* —— BORDERS —— */
+      --border:       #e0e3e8;
+      --border-hi:    #c8cdd5;
+      /* —— ACCENT (deeper indigo for AA contrast on white) —— */
+      --accent:       #4f46e5;
+      --accent-hi:    #6366f1;
+      --accent-soft:  rgba(79,70,229,0.10);
+      --accent-glow:  rgba(79,70,229,0.30);
+      --focus-ring:   rgba(79,70,229,0.45);
+      /* —— SEMANTIC TINTS (lighter alpha to read on white) —— */
+      --c-success-tint:   rgba(16,185,129,0.10);
+      --c-success-border: rgba(16,185,129,0.30);
+      --c-success:        #059669;
+      --c-warn-tint:      rgba(217,119,6,0.10);
+      --c-warn-border:    rgba(217,119,6,0.30);
+      --c-warn:           #c2410c;
+      --c-danger-tint:    rgba(220,38,38,0.08);
+      --c-danger-border:  rgba(220,38,38,0.28);
+      --c-danger:         #dc2626;
+      --c-info-tint:      rgba(14,165,233,0.10);
+      --c-info-border:    rgba(14,165,233,0.32);
+      --c-info:           #0284c7;
+      --c-neutral-tint:   rgba(75,85,99,0.06);
+      --c-neutral-border: rgba(75,85,99,0.22);
+      --c-neutral:        #4b5563;
+      /* —— SHADOWS (much lighter on white) —— */
+      --shadow-sm: 0 1px 2px rgba(15,23,42,0.06);
+      --shadow-md: 0 4px 12px rgba(15,23,42,0.08);
+      --shadow-lg: 0 12px 32px rgba(15,23,42,0.10);
+      --shadow-xl: 0 24px 56px rgba(15,23,42,0.12);
+    }
+    /* The browser-tab theme color must match the actual theme so
+       PWA-installed iOS shows the right status-bar tint. */
+    html[data-theme="light"] body { color-scheme: light; }
+
+    /* Floating theme toggle pill — bottom-left, just above the
+       a11y toggle.  Same compact pill style; SVG sun/moon glyphs. */
+    .theme-toggle {
+      position: fixed; bottom: 52px; left: 14px;
+      z-index: 8;
+      display: inline-flex; align-items: center; gap: 6px;
+      background: rgba(20,23,28,0.85);
+      color: var(--muted); border: 1px solid var(--border);
+      border-radius: var(--radius-pill);
+      padding: 5px 11px; font-size: 11px; font-weight: 500;
+      cursor: pointer; opacity: 0.55;
+      transition: opacity var(--duration-fast) var(--ease-out),
+                  background var(--duration-fast) var(--ease-out),
+                  color var(--duration-fast) var(--ease-out);
+    }
+    .theme-toggle:hover { opacity: 1; }
+    html[data-theme="light"] .theme-toggle {
+      background: rgba(255,255,255,0.90);
+      border-color: var(--border-hi);
+      color: var(--fg-2);
+    }
+    .theme-toggle svg {
+      width: 13px; height: 13px;
+      stroke: currentColor; fill: none;
+    }
     * { box-sizing: border-box; }
     body {
       margin: 0;
@@ -2625,6 +2714,19 @@
                 stroke="var(--accent)" stroke-width="2"/>
         <circle cx="80" cy="60" r="3" fill="var(--accent)"/>
       </symbol>
+
+      <!-- Sun + Moon — for the v0.4 P2 light-theme toggle -->
+      <symbol id="icon-sun" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="1.8"
+              stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="4"/>
+        <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+      </symbol>
+      <symbol id="icon-moon" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="1.8"
+              stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+      </symbol>
     </defs>
   </svg>
 
@@ -2821,6 +2923,15 @@
           title="色盲友好配色 — 切换为蓝/橙/紫高对比方案(配合 ✓/?/✕ 形状标记)">
     <svg class="icon"><use href="#icon-contrast"/></svg>
     <span>配色</span>
+  </button>
+  <!-- v0.4 P2 (1/4) — theme toggle.  Cycles dark → light → system.
+       Persisted in localStorage[pixcull_theme].  Sun/moon glyph
+       reflects the *current* effective theme. -->
+  <button class="theme-toggle" id="themeToggleBtn" type="button"
+          aria-pressed="false"
+          title="切换深色 / 浅色主题(默认跟随系统)">
+    <svg id="themeToggleIcon"><use href="#icon-moon"/></svg>
+    <span id="themeToggleLabel">主题</span>
   </button>
   <button class="buckets-toggle" id="bucketsToggleBtn" type="button"
           title="交付桶 — 拖卡片到桶里整理输出">
@@ -7024,6 +7135,76 @@
         toast(next === "cb"
           ? "色盲友好配色已开启(蓝 / 橙 / 紫 + ✓ / ? / ✕)"
           : "已切换回默认配色", "info");
+      }
+    });
+  }
+
+  // ==================================================================
+  // v0.4 P2 (1/4) — light / dark theme toggle.
+  //
+  // State machine: dark → light → system → (back to dark).  Three
+  // explicit states because users want a manual override AND a
+  // "follow my OS" default.  Persisted in
+  // localStorage[pixcull_theme] as "dark" / "light" / "system".
+  //
+  // Auto-apply on init based on (a) persisted pref, OR (b)
+  // prefers-color-scheme media query if no pref.  matchMedia
+  // listener catches OS changes while "system" is selected.
+  // ==================================================================
+  const _THEME_KEY = "pixcull_theme";
+  const _themeBtn   = document.getElementById("themeToggleBtn");
+  const _themeIcon  = document.getElementById("themeToggleIcon");
+  const _themeLabel = document.getElementById("themeToggleLabel");
+  const _mqLight = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)");
+
+  function _effectiveTheme(pref) {
+    if (pref === "light" || pref === "dark") return pref;
+    return (_mqLight && _mqLight.matches) ? "light" : "dark";
+  }
+  function _renderTheme(pref) {
+    const eff = _effectiveTheme(pref);
+    document.documentElement.setAttribute("data-theme", eff);
+    if (_themeIcon) {
+      _themeIcon.firstElementChild.setAttribute(
+        "href", eff === "light" ? "#icon-sun" : "#icon-moon"
+      );
+    }
+    if (_themeLabel) {
+      _themeLabel.textContent =
+        pref === "system" ? "跟随系统"
+        : pref === "light" ? "浅色"
+        : "深色";
+    }
+    if (_themeBtn) {
+      _themeBtn.setAttribute("aria-pressed",
+        eff === "light" ? "true" : "false");
+    }
+  }
+  // Init
+  let _themePref = "system";
+  try { _themePref = localStorage.getItem(_THEME_KEY) || "system"; }
+  catch (e) { /* localStorage disabled — fall back to system */ }
+  if (!["dark", "light", "system"].includes(_themePref)) _themePref = "system";
+  _renderTheme(_themePref);
+  // Listen for OS theme changes while in "system" mode
+  if (_mqLight && _mqLight.addEventListener) {
+    _mqLight.addEventListener("change", () => {
+      if (_themePref === "system") _renderTheme(_themePref);
+    });
+  }
+  if (_themeBtn) {
+    _themeBtn.addEventListener("click", () => {
+      // Cycle through the three states
+      _themePref = _themePref === "dark" ? "light"
+                  : _themePref === "light" ? "system"
+                  : "dark";
+      try { localStorage.setItem(_THEME_KEY, _themePref); } catch (e) {}
+      _renderTheme(_themePref);
+      if (typeof toast === "function") {
+        const label = _themePref === "system" ? "跟随系统"
+                    : _themePref === "light" ? "浅色主题"
+                    : "深色主题";
+        toast(`已切换:${label}`, "info", 1800);
       }
     });
   }
