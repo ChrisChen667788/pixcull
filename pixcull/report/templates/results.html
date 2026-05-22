@@ -384,6 +384,24 @@
     .stats .keep b { color: var(--keep); }
     .stats .maybe b { color: var(--maybe); }
     .stats .cull b { color: var(--cull); }
+    /* v0.4 P2 (2/4) — stat-counter pulse on annotation.
+       When the user keyboard-labels a card and a counter changes,
+       the matching <b> briefly scales + brightens so the user
+       sees that their action moved the number.  Tactile feedback
+       for the "I'm making progress" feeling. */
+    @keyframes pix-stat-pulse {
+      0%   { transform: scale(1);    filter: none; }
+      30%  { transform: scale(1.30); filter: brightness(1.4); }
+      100% { transform: scale(1);    filter: none; }
+    }
+    .stats b.pulse {
+      display: inline-block;
+      animation: pix-stat-pulse 360ms var(--ease-spring);
+      transform-origin: center;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .stats b.pulse { animation: none; }
+    }
     .filters {
       display: flex; gap: var(--space-2);
       margin-top: var(--space-3); flex-wrap: wrap;
@@ -3470,11 +3488,14 @@
   // Header stats
   const statsEl = document.getElementById("stats");
   const ela = summary.elapsed_s != null ? summary.elapsed_s + "s" : "--";
+  // v0.4 P2 (2/4) — annotate each stat <b> with data-stat so the
+  // quickLabel / _lbLabel post-pass can update + pulse the matching
+  // number without re-rendering the whole header.
   const stats = [
-    `<span>共 <b>${summary.n_total}</b> 张</span>`,
-    `<span class="keep">keep <b>${summary.n_keep}</b></span>`,
-    `<span class="maybe">maybe <b>${summary.n_maybe}</b></span>`,
-    `<span class="cull">cull <b>${summary.n_cull}</b></span>`,
+    `<span>共 <b data-stat="total">${summary.n_total}</b> 张</span>`,
+    `<span class="keep">keep <b data-stat="keep">${summary.n_keep}</b></span>`,
+    `<span class="maybe">maybe <b data-stat="maybe">${summary.n_maybe}</b></span>`,
+    `<span class="cull">cull <b data-stat="cull">${summary.n_cull}</b></span>`,
     `<span>耗时 <b>${ela}</b></span>`,
   ];
   if (summary.rescorer_active) {
@@ -4096,6 +4117,39 @@
 
   // Grid
   const grid = document.getElementById("grid");
+
+  // v0.4 P2 (2/4) — stat-counter pulse helpers.
+  // Called from quickLabel + _lbLabel when a decision flip changes
+  // a keep/maybe/cull tally.  Direct DOM patch + brief pulse class
+  // so the user sees the number tick + bounce.
+  function _pulseStat(name) {
+    if (!name) return;
+    const el = document.querySelector(`.stats b[data-stat="${name}"]`);
+    if (!el) return;
+    el.classList.remove("pulse");
+    void el.offsetWidth;   // restart animation
+    el.classList.add("pulse");
+    setTimeout(() => el.classList.remove("pulse"), 400);
+  }
+  function _shiftStatCounts(prevDecision, newDecision) {
+    if (prevDecision === newDecision) return;
+    // Decrement the previous bucket (if any)
+    if (prevDecision && ["keep","maybe","cull"].includes(prevDecision)) {
+      const k = "n_" + prevDecision;
+      summary[k] = Math.max(0, (summary[k] || 0) - 1);
+      const el = document.querySelector(`.stats b[data-stat="${prevDecision}"]`);
+      if (el) el.textContent = summary[k];
+      _pulseStat(prevDecision);
+    }
+    // Increment the new bucket
+    if (["keep","maybe","cull"].includes(newDecision)) {
+      const k = "n_" + newDecision;
+      summary[k] = (summary[k] || 0) + 1;
+      const el = document.querySelector(`.stats b[data-stat="${newDecision}"]`);
+      if (el) el.textContent = summary[k];
+      _pulseStat(newDecision);
+    }
+  }
 
   // v0.4 P1 (2/4) — quick fade flash when filter state changes.
   // Adds `.filtering` to .grid for one paint frame so the user
@@ -5541,6 +5595,8 @@
     const fn = _lbCurrentFn;
     if (!fn) return;
     const r = rows.find(x => x.filename === fn);
+    // v0.4 P2 (2/4) — capture for the stat counter shift
+    const _prevDecision = r ? r.decision : null;
     if (r) {
       pushUndo([{
         filename: fn,
@@ -5563,6 +5619,9 @@
         r.decision = label;
         if (label !== "cull") r.cull_reason = "";
       }
+      // v0.4 P2 (2/4) — shift stat counters + pulse, same as
+      // the keyboard path.
+      _shiftStatCounts(_prevDecision, label);
       // P-UX-25 — same broadcast as quickLabel(); see the comment
       // on the keyboard path for rationale.
       _pixMultiTab.broadcastAnnotation(fn, label);
@@ -5676,6 +5735,11 @@
   async function quickLabel(label) {
     if (!focusedFn) return;
     const r = rows.find(x => x.filename === focusedFn);
+    // v0.4 P2 (2/4) — capture the previous decision BEFORE the
+    // POST so we can shift the stat counters even if the network
+    // is slow.  Counter update happens in the response handler
+    // alongside the in-memory r.decision update.
+    const _prevDecision = r ? r.decision : null;
     if (r) {
       pushUndo([{
         filename: focusedFn,
@@ -5700,6 +5764,10 @@
         // P-UX-4 — flipping away from cull clears any stale reason.
         if (label !== "cull") r.cull_reason = "";
       }
+      // v0.4 P2 (2/4) — shift the header stat counters in the
+      // matching keep/maybe/cull buckets + pulse the changed
+      // numbers so the user feels their action move the totals.
+      _shiftStatCounts(_prevDecision, label);
       // P-UX-25 — broadcast to any sibling tab on the same run_id so
       // the user sees the change live in the other window instead of
       // discovering a stale decision on next reload.
