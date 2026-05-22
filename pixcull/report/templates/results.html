@@ -395,6 +395,17 @@
       line-height: 1;
       filter: drop-shadow(0 4px 12px var(--accent-glow));
     }
+    /* v0.4 P1 (3/4) — illustration variant of .empty-icon.  Used
+       when the empty-state container renders a proper SVG art
+       rather than an emoji glyph.  Sized 160×120 with breathing
+       room; the radial-gradient backdrop from the empty-state
+       container still glows behind it. */
+    .empty-art {
+      width: 160px;
+      height: 120px;
+      margin-bottom: var(--space-2);
+      filter: drop-shadow(0 8px 24px var(--accent-glow));
+    }
     .empty-title {
       font-family: var(--font-display);
       font-size: var(--t-h2);
@@ -2547,6 +2558,73 @@
         <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/>
         <circle cx="12" cy="10" r="3"/>
       </symbol>
+
+      <!-- v0.4 P1 (3/4) · EMPTY-STATE ILLUSTRATIONS
+           Larger 160×120 SVGs used in the empty-state container
+           instead of 42px emoji.  Two-tone palette (accent + muted
+           outlines) so the illustration ties into the design system. -->
+
+      <!-- "Empty inbox" — for runs with zero rows -->
+      <symbol id="art-empty-inbox" viewBox="0 0 160 120" fill="none"
+              stroke-linecap="round" stroke-linejoin="round">
+        <!-- floor shadow -->
+        <ellipse cx="80" cy="103" rx="50" ry="5"
+                 fill="rgba(99,102,241,0.10)"/>
+        <!-- main inbox tray -->
+        <path d="M30 55l10-32a4 4 0 0 1 4-3h72a4 4 0 0 1 4 3l10 32"
+              stroke="var(--muted)" stroke-width="2"/>
+        <rect x="30" y="55" width="100" height="40" rx="4"
+              fill="var(--surface-2)" stroke="var(--muted)"
+              stroke-width="2"/>
+        <!-- inbox slot -->
+        <path d="M30 55h32l4 8h28l4-8h32"
+              stroke="var(--accent)" stroke-width="2.5"
+              fill="rgba(99,102,241,0.16)"/>
+        <!-- subtle "dust" — sparkles drifting in to show "nothing here yet" -->
+        <circle cx="48" cy="34" r="1.5" fill="var(--accent)" opacity="0.6"/>
+        <circle cx="112" cy="38" r="1.2" fill="var(--accent)" opacity="0.5"/>
+        <circle cx="80" cy="22" r="2" fill="var(--accent)" opacity="0.7"/>
+      </symbol>
+
+      <!-- "No filter match" — magnifier glass over empty result strip -->
+      <symbol id="art-no-match" viewBox="0 0 160 120" fill="none"
+              stroke-linecap="round" stroke-linejoin="round">
+        <ellipse cx="80" cy="103" rx="50" ry="5"
+                 fill="rgba(99,102,241,0.10)"/>
+        <!-- empty result strip (suggests photos that COULD match) -->
+        <rect x="22" y="48" width="22" height="22" rx="3"
+              stroke="var(--muted-soft)" stroke-width="1.5"
+              fill="var(--surface-2)" opacity="0.55"/>
+        <rect x="52" y="48" width="22" height="22" rx="3"
+              stroke="var(--muted-soft)" stroke-width="1.5"
+              fill="var(--surface-2)" opacity="0.55"/>
+        <rect x="82" y="48" width="22" height="22" rx="3"
+              stroke="var(--muted-soft)" stroke-width="1.5"
+              fill="var(--surface-2)" opacity="0.55"/>
+        <rect x="112" y="48" width="22" height="22" rx="3"
+              stroke="var(--muted-soft)" stroke-width="1.5"
+              fill="var(--surface-2)" opacity="0.55"/>
+        <!-- magnifier -->
+        <circle cx="80" cy="60" r="18"
+                fill="var(--bg-card)" stroke="var(--accent)"
+                stroke-width="2.5"/>
+        <path d="M94 74l10 10" stroke="var(--accent)" stroke-width="2.5"/>
+        <!-- subtle "no match" inside lens -->
+        <path d="M72 60h16" stroke="var(--muted)" stroke-width="2"/>
+      </symbol>
+
+      <!-- "Analyzing" — animated pulse rings around a small lens.
+           Used by the future loading-state placeholder. -->
+      <symbol id="art-analyzing" viewBox="0 0 160 120" fill="none"
+              stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="80" cy="60" r="36" stroke="var(--accent)"
+                stroke-width="1.5" opacity="0.18"/>
+        <circle cx="80" cy="60" r="24" stroke="var(--accent)"
+                stroke-width="2" opacity="0.45"/>
+        <circle cx="80" cy="60" r="12" fill="var(--accent-soft)"
+                stroke="var(--accent)" stroke-width="2"/>
+        <circle cx="80" cy="60" r="3" fill="var(--accent)"/>
+      </symbol>
     </defs>
   </svg>
 
@@ -4213,7 +4291,7 @@
       if (rows.length === 0) {
         emptyHtml = `
           <div class="empty-state">
-            <div class="empty-icon">📭</div>
+            <svg class="empty-art"><use href="#art-empty-inbox"/></svg>
             <div class="empty-title">这个 run 没有产出任何结果</div>
             <div class="empty-hint">
               可能原因:全部图片解码失败 / 文件夹为空 / 仅含非图片文件。
@@ -4229,7 +4307,7 @@
                              (filterState.decision !== "all" ? 1 : 0);
         emptyHtml = `
           <div class="empty-state">
-            <div class="empty-icon">🔍</div>
+            <svg class="empty-art"><use href="#art-no-match"/></svg>
             <div class="empty-title">当前筛选下没有图片</div>
             <div class="empty-hint">
               ${totalFilters} 个筛选条件正在过滤这个 ${rows.length} 张图的批次。
