@@ -1066,12 +1066,141 @@
       outline-offset: 1px;
       box-shadow: 0 0 0 4px var(--accent-glow), 0 8px 24px rgba(0,0,0,0.5);
     }
-    .card .thumb {
-      width: 100%; aspect-ratio: 4/3; object-fit: cover;
-      background: #000; cursor: zoom-in;
-      transition: filter 0.18s;
+    /* v0.5 LR-grade (2/3) — thumb wrap for LR-style overlays.
+       The card now uses an inner .thumb-wrap container so we can
+       absolutely-position a decision glyph (top-left) and a
+       filename + score gradient strip (bottom) over the photo. */
+    .card .thumb-wrap {
+      position: relative;
+      width: 100%; aspect-ratio: 4/3;
+      overflow: hidden;
+      background: #000;
     }
-    .card:hover .thumb { filter: brightness(1.04); }
+    .card .thumb {
+      width: 100%; height: 100%; object-fit: cover;
+      background: #000; cursor: zoom-in;
+      display: block;
+      transition: filter var(--duration-fast) var(--ease-out),
+                  transform var(--duration-normal) var(--ease-out);
+    }
+    .card:hover .thumb {
+      filter: brightness(1.05);
+      transform: scale(1.015);   /* gentle "press in" feel */
+    }
+    /* Decision glyph — LR Library "flag" pattern. 22×22 chip,
+       backdrop-filter blur, small + monochrome so it never
+       competes with the photo. */
+    .card .thumb-decision-glyph {
+      position: absolute; top: 6px; left: 6px;
+      width: 22px; height: 22px;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-family: var(--font-mono);
+      font-size: 11px; font-weight: 700;
+      border-radius: var(--radius-sm);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      background: rgba(0,0,0,0.45);
+      color: #fff;
+      box-shadow: var(--shadow-sm);
+      z-index: 2;
+      pointer-events: none;
+    }
+    .card .thumb-decision-glyph.dg-keep  { background: rgba(52,211,153,0.85);  color: #052e1f; }
+    .card .thumb-decision-glyph.dg-maybe { background: rgba(251,191,36,0.85);  color: #2a1d05; }
+    .card .thumb-decision-glyph.dg-cull  { background: rgba(239,99,99,0.85);   color: #2a0606; }
+    /* Bottom gradient strip with filename + score.  Always visible
+       at low opacity; brightens on hover.  Mirrors LR Library's
+       per-thumbnail caption strip. */
+    .card .thumb-overlay {
+      position: absolute; left: 0; right: 0; bottom: 0;
+      display: flex; align-items: center; gap: 8px;
+      padding: 18px 10px 8px;
+      background: linear-gradient(180deg,
+        rgba(0,0,0,0) 0%,
+        rgba(0,0,0,0.65) 60%,
+        rgba(0,0,0,0.85) 100%);
+      color: #f1f3f7;
+      font-size: 10.5px;
+      pointer-events: none;
+      z-index: 2;
+      opacity: 0.75;
+      transition: opacity var(--duration-fast) var(--ease-out);
+    }
+    .card:hover .thumb-overlay { opacity: 1; }
+    .card .thumb-overlay-fn {
+      flex: 1; min-width: 0;
+      font-family: var(--font-mono);
+      font-size: 10px; font-weight: 500;
+      color: rgba(255,255,255,0.92);
+      letter-spacing: 0.02em;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .card .thumb-overlay-score {
+      font-family: var(--font-mono);
+      font-size: 11px; font-weight: 600;
+      color: #fff;
+      padding: 1px 6px;
+      background: rgba(255,255,255,0.10);
+      border: 1px solid rgba(255,255,255,0.20);
+      border-radius: var(--radius-sm);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* v0.5 LR-grade (2/3) — grid DENSITY MODES.
+       Three thumbnail sizes the user picks via a small toolbar
+       in the filter row.  Mirrors LR Library Grid's S/M/L size
+       slider.  Stored in localStorage[pixcull_density]. */
+    .grid.density-s {
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: var(--space-2);
+    }
+    .grid.density-s .card .body { padding: 6px 8px 8px; font-size: 10.5px; }
+    .grid.density-s .row1 { gap: 3px; }
+    .grid.density-s .row1 .badge { font-size: 9px; }
+    .grid.density-s .card .row2 { font-size: 9.5px; }
+    /* In dense mode the bottom overlay carries the filename;
+       no need to repeat in the .body row1.  Hide it. */
+    .grid.density-s .row1 .fn { display: none; }
+    .grid.density-s .annotate-btn { display: none; }
+
+    .grid.density-m {
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: var(--space-3);
+    }
+    .grid.density-l {
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+      gap: var(--space-4);
+    }
+    .grid.density-l .card .thumb-overlay { font-size: 12px; padding: 24px 14px 12px; }
+    .grid.density-l .card .thumb-overlay-fn { font-size: 11.5px; }
+    .grid.density-l .card .thumb-overlay-score { font-size: 12.5px; }
+
+    /* Density toolbar (small button group) lives in the filter row */
+    .density-toolbar {
+      display: inline-flex; gap: 1px;
+      padding: 1px;
+      background: var(--surface-3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      margin-left: auto;   /* push to the right edge of filter row */
+    }
+    .density-toolbar button {
+      padding: 4px 9px;
+      font-size: 11px; font-weight: 500;
+      background: transparent;
+      color: var(--muted);
+      border: none;
+      border-radius: 3px;
+      cursor: pointer;
+      transition: background var(--duration-fast) var(--ease-out),
+                  color var(--duration-fast) var(--ease-out);
+    }
+    .density-toolbar button:hover { color: var(--fg); }
+    .density-toolbar button.active {
+      background: var(--bg-card);
+      color: var(--fg);
+      box-shadow: var(--shadow-sm);
+    }
     .card .body { padding: 8px 10px 10px; }
     .row1 { display: flex; align-items: baseline; gap: 6px; }
     .row1 .fn {
@@ -3065,9 +3194,17 @@
         </div>
       </div>
       <span class="export-status" id="exportStatus"></span>
+      <!-- v0.5 LR-grade (2/3) — density toolbar (S / M / L thumbnail
+           size, mirrors LR Library's grid-size slider).  Persisted
+           in localStorage[pixcull_density]. -->
+      <div class="density-toolbar" role="group" aria-label="缩略图密度">
+        <button type="button" data-density="s" title="紧凑 (160px)">S</button>
+        <button type="button" data-density="m" title="标准 (240px)" class="active">M</button>
+        <button type="button" data-density="l" title="宽松 (340px)">L</button>
+      </div>
     </div>
   </header>
-  <div class="grid" id="grid"></div>
+  <div class="grid density-m" id="grid"></div>
   <!-- V14.2 — toast container; populated by ``toast(msg, kind)`` in JS -->
   <div class="toast-stack" id="toastStack" aria-live="polite"></div>
 
@@ -4274,6 +4411,37 @@
   // Grid
   const grid = document.getElementById("grid");
 
+  // v0.5 LR-grade (2/3) — density toolbar.  LR Library has a
+  // 4-step grid-size slider that's been the standard photographer
+  // affordance for a decade.  PixCull's 3-step (S / M / L) is
+  // enough: tight (browse), default (default), spread (review).
+  // Persisted in localStorage so the photographer's chosen
+  // density survives reload.
+  (function _initDensityToolbar() {
+    const _DENSITY_KEY = "pixcull_density";
+    const tb = document.querySelector(".density-toolbar");
+    if (!tb || !grid) return;
+    function _apply(density) {
+      grid.classList.remove("density-s", "density-m", "density-l");
+      grid.classList.add("density-" + density);
+      tb.querySelectorAll("button").forEach(b => {
+        b.classList.toggle("active", b.dataset.density === density);
+      });
+    }
+    let saved = "m";
+    try { saved = localStorage.getItem(_DENSITY_KEY) || "m"; } catch (e) {}
+    if (!["s","m","l"].includes(saved)) saved = "m";
+    _apply(saved);
+    tb.querySelectorAll("button").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const d = btn.dataset.density;
+        if (!d) return;
+        try { localStorage.setItem(_DENSITY_KEY, d); } catch (e) {}
+        _apply(d);
+      });
+    });
+  })();
+
   // v0.4 P2 (2/4) — stat-counter pulse helpers.
   // Called from quickLabel + _lbLabel when a decision flip changes
   // a keep/maybe/cull tally.  Direct DOM patch + brief pulse class
@@ -4486,10 +4654,32 @@
       // views share state — rotate once, both update.
       const rotDeg = _lbRotGet(r.filename);
       const rotStyle = rotDeg ? `style="transform: rotate(${rotDeg}deg)"` : "";
+      // v0.5 LR-grade (2/3) — LR Library-style decision glyph
+      // overlayed top-left of the thumb (small, monochrome,
+      // doesn't compete with the photo).  Same shapes as the
+      // P-UX-23 a11y glyphs (✓ / ? / ✕) but presented as a
+      // floating chip rather than inline with the badge row.
+      const glyphMap = { keep: "✓", maybe: "?", cull: "✕" };
+      const decisionGlyph = r.decision && glyphMap[r.decision]
+        ? `<span class="thumb-decision-glyph dg-${r.decision}" title="${esc(r.decision)}">${glyphMap[r.decision]}</span>`
+        : "";
+      // Bottom-gradient overlay holding filename + score, like the
+      // LR Library thumbnail metadata strip.  Always present so
+      // the gradient is visible; opacity-toggled by hover at the
+      // grid level.
+      const scoreText = r.score_final == null
+        ? "" : r.score_final.toFixed(2);
       return `
         <div class="card ${cardCls}" data-fn="${fnEsc}">
           ${activeLearningBadge}
-          <img class="thumb" src="${thumb}" data-full="${full}" loading="lazy" alt="${fnEsc}" ${rotStyle}>
+          <div class="thumb-wrap">
+            <img class="thumb" src="${thumb}" data-full="${full}" loading="lazy" alt="${fnEsc}" ${rotStyle}>
+            ${decisionGlyph}
+            <div class="thumb-overlay">
+              <span class="thumb-overlay-fn" title="${fnEsc}">${fnEsc}</span>
+              ${scoreText ? `<span class="thumb-overlay-score">${scoreText}</span>` : ""}
+            </div>
+          </div>
           <button class="annotate-btn" data-fn="${fnEsc}" title="人工标注 (rubric)">${r.rubric_human_labeled ? "✓ 已标" : "标注"}</button>
           <button class="card-rot-btn" data-fn="${fnEsc}" type="button" title="顺时针旋转 90°(在放大窗中可继续微调)">↻</button>
           <button class="card-cmp-btn" data-fn="${fnEsc}" type="button"
