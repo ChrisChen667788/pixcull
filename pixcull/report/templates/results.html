@@ -5,7 +5,8 @@
   <!-- P-UX-17 — mobile-responsive layout needs viewport meta -->
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="dark">
-  <meta name="theme-color" content="#0b0d10">
+  <meta name="theme-color" content="#1a1c20" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f5f6f8" media="(prefers-color-scheme: light)">
   <title>PixCull — 分析结果</title>
   <style>
     /* ============================================================
@@ -18,12 +19,19 @@
        Charter: docs/ROADMAP-v0.4-charter.md
        ============================================================ */
     :root {
-      /* —— SURFACES ——————————————————————————————————————— */
-      --bg:           #0b0d10;
-      --bg-card:      #14171c;
-      --bg-card-hi:   #1a1e25;
-      --surface-2:    #1a1e25;     /* alias for hover / raised cards */
-      --surface-3:    #232830;     /* third tier for inset blocks */
+      /* —— SURFACES ——————————————————————————————————————————
+         v0.5 — refined workspace palette inspired by LR / PS
+         Library modules.  Slightly warmer + lighter than v0.4's
+         #0b0d10 pure black so the grid reads as "workspace" not
+         "void", and decision color chips stay readable against
+         the chrome.  Three explicit elevation tiers + a chrome
+         color used for sticky headers / inspector panes. */
+      --bg:           #1a1c20;     /* workspace gray — was #0b0d10 */
+      --bg-card:      #23262c;     /* tile surface */
+      --bg-card-hi:   #2a2e35;     /* hover / raised */
+      --surface-2:    #2a2e35;
+      --surface-3:    #34383f;     /* inset blocks (inspector cells) */
+      --chrome:       #14161a;     /* sticky chrome (header / inspector chrome) */
 
       /* —— TEXT ——————————————————————————————————————————— */
       --fg:           #f1f3f7;     /* primary text (was #e9ecf2 — bumped contrast) */
@@ -167,6 +175,7 @@
       --bg-card-hi:   #f0f2f5;
       --surface-2:    #ebedf0;
       --surface-3:    #e0e3e8;
+      --chrome:       #ffffff;    /* sticky chrome reads as white card */
       /* —— TEXT —— */
       --fg:           #1a1d24;
       --fg-2:         #3c4250;
@@ -261,28 +270,49 @@
     }
     button, input, select, a, [tabindex] { outline: none; }
 
-    /* v0.4 P0 — refreshed header.
-       Brand mark (SVG aperture logo) + product wordmark, then
-       page title in subdued weight + tag (run id, photo count).
-       Replaces the V14.2 "分析结果 ← 上传新一批" single-line
-       cramped title that read as a debug tool. */
+    /* ============================================================
+       v0.5 · LR-GRADE WORKSPACE CHROME (1/3)
+       ============================================================
+       The v0.4 P0 header was an info-rich hero (28px gradient h1 +
+       stats row + filter row stacked = 3 lines of vertical real
+       estate).  Beautiful, but it was eating ~140px above-the-fold
+       on a 13" laptop — half a grid row gone before the
+       photographer sees their photos.
+
+       v0.5 condenses the header to a single dense bar (logo + run
+       crumb + stats + theme/a11y) like LR Library's filmstrip
+       chrome.  Filter row stays as a second tighter row.  Net:
+       header drops from ~140px to ~78px, more grid above the
+       fold, AND it reads as a real photo-app workspace.
+
+       Frosted-glass header via backdrop-filter so photos passing
+       behind it during scroll feel like they're moving through a
+       proper desktop app.
+       ============================================================ */
     header {
       position: sticky; top: 0; z-index: 5;
-      background: rgba(11, 13, 16, 0.85);
-      backdrop-filter: blur(14px) saturate(180%);
-      -webkit-backdrop-filter: blur(14px) saturate(180%);
+      background: rgba(20, 22, 26, 0.78);    /* matches --chrome with alpha */
+      backdrop-filter: blur(20px) saturate(180%);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
       border-bottom: 1px solid var(--border);
-      padding: var(--space-5) var(--space-6) var(--space-4);
+      padding: 0;
     }
-    .brand-row {
+    html[data-theme="light"] header {
+      background: rgba(255, 255, 255, 0.78);
+    }
+    /* Single dense workspace bar — replaces .brand-row + h1 stacked */
+    .workspace-bar {
       display: flex; align-items: center;
-      gap: var(--space-3);
-      margin-bottom: var(--space-2);
+      gap: var(--space-4);
+      padding: 10px var(--space-5);
+      min-height: 48px;
+      border-bottom: 1px solid var(--border);
     }
     .brand-mark {
       display: inline-flex; align-items: center;
-      gap: var(--space-2);
+      gap: 8px;
       text-decoration: none;
+      flex-shrink: 0;
     }
     .brand-mark svg {
       width: 22px; height: 22px;
@@ -291,62 +321,62 @@
                   color var(--duration-fast) var(--ease-out);
     }
     .brand-mark:hover svg {
-      transform: rotate(-8deg) scale(1.05);
+      transform: rotate(-8deg) scale(1.06);
       color: var(--accent-hi);
     }
     .brand-mark .wordmark {
       font-family: var(--font-display);
-      font-size: 15px; font-weight: 700;
+      font-size: 14px; font-weight: 700;
       letter-spacing: -0.02em;
       color: var(--fg);
       line-height: 1;
     }
-    .brand-mark .wordmark span {
-      color: var(--accent);
+    .brand-mark .wordmark span { color: var(--accent); }
+
+    .crumb-divider {
+      color: var(--muted-soft); opacity: 0.55;
+      font-size: 14px; user-select: none;
     }
-    .brand-divider {
-      width: 1px; height: 14px; background: var(--border-hi);
-    }
-    .brand-back {
+    .crumb-back {
       font-size: var(--t-small);
       color: var(--muted);
       text-decoration: none;
-      padding: var(--space-1) var(--space-2);
+      padding: 4px 10px;
       border-radius: var(--radius-sm);
       transition: color var(--duration-fast) var(--ease-out),
                   background var(--duration-fast) var(--ease-out);
+      display: inline-flex; align-items: center; gap: 4px;
     }
-    .brand-back:hover {
+    .crumb-back:hover {
       color: var(--fg);
       background: var(--surface-2);
     }
-    h1 {
-      font-size: var(--t-hero);
-      margin: 0;
-      font-weight: 600;
-      letter-spacing: -0.02em;
-      line-height: var(--lh-tight);
-      background: linear-gradient(180deg, #ffffff, #b8c0cc 95%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
+    .crumb-title {
+      font-family: var(--font-display);
+      font-size: 14px; font-weight: 500;
+      color: var(--fg);
+      letter-spacing: -0.005em;
+      display: inline-flex; align-items: center; gap: 8px;
     }
-    h1 .run-tag {
+    .crumb-title .run-pill {
       display: inline-flex; align-items: center;
-      gap: var(--space-2);
-      margin-left: var(--space-3);
-      padding: var(--space-1) var(--space-3);
+      padding: 2px 9px;
       font-family: var(--font-mono);
-      font-size: var(--t-small);
+      font-size: 10.5px;
       font-weight: 400;
-      letter-spacing: 0;
+      color: var(--muted);
       background: var(--surface-2);
       border: 1px solid var(--border);
-      color: var(--muted);
       border-radius: var(--radius-pill);
-      -webkit-text-fill-color: var(--muted);
-      vertical-align: middle;
+      letter-spacing: 0.01em;
     }
+    .workspace-bar-spacer { flex: 1; }
+    /* LEGACY h1 — kept hidden so older callers that probe by id
+       still find an element to update.  All visible content now
+       lives in .crumb-title. */
+    h1#title { display: none; }
+    /* Legacy .brand-row hidden too — replaced by .workspace-bar */
+    .brand-row { display: none; }
     .stats { display: flex; gap: 18px; color: var(--muted); font-size: 12px; flex-wrap: wrap; }
     /* V17.2 — vertical policy badge: small accent pill that hovers
        to reveal the policy notes ("风光提高 keep 门槛 +3pp..."). */
@@ -404,8 +434,29 @@
     }
     .filters {
       display: flex; gap: var(--space-2);
-      margin-top: var(--space-3); flex-wrap: wrap;
+      flex-wrap: wrap;
       align-items: center;
+      padding: 8px var(--space-5) 10px;
+    }
+    /* v0.5 — the stats row now lives inside .workspace-bar so it
+       doesn't need its own bottom margin / padding.  Tighten the
+       inline rendering so chips don't have huge gaps. */
+    .workspace-bar .stats {
+      display: flex; gap: var(--space-4);
+      font-size: var(--t-small);
+      color: var(--muted);
+      flex-wrap: nowrap;
+      overflow: hidden;
+      align-items: center;
+    }
+    .workspace-bar .stats > span {
+      display: inline-flex; align-items: baseline; gap: 4px;
+      white-space: nowrap;
+    }
+    .workspace-bar .stats b {
+      font-weight: 600;
+      color: var(--fg);
+      font-variant-numeric: tabular-nums;
     }
     /* v0.4 — filter pill.  Pill radius, subtle border, soft hover
        lift, saturated accent fill when active.  Matches the chip
@@ -2842,15 +2893,13 @@
   </svg>
 
   <header>
-    <!-- v0.4 P0 — brand row.  Aperture-glyph SVG logomark + the
-         PixCull wordmark (accented "C") + back link.  Replaces
-         the old single-line "分析结果 ← 上传新一批" which read
-         as a debug-tool title bar instead of a product header. -->
-    <div class="brand-row">
+    <!-- v0.5 — workspace bar (single dense row).  Replaces the
+         previous 3-row hero header.  LR-style chrome: brand mark
+         + back crumb + page title + run pill + stats slot, all
+         on one frosted-glass row.  Filter row sits as a second
+         row underneath. -->
+    <div class="workspace-bar">
       <a href="/" class="brand-mark" title="返回上传">
-        <!-- Aperture / iris logomark.  6 blades around a center,
-             evokes both "camera aperture" and "AI eye".  Inline
-             SVG so we don't ship an extra HTTP request. -->
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="1.6" stroke-linecap="round"
              stroke-linejoin="round" aria-hidden="true">
@@ -2864,11 +2913,18 @@
         </svg>
         <span class="wordmark">Pix<span>Cull</span></span>
       </a>
-      <span class="brand-divider"></span>
-      <a href="/" class="brand-back">← 上传新一批</a>
+      <span class="crumb-divider">/</span>
+      <a href="/" class="crumb-back" title="返回上传新一批">← 上传</a>
+      <span class="crumb-divider">/</span>
+      <span class="crumb-title">
+        <span>分析结果</span>
+        <span id="runPill" class="run-pill" style="display:none"></span>
+      </span>
+      <span class="workspace-bar-spacer"></span>
+      <div class="stats" id="stats"></div>
     </div>
+    <!-- legacy h1 kept (hidden) for any JS that probes #title -->
     <h1 id="title">分析结果<span id="runTag" class="run-tag" style="display:none"></span></h1>
-    <div class="stats" id="stats"></div>
     <div class="filters" id="filters">
       <span class="pill active" data-d="all">全部</span>
       <span class="pill" data-d="keep">keep</span>
@@ -3305,17 +3361,24 @@
   })();
   const { run_id, rows, summary } = PAYLOAD;
 
-  // v0.4 P0 — populate the brand-row run pill with the run id +
-  // photo count.  Hero h1 now reads "分析结果 [✦ 1500 张 · run abc]".
+  // v0.5 — populate the new workspace-bar run pill.  Still
+  // updates the legacy #runTag too in case anything probes it,
+  // but the visible affordance is now #runPill inside .crumb-title.
   (function _populateRunTag() {
-    const el = document.getElementById("runTag");
-    if (!el) return;
     const n = rows.length;
     const shortId = (run_id || "").slice(0, 12);
-    el.textContent = `${n} 张 · ${shortId}`;
-    el.style.display = "inline-flex";
-    el.title = `run id: ${run_id}`;
-    // Also update document.title so the browser tab is meaningful
+    const text = `${n} 张 · ${shortId}`;
+    const newEl = document.getElementById("runPill");
+    if (newEl) {
+      newEl.textContent = text;
+      newEl.style.display = "inline-flex";
+      newEl.title = `run id: ${run_id}`;
+    }
+    const legacy = document.getElementById("runTag");
+    if (legacy) {
+      legacy.textContent = text;
+      legacy.style.display = "inline-flex";
+    }
     document.title = `PixCull · ${n} 张 · ${shortId}`;
   })();
 
