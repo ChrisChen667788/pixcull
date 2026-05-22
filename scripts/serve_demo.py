@@ -9943,43 +9943,135 @@ _VERTICAL_BULK_HTML = r"""<!DOCTYPE html>
 """
 
 
-_UPLOAD_HTML = r"""<!DOCTYPE html>
+# v0.6 (3/5) — shared design tokens.
+# Single source of truth for the v0.4 P0 + v0.5 LR-grade palette
+# that previously lived only inside pixcull/report/templates/
+# results.html.  Interpolated into the inline <style> blocks of
+# the upload page, admin page, face-audit page, and delivery-
+# audit page so /, /admin, /admin/face_audit/<id>, and
+# /admin/delivery/<id> all share the same visual language.
+_DESIGN_TOKENS_CSS = r"""
+  :root {
+    /* surfaces — v0.5 LR-grade workspace gray */
+    --bg:           #1a1c20;
+    --bg-card:      #23262c;
+    --bg-card-hi:   #2a2e35;
+    --surface-2:    #2a2e35;
+    --surface-3:    #34383f;
+    --chrome:       #14161a;
+    /* text */
+    --fg:           #f1f3f7;
+    --fg-2:         #c5cad4;
+    --muted:        #a8b2c1;
+    --muted-soft:   #7a8696;
+    /* borders */
+    --border:       #232830;
+    --border-hi:    #2f3742;
+    /* accent — indigo */
+    --accent:       #6366f1;
+    --accent-hi:    #818cf8;
+    --accent-soft:  rgba(99,102,241,0.14);
+    --accent-glow:  rgba(99,102,241,0.40);
+    --focus-ring:   rgba(129,140,248,0.55);
+    /* semantic palette */
+    --c-success:        #34d399;
+    --c-success-tint:   rgba(52,211,153,0.14);
+    --c-success-border: rgba(52,211,153,0.40);
+    --c-warn:           #fbbf24;
+    --c-warn-tint:      rgba(251,191,36,0.14);
+    --c-warn-border:    rgba(251,191,36,0.40);
+    --c-danger:         #ef6363;
+    --c-danger-tint:    rgba(239,99,99,0.14);
+    --c-danger-border:  rgba(239,99,99,0.40);
+    --c-info:           #38bdf8;
+    --c-info-tint:      rgba(56,189,248,0.14);
+    --c-info-border:    rgba(56,189,248,0.40);
+    --c-neutral:        #a8b2c1;
+    --c-neutral-tint:   rgba(168,178,193,0.10);
+    --c-neutral-border: rgba(168,178,193,0.30);
+    /* legacy alias for V14 callers */
+    --keep:  var(--c-success);
+    --maybe: var(--c-warn);
+    --cull:  var(--c-danger);
+    --error: var(--c-danger);
+    /* typography */
+    --font-display: "Inter Display", "Inter", -apple-system,
+                    BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI",
+                    "PingFang SC", "Microsoft Yahei UI", sans-serif;
+    --font-body:    "Inter", -apple-system, BlinkMacSystemFont,
+                    "Segoe UI Variable", "Segoe UI", "PingFang SC",
+                    "Microsoft Yahei UI", sans-serif;
+    --font-mono:    ui-monospace, "SF Mono", "JetBrains Mono", Menlo,
+                    monospace;
+    --t-hero:    28px;  --t-h2:    18px;  --t-h3:    14px;
+    --t-body:    13px;  --t-small: 11.5px; --t-tiny:  10.5px;
+    --lh-tight:  1.25;  --lh-normal: 1.55; --lh-loose: 1.7;
+    /* spacing */
+    --space-1: 4px;  --space-2: 8px;  --space-3: 12px;
+    --space-4: 16px; --space-5: 20px; --space-6: 24px;
+    --space-7: 32px; --space-8: 48px;
+    /* radius */
+    --radius-sm: 4px;  --radius-md: 6px;  --radius-lg: 10px;
+    --radius-xl: 14px; --radius-pill: 999px;
+    /* shadows */
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.30);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.40);
+    --shadow-lg: 0 12px 32px rgba(0,0,0,0.50);
+    --shadow-xl: 0 24px 56px rgba(0,0,0,0.55);
+    /* motion */
+    --duration-fast: 120ms; --duration-normal: 220ms; --duration-slow: 320ms;
+    --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+    --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  /* Light theme override — same shape as results.html */
+  html[data-theme="light"] {
+    --bg:           #f5f6f8;
+    --bg-card:      #ffffff;
+    --bg-card-hi:   #f0f2f5;
+    --surface-2:    #ebedf0;
+    --surface-3:    #e0e3e8;
+    --chrome:       #ffffff;
+    --fg:           #1a1d24;
+    --fg-2:         #3c4250;
+    --muted:        #5b6473;
+    --muted-soft:   #8c95a3;
+    --border:       #e0e3e8;
+    --border-hi:    #c8cdd5;
+    --accent:       #4f46e5;
+    --accent-hi:    #6366f1;
+    --accent-soft:  rgba(79,70,229,0.10);
+    --accent-glow:  rgba(79,70,229,0.30);
+    --focus-ring:   rgba(79,70,229,0.45);
+    --shadow-sm: 0 1px 2px rgba(15,23,42,0.06);
+    --shadow-md: 0 4px 12px rgba(15,23,42,0.08);
+    --shadow-lg: 0 12px 32px rgba(15,23,42,0.10);
+    --shadow-xl: 0 24px 56px rgba(15,23,42,0.12);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    :root {
+      --duration-fast: 1ms; --duration-normal: 1ms; --duration-slow: 1ms;
+    }
+  }
+"""
+
+
+_UPLOAD_HTML = (r"""<!DOCTYPE html>
 <html lang="zh">
 <head>
   <meta charset="utf-8">
   <title>PixCull — AI 摄影分拣</title>
   <style>
+""" + _DESIGN_TOKENS_CSS + r"""
+    /* v0.6 (3/5) — upload-page-specific tokens.
+       The hero gradient backdrop was the V14 visual signature;
+       remap it to the new --accent (indigo) color. */
     :root {
-      --bg: #0b0d10;
-      --bg-grad: radial-gradient(1200px 600px at 50% -200px, rgba(59,130,246,0.08), transparent 60%),
-                 radial-gradient(900px 500px at 90% 110%, rgba(168,85,247,0.05), transparent 60%);
-      --bg-card: #14171c;
-      --bg-card-hi: #1a1e25;
-      --fg: #e9ecf2;
-      /* V14.2 — bumped from #8892a0 (5.4:1 on --bg) to #a8b2c1
-         (~7.2:1) so muted body text comfortably passes WCAG AA Large
-         and approaches AAA. The old value was technically passing
-         but felt dim during testing. */
-      --muted: #a8b2c1;
-      --muted-soft: #7a8696;  /* still-quieter level for tertiary chrome */
-      --border: #232830;
-      --border-hi: #2f3742;
-      --accent: #3b82f6;
-      --accent-hi: #60a5fa;
-      --accent-glow: rgba(59,130,246,0.18);
-      --focus-ring: rgba(96,165,250,0.55);  /* V14.2 — focus-visible color */
-      --keep: #34d399;
-      --maybe: #fbbf24;
-      --cull: #ef6363;
-      --error: #ef4444;
-      --shadow-sm: 0 1px 2px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.02);
-      --shadow-md: 0 4px 16px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.03);
-      --shadow-lg: 0 16px 60px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.04);
-      /* V14.2 — design tokens. Use these everywhere instead of magic
-         pixels so spacing/sizing stays on a 4px grid. */
-      --space-1: 4px;  --space-2: 8px;  --space-3: 12px;
-      --space-4: 16px; --space-5: 20px; --space-6: 24px;
-      --radius-sm: 4px; --radius-md: 6px; --radius-lg: 10px;
+      --bg-grad: radial-gradient(1200px 600px at 50% -200px,
+                 rgba(99,102,241,0.10), transparent 60%),
+                 radial-gradient(900px 500px at 90% 110%,
+                 rgba(99,102,241,0.05), transparent 60%);
+      /* legacy button paddings kept; existing buttons reference them */
       --btn-pad-s: 4px 10px;
       --btn-pad-m: 7px 14px;
       --btn-pad-l: 10px 22px;
@@ -11597,7 +11689,7 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
 </script>
 </body>
 </html>
-"""
+""")
 
 
 # V19.4.1 — _RESULTS_HTML moved to pixcull/report/templates/results.html.
@@ -11849,34 +11941,23 @@ def _render_face_audit_html(payload: dict) -> str:
     )
 
 
-_ADMIN_HTML = r"""<!DOCTYPE html>
+_ADMIN_HTML = (r"""<!DOCTYPE html>
 <html lang="zh">
 <head>
   <meta charset="utf-8">
   <title>PixCull — 存储管理</title>
   <style>
-    :root {
-      --bg: #111418;
-      --bg-card: #1a1e24;
-      --bg-card-hi: #232830;
-      --fg: #e5e7eb;
-      /* V14.2 — contrast bump */
-      --muted: #a8b2c1;
-      --border: #2a2f38;
-      --accent: #3b82f6;
-      --keep: #2ea84a;
-      --maybe: #d9a30c;
-      --cull: #d95050;
-      --danger: #ef4444;
-      --focus-ring: rgba(96,165,250,0.55);
-    }
+""" + _DESIGN_TOKENS_CSS + r"""
+    /* v0.6 (3/5) — admin-page aliases.
+       Legacy --danger was a separate token; alias to --c-danger. */
+    :root { --danger: var(--c-danger); }
     * { box-sizing: border-box; }
     body {
       margin: 0; min-height: 100vh; background: var(--bg); color: var(--fg);
-      font: 13px/1.5 "Inter", -apple-system, BlinkMacSystemFont,
-            "Segoe UI Variable", "Segoe UI", "PingFang SC",
-            "Microsoft Yahei UI", "Microsoft Yahei",
-            "Helvetica Neue", sans-serif;
+      font-family: var(--font-body);
+      font-size: var(--t-body);
+      line-height: var(--lh-normal);
+      -webkit-font-smoothing: antialiased;
     }
     *:focus-visible {
       outline: 2px solid var(--focus-ring);
@@ -12521,7 +12602,7 @@ PYTHONPATH=. python scripts/eval_on_golden_set.py golden/ \
 </script>
 </body>
 </html>
-"""
+""")
 
 
 if __name__ == "__main__":
