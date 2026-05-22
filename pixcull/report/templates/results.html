@@ -855,6 +855,42 @@
       .card-placeholder { animation: none; }
     }
     .card.cull:hover { opacity: 1; }
+
+    /* v0.4 P1 (2/4) — card label flash.
+       When the user keyboard-labels a card (1/2/3/F) the badge
+       updates instantly, but the rest of the UI gives no visible
+       feedback that the keystroke registered.  This animation
+       wraps the card in a brief accent ring + a tiny scale bounce
+       so the photographer can keyboard-cull at speed without
+       breaking flow to "did that 3 take?"
+
+       Class added by JS for ~360ms then removed. */
+    @keyframes pix-card-flash {
+      0%   { transform: scale(1);
+             box-shadow: var(--shadow-sm); }
+      35%  { transform: scale(1.03);
+             box-shadow: 0 0 0 3px var(--accent-soft),
+                         var(--shadow-md); }
+      100% { transform: scale(1);
+             box-shadow: var(--shadow-sm); }
+    }
+    .card.label-flash {
+      animation: pix-card-flash 360ms var(--ease-out);
+      animation-fill-mode: forwards;
+      z-index: 1;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .card.label-flash { animation: none; }
+    }
+
+    /* v0.4 P1 (2/4) — grid filter apply transition.
+       When the user toggles a scene / style / moment chip, the
+       grid currently snaps the rebuild instantly.  Add a fast
+       fade so the user perceives "filter applied" instead of a
+       paint glitch.  Implemented as a class swap on .grid +
+       opacity transition. */
+    .grid { transition: opacity var(--duration-fast) var(--ease-out); }
+    .grid.filtering { opacity: 0.55; }
     /* V9.1 keyboard focus ring */
     .card.focused {
       outline: 2px solid var(--accent);
@@ -3392,6 +3428,7 @@
         const s = el.dataset.scene;
         if (filterState.scenes.has(s)) { filterState.scenes.delete(s); el.classList.remove("active"); }
         else { filterState.scenes.add(s); el.classList.add("active"); }
+        if (typeof _flashFilter === "function") _flashFilter();
         render();
       });
     });
@@ -3400,6 +3437,7 @@
         const s = el.dataset.style;
         if (filterState.styles.has(s)) { filterState.styles.delete(s); el.classList.remove("active"); }
         else { filterState.styles.add(s); el.classList.add("active"); }
+        if (typeof _flashFilter === "function") _flashFilter();
         render();
       });
     });
@@ -3869,6 +3907,23 @@
 
   // Grid
   const grid = document.getElementById("grid");
+
+  // v0.4 P1 (2/4) — quick fade flash when filter state changes.
+  // Adds `.filtering` to .grid for one paint frame so the user
+  // perceives "the filter applied" rather than a paint glitch.
+  // No-op if prefers-reduced-motion is set (CSS handles that).
+  function _flashFilter() {
+    if (!grid) return;
+    grid.classList.add("filtering");
+    // Two rAFs so the browser commits the dimmed style before
+    // we clear it; otherwise the transition can be optimized away.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        grid.classList.remove("filtering");
+      });
+    });
+  }
+
   function render() {
     let filtered = rows;
     if (filterState.decision !== "all") {
@@ -5135,6 +5190,7 @@
       } else {
         filterState.weddingMoments.add(mk);
       }
+      if (typeof _flashFilter === "function") _flashFilter();
       render();
       return;
     }
@@ -5327,6 +5383,13 @@
       if (card) {
         card.classList.remove("keep", "maybe", "cull");
         card.classList.add(label, "has-human");
+        // v0.4 P1 — match the grid-side flash so closing the
+        // lightbox shows the card "just got labeled" by the
+        // same animation the keyboard path triggers.
+        card.classList.remove('label-flash');
+        void card.offsetWidth;
+        card.classList.add('label-flash');
+        setTimeout(() => card.classList.remove('label-flash'), 380);
       }
       summary.n_human_labeled = (summary.n_human_labeled || 0) + 1;
     } catch (_e) { /* ignore network blip */ }
@@ -5457,6 +5520,16 @@
       if (card) {
         card.classList.remove('keep','maybe','cull');
         card.classList.add(label, 'has-human');
+        // v0.4 P1 — micro-interaction: brief scale-bounce + ring
+        // so the keystroke registers as a felt action, not just
+        // a class change on the badge.  Self-clears so subsequent
+        // keystrokes re-fire the animation.
+        card.classList.remove('label-flash');
+        // force reflow so removing + adding in the same tick
+        // restarts the keyframe
+        void card.offsetWidth;
+        card.classList.add('label-flash');
+        setTimeout(() => card.classList.remove('label-flash'), 380);
       }
       summary.n_human_labeled = (summary.n_human_labeled || 0) + 1;
     } catch (e) { /* ignore quick errors */ }
