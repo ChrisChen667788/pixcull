@@ -10029,6 +10029,96 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
       color: var(--muted); margin-bottom: 36px; max-width: 540px;
       text-align: center; font-size: 13.5px;
     }
+
+    /* v0.4 P1 (4/4) — hero landing rules.  Replaces the single
+       cramped title with a brand mark + huge hero title + value-
+       prop subtitle + 3-column feature strip.  Same hero pattern
+       the results page header uses, so the visual continuity
+       between /upload and /results is now obvious. */
+    .hero-brand {
+      display: inline-flex; align-items: center; gap: 10px;
+      margin-bottom: 28px;
+      text-decoration: none;
+      color: var(--fg);
+      transition: transform 220ms cubic-bezier(0.16,1,0.3,1);
+    }
+    .hero-brand:hover { transform: translateY(-2px); }
+    .hero-brand:hover svg { transform: rotate(-12deg); }
+    .hero-brand svg { transition: transform 220ms cubic-bezier(0.34,1.56,0.64,1); }
+    .hero-wordmark {
+      font-size: 17px; font-weight: 700; letter-spacing: -0.02em;
+      color: var(--fg);
+    }
+    .hero-wordmark b { color: #818cf8; font-weight: 700; }
+    .hero-title {
+      margin: 0 0 14px;
+      font-size: 44px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
+      text-align: center;
+      max-width: 720px;
+      background: linear-gradient(180deg, #ffffff 0%, #aab3c1 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero-subtitle {
+      color: var(--muted); max-width: 560px; text-align: center;
+      font-size: 14px; line-height: 1.7;
+      margin-bottom: 36px;
+    }
+    .hero-subtitle .pill {
+      display: inline-flex; align-items: center;
+      padding: 1px 8px; border-radius: 999px; font-size: 11px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      margin: 0 2px;
+    }
+    .hero-features {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      max-width: 720px; width: 100%;
+      margin-bottom: 36px;
+    }
+    .hero-feature {
+      background: rgba(255,255,255,0.02);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 18px;
+      text-align: left;
+      transition: border-color 180ms ease-out,
+                  background 180ms ease-out,
+                  transform 180ms cubic-bezier(0.16,1,0.3,1);
+    }
+    .hero-feature:hover {
+      border-color: #4f55e8;
+      background: rgba(99,102,241,0.06);
+      transform: translateY(-2px);
+    }
+    .hero-feature-icon {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 32px; height: 32px;
+      border-radius: 8px;
+      background: rgba(99,102,241,0.14);
+      color: #818cf8;
+      margin-bottom: 10px;
+    }
+    .hero-feature-title {
+      font-size: 13px; font-weight: 600;
+      color: var(--fg);
+      margin-bottom: 4px;
+    }
+    .hero-feature-text {
+      font-size: 11.5px; color: var(--muted);
+      line-height: 1.55;
+    }
+    /* On narrow screens the 3-col strip collapses to a single column */
+    @media (max-width: 640px) {
+      .hero-features { grid-template-columns: 1fr; }
+      .hero-title { font-size: 32px; }
+    }
     .subtitle .pill {
       display: inline-flex; align-items: center; gap: 4px;
       padding: 2px 7px; border-radius: 999px; font-size: 11px;
@@ -10438,14 +10528,81 @@ _UPLOAD_HTML = r"""<!DOCTYPE html>
     </div>
   </div>
 
-  <h1>PixCull</h1>
-  <div class="subtitle">
-    AI 摄影分拣 · 6 轴 rubric · 风格感知评分<br>
-    <span style="display:inline-flex;gap:6px;margin-top:8px;flex-wrap:wrap;justify-content:center">
-      <span class="pill k">● keep</span>
-      <span class="pill m">● maybe</span>
-      <span class="pill c">● cull</span>
-    </span>
+  <!-- v0.4 P1 (4/4) — hero landing.
+       Replaces the V14.2 single-line "PixCull" title + tagline
+       with a proper product hero: brand mark, big gradient
+       title, value-prop subtitle, and a 3-column "why this
+       tool exists" feature strip.  Designed to read as a real
+       product instead of a tool that needs context. -->
+  <a href="#" class="hero-brand" aria-label="PixCull">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="1.6" stroke-linecap="round"
+         stroke-linejoin="round" aria-hidden="true"
+         style="width:32px;height:32px;color:#818cf8">
+      <circle cx="12" cy="12" r="10"/>
+      <path d="M14.31 8 20.05 17.94"/>
+      <path d="M9.69 8h11.48"/>
+      <path d="M7.38 12 13.12 2.06"/>
+      <path d="M9.69 16 3.95 6.06"/>
+      <path d="M14.31 16H2.83"/>
+      <path d="M16.62 12 10.88 21.94"/>
+    </svg>
+    <span class="hero-wordmark">Pix<b>Cull</b></span>
+  </a>
+
+  <h1 class="hero-title">本地优先的 AI 摄影分拣</h1>
+  <div class="hero-subtitle">
+    6 轴 rubric · 风格感知 · Lr / C1 双向 round-trip<br>
+    <span style="opacity:0.75">在你的电脑上一键评估上千张照片,自动给出
+    <span class="pill k">● keep</span> ·
+    <span class="pill m">● maybe</span> ·
+    <span class="pill c">● cull</span>
+    建议。所有计算本地完成,原图永远不离开你的硬盘。</span>
+  </div>
+
+  <div class="hero-features">
+    <div class="hero-feature">
+      <div class="hero-feature-icon">
+        <!-- shield / lock — local privacy -->
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="1.8" stroke-linecap="round"
+             stroke-linejoin="round" style="width:18px;height:18px">
+          <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1Z"/>
+          <path d="m9 12 2 2 4-4"/>
+        </svg>
+      </div>
+      <div class="hero-feature-title">本地优先</div>
+      <div class="hero-feature-text">原图不上传 · CLIP / 模型缓存本地</div>
+    </div>
+    <div class="hero-feature">
+      <div class="hero-feature-icon">
+        <!-- target — precision -->
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="1.8" stroke-linecap="round"
+             stroke-linejoin="round" style="width:18px;height:18px">
+          <circle cx="12" cy="12" r="10"/>
+          <circle cx="12" cy="12" r="6"/>
+          <circle cx="12" cy="12" r="2"/>
+        </svg>
+      </div>
+      <div class="hero-feature-title">6 轴 rubric</div>
+      <div class="hero-feature-text">技术 · 主体 · 构图 · 光线 · 瞬间 · 美学</div>
+    </div>
+    <div class="hero-feature">
+      <div class="hero-feature-icon">
+        <!-- workflow — round-trip -->
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="1.8" stroke-linecap="round"
+             stroke-linejoin="round" style="width:18px;height:18px">
+          <path d="M3 7v6h6"/>
+          <path d="M21 17a9 9 0 0 0-15-6.7L3 13"/>
+          <path d="M21 17v-6h-6"/>
+          <path d="M3 7a9 9 0 0 1 15 6.7l3-2.7"/>
+        </svg>
+      </div>
+      <div class="hero-feature-title">Lr / C1 双向</div>
+      <div class="hero-feature-text">XMP / .cos sidecar 直接读写</div>
+    </div>
   </div>
 
   <div class="card">
