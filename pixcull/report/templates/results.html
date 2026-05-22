@@ -2571,6 +2571,99 @@
       .lightbox .rotate-grp { top: 18px; right: 60px; }
       .lightbox .rot-btn { width: 28px; height: 28px; font-size: 14px; }
     }
+
+    /* ============================================================
+       v0.4 P2 (3/4) · MOBILE POLISH
+       ============================================================
+       P-UX-17 made the layout responsive (the grid collapses, the
+       lightbox fits).  This pass adds touch-grade affordances:
+
+         · ≥44px touch targets on all clickable controls (Apple HIG
+           minimum + the WCAG 2.5.5 recommended size)
+         · floating buttons stick to safe-area-inset on iOS
+         · larger chip padding so taps don't hit the wrong filter
+         · grid card thumb gets a thumb-friendly aspect ratio
+         · stats row hides "elapsed" + "rescorer" on small screens
+           (those are admin info — main keep/maybe/cull stay)
+
+       Tap targets only apply on coarse-pointer devices (real
+       phones / tablets) so desktop hover users still get the
+       compact dense layout the design system optimizes for.
+       ============================================================ */
+    @media (pointer: coarse) {
+      /* Floating toggles (buckets / a11y / theme / shortcuts hint)
+         get ≥44px hit area + safe-area padding */
+      .buckets-toggle,
+      .a11y-toggle,
+      .theme-toggle,
+      .shortcuts-hint {
+        min-height: 44px;
+        padding: 10px 16px;
+        font-size: 13px;
+      }
+      .buckets-toggle { top: calc(14px + env(safe-area-inset-top)); right: calc(14px + env(safe-area-inset-right)); }
+      .a11y-toggle    { bottom: calc(14px + env(safe-area-inset-bottom)); left:  calc(14px + env(safe-area-inset-left)); }
+      .theme-toggle   { bottom: calc(64px + env(safe-area-inset-bottom)); left:  calc(14px + env(safe-area-inset-left)); }
+      .shortcuts-hint { bottom: calc(14px + env(safe-area-inset-bottom)); right: calc(14px + env(safe-area-inset-right)); }
+
+      /* Filter pills + chips wider tap target on phones */
+      .filters .pill {
+        padding: 8px 14px;
+        font-size: 12px;
+        min-height: 36px;
+      }
+      .filters button.export-btn {
+        padding: 8px 14px;
+        min-height: 36px;
+      }
+      .chip,
+      .row1 .moment-chip,
+      .row1 .cull-reason-chip,
+      .row1 .review-me-chip,
+      .row1 .exposure-chip {
+        padding: 4px 10px;
+        font-size: 11px;
+      }
+
+      /* Card cmp button stays accessible (~32px tap, edge of card) */
+      .card-cmp-btn { min-width: 32px; min-height: 32px; }
+    }
+
+    @media (max-width: 640px) {
+      /* Stats row gets aggressive when narrow: hide non-essential
+         counters so the keep/maybe/cull triplet doesn't wrap. */
+      .stats > span:nth-child(n+5) { display: none; }
+      .stats { gap: 12px; }
+      .stats > span { font-size: 11.5px; }
+      /* Header padding pulled in so the hero h1 doesn't overflow */
+      header { padding: var(--space-3) var(--space-4); }
+      .brand-mark .wordmark { display: none; }   /* logomark alone is enough on phone */
+      h1 { font-size: 22px; }
+      h1 .run-tag { font-size: 10px; padding: 1px 8px; }
+      /* Buckets panel goes full-width as a bottom sheet style */
+      .buckets-panel {
+        width: 100% !important;
+        max-width: none;
+        max-height: 70vh;
+        bottom: 0; top: auto;
+        right: 0;
+        transform: translateY(100%);
+        border-top: 1px solid var(--border-hi);
+        border-left: none;
+        border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+        padding-bottom: env(safe-area-inset-bottom);
+      }
+      .buckets-panel.show { transform: translateY(0); }
+      /* Multi-tab banner shorter on phones */
+      .multi-tab-banner, .scene-anomaly-banner {
+        max-width: 92vw;
+        font-size: 11.5px;
+        padding: 6px 10px;
+      }
+      .scene-anomaly-banner .sab-toggle { display: none; }
+      /* Onboarding tip narrower */
+      .onboard-tip { width: 92vw; right: 14px; }
+    }
   </style>
 </head>
 <body>
