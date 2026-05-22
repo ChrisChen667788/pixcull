@@ -2752,55 +2752,270 @@
         grid-auto-columns: 1fr;
       }
     }
+    /* v0.7-P0-2 — Annotation rubric modal redesigned for LR Develop-
+       grade visual density. Star bar is bigger + glows when picked,
+       top progress bar tracks how many of 6 axes are rated, inline
+       cull-reason picker replaces the floating tray when overall=
+       cull, and the rationale textarea uses design-token surfaces
+       instead of hardcoded rgba blacks. */
     .ann-card {
-      background: var(--bg-card); border: 1px solid var(--border);
-      border-radius: 8px; max-width: 920px; width: 100%; padding: 18px;
-      display: grid; grid-template-columns: 280px 1fr; gap: 18px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg, 12px);
+      box-shadow: var(--shadow-xl, 0 24px 80px rgba(0,0,0,0.6));
+      max-width: 920px; width: 100%; padding: 20px;
+      display: grid; grid-template-columns: 280px 1fr;
+      gap: 20px;
+      align-items: start;
+    }
+    /* Top progress bar — spans both columns. Shows how many of 6
+       axes have been rated (lit segment per rated axis). */
+    .ann-progress {
+      grid-column: 1 / -1;
+      display: flex; align-items: center; gap: 10px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 4px;
+    }
+    .ann-progress .ann-progress-track {
+      flex: 1;
+      display: grid; grid-template-columns: repeat(6, 1fr);
+      gap: 3px;
+      height: 4px;
+    }
+    .ann-progress .ann-progress-cell {
+      background: var(--surface-2, rgba(255,255,255,0.05));
+      border-radius: 2px;
+      transition: background var(--duration-normal) var(--ease-out);
+    }
+    .ann-progress .ann-progress-cell.lit {
+      background: var(--accent);
+      box-shadow: 0 0 6px var(--accent-soft, rgba(99,102,241,0.4));
+    }
+    .ann-progress .ann-progress-count {
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 11px;
+      color: var(--muted);
+      min-width: 32px;
+      text-align: right;
     }
     .ann-thumb {
       width: 100%; aspect-ratio: 4/3; object-fit: contain;
-      background: #000; border-radius: 4px;
+      background: #000;
+      border-radius: var(--radius-md, 6px);
+      box-shadow: var(--shadow-md);
     }
-    .ann-side h3 { margin: 0 0 4px; font-size: 14px; font-weight: 600; }
+    .ann-side h3 {
+      margin: 0 0 4px;
+      font-size: var(--t-h3, 15px);
+      font-weight: 600;
+      color: var(--fg);
+    }
+    .ann-side .rubric-intro {
+      font-size: var(--t-small, 11px);
+      color: var(--muted);
+      margin-bottom: 14px;
+      line-height: 1.55;
+    }
     .ann-side .why {
-      background: rgba(217, 163, 12, 0.15); border-left: 3px solid var(--maybe);
-      padding: 6px 10px; border-radius: 3px; font-size: 11px; margin-bottom: 12px;
+      background: var(--maybe-soft, rgba(217, 163, 12, 0.15));
+      border-left: 3px solid var(--maybe);
+      padding: 8px 12px;
+      border-radius: var(--radius-sm, 4px);
+      font-size: var(--t-small, 11px);
+      color: var(--fg-2, var(--fg));
+      margin-bottom: 14px;
     }
-    .axis-row { margin-bottom: 14px; }
+    .axis-row {
+      margin-bottom: 14px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .axis-row:last-of-type { border-bottom: 0; margin-bottom: 6px; }
+    .axis-row.focused {
+      /* Visual cue for keyboard navigation — the axis you'd hit
+         with 1-5 is haloed faintly. */
+      background: var(--surface-2, rgba(255,255,255,0.025));
+      border-radius: var(--radius-md, 6px);
+      padding: 8px 10px 10px;
+      margin: 0 -10px 12px;
+      border-bottom: 0;
+    }
     .axis-row .axis-name {
-      font-size: 12px; font-weight: 600; color: var(--fg); margin-bottom: 2px;
+      font-size: var(--t-body, 12.5px);
+      font-weight: 600;
+      color: var(--fg);
+      margin-bottom: 2px;
+      display: flex; align-items: baseline; gap: 6px;
     }
-    .axis-row .axis-desc { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+    .axis-row .axis-name .axis-en {
+      opacity: 0.5; font-weight: 400; font-size: 10px;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    }
+    .axis-row .axis-desc {
+      font-size: var(--t-small, 11px);
+      color: var(--muted);
+      margin-bottom: 6px;
+      line-height: 1.5;
+    }
+    /* v0.7-P0-2 — bigger, more deliberate ★ row. Hover preview
+       still works, but the locked-star treatment is a saturated
+       golden with subtle glow so you see at a glance which axes
+       you've rated. */
     .stars {
-      display: flex; gap: 4px; margin-bottom: 4px;
-      font-size: 18px; color: var(--muted); cursor: pointer; user-select: none;
+      display: flex; gap: 5px; margin-bottom: 6px;
+      font-size: 22px;
+      color: var(--surface-3, rgba(255,255,255,0.18));
+      cursor: pointer; user-select: none;
     }
-    .stars .star { transition: color 0.1s; }
-    .stars .star:hover, .stars .star.on { color: var(--maybe); }
-    .stars .star.locked { color: var(--keep); }
+    .stars .star {
+      transition: color var(--duration-fast) var(--ease-out),
+                  text-shadow var(--duration-fast) var(--ease-out),
+                  transform var(--duration-fast) var(--ease-out);
+      display: inline-block;
+    }
+    .stars .star:hover { transform: scale(1.1); }
+    .stars .star.on { color: var(--maybe); }
+    .stars .star.locked {
+      color: #f4c430;
+      text-shadow: 0 0 8px rgba(244,196,48,0.4);
+    }
     .axis-row textarea {
-      width: 100%; min-height: 32px; resize: vertical;
-      background: rgba(0,0,0,0.3); border: 1px solid var(--border);
-      color: var(--fg); padding: 5px 8px; border-radius: 3px;
-      font: inherit; font-size: 11px;
+      width: 100%; min-height: 30px; resize: vertical;
+      background: var(--surface-2, rgba(0,0,0,0.3));
+      border: 1px solid var(--border);
+      color: var(--fg);
+      padding: 6px 9px;
+      border-radius: var(--radius-sm, 4px);
+      font: inherit;
+      font-size: var(--t-small, 11px);
+      transition: border-color var(--duration-fast) var(--ease-out);
+    }
+    .axis-row textarea:focus {
+      outline: none;
+      border-color: var(--accent);
     }
     .axis-row .descriptor {
-      font-size: 11px; color: var(--keep); margin-top: 2px; min-height: 14px;
+      font-size: var(--t-small, 11px);
+      color: var(--keep);
+      margin-top: 4px;
+      margin-bottom: 4px;
+      min-height: 14px;
+      font-style: italic;
     }
     .ann-foot {
-      grid-column: 1 / -1; display: flex; gap: 10px; align-items: center;
-      border-top: 1px solid var(--border); padding-top: 12px; margin-top: 6px;
+      grid-column: 1 / -1;
+      display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+      border-top: 1px solid var(--border);
+      padding-top: 14px;
+      margin-top: 6px;
     }
-    .ann-foot select, .ann-foot input {
-      background: rgba(0,0,0,0.3); border: 1px solid var(--border);
-      color: var(--fg); padding: 6px 10px; border-radius: 3px;
+    .ann-foot select,
+    .ann-foot input {
+      background: var(--surface-2, rgba(0,0,0,0.3));
+      border: 1px solid var(--border);
+      color: var(--fg);
+      padding: 7px 11px;
+      border-radius: var(--radius-md, 5px);
+      font: inherit;
+      font-size: var(--t-small, 12px);
+      transition: border-color var(--duration-fast) var(--ease-out);
     }
-    .ann-foot input { flex: 1; }
-    .ann-foot button { padding: 7px 14px; font-size: 12px; }
-    .ann-foot button.primary { background: var(--accent); color: white; border: 0; }
-    .ann-foot button.primary:hover { opacity: 0.9; }
+    .ann-foot select:focus,
+    .ann-foot input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    .ann-foot input { flex: 1; min-width: 180px; }
+    .ann-foot button {
+      padding: 8px 16px;
+      font-size: var(--t-small, 12px);
+      border-radius: var(--radius-md, 6px);
+      cursor: pointer;
+      transition: opacity var(--duration-fast) var(--ease-out),
+                  border-color var(--duration-fast) var(--ease-out),
+                  background var(--duration-fast) var(--ease-out);
+    }
+    .ann-foot button.primary {
+      background: var(--accent); color: white;
+      border: 1px solid var(--accent-hi, var(--accent));
+      font-weight: 500;
+    }
+    .ann-foot button.primary:hover { opacity: 0.92; }
     .ann-foot button.skip {
-      background: transparent; color: var(--muted); border: 1px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--border);
+    }
+    .ann-foot button.skip:hover {
+      color: var(--fg); border-color: var(--border-hi);
+      background: var(--surface-2);
+    }
+    /* v0.7-P0-2 — inline cull-reason picker.  Replaces the
+       floating cullReasonTray when the overall picker says cull —
+       no second modal, no out-of-context picker. Hidden by default
+       (display:none); openAnnotation flips display when overall=cull. */
+    .ann-cull-reasons {
+      grid-column: 1 / -1;
+      display: none;
+      flex-wrap: wrap; gap: 5px;
+      padding: 10px 12px;
+      background: var(--cull-soft, rgba(248,113,113,0.08));
+      border: 1px solid var(--cull-border, rgba(248,113,113,0.28));
+      border-radius: var(--radius-md, 6px);
+      margin-top: 6px;
+    }
+    .ann-cull-reasons.show { display: flex; }
+    .ann-cull-reasons .ann-cull-label {
+      font-size: var(--t-small, 11.5px);
+      color: var(--cull);
+      font-weight: 600;
+      margin-right: 6px;
+      align-self: center;
+    }
+    .ann-cull-reasons .reason-pill {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--fg);
+      font: inherit; font-size: 11.5px;
+      padding: 4px 11px;
+      border-radius: var(--radius-pill, 999px);
+      cursor: pointer;
+      transition: color var(--duration-fast) var(--ease-out),
+                  border-color var(--duration-fast) var(--ease-out),
+                  background var(--duration-fast) var(--ease-out);
+    }
+    .ann-cull-reasons .reason-pill:hover {
+      border-color: var(--cull);
+      background: var(--cull-soft, rgba(248,113,113,0.18));
+    }
+    .ann-cull-reasons .reason-pill.active {
+      background: var(--cull); color: #fff; border-color: var(--cull);
+    }
+    /* Mobile — full-page layout.  Card fills the viewport, thumb
+       stacks above the form, foot becomes sticky-bottom for tap
+       access while keyboard is up. */
+    @media (max-width: 640px) {
+      .ann-modal { padding: 0; }
+      .ann-card {
+        max-width: 100vw;
+        max-height: 100vh;
+        border-radius: 0;
+        grid-template-columns: 1fr;
+        gap: 14px;
+        padding: 14px;
+        overflow-y: auto;
+      }
+      .ann-thumb { aspect-ratio: 16/10; }
+      .ann-foot {
+        position: sticky; bottom: 0;
+        background: var(--bg-card);
+        margin: 0 -14px -14px;
+        padding: 12px 14px;
+        border-top: 1px solid var(--border);
+        z-index: 1;
+      }
+      .stars { font-size: 26px; }
     }
     /* V10.1 Lightbox upgrade: image + full evaluation panel side-by-side. */
     .lightbox {
@@ -4033,9 +4248,24 @@
     <div class="cmp-rgb-readout" id="cmpRgbReadout" aria-hidden="true"></div>
   </div>
 
-  <!-- V2.0 annotation modal: rubric form + active-learning queue -->
+  <!-- V2.0 annotation modal: rubric form + active-learning queue
+       v0.7-P0-2: progress bar at the top (6 axis cells lit as
+       rated), inline ann-cull-reasons picker (replaces the floating
+       cullReasonTray when overall=cull), full-page mobile layout. -->
   <div class="ann-modal" id="annModal">
     <div class="ann-card">
+      <!-- v0.7-P0-2 progress bar (full width, 6 axis segments) -->
+      <div class="ann-progress" id="annProgress" aria-label="rubric 进度">
+        <span class="ann-progress-count" id="annProgressCount">0 / 6</span>
+        <div class="ann-progress-track" id="annProgressTrack">
+          <div class="ann-progress-cell" data-axis-idx="0"></div>
+          <div class="ann-progress-cell" data-axis-idx="1"></div>
+          <div class="ann-progress-cell" data-axis-idx="2"></div>
+          <div class="ann-progress-cell" data-axis-idx="3"></div>
+          <div class="ann-progress-cell" data-axis-idx="4"></div>
+          <div class="ann-progress-cell" data-axis-idx="5"></div>
+        </div>
+      </div>
       <div>
         <img class="ann-thumb" id="annThumb" alt="">
         <div style="margin-top:10px;font-size:11px;color:var(--muted)" id="annMeta"></div>
@@ -4043,10 +4273,16 @@
       </div>
       <div class="ann-side">
         <h3 id="annTitle">标注</h3>
-        <div style="font-size:11px;color:var(--muted);margin-bottom:12px">
-          每个轴 1-5★ + 一句"为什么"。这种 rubric 风格的标注比单一的 keep/maybe/cull 给 rescorer 提供 ~6× 的训练信号。
+        <div class="rubric-intro">
+          每个轴 1-5★ + 一句"为什么"。Tab 在轴间跳,1-5 直接给当前轴打星 — 一张全维度评分通常 &lt; 5 秒。
         </div>
         <div id="axesContainer"></div>
+        <!-- v0.7-P0-2 inline cull-reason picker (replaces the
+             floating cullReasonTray for the annotation flow). -->
+        <div class="ann-cull-reasons" id="annCullReasons" aria-hidden="true">
+          <span class="ann-cull-label">为什么 cull?</span>
+          <span id="annCullReasonPills"></span>
+        </div>
         <div class="ann-foot">
           <select id="annOverall">
             <option value="">总体决策…</option>
@@ -7477,6 +7713,47 @@
   const annNext = document.getElementById("annNext");
   const annSave = document.getElementById("annSave");
   const axesContainer = document.getElementById("axesContainer");
+  // v0.7-P0-2 — new top progress bar + inline cull-reason picker
+  const annProgressTrack = document.getElementById("annProgressTrack");
+  const annProgressCount = document.getElementById("annProgressCount");
+  const annCullReasons   = document.getElementById("annCullReasons");
+  const annCullReasonPills = document.getElementById("annCullReasonPills");
+  let _annSelectedCullReason = null;
+
+  function _showAnnCullReasons() {
+    if (!annCullReasons) return;
+    // Populate from the taxonomy fetched at boot (P-UX-4 path).  If
+    // it's not loaded yet (rare — fetch is fired on page load), the
+    // tray simply stays empty and the save path still works.
+    if (annCullReasonPills && !annCullReasonPills.dataset.built && _CULL_REASONS_LIST.length) {
+      annCullReasonPills.innerHTML = _CULL_REASONS_LIST.map(e =>
+        `<button class="reason-pill" type="button" data-token="${esc(e.token)}"
+                  title="${esc(e.label_zh || e.token)}">${esc(e.label_zh || e.token)}</button>`
+      ).join(" ");
+      annCullReasonPills.dataset.built = "1";
+      annCullReasonPills.addEventListener("click", e => {
+        const b = e.target.closest("[data-token]");
+        if (!b) return;
+        annCullReasonPills.querySelectorAll(".reason-pill").forEach(p => p.classList.remove("active"));
+        b.classList.add("active");
+        _annSelectedCullReason = b.dataset.token;
+      });
+    }
+    annCullReasons.classList.add("show");
+    annCullReasons.setAttribute("aria-hidden", "false");
+  }
+  function _hideAnnCullReasons() {
+    if (!annCullReasons) return;
+    annCullReasons.classList.remove("show");
+    annCullReasons.setAttribute("aria-hidden", "true");
+    annCullReasonPills?.querySelectorAll(".reason-pill")
+      .forEach(p => p.classList.remove("active"));
+  }
+  // annOverall change → show/hide inline cull-reason picker
+  annOverall?.addEventListener("change", () => {
+    if (annOverall.value === "cull") _showAnnCullReasons();
+    else { _hideAnnCullReasons(); _annSelectedCullReason = null; }
+  });
 
   let rubricMeta = null;
   let currentFn = null;
@@ -7486,12 +7763,16 @@
     const res = await fetch("/rubric_meta");
     const data = await res.json();
     rubricMeta = data.axes;
-    // Build static form skeleton once
-    axesContainer.innerHTML = rubricMeta.map(ax => `
-      <div class="axis-row" data-axis="${ax.name}">
-        <div class="axis-name">${ax.label_zh} <span style="opacity:0.5;font-weight:400;font-size:10px">(${ax.label_en})</span></div>
+    // v0.7-P0-2 — `data-axis-idx` lets the progress bar map back
+    // to the rubricMeta index so each rated axis lights its
+    // matching cell.
+    axesContainer.innerHTML = rubricMeta.map((ax, idx) => `
+      <div class="axis-row" data-axis="${ax.name}" data-axis-idx="${idx}">
+        <div class="axis-name">${ax.label_zh}
+          <span class="axis-en">${ax.label_en}</span>
+        </div>
         <div class="axis-desc">${ax.description_zh}</div>
-        <div class="stars" data-stars data-axis="${ax.name}">
+        <div class="stars" data-stars data-axis="${ax.name}" data-axis-idx="${idx}">
           ${[1,2,3,4,5].map(i => `<span class="star" data-v="${i}">★</span>`).join("")}
         </div>
         <div class="descriptor" data-descriptor></div>
@@ -7534,6 +7815,23 @@
     starsEl.querySelectorAll(".star").forEach((s, i) => {
       s.classList.toggle("locked", i < v);
     });
+    // v0.7-P0-2 — keep the progress bar in sync.
+    _updateAnnProgress();
+  }
+
+  // v0.7-P0-2 — paint the 6 progress cells based on which axes
+  // are rated. Counts ≥1★ as "rated"; updates the X/6 counter too.
+  function _updateAnnProgress() {
+    if (!annProgressTrack) return;
+    let n = 0;
+    axesContainer.querySelectorAll(".stars").forEach(starsEl => {
+      const locked = parseInt(starsEl.dataset.locked || "0", 10);
+      const idx    = parseInt(starsEl.dataset.axisIdx || "-1", 10);
+      const cell   = annProgressTrack.querySelector(`[data-axis-idx="${idx}"]`);
+      if (cell) cell.classList.toggle("lit", locked > 0);
+      if (locked > 0) n++;
+    });
+    if (annProgressCount) annProgressCount.textContent = `${n} / 6`;
   }
 
   function clearForm() {
@@ -7546,6 +7844,10 @@
     annOverall.value = "";
     annOverallRationale.value = "";
     annWhy.style.display = "none";
+    // v0.7-P0-2 — reset progress bar + hide cull-reason picker.
+    _updateAnnProgress();
+    _hideAnnCullReasons();
+    _annSelectedCullReason = null;
   }
 
   // V14.5 — when openAnnotation is called via openNextToLabel right
@@ -7611,6 +7913,13 @@
       });
       if (rec.overall_label) annOverall.value = rec.overall_label;
       if (rec.overall_rationale) annOverallRationale.value = rec.overall_rationale;
+      // v0.7-P0-2 — refresh progress bar after loading prior stars;
+      // also re-show the cull-reason picker if the loaded record is
+      // a cull (lets the user change reason without re-flipping the
+      // overall dropdown).
+      _updateAnnProgress();
+      if (annOverall.value === "cull") _showAnnCullReasons();
+      else _hideAnnCullReasons();
     } catch (e) { /* no prior — leave blank */ }
     annModal.classList.add("show");
     // V14.5 — clear the cross-fade veil one frame after the modal
@@ -7645,6 +7954,12 @@
       overall_label: annOverall.value,
       overall_rationale: annOverallRationale.value,
     };
+    // v0.7-P0-2 — inline cull-reason picker. When the user chose
+    // cull AND picked a reason pill, fold it into the same POST
+    // instead of triggering the separate floating tray afterward.
+    if (annOverall.value === "cull" && _annSelectedCullReason) {
+      body.cull_reason = _annSelectedCullReason;
+    }
     annSave.disabled = true;
     try {
       const res = await fetch(`/annotation/${run_id}/${encodeURIComponent(currentFn)}`, {
@@ -7675,7 +7990,9 @@
       // P-UX-4 — if the user just culled via the rubric modal, prompt
       // for a reason (unless they're already advancing — in advance
       // mode the rapid-flow rhythm shouldn't be interrupted).
-      if (annOverall.value === "cull" && !thenAdvance) {
+      // v0.7-P0-2 — skip the floating prompt when the inline picker
+      // already captured a reason; we already POSTed it above.
+      if (annOverall.value === "cull" && !thenAdvance && !_annSelectedCullReason) {
         promptCullReason(currentFn);
       }
       summary.n_human_labeled = (summary.n_human_labeled || 0) + (r && !rows._wasLabeled ? 1 : 0);
