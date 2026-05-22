@@ -739,7 +739,15 @@
       }
     }
 
-    /* V9.2 cluster compare modal */
+    /* v0.7-P0-1 — A/B compare modal redesigned for LR Compare-grade
+       visual density. Header is frosted chrome (design tokens), the
+       per-cell decision input upgrades from a single "pick best"
+       green button to three semantic pills (keep / maybe / cull)
+       matching the .pill grammar used elsewhere, and a floating
+       pixel-level RGB readout follows the cursor in 1:1 zoom mode.
+       2-cell layout collapses to a 50/50 split (LR Compare classic);
+       3+ cells keep the horizontal scroll. Mobile stacks vertically
+       with snap-scroll. */
     .cmp-modal {
       position: fixed; inset: 0; background: rgba(0,0,0,0.92);
       display: none; flex-direction: column; z-index: 12;
@@ -747,30 +755,59 @@
     }
     .cmp-modal.show { display: flex; }
     .cmp-header {
-      padding: 14px 24px; display: flex; gap: 16px; align-items: center;
+      padding: 10px 22px;
+      display: flex; gap: 14px; align-items: center;
       border-bottom: 1px solid var(--border);
-      background: rgba(0,0,0,0.5);
+      background: var(--chrome);
+      backdrop-filter: blur(12px) saturate(140%);
+      -webkit-backdrop-filter: blur(12px) saturate(140%);
     }
-    .cmp-header h3 { margin: 0; font-size: 15px; font-weight: 600; }
-    .cmp-header .muted { color: var(--muted); font-size: 12px; }
-    .cmp-header .close {
-      margin-left: auto; cursor: pointer; padding: 6px 12px;
-      border: 1px solid var(--border); border-radius: 5px;
+    .cmp-header h3 {
+      margin: 0;
+      font-size: var(--t-h3, 15px);
+      font-weight: 600;
+      color: var(--fg);
+    }
+    .cmp-header .muted { color: var(--muted); font-size: var(--t-small, 11.5px); }
+    .cmp-header .close,
+    .cmp-header .cmp-nav-btn {
+      cursor: pointer;
+      padding: 5px 11px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md, 6px);
       color: var(--muted);
+      font: inherit; font-size: var(--t-small, 11.5px);
+      background: transparent;
+      transition: color var(--duration-fast) var(--ease-out),
+                  border-color var(--duration-fast) var(--ease-out),
+                  background var(--duration-fast) var(--ease-out);
     }
-    .cmp-header .close:hover { color: var(--fg); border-color: var(--border-hi); }
+    .cmp-header .close { margin-left: auto; }
+    .cmp-header .close:hover,
+    .cmp-header .cmp-nav-btn:hover {
+      color: var(--fg); border-color: var(--border-hi);
+      background: var(--surface-2);
+    }
     .cmp-body {
       flex: 1; overflow: auto;
       display: grid; gap: 10px; padding: 14px;
       grid-auto-flow: column; grid-auto-columns: minmax(280px, 1fr);
       align-items: stretch;
     }
+    /* v0.7-P0-1 — 2-cell layout = LR Compare 50/50 split */
+    .cmp-body[data-n="2"] { grid-auto-columns: 1fr; }
     .cmp-cell {
       display: flex; flex-direction: column;
       background: var(--bg-card); border: 1px solid var(--border);
-      border-radius: 8px; overflow: hidden;
+      border-radius: var(--radius-md, 8px);
+      overflow: hidden;
+      transition: border-color var(--duration-fast) var(--ease-out),
+                  box-shadow var(--duration-fast) var(--ease-out);
     }
-    .cmp-cell.best { border: 2px solid var(--keep); }
+    .cmp-cell.best {
+      border: 1.5px solid var(--keep);
+      box-shadow: 0 0 0 2px rgba(74,222,128,0.16);
+    }
     .cmp-cell .img-wrap {
       flex: 1; min-height: 280px;
       display: flex; align-items: center; justify-content: center;
@@ -784,13 +821,8 @@
       transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
       will-change: transform;
     }
-    /* P-UX-7 — synced zoom across compare cells. The shared-zoom
-       state applies the same scale + normalized pan to every cell's
-       image, so panning/zooming one updates them all in lock-step.
-       Click in fit mode = 1:1 zoom; click in 1:1 mode = back to
-       fit; drag pans; wheel fine-tunes. Per-cell cursor states
-       reflect the current zoom mode below. */
-    .cmp-cell.zoomed .img-wrap { cursor: grab; }
+    /* P-UX-7 — synced zoom across compare cells. */
+    .cmp-cell.zoomed .img-wrap { cursor: crosshair; }
     .cmp-cell.zoomed.dragging .img-wrap { cursor: grabbing; }
     .cmp-cell.dragging .img-wrap img { transition: none; }
     .cmp-header .cmp-zoom-controls {
@@ -798,22 +830,32 @@
       margin-left: 12px;
     }
     .cmp-header .cmp-zoom-btn {
-      height: 28px; padding: 0 12px; border-radius: 5px;
-      background: rgba(0,0,0,0.4); color: #fff;
-      border: 1px solid rgba(255,255,255,0.18);
-      font: inherit; font-size: 11.5px; cursor: pointer;
+      height: 28px; padding: 0 12px;
+      border-radius: var(--radius-md, 5px);
+      background: transparent; color: var(--muted);
+      border: 1px solid var(--border);
+      font: inherit; font-size: var(--t-small, 11.5px);
+      cursor: pointer;
       display: inline-flex; align-items: center;
-      transition: background 120ms;
+      transition: color var(--duration-fast) var(--ease-out),
+                  border-color var(--duration-fast) var(--ease-out),
+                  background var(--duration-fast) var(--ease-out);
     }
-    .cmp-header .cmp-zoom-btn:hover { background: rgba(0,0,0,0.7); }
+    .cmp-header .cmp-zoom-btn:hover {
+      color: var(--fg); border-color: var(--border-hi);
+      background: var(--surface-2);
+    }
     .cmp-header .cmp-zoom-btn.active {
-      background: var(--accent); border-color: var(--accent);
+      background: var(--accent); border-color: var(--accent-hi);
+      color: #fff;
     }
     .cmp-header .cmp-zoom-badge {
-      padding: 3px 8px; border-radius: 4px;
-      background: rgba(0,0,0,0.45); color: #fff;
-      font-size: 11px; font-family: ui-monospace, monospace;
-      opacity: 0; transition: opacity 150ms;
+      padding: 3px 8px; border-radius: var(--radius-sm, 4px);
+      background: var(--surface-2);
+      color: var(--fg);
+      font-size: var(--t-small, 11px);
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      opacity: 0; transition: opacity 150ms var(--ease-out);
     }
     .cmp-header .cmp-zoom-badge.show { opacity: 1; }
     .cmp-header .cmp-sync-hint {
@@ -821,31 +863,161 @@
       margin-left: 4px;
     }
     .cmp-cell .meta {
-      padding: 10px 12px; font-size: 11px;
+      padding: 10px 12px;
+      font-size: var(--t-small, 11px);
       border-top: 1px solid var(--border);
+      background: var(--surface-2);
     }
     .cmp-cell .meta .fn {
-      font-family: ui-monospace, monospace; font-size: 10.5px;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 10.5px;
       color: var(--muted); display: block; margin-bottom: 6px;
       text-overflow: ellipsis; overflow: hidden; white-space: nowrap;
     }
+    .cmp-cell .meta .meta-top {
+      display: flex; align-items: center; gap: 8px;
+      flex-wrap: wrap; margin-bottom: 6px;
+    }
+    .cmp-cell .meta .score {
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      color: var(--fg-2, var(--fg));
+    }
     .cmp-cell .meta .stars {
       display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px;
-      margin: 4px 0;
+      margin: 4px 0 8px;
     }
     .cmp-cell .meta .stars .a {
-      background: rgba(255,255,255,0.04); padding: 2px 4px;
-      border-radius: 2px; text-align: center; font-size: 9.5px;
+      background: var(--surface-3, rgba(255,255,255,0.04));
+      padding: 3px 4px;
+      border-radius: var(--radius-sm, 3px);
+      text-align: center; font-size: 9.5px;
+      color: var(--fg-2, var(--fg));
     }
-    .cmp-cell .meta .pick-btn {
-      width: 100%; margin-top: 6px;
-      background: rgba(46,168,74,0.15); color: var(--keep);
-      border: 1px solid rgba(46,168,74,0.3);
-      padding: 5px; border-radius: 4px; font-size: 11px; cursor: pointer;
+    /* v0.7-P0-1 — three-pill decision picker.  Replaces the v0.2
+       single green "pick best" button so the user can grade each
+       photo independently (and the burst-compare "make this best
+       and cull rest" flow becomes one click on a star icon below). */
+    .cmp-cell .cmp-picker {
+      display: grid; grid-template-columns: 1fr 1fr 1fr;
+      gap: 4px;
+      margin-top: 4px;
     }
-    .cmp-cell.best .pick-btn {
-      background: var(--keep); color: white;
+    .cmp-cell .cmp-pick-pill {
+      padding: 5px 8px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-pill, 999px);
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font: inherit; font-size: var(--t-small, 11px);
+      font-weight: 500;
+      display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+      transition: color var(--duration-fast) var(--ease-out),
+                  border-color var(--duration-fast) var(--ease-out),
+                  background var(--duration-fast) var(--ease-out);
+    }
+    .cmp-cell .cmp-pick-pill:hover {
+      color: var(--fg); border-color: var(--border-hi);
+    }
+    .cmp-cell .cmp-pick-pill.keep.active {
+      background: var(--keep); color: #fff; border-color: var(--keep);
+    }
+    .cmp-cell .cmp-pick-pill.maybe.active {
+      background: var(--maybe); color: #1a1d24; border-color: var(--maybe);
+    }
+    .cmp-cell .cmp-pick-pill.cull.active {
+      background: var(--cull); color: #fff; border-color: var(--cull);
+    }
+    /* "Make best, cull rest" action — appears below the picker
+       row when in burst-cluster compare mode (2+ cells, has
+       cluster_id). Single shortcut for the most common gesture. */
+    .cmp-cell .cmp-best-btn {
+      margin-top: 4px;
+      width: 100%;
+      padding: 5px 8px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-pill, 999px);
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font: inherit; font-size: 10.5px;
+      transition: color var(--duration-fast) var(--ease-out),
+                  border-color var(--duration-fast) var(--ease-out),
+                  background var(--duration-fast) var(--ease-out);
+    }
+    .cmp-cell .cmp-best-btn:hover {
+      color: var(--fg); border-color: var(--keep);
+      background: rgba(74,222,128,0.08);
+    }
+    .cmp-cell.best .cmp-best-btn {
+      background: var(--keep); color: #fff;
       border-color: var(--keep);
+    }
+
+    /* v0.7-P0-1 — floating pixel-level RGB readout.  Follows cursor
+       inside .img-wrap while in zoomed 1:1 mode.  Reads ImageData
+       from a cached <canvas> of the visible image at native
+       resolution.  Position is fixed (viewport) so it doesn't get
+       clipped by .img-wrap overflow:hidden. */
+    .cmp-rgb-readout {
+      position: fixed;
+      pointer-events: none;
+      display: none;
+      z-index: 13;
+      padding: 7px 9px;
+      background: var(--chrome, rgba(20,23,28,0.95));
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm, 5px);
+      box-shadow: var(--shadow-md);
+      font: 11px/1.45 ui-monospace, "SF Mono", Menlo, monospace;
+      color: var(--fg);
+      backdrop-filter: blur(8px);
+      min-width: 130px;
+    }
+    .cmp-rgb-readout.show { display: block; }
+    .cmp-rgb-readout .rgb-line {
+      display: flex; gap: 8px; align-items: center;
+    }
+    .cmp-rgb-readout .swatch {
+      display: inline-block;
+      width: 12px; height: 12px;
+      border-radius: 2px;
+      border: 1px solid rgba(255,255,255,0.2);
+      flex-shrink: 0;
+    }
+    .cmp-rgb-readout .rgb-vals {
+      color: var(--fg-2, var(--fg));
+    }
+    .cmp-rgb-readout .rgb-hex {
+      color: var(--muted);
+      font-size: 10px;
+      margin-top: 2px;
+    }
+    .cmp-rgb-readout .rgb-y {
+      color: var(--muted);
+      font-size: 10px;
+    }
+    /* Mobile — stack vertically with snap-scroll swipe gesture.
+       Each cell takes ~one screen so the user pages through
+       with thumb swipe; pills enlarge for tap-target compliance. */
+    @media (max-width: 640px) {
+      .cmp-body {
+        grid-auto-flow: row;
+        grid-auto-columns: unset;
+        grid-template-columns: 1fr;
+        scroll-snap-type: y mandatory;
+        padding: 10px;
+      }
+      .cmp-body[data-n="2"] { grid-template-columns: 1fr; }
+      .cmp-cell {
+        scroll-snap-align: start;
+        min-height: calc(100vh - 90px);
+      }
+      .cmp-cell .img-wrap { min-height: 320px; }
+      .cmp-cell .cmp-pick-pill { padding: 8px 6px; font-size: 12.5px; }
+      .cmp-cell .cmp-best-btn { padding: 8px; font-size: 12px; }
+      .cmp-header { padding: 8px 14px; gap: 8px; flex-wrap: wrap; }
+      .cmp-header .cmp-sync-hint { display: none; }
     }
     /* V9.0 style chip in card */
     .row1 .style-chip {
@@ -3840,24 +4012,25 @@
               aria-live="polite"></span>
       </span>
       <!-- P0.3 — prev/next walk across burst clusters without
-           leaving the modal. Keyboard: ← / → and j / k. -->
+           leaving the modal. Keyboard: ← / → and j / k.
+           v0.7-P0-1: inline styles replaced by .cmp-nav-btn so they
+           inherit the design-token hover ramp + frosted hierarchy. -->
       <span style="margin-left:auto;display:inline-flex;gap:6px">
-        <button id="cmpPrev" style="padding:4px 10px;
-          background:transparent;color:var(--muted);
-          border:1px solid var(--border);border-radius:4px;
-          font:inherit;cursor:pointer" title="上一个连拍组 (←)">
+        <button id="cmpPrev" class="cmp-nav-btn" title="上一个连拍组 (←)">
           ◀ 上一组
         </button>
-        <button id="cmpNext" style="padding:4px 10px;
-          background:transparent;color:var(--muted);
-          border:1px solid var(--border);border-radius:4px;
-          font:inherit;cursor:pointer" title="下一个连拍组 (→)">
+        <button id="cmpNext" class="cmp-nav-btn" title="下一个连拍组 (→)">
           下一组 ▶
         </button>
       </span>
       <span class="close" id="cmpClose">关闭 (Esc)</span>
     </div>
     <div class="cmp-body" id="cmpBody"></div>
+    <!-- v0.7-P0-1 — floating pixel RGB readout overlay.  Visible
+         only inside the modal while .cmp-cell.zoomed is active and
+         the cursor is hovering an img-wrap. Populated by
+         _cmpUpdateRgbReadout(). -->
+    <div class="cmp-rgb-readout" id="cmpRgbReadout" aria-hidden="true"></div>
   </div>
 
   <!-- V2.0 annotation modal: rubric form + active-learning queue -->
@@ -7717,6 +7890,10 @@
 
     const axisAbbr = {technical:"技", subject:"主", composition:"构",
                        light:"光", moment:"瞬", aesthetic:"美"};
+    // v0.7-P0-1 — annotate the body root with n cells so CSS can
+    // collapse to 50/50 split when there are exactly 2 (LR Compare
+    // classic). Burst-cluster compares are almost always 2-4 cells.
+    cmpBody.dataset.n = String(members.length);
     cmpBody.innerHTML = members.map(r => {
       const isBest = (r === best);
       const stars = ["technical","subject","composition","light","moment","aesthetic"].map(name => {
@@ -7724,19 +7901,41 @@
         return `<div class="a">${axisAbbr[name]} ${s == null ? "--" : s.toFixed(1)}</div>`;
       }).join("");
       const dec = r.decision || "";
+      // v0.7-P0-1 — three-pill picker replaces the single pick-btn.
+      // .cmp-best-btn (below) handles the "make best + cull rest"
+      // gesture from burst compare; here we add it only for that
+      // mode (members.length >= 2 + same cluster_id, which is the
+      // burst-compare entry path).
+      const picker = `
+        <div class="cmp-picker">
+          <button class="cmp-pick-pill keep ${dec==='keep'?'active':''}"
+                  data-fn="${esc(r.filename)}" data-pick="keep"
+                  type="button" title="保留 (1)">保留</button>
+          <button class="cmp-pick-pill maybe ${dec==='maybe'?'active':''}"
+                  data-fn="${esc(r.filename)}" data-pick="maybe"
+                  type="button" title="待定 (2)">待定</button>
+          <button class="cmp-pick-pill cull ${dec==='cull'?'active':''}"
+                  data-fn="${esc(r.filename)}" data-pick="cull"
+                  type="button" title="剔除 (3)">剔除</button>
+        </div>
+        <button class="cmp-best-btn" data-fn="${esc(r.filename)}" data-best="1"
+                type="button" title="选这张为最佳,其余 ${members.length-1} 张标 cull">
+          ${isBest ? '✓ 已选最佳' : '✓ 选最佳 + 其余 cull'}
+        </button>
+      `;
       return `
-        <div class="cmp-cell ${isBest?'best':''}" data-fn="${r.filename}">
+        <div class="cmp-cell ${isBest?'best':''}" data-fn="${esc(r.filename)}">
           <div class="img-wrap" data-full="/full/${run_id}/${encodeURIComponent(r.filename)}">
-            <img src="/thumb/${run_id}/${encodeURIComponent(r.filename)}" alt="${r.filename}">
+            <img src="/thumb/${run_id}/${encodeURIComponent(r.filename)}" alt="${esc(r.filename)}">
           </div>
           <div class="meta">
-            <span class="fn" title="${r.filename}">${r.filename}</span>
-            <div>
+            <span class="fn" title="${esc(r.filename)}">${esc(r.filename)}</span>
+            <div class="meta-top">
               <span class="badge ${dec}" style="font-size:9px;padding:1px 5px">${dec || '?'}</span>
-              <span style="margin-left:6px">final ${r.score_final == null ? "--" : r.score_final.toFixed(2)}</span>
+              <span class="score">final ${r.score_final == null ? "--" : r.score_final.toFixed(2)}</span>
             </div>
             <div class="stars">${stars}</div>
-            <button class="pick-btn" data-fn="${r.filename}">${isBest?'✓ 已选最佳':'选这张'}</button>
+            ${picker}
           </div>
         </div>
       `;
@@ -7754,13 +7953,62 @@
     // want the full lightbox can still get there by closing this
     // modal and clicking the photo's card.
 
-    // Pick handler — keep this one, cull the others
-    cmpBody.querySelectorAll(".pick-btn").forEach(btn => {
+    // v0.7-P0-1 — two click paths inside the modal body, dispatched
+    // by data attribute so we don't have separate listeners for each
+    // sub-button. Delegated to cmpBody (not the individual cells)
+    // so a future re-render doesn't lose handlers.
+    cmpBody.querySelectorAll(".cmp-pick-pill").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const fn  = btn.dataset.fn;
+        const lbl = btn.dataset.pick;
+        if (!fn || !lbl) return;
+        const row = rows.find(x => x.filename === fn);
+        if (!row) return;
+        const cell = btn.closest(".cmp-cell");
+        // Optimistic UI: flip pill highlight + badge before the
+        // network round-trip lands so the pro doesn't wait for it.
+        cell?.querySelectorAll(".cmp-pick-pill").forEach(p => p.classList.remove("active"));
+        btn.classList.add("active");
+        const badge = cell?.querySelector(".badge");
+        if (badge) {
+          badge.classList.remove("keep", "maybe", "cull");
+          badge.classList.add(lbl);
+          badge.textContent = lbl;
+        }
+        // V10.1 — undo snapshot per-cell (lighter than the burst
+        // pick path which snapshots all members at once).
+        pushUndo([{
+          filename: fn,
+          prev_decision: row.decision,
+          prev_human_labeled: row.rubric_human_labeled,
+        }]);
+        try {
+          await fetch(`/annotation/${run_id}/${encodeURIComponent(fn)}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              axes: {},
+              overall_label: lbl,
+              overall_rationale: `compare-modal pick: ${lbl}`,
+            }),
+          });
+          row.rubric_human_labeled = true;
+          row.decision = lbl;
+          summary.n_human_labeled = (summary.n_human_labeled || 0) + 1;
+        } catch (_e) { /* ignore — UI already updated */ }
+        showToast(`已标 ${lbl}:${fn}`, "success");
+      });
+    });
+    // "Make best + cull the rest" — the legacy burst-compare gesture
+    // kept on a dedicated button so the per-cell pills above stay
+    // semantically clean (one cell, one pill, one annotation).
+    cmpBody.querySelectorAll(".cmp-best-btn").forEach(btn => {
       btn.addEventListener("click", async () => {
         const pickFn = btn.dataset.fn;
+        if (!pickFn) return;
         const ok = confirm(`选 ${pickFn} 为最佳,其余 ${members.length - 1} 张标 cull?`);
         if (!ok) return;
-        // V10.1 — undo snapshot
+        // V10.1 — undo snapshot (all members)
         pushUndo(members.map(m => ({
           filename: m.filename,
           prev_decision: m.decision,
@@ -7891,6 +8139,9 @@
 
     const axisAbbr = {technical:"技", subject:"主", composition:"构",
                        light:"光", moment:"瞬", aesthetic:"美"};
+    // v0.7-P0-1 — same n-cells annotation as openCompare so CSS
+    // collapses to 50/50 split when exactly 2.
+    cmpBody.dataset.n = String(members.length);
     cmpBody.innerHTML = members.map(r => {
       const isBest = (r === best);
       const stars = ["technical","subject","composition","light","moment","aesthetic"].map(name => {
@@ -7898,6 +8149,24 @@
         return `<div class="a">${axisAbbr[name]} ${s == null ? "--" : s.toFixed(1)}</div>`;
       }).join("");
       const dec = r.decision || "";
+      // v0.7-P0-1 — three-pill picker, parallels openCompare().
+      const picker = `
+        <div class="cmp-picker">
+          <button class="cmp-pick-pill keep ${dec==='keep'?'active':''}"
+                  data-fn="${esc(r.filename)}" data-pick="keep"
+                  type="button" title="保留 (1)">保留</button>
+          <button class="cmp-pick-pill maybe ${dec==='maybe'?'active':''}"
+                  data-fn="${esc(r.filename)}" data-pick="maybe"
+                  type="button" title="待定 (2)">待定</button>
+          <button class="cmp-pick-pill cull ${dec==='cull'?'active':''}"
+                  data-fn="${esc(r.filename)}" data-pick="cull"
+                  type="button" title="剔除 (3)">剔除</button>
+        </div>
+        <button class="cmp-best-btn" data-fn="${esc(r.filename)}" data-best="1"
+                type="button" title="选这张为 keep,其余 ${members.length-1} 张标 cull">
+          ${isBest ? '✓ 系统推荐 · 选这张 + 其余 cull' : '✓ 选这张 + 其余 cull'}
+        </button>
+      `;
       return `
         <div class="cmp-cell ${isBest?'best':''}" data-fn="${esc(r.filename)}">
           <div class="img-wrap" data-full="/full/${run_id}/${encodeURIComponent(r.filename)}">
@@ -7905,12 +8174,12 @@
           </div>
           <div class="meta">
             <span class="fn" title="${esc(r.filename)}">${esc(r.filename)}</span>
-            <div>
+            <div class="meta-top">
               <span class="badge ${dec}" style="font-size:9px;padding:1px 5px">${esc(dec || '?')}</span>
-              <span style="margin-left:6px">final ${r.score_final == null ? "--" : r.score_final.toFixed(2)}</span>
+              <span class="score">final ${r.score_final == null ? "--" : r.score_final.toFixed(2)}</span>
             </div>
             <div class="stars">${stars}</div>
-            <button class="pick-btn" data-fn="${esc(r.filename)}">${isBest?'✓ 选这张(系统推荐)':'选这张'}</button>
+            ${picker}
           </div>
         </div>
       `;
@@ -7925,13 +8194,50 @@
     // P-UX-7 — reset synced zoom for the new compare set.
     if (typeof _cmpResetZoom === "function") _cmpResetZoom();
 
-    // P-UX-7 — click on an .img-wrap is reserved for the synced
-    // zoom toggle now (see cmpBody-level mousedown/click delegation).
-    // Pick handler — keep one, cull the other(s). Mirrors the cluster
-    // path's flow including undo snapshot + toast.
-    cmpBody.querySelectorAll(".pick-btn").forEach(btn => {
+    // v0.7-P0-1 — per-cell pill handler: independent labels.
+    cmpBody.querySelectorAll(".cmp-pick-pill").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const fn  = btn.dataset.fn;
+        const lbl = btn.dataset.pick;
+        if (!fn || !lbl) return;
+        const row = rows.find(x => x.filename === fn);
+        if (!row) return;
+        const cell = btn.closest(".cmp-cell");
+        cell?.querySelectorAll(".cmp-pick-pill").forEach(p => p.classList.remove("active"));
+        btn.classList.add("active");
+        const badge = cell?.querySelector(".badge");
+        if (badge) {
+          badge.classList.remove("keep", "maybe", "cull");
+          badge.classList.add(lbl);
+          badge.textContent = lbl;
+        }
+        pushUndo([{
+          filename: fn,
+          prev_decision: row.decision,
+          prev_human_labeled: row.rubric_human_labeled,
+        }]);
+        try {
+          await fetch(`/annotation/${run_id}/${encodeURIComponent(fn)}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              axes: {},
+              overall_label: lbl,
+              overall_rationale: `A/B compare pick: ${lbl}`,
+            }),
+          });
+          row.rubric_human_labeled = true;
+          row.decision = lbl;
+          summary.n_human_labeled = (summary.n_human_labeled || 0) + 1;
+        } catch (_e) { /* ignore — UI already updated */ }
+        showToast(`已标 ${lbl}:${fn}`, "success");
+      });
+    });
+    // Make best + cull the rest — same gesture as cluster compare.
+    cmpBody.querySelectorAll(".cmp-best-btn").forEach(btn => {
       btn.addEventListener("click", async () => {
         const pickFn = btn.dataset.fn;
+        if (!pickFn) return;
         const ok = confirm(
           `选 ${pickFn} 为 keep,其余 ${members.length - 1} 张标 cull?`);
         if (!ok) return;
@@ -9411,6 +9717,102 @@
     const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
     _cmpZoomToPoint((_cmpZoom.scale || 1) * factor, e.clientX, e.clientY);
   }, { passive: false });
+
+  // ============================================================
+  // v0.7-P0-1 — LR Compare-style RGB pixel readout.
+  // Visible only when (a) the modal is open AND (b) the cells are
+  // in 1:1 sync-zoom mode AND (c) the cursor is over a .cmp-cell
+  // img-wrap.  Reads via canvas ImageData from the loaded <img> at
+  // its natural resolution; one canvas per <img> src, lazily built
+  // + cached on the element itself (img._rgbCanvas) so repeated
+  // hovers don't re-paint.
+  // ============================================================
+  const cmpRgbReadout = document.getElementById("cmpRgbReadout");
+  function _ensureRgbCanvas(img) {
+    if (img._rgbCanvas) return img._rgbCanvas;
+    if (!img.complete || !img.naturalWidth) return null;
+    try {
+      const c = document.createElement("canvas");
+      c.width  = img.naturalWidth;
+      c.height = img.naturalHeight;
+      const ctx = c.getContext("2d", { willReadFrequently: true });
+      ctx.drawImage(img, 0, 0);
+      // Cache the context too so we don't getContext on every sample.
+      img._rgbCanvas = c;
+      img._rgbCtx    = ctx;
+      return c;
+    } catch (_e) {
+      // Cross-origin taint — unlikely in our setup (same-origin
+      // /thumb/) but if it ever happens we just disable the readout.
+      img._rgbCanvas = null;
+      return null;
+    }
+  }
+  function _hideRgbReadout() {
+    if (cmpRgbReadout) cmpRgbReadout.classList.remove("show");
+  }
+  function _samplePixel(img, naturalX, naturalY) {
+    const c = _ensureRgbCanvas(img);
+    if (!c) return null;
+    try {
+      const d = img._rgbCtx.getImageData(
+        Math.max(0, Math.min(c.width  - 1, Math.round(naturalX))),
+        Math.max(0, Math.min(c.height - 1, Math.round(naturalY))),
+        1, 1
+      ).data;
+      return { r: d[0], g: d[1], b: d[2] };
+    } catch (_e) { return null; }
+  }
+  function _updateRgbReadout(e) {
+    if (!cmpRgbReadout) return;
+    if (!cmpModal.classList.contains("show")) { _hideRgbReadout(); return; }
+    const cell = e.target.closest(".cmp-cell");
+    if (!cell || !cell.classList.contains("zoomed")) {
+      _hideRgbReadout();
+      return;
+    }
+    const img = cell.querySelector("img");
+    if (!img) { _hideRgbReadout(); return; }
+    const rect = img.getBoundingClientRect();
+    // Cursor outside the displayed image — happens in the gutters
+    // when the image is wider/taller than the wrap and centered.
+    if (e.clientX < rect.left || e.clientX > rect.right ||
+        e.clientY < rect.top  || e.clientY > rect.bottom) {
+      _hideRgbReadout();
+      return;
+    }
+    const nx = ((e.clientX - rect.left) / rect.width)  * img.naturalWidth;
+    const ny = ((e.clientY - rect.top)  / rect.height) * img.naturalHeight;
+    const px = _samplePixel(img, nx, ny);
+    if (!px) { _hideRgbReadout(); return; }
+    // ITU-R BT.601 luma — matches what LR/PS show as "Y".
+    const y = Math.round(0.299*px.r + 0.587*px.g + 0.114*px.b);
+    const hex = "#" + [px.r, px.g, px.b]
+      .map(v => v.toString(16).padStart(2, "0").toUpperCase()).join("");
+    cmpRgbReadout.innerHTML = `
+      <div class="rgb-line">
+        <span class="swatch" style="background:rgb(${px.r},${px.g},${px.b})"></span>
+        <span class="rgb-vals">R ${px.r}&nbsp;&nbsp;G ${px.g}&nbsp;&nbsp;B ${px.b}</span>
+      </div>
+      <div class="rgb-hex">${hex}</div>
+      <div class="rgb-y">Y ${y} · ${Math.round((y/255)*100)}%</div>
+    `;
+    // Position to the right + below cursor by 12px; flip horizontally
+    // when too close to viewport right.
+    const READ_W = 160, READ_H = 64;
+    let left = e.clientX + 14;
+    let top  = e.clientY + 14;
+    if (left + READ_W > window.innerWidth)  left = e.clientX - READ_W - 12;
+    if (top  + READ_H > window.innerHeight) top  = e.clientY - READ_H - 12;
+    cmpRgbReadout.style.left = left + "px";
+    cmpRgbReadout.style.top  = top  + "px";
+    cmpRgbReadout.classList.add("show");
+  }
+  cmpBody.addEventListener("mousemove", _updateRgbReadout);
+  cmpBody.addEventListener("mouseleave", _hideRgbReadout);
+  cmpModal.addEventListener("click", e => {
+    if (e.target === cmpModal) _hideRgbReadout();
+  });
 
   // XMP export — POST /export/<run_id>.
   // Two buttons:
