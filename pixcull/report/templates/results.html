@@ -2389,6 +2389,83 @@
       }
     }
 
+    /* v0.6 (5/5) — hold-Space cheat-sheet overlay (macOS Finder
+       pattern).  Press-and-hold Space ≥ 350ms surfaces a transient
+       contextual hint strip; release Space (or any other key) hides
+       it.  No focus trap, no Esc handling — purely transient, owned
+       by the hold-Space gesture.
+
+       The strip is small, frosted, anchored centre-bottom so the
+       grid stays readable behind it.  At ≤ 640px it fans out to two
+       rows of pills.  The full shortcuts modal (?) remains the
+       authoritative source — this overlay is a 4-6 pill subset for
+       the *current* context only. */
+    .kbd-cheat {
+      position: fixed;
+      left: 50%; bottom: calc(20px + env(safe-area-inset-bottom));
+      transform: translate(-50%, 12px);
+      opacity: 0; pointer-events: none;
+      display: flex; gap: 8px; align-items: center;
+      padding: 9px 14px;
+      background: var(--chrome, rgba(20,23,28,0.94));
+      backdrop-filter: blur(10px) saturate(140%);
+      -webkit-backdrop-filter: blur(10px) saturate(140%);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      box-shadow: var(--shadow-lg, 0 18px 40px rgba(0,0,0,0.45));
+      transition: opacity 160ms var(--ease-out, ease-out),
+                  transform 200ms var(--ease-out, ease-out);
+      z-index: 60;
+      max-width: calc(100vw - 28px);
+      flex-wrap: wrap; justify-content: center;
+    }
+    .kbd-cheat.show {
+      opacity: 1;
+      transform: translate(-50%, 0);
+    }
+    .kbd-cheat .kbd-ctx {
+      font-size: 10.5px;
+      color: var(--muted);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin-right: 4px;
+      padding-right: 8px;
+      border-right: 1px solid var(--border);
+    }
+    .kbd-cheat .kbd-cell {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 11.5px;
+      color: var(--fg);
+    }
+    .kbd-cheat kbd {
+      display: inline-block;
+      padding: 2px 7px;
+      background: var(--surface-2, rgba(255,255,255,0.06));
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 10.5px;
+      line-height: 1.2;
+      min-width: 18px;
+      text-align: center;
+      color: var(--fg);
+    }
+    .kbd-cheat .kbd-cell .desc { color: var(--fg-2, var(--fg)); }
+    .kbd-cheat .kbd-more {
+      margin-left: 4px; padding-left: 8px;
+      border-left: 1px solid var(--border);
+      font-size: 10.5px; color: var(--muted);
+    }
+    /* prefers-reduced-motion → don't slide; just fade */
+    @media (prefers-reduced-motion: reduce) {
+      .kbd-cheat,
+      .kbd-cheat.show { transition: opacity 120ms linear; transform: translate(-50%, 0); }
+    }
+    @media (max-width: 640px) {
+      .kbd-cheat { padding: 8px 10px; gap: 6px; font-size: 11px; }
+      .kbd-cheat .kbd-ctx { display: none; }
+    }
+
     /* P-UX-17 — mobile-responsive layout overhaul. The desktop UI is
        built around mouse + keyboard; phones need:
          - bigger touch targets (action buttons 36px min)
@@ -3750,6 +3827,14 @@
       </div>
     </div>
   </div>
+
+  <!-- v0.6 (5/5) — hold-Space cheat-sheet overlay (macOS Finder
+       pattern).  Lives outside the shortcuts modal — never modal,
+       never focus-trapping, owned by the keydown/keyup pair only.
+       Populated by _showKbdCheat(ctx) which reads _activeShortcutCtx()
+       and pulls a 4-6-pill subset from KBD_CHEAT_DATA below. -->
+  <div class="kbd-cheat" id="kbdCheat" aria-hidden="true"
+       role="status" aria-live="polite"></div>
 
   <!-- V14.5 shortcuts overlay — opens with `?`. Replaces a native
        alert() that was ugly + non-dismissible-on-Esc. Auto-discoverable
@@ -6701,6 +6786,119 @@
     if (badge) badge.textContent = "当前:" + (_CTX_LABELS[ctx] || ctx);
   }
 
+  // ================================================================
+  // v0.6 (5/5) — hold-Space contextual cheat-sheet (Finder pattern).
+  // Press-and-hold Space ≥ HOLD_MS surfaces a frosted strip showing
+  // the 4-6 most-useful keys for the *current* context (grid /
+  // lightbox / compare). Release Space → strip fades + the upcoming
+  // Space-up is consumed (no lightbox toggle).
+  // Tap Space (< HOLD_MS) → existing toggle-lightbox behavior.
+  // ================================================================
+  const KBD_HOLD_MS = 350;
+  const kbdCheat    = document.getElementById("kbdCheat");
+  // Subset of the full shortcuts modal, distilled to the keys a
+  // panicked user actually needs in the moment.  Order is
+  // most-frequent-first; the strip caps visually at ~6 pills.
+  const KBD_CHEAT_DATA = {
+    grid: [
+      {keys: ["1"], desc: "keep"},
+      {keys: ["2"], desc: "maybe"},
+      {keys: ["3"], desc: "cull"},
+      {keys: ["←", "→"], desc: "上/下一张"},
+      {keys: ["B"], desc: "侧栏"},
+      {keys: ["?"], desc: "全部"},
+    ],
+    lightbox: [
+      {keys: ["1"], desc: "keep"},
+      {keys: ["2"], desc: "maybe"},
+      {keys: ["3"], desc: "cull"},
+      {keys: ["←", "→"], desc: "前/后一张"},
+      {keys: ["Z"], desc: "1:1"},
+      {keys: ["Esc"], desc: "关闭"},
+    ],
+    compare: [
+      {keys: ["Z"], desc: "同步 1:1"},
+      {keys: ["+", "−"], desc: "缩放"},
+      {keys: ["0"], desc: "重置"},
+      {keys: ["Esc"], desc: "关闭"},
+    ],
+  };
+
+  function _renderKbdCheat(ctx) {
+    if (!kbdCheat) return;
+    const rows = KBD_CHEAT_DATA[ctx] || KBD_CHEAT_DATA.grid;
+    const label = _CTX_LABELS[ctx] || "网格";
+    const html = [`<span class="kbd-ctx">${esc(label)}</span>`];
+    rows.forEach(r => {
+      const keysHtml = r.keys
+        .map(k => `<kbd>${esc(k)}</kbd>`).join(" ");
+      html.push(
+        `<span class="kbd-cell">${keysHtml}<span class="desc">${esc(r.desc)}</span></span>`
+      );
+    });
+    html.push(`<span class="kbd-more">松开 Space 关闭</span>`);
+    kbdCheat.innerHTML = html.join("");
+  }
+
+  let _kbdHoldTimer  = null;   // setTimeout handle for the hold-debounce
+  let _kbdCheatShown = false;  // true while the overlay is on screen
+  let _kbdSpaceDown  = false;  // dedupes keyboard auto-repeat events
+
+  function _showKbdCheat() {
+    if (!kbdCheat) return;
+    _renderKbdCheat(_activeShortcutCtx());
+    kbdCheat.classList.add("show");
+    kbdCheat.setAttribute("aria-hidden", "false");
+    _kbdCheatShown = true;
+  }
+  function _hideKbdCheat() {
+    if (!kbdCheat) return;
+    kbdCheat.classList.remove("show");
+    kbdCheat.setAttribute("aria-hidden", "true");
+    _kbdCheatShown = false;
+  }
+  function _cancelKbdHold() {
+    if (_kbdHoldTimer) {
+      clearTimeout(_kbdHoldTimer);
+      _kbdHoldTimer = null;
+    }
+  }
+  // Tap-vs-hold gate, called from the keydown handler before any
+  // other Space-specific logic. Returns true when the caller should
+  // suppress the default Space behavior (i.e. the hint is showing
+  // OR we are in the hold-debounce window).
+  function _kbdSpaceDownGate(e) {
+    // Auto-repeat events — first one already started the timer; bail.
+    if (e.repeat || _kbdSpaceDown) {
+      e.preventDefault();
+      return true;
+    }
+    _kbdSpaceDown = true;
+    _cancelKbdHold();
+    _kbdHoldTimer = setTimeout(() => {
+      _kbdHoldTimer = null;
+      _showKbdCheat();
+    }, KBD_HOLD_MS);
+    return false;  // caller still gets to perform the tap path
+  }
+  // Returns true if the keyup should suppress the lightbox toggle
+  // (because we showed the overlay or are still in the hold window).
+  function _kbdSpaceUpGate() {
+    const wasShown = _kbdCheatShown;
+    _cancelKbdHold();
+    _hideKbdCheat();
+    _kbdSpaceDown = false;
+    return wasShown;
+  }
+  // Any *other* key released while Space is held also dismisses the
+  // overlay — matches Finder behaviour where the user reads, picks
+  // a key, then releases everything.
+  document.addEventListener("keyup", e => {
+    if (e.key !== " " && e.key !== "Spacebar" && _kbdCheatShown) {
+      _hideKbdCheat();
+    }
+  });
+
   function showShortcuts() {
     if (!shortcutsModal) return;
     _applyShortcutsContext(_activeShortcutCtx());
@@ -6910,13 +7108,12 @@
       if (focusedFn) pinForCompare(focusedFn);
     }
     else if (e.key === " " || e.key === "Spacebar") {
-      // toggle lightbox (with info pane) on focused card
+      // v0.6 (5/5) — hold-Space → cheat-sheet (Finder pattern). The
+      // keydown only *starts* the hold timer; we DON'T toggle the
+      // lightbox here. The toggle happens in the matching keyup
+      // handler below, and only if the hint never surfaced.
       e.preventDefault();
-      if (lb.classList.contains("show")) {
-        lb.classList.remove("show");
-      } else if (focusedFn) {
-        openLightbox(focusedFn);
-      }
+      _kbdSpaceDownGate(e);
     }
     else if (e.key === "Enter") {
       e.preventDefault();
@@ -6927,6 +7124,35 @@
     else if (e.key === "?") {
       e.preventDefault();
       showShortcuts();
+    }
+  });
+
+  // v0.6 (5/5) — Space keyup handler. If the hold-cheat-sheet was
+  // shown during the hold, just dismiss it and consume the up event
+  // (no lightbox toggle). Otherwise the user did a quick tap →
+  // perform the original toggle-lightbox behavior.
+  document.addEventListener("keyup", e => {
+    if (e.key !== " " && e.key !== "Spacebar") return;
+    // Same skip rule as keydown — typing in inputs etc.
+    const tag = (e.target && e.target.tagName) || "";
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
+      _kbdSpaceUpGate();
+      return;
+    }
+    // Don't act when an annotation modal owns input.
+    const am = document.getElementById("annModal");
+    if (am && am.classList.contains("show")) {
+      _kbdSpaceUpGate();
+      return;
+    }
+    e.preventDefault();
+    const wasHeld = _kbdSpaceUpGate();
+    if (wasHeld) return;  // hint was shown → that *was* the gesture
+    // Original tap behavior: toggle lightbox on focused card.
+    if (lb.classList.contains("show")) {
+      lb.classList.remove("show");
+    } else if (typeof focusedFn !== "undefined" && focusedFn) {
+      openLightbox(focusedFn);
     }
   });
 
