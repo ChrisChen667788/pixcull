@@ -71,7 +71,7 @@ import traceback
 import uuid
 import webbrowser
 from collections import Counter
-from datetime import datetime
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
@@ -3497,6 +3497,10 @@ class _Handler(BaseHTTPRequestHandler):
             )
         if path.startswith("/xmp_zip/"):
             return self._serve_xmp_zip(path[len("/xmp_zip/"):])
+        # v0.7-P1-4 — token-gated client delivery share page.
+        # /share/<run_id>/<token>  → static-ish HTML showing keeps
+        if path.startswith("/share/"):
+            return self._serve_share_page(path[len("/share/"):])
         if path.startswith("/gallery_zip/"):
             # V23.x — standalone HTML gallery export. Returns a zip
             # the user can email/upload as-is; index.html opens in
@@ -3538,6 +3542,12 @@ class _Handler(BaseHTTPRequestHandler):
         if path.startswith("/buckets/export/"):
             run_id = path[len("/buckets/export/"):]
             return self._handle_bucket_export(run_id)
+        # v0.7-P1-4 — issue a fresh share token for the run.
+        # POST /share/<run_id>/issue  body: {photographer?, client?}
+        # → {ok, token, url}
+        if path.startswith("/share/") and path.endswith("/issue"):
+            rid = path[len("/share/"):-len("/issue")]
+            return self._handle_share_issue(rid)
         if path == "/browse":
             return self._handle_browse()
         if path.startswith("/export/"):
@@ -3862,6 +3872,311 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
         return True
+
+    # ============================================================
+    # v0.7-P1-4 — client delivery share link.
+    # POST /share/<run_id>/issue            → mint a new token
+    # GET  /share/<run_id>/<token>          → render the read-only
+    #                                          delivery page
+    # Tokens are persisted to <output_dir>/share_tokens.json so they
+    # survive server restarts. The page shows only photos the user
+    # marked "keep" (decision == "keep") plus a header with
+    # photographer + client labels. Clients open the URL in any
+    # browser — no PixCull install required.
+    # ============================================================
+    def _share_token_path(self, run: dict):
+        return Path(run["output_dir"]) / "share_tokens.json"
+
+    def _read_share_tokens(self, run: dict) -> dict:
+        p = self._share_token_path(run)
+        try:
+            return json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+
+    def _write_share_tokens(self, run: dict, data: dict) -> None:
+        p = self._share_token_path(run)
+        try:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(json.dumps(data, ensure_ascii=False, indent=2),
+                         encoding="utf-8")
+        except OSError as exc:
+            _dbg("share/write_tokens", exc, str(p))
+
+    def _handle_share_issue(self, run_id: str) -> None:
+        """POST /share/<run_id>/issue
+        body: {photographer?, client?, expires_days?}
+        → {ok, token, url}
+        """
+        import secrets
+
+        run = _get_run(run_id) or _reload_run_from_disk(run_id)
+        if run is None:
+            self.send_error(404, "no such run")
+            return
+        try:
+            n = int(self.headers.get("Content-Length") or "0")
+        except ValueError:
+            n = 0
+        raw = self.rfile.read(n) if n > 0 else b""
+        try:
+            body = json.loads(raw or b"{}")
+        except ValueError:
+            body = {}
+        if not isinstance(body, dict):
+            body = {}
+        token = secrets.token_urlsafe(16)
+        record = {
+            "token":        token,
+            "photographer": str(body.get("photographer") or "").strip()[:80],
+            "client":       str(body.get("client") or "").strip()[:80],
+            "issued_at":    datetime.now(timezone.utc).isoformat(),
+        }
+        try:
+            days = int(body.get("expires_days") or 0)
+        except (TypeError, ValueError):
+            days = 0
+        if days > 0:
+            from datetime import timedelta
+            record["expires_at"] = (
+                datetime.now(timezone.utc) + timedelta(days=days)
+            ).isoformat()
+        tokens = self._read_share_tokens(run)
+        tokens[token] = record
+        self._write_share_tokens(run, tokens)
+        payload = {
+            "ok":   True,
+            "token": token,
+            "url":  f"/share/{run_id}/{token}",
+        }
+        body_bytes = json.dumps(payload).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body_bytes)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body_bytes)
+
+    def _serve_share_page(self, rel: str) -> None:
+        """GET /share/<run_id>/<token> → minimal client-delivery HTML.
+
+        The page is self-contained (inline CSS + <img> referring back to
+        /thumb/<run>/<file>). The token is validated against the
+        on-disk share_tokens.json; expired or unknown tokens 404.
+        """
+        rel = unquote(rel).strip("/")
+        parts = rel.split("/", 1)
+        if len(parts) != 2:
+            self.send_error(400, "expected /share/<run_id>/<token>")
+            return
+        run_id, token = parts
+        run = _get_run(run_id) or _reload_run_from_disk(run_id)
+        if run is None:
+            self.send_error(404, "no such run")
+            return
+        tokens = self._read_share_tokens(run)
+        rec = tokens.get(token)
+        if not rec:
+            self.send_error(404, "share link not found or revoked")
+            return
+        # Optional expiry check
+        exp = rec.get("expires_at")
+        if exp:
+            try:
+                exp_dt = datetime.fromisoformat(exp)
+                if exp_dt < datetime.now(timezone.utc):
+                    self.send_error(410, "share link expired")
+                    return
+            except ValueError:
+                pass
+
+        # Load keeps only from scores.csv. We deliberately filter
+        # *server-side* so a client can't toggle off the filter from
+        # the page (the share contract is "you see what I picked").
+        try:
+            keeps = self._share_collect_keeps(run)
+        except Exception as exc:
+            _dbg("share/collect_keeps", exc, run_id)
+            self.send_error(500, "failed to read run")
+            return
+
+        photographer = rec.get("photographer") or ""
+        client = rec.get("client") or ""
+        html = self._render_share_html(
+            run_id, token, photographer, client, keeps
+        )
+        body = html.encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        # Don't index the page; keep it private-by-obscurity (token).
+        self.send_header("X-Robots-Tag", "noindex, nofollow")
+        self.send_header("Cache-Control", "private, max-age=60")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _share_collect_keeps(self, run: dict) -> list:
+        """Return [(filename, score_final), ...] for keep rows only."""
+        import csv as _csv
+
+        scores_path = Path(run["output_dir"]) / "scores.csv"
+        if not scores_path.exists():
+            return []
+        # Honor annotation/* overrides — a photo annotated as keep
+        # after the fact should appear too.
+        ann_dir = Path(run["output_dir"]) / "annotation"
+        ann_overrides = {}
+        if ann_dir.is_dir():
+            for f in ann_dir.glob("*.json"):
+                try:
+                    d = json.loads(f.read_text(encoding="utf-8"))
+                    fn = f.stem
+                    dec = d.get("decision")
+                    if dec in {"keep", "maybe", "cull"}:
+                        ann_overrides[fn] = dec
+                except (OSError, ValueError):
+                    continue
+        keeps = []
+        with open(scores_path, "r", encoding="utf-8-sig", newline="") as fh:
+            reader = _csv.DictReader(fh)
+            for row in reader:
+                fn = row.get("filename") or ""
+                if not fn:
+                    continue
+                dec = ann_overrides.get(fn) or row.get("decision") or ""
+                if dec != "keep":
+                    continue
+                try:
+                    score = float(row.get("score_final") or 0)
+                except ValueError:
+                    score = 0.0
+                keeps.append((fn, score))
+        # Sort by score desc — best-first delivery
+        keeps.sort(key=lambda t: t[1], reverse=True)
+        return keeps
+
+    def _render_share_html(
+        self,
+        run_id: str,
+        token: str,
+        photographer: str,
+        client: str,
+        keeps: list,
+    ) -> str:
+        """Render the minimal client-delivery page (self-contained)."""
+        from html import escape as _esc
+
+        cards = []
+        for fn, score in keeps:
+            cards.append(
+                f'''<a class="card" href="/full/{run_id}/{_esc(fn)}" target="_blank" rel="noopener">
+                  <img loading="lazy" src="/thumb/{run_id}/{_esc(fn)}?w=420" alt="{_esc(fn)}">
+                  <div class="cap">{_esc(fn)}</div>
+                </a>'''
+            )
+        cards_html = "\n".join(cards) if cards else (
+            '<div class="empty">摄影师还没有挑出片 — 请稍后再来。</div>'
+        )
+        header_lines = []
+        if photographer:
+            header_lines.append(
+                f'<span class="lbl">摄影师</span><span class="val">{_esc(photographer)}</span>'
+            )
+        if client:
+            header_lines.append(
+                f'<span class="lbl">客户</span><span class="val">{_esc(client)}</span>'
+            )
+        header_html = (
+            f'<div class="head-meta">{"".join(header_lines)}</div>'
+            if header_lines else ""
+        )
+        return f"""<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>{_esc(photographer or "PixCull")} · 精选交付</title>
+<style>
+  :root {{
+    color-scheme: dark;
+    --bg: #0b0d10; --bg-card: #14171c;
+    --fg: #e8eaed; --fg-2: #c6c9cf; --muted: #8a8e96;
+    --border: rgba(255,255,255,0.10);
+    --accent: #6366f1;
+  }}
+  *,*::before,*::after {{ box-sizing: border-box; }}
+  html,body {{ margin: 0; padding: 0; background: var(--bg); color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+                 "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased; }}
+  header {{
+    padding: 36px 24px 24px;
+    border-bottom: 1px solid var(--border);
+    text-align: center;
+  }}
+  header h1 {{ margin: 0 0 6px; font-size: 24px; font-weight: 700; letter-spacing: 0.02em; }}
+  header .sub {{ margin: 0; color: var(--muted); font-size: 13px; }}
+  .head-meta {{
+    display: inline-flex; flex-wrap: wrap; justify-content: center;
+    gap: 6px 14px; margin-top: 14px;
+    font-size: 12px;
+  }}
+  .head-meta .lbl {{ color: var(--muted); margin-right: 4px; }}
+  .head-meta .val {{ color: var(--fg-2); font-weight: 600; }}
+  main {{ padding: 24px; max-width: 1280px; margin: 0 auto; }}
+  .count {{ color: var(--muted); font-size: 12px; margin: 0 0 16px;
+            text-align: center; letter-spacing: 0.04em; text-transform: uppercase; }}
+  .grid {{
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 12px;
+  }}
+  .card {{
+    display: block; text-decoration: none; color: inherit;
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; overflow: hidden;
+    transition: transform 160ms ease-out, border-color 160ms ease-out;
+  }}
+  .card:hover {{ transform: translateY(-2px); border-color: var(--accent); }}
+  .card img {{ display: block; width: 100%; aspect-ratio: 3/2; object-fit: cover; background: #1c1f24; }}
+  .card .cap {{
+    padding: 8px 10px; font-size: 11px; color: var(--muted);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }}
+  .empty {{ text-align: center; color: var(--muted); padding: 48px 12px; font-size: 13px; }}
+  footer {{
+    margin-top: 32px; padding: 18px 24px;
+    border-top: 1px solid var(--border);
+    text-align: center; color: var(--muted); font-size: 11px;
+    letter-spacing: 0.04em;
+  }}
+  footer a {{ color: var(--fg-2); text-decoration: none; }}
+  @media (max-width: 640px) {{
+    header {{ padding: 24px 14px 16px; }}
+    header h1 {{ font-size: 19px; }}
+    main {{ padding: 16px 12px; }}
+    .grid {{ grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }}
+  }}
+</style>
+</head>
+<body>
+  <header>
+    <h1>{_esc(photographer or "精选交付")}</h1>
+    <p class="sub">PixCull · 客户交付预览</p>
+    {header_html}
+  </header>
+  <main>
+    <p class="count">{len(keeps)} 张精选</p>
+    <div class="grid">
+      {cards_html}
+    </div>
+  </main>
+  <footer>
+    Powered by <a href="https://github.com/haozi667788/pixcull" rel="noopener" target="_blank">PixCull</a>
+  </footer>
+</body>
+</html>"""
 
     def _handle_sample_demo(self) -> None:
         """P-UX-21 — instant sample-data path.

@@ -4187,6 +4187,12 @@
                Default = keep only; Shift-click for keep+maybe. -->
           <a class="export-btn" id="galleryBtn" role="menuitem"
              title="导出可发客户的 standalone HTML 相册(默认仅 keep;Shift-点 = keep+maybe)">📔 导出相册</a>
+          <!-- v0.7-P1-4 — token-gated shareable delivery link.
+               Unlike the gallery export (downloadable zip), this
+               generates an in-app URL the client can open in a
+               browser without any download. -->
+          <button class="export-btn" id="shareLinkBtn" role="menuitem"
+                  title="生成一个可分享给客户的只读链接,只展示 keep 的照片">🔗 客户分享链接</button>
           <!-- P2.5: auto-generate IPTC captions from structured data
                (scene + face labels + location + advice). Free / offline
                by default; Shift-click to enable LLM polish via DeepSeek
@@ -8582,6 +8588,60 @@
       // Reset back to keep-only after the click so a later plain
       // click goes back to default.
       setTimeout(() => updateGalleryHref(false), 200);
+    }
+  });
+
+  // ==================================================================
+  // v0.7-P1-4 — client delivery share link.
+  // Mints a token via POST /share/<run>/issue then surfaces the
+  // resulting URL.  We keep the prompt tiny so the workflow is
+  // "click button → paste URL into iMessage / email" — no modal
+  // form, no expiry picker by default (Phase 2 can add one).
+  // ==================================================================
+  document.getElementById("shareLinkBtn")?.addEventListener("click", async () => {
+    const photographer = (localStorage.getItem("pixcull_photographer_name") || "").trim();
+    const photographerIn = prompt(
+      "摄影师名字(显示在分享页头部 / 留空跳过)",
+      photographer
+    );
+    if (photographerIn === null) return;  // user cancelled
+    const clientIn = prompt("客户名字(可留空)", "");
+    if (clientIn === null) return;
+    try {
+      localStorage.setItem(
+        "pixcull_photographer_name", photographerIn || ""
+      );
+    } catch (_e) {}
+    try {
+      const res = await fetch(`/share/${run_id}/issue`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          photographer: photographerIn || "",
+          client:       clientIn || "",
+        }),
+      });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const d = await res.json();
+      if (!d.ok || !d.url) throw new Error("server returned no URL");
+      const fullUrl = location.origin + d.url;
+      let copied = false;
+      try {
+        await navigator.clipboard.writeText(fullUrl);
+        copied = true;
+      } catch (_e) {
+        /* clipboard write may be blocked; we still show the URL */
+      }
+      // Show the URL in a (regrettably native) prompt so the user
+      // can copy it manually if clipboard write was blocked, and
+      // open it to verify the layout.
+      const note = copied
+        ? "已复制到剪贴板。粘贴给客户即可。\n\n"
+        : "复制下面 URL(剪贴板被浏览器拒绝):\n\n";
+      window.prompt(note + "也可以右键 → 新标签打开:", fullUrl);
+      showToast("分享链接已生成", "success");
+    } catch (err) {
+      showToast("生成失败: " + err.message, "error");
     }
   });
 
