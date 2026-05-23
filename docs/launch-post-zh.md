@@ -129,6 +129,37 @@ python scripts/serve_demo.py
 docker compose up --build
 ```
 
+## v0.7 - v0.8 新增的(从这篇 draft 写完到现在又发了 22 个 slice)
+
+- **风格 clone V1 + V2** — 给我 5-20 张你以前 keep 的照片,产品学你
+  的个人风格(V1 是 axis-MAD,V2 是 CLIP embedding 中心)。新一批照片
+  按"像我风格的优先"排序,Inspector 显示 "🎨 风格距离" 芯片。模型纯
+  本地,在 `<run>/output/style_profile.json`。
+- **Tethered live scoring** — 监听 Lr/C1 tether 文件夹,新 RAW 进来
+  即刻分析,grid 实时更新。二摄"现场给客户预览"的场景。
+- **LAN 协作** — 主摄发链接,二摄/编辑打开,每 5s 同步你的标注;
+  俩人标同一张冲突时打 ⚠ 标记。纯局域网,不上云。
+- **客户分享链接 + 二维码** — 不用打 zip 了,主摄一键生成短链 + QR,
+  客户手机扫码就能在浏览器看精选。带摄影师水印 + 客户姓名 header。
+- **LR-Library + LR-Develop 风格 UX** — 左边 8 组可折叠 filter
+  侧栏(decision / scene / style / faces / location / bursts /
+  cull-reason / active-learning),右边 9 段可折叠 Inspector,
+  手机端 bottom-sheet。
+- **i18n** — workspace 顶部一个芯片切换 中 / EN / あ。154 个字符串
+  已多语化,剩下的 v0.9 继续。
+- **Loupe RGB readout** — 1:1 缩放模式光标位置浮显 R/G/B/Hex/Y
+  数字。LR / PS 同款。
+- **按住 Space 出 cheat sheet**(macOS Finder 模式)— 按住 350ms
+  浮出当前 context 的快捷键条;tap-Space 仍是切换 lightbox。
+- **结构化 CSV / JSON 导出** — 在 scores.csv 基础上 join 注解 +
+  风格距离 + bucket 归属,一行一个 filename 全字段。
+- **5k+ 张稳定性** — IndexedDB 标注 adapter,observer 节流,自适应
+  懒加载。16GB M2 Pro 跑 5000 张稳。
+
+97 个 unit test 通过(i18n / sync / style / shortlink / QR /
+CLI audit / 5k smoke)。Charter 在
+`docs/ROADMAP-v0.4-charter.md` → `-v0.7-` → `-v0.8-`。
+
 ## 希望你能给我反馈的
 
 如果你拿到自己的拍摄数据上跑,有几件事最帮我:
@@ -141,6 +172,10 @@ docker compose up --build
    告诉我你 PixCull 之后用的下一个工具,我给你写 bridge。
 
 3. **README 里你没看到但想看到的是什么?**
+
+4. **风格 clone V2 真的学到你的风格了吗?** 给它 10-20 张你以前的
+   keep,跑一场新活动,告诉我"像我风格的优先"这个排序是不是真的把
+   你会 keep 的片子排前面 — 还是只把同维度评分高的排前面。
 
 GitHub issues 开着 + bug 模板已就绪:
 https://github.com/ChrisChen667788/pixcull/issues

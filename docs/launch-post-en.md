@@ -147,6 +147,51 @@ M2 Pro. Or via Docker:
 docker compose up --build
 ```
 
+## What's in the v0.7-v0.8 release
+
+Since the original draft of this post the product has shipped 22
+slices across two charters. The headline additions:
+
+- **Style clone V1 + V2** — give it 5-20 of your past keepers, it
+  learns your personal style fingerprint (median per axis + scene
+  mode in V1, CLIP-embedding centroid in V2). New runs surface a
+  "🎨 风格距离" chip per photo + sort "像我风格的优先". Local-only:
+  the model lives in `<run>/output/style_profile.json`.
+- **Tethered live scoring** — point PixCull at your Lr/C1 tether
+  folder, new RAWs analyze on landing, the grid refreshes live.
+  Built for the second-shooter "show the client a preview during
+  the shoot" workflow.
+- **LAN collaboration** — host issues a token, second-shooter /
+  editor opens the URL, every 5s their grid syncs your annotations.
+  Conflict markers when both edit the same photo. Pure local,
+  no cloud.
+- **Client share links + QR** — instead of zipping a gallery, the
+  host clicks 🔗 → gets a short link + a QR. Client scans with
+  their phone, opens the keeps in any browser. No download, no
+  install, watermark + photographer signature in the header.
+- **Lightroom-Library + Lightroom-Develop UX** — left sidebar
+  with 8 collapsible filter groups (decision / scene / style /
+  faces / location / bursts / cull-reason / active-learning), right
+  Inspector with 9 collapsible sections (★ scores / similar / AI
+  judgment / matrices / etc.), mobile bottom-sheet variant.
+- **i18n** — switch zh / en / ja with a single chip in the
+  workspace bar. 154 strings localised; remaining migrations
+  underway in v0.9.
+- **Loupe RGB readout** — 1:1 zoom mode follows the cursor with
+  R/G/B/Hex/Y(luminance) for the pixel underneath. LR / PS parity.
+- **Hold-Space cheat sheet** (macOS Finder pattern) — press &
+  hold Space for 350ms, a context-aware shortcut strip surfaces.
+  Tap-Space still toggles the lightbox.
+- **Structured CSV / JSON export** — beyond the raw scores.csv,
+  merged with annotations + style distances per row.
+- **5k+ photo stability** — IndexedDB adapter for annotation state,
+  observer throttling, adaptive lazy-load. Runs comfortably on a
+  16GB M2 Pro at 5000 photos.
+
+97 unit tests across i18n / sync / style / shortlink / QR encoder
+/ CLI audit / 5k smoke pass. Charter trail in `docs/ROADMAP-v0.4-
+charter.md` → `-v0.7-` → `-v0.8-`.
+
 ## What I'd value feedback on
 
 1. **Where does the rubric obviously misjudge a photo?** The per-source
@@ -157,6 +202,10 @@ docker compose up --build
    xmp:Rating back into PixCull annotations. Capture One? Bridge?
    DigiKam? Tell me what you reach for and I'll write the bridge.
 3. **What did you NOT see in the README that you wish it did?**
+4. **Style clone V2 — does it actually learn YOUR style?** Train
+   it on 10-20 of your past keeps, then run a fresh event. Tell me
+   how the "风格距离" sort feels — is it surfacing keeps you'd
+   actually pick, or just same-axis-stars look-alikes?
 
 Issues at https://github.com/ChrisChen667788/pixcull/issues — bug
 templates are wired.
@@ -164,3 +213,19 @@ templates are wired.
 — Chris Chen (former AI architect at Tencent / SenseTime / Hikvision,
 now mostly a 视觉中国 + 图虫 signed photographer who got tired of
 spending an evening per shoot in Lightroom)
+
+---
+
+## For platform editors / re-posters
+
+**Short pitch** (180 chars):
+> Local-first AI photo culling for working photographers. Burst-peak
+> picking + style clone + tethered live scoring. No cloud upload,
+> no monthly fee. Lightroom round-trip. Apache-2 / brew install.
+
+**Tags**: `#photography` `#opensource` `#machinelearning` `#localfirst`
+`#lightroom` `#wedding-photography` `#computer-vision`
+
+**Hero image suggestion**: docs/screenshots/results-v0.8-grid.png
+(showing the LR Library sidebar + grid + style-distance chips)
+
