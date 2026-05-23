@@ -3555,6 +3555,14 @@ class _Handler(BaseHTTPRequestHandler):
         # v0.7-P2-4 — history timeline page (all past runs)
         if path == "/history":
             return self._serve_history_page()
+        # v0.8-P1-3 — short link resolver + QR SVG.
+        # GET /s/<code>      → 302 redirect to long URL (or 404/410)
+        # GET /s/<code>.svg  → inline QR SVG for the long URL
+        if path.startswith("/s/"):
+            tail = path[len("/s/"):]
+            if tail.endswith(".svg"):
+                return self._serve_shortlink_qr(tail[:-4])
+            return self._serve_shortlink_redirect(tail)
         # v0.7-P2-2 — tethered live scoring.
         if path == "/tether":
             return self._serve_tether_page()
@@ -3623,6 +3631,11 @@ class _Handler(BaseHTTPRequestHandler):
         if path.startswith("/sync/event/issue/"):
             rid = path[len("/sync/event/issue/"):]
             return self._handle_sync_event_issue(rid)
+        # v0.8-P1-3 — short-link issuer.
+        # POST /s/issue  body: {long_url, ttl_hours?, label?}
+        # → {ok, short_code, short_url, qr_url, long_url, expires_at}
+        if path == "/s/issue":
+            return self._handle_shortlink_issue()
         # v0.8-P0-2 — revoke an event
         # POST /sync/event/revoke/<run_id>/<event_id>
         if path.startswith("/sync/event/revoke/"):
@@ -4567,6 +4580,138 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
         return True
+
+    # ============================================================
+    # v0.8-P1-3 — short links + QR
+    # ============================================================
+    def _handle_shortlink_issue(self) -> None:
+        """POST /s/issue  body: {long_url, ttl_hours?, label?}
+
+        Long URL can be either an absolute URL the client has in
+        hand (e.g. from /share/issue or /sync/event/issue), or a
+        relative path starting with "/" — in which case the
+        response wraps it as origin-relative so the QR encodes a
+        complete URL the recipient's phone can open.
+
+        Idempotent: same long_url → same short_code (see
+        pixcull.shortlink.issue).
+        """
+        try:
+            from pixcull.shortlink import issue as _issue
+        except Exception as exc:
+            _dbg("shortlink/import", exc, "issue")
+            self.send_error(500, "shortlink module import failed")
+            return
+        body = self._read_json_body()
+        long_url = body.get("long_url") or ""
+        if not isinstance(long_url, str) or not long_url.strip():
+            self.send_error(400, "missing 'long_url'")
+            return
+        try:
+            ttl = int(body.get("ttl_hours") or (24 * 30))
+        except (TypeError, ValueError):
+            ttl = 24 * 30
+        label = str(body.get("label") or "")[:120]
+        try:
+            rec = _issue(_DEMO_ROOT, long_url, ttl_hours=ttl, label=label)
+        except ValueError as exc:
+            self.send_error(400, str(exc))
+            return
+        except Exception as exc:
+            _dbg("shortlink/issue", exc, long_url[:60])
+            self.send_error(500, "failed to issue short link")
+            return
+        code = rec["short_code"]
+        self._json_ok({
+            "ok":         True,
+            "short_code": code,
+            "short_url":  f"/s/{code}",
+            "qr_url":     f"/s/{code}.svg",
+            "long_url":   rec["long_url"],
+            "expires_at": rec.get("expires_at"),
+        })
+
+    def _serve_shortlink_redirect(self, code: str) -> None:
+        """GET /s/<code> → 302 → long URL (404 missing, 410 expired)."""
+        try:
+            from pixcull.shortlink import resolve as _resolve
+        except Exception as exc:
+            _dbg("shortlink/import", exc, "redirect")
+            self.send_error(500, "shortlink module import failed")
+            return
+        rec = _resolve(_DEMO_ROOT, code)
+        if rec is None:
+            self.send_error(404, "unknown short code")
+            return
+        if rec.get("expired"):
+            self.send_error(410, "short link expired")
+            return
+        long_url = str(rec.get("long_url") or "")
+        if not long_url:
+            self.send_error(500, "store missing long_url")
+            return
+        self.send_response(302)
+        self.send_header("Location", long_url)
+        # noindex so search engines don't follow + index shared links
+        self.send_header("X-Robots-Tag", "noindex, nofollow")
+        # Don't cache redirects — short link store can be revoked
+        # at any time.
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+    def _serve_shortlink_qr(self, code: str) -> None:
+        """GET /s/<code>.svg → inline QR pointing at the LONG url.
+
+        The QR encodes the full origin-prefixed URL so the recipient's
+        phone camera can scan it directly without depending on
+        /s/<code> resolving correctly on their network (e.g. a guest
+        on a different Wi-Fi.  We still default to /s/<code> as the
+        href but the QR carries the absolute long_url.)
+        """
+        try:
+            from pixcull.shortlink import resolve as _resolve
+            from pixcull.qrcode_svg import to_svg
+        except Exception as exc:
+            _dbg("shortlink/qr/import", exc, "qr")
+            self.send_error(500, "shortlink/qr import failed")
+            return
+        rec = _resolve(_DEMO_ROOT, code)
+        if rec is None:
+            self.send_error(404, "unknown short code")
+            return
+        if rec.get("expired"):
+            self.send_error(410, "short link expired")
+            return
+        long_url = str(rec.get("long_url") or "")
+        if not long_url:
+            self.send_error(500, "store missing long_url")
+            return
+        # If long_url is origin-relative ("/..."), prepend the host
+        # so the QR resolves to a complete absolute URL.  Use the
+        # Host header so behind-proxy installs still produce the
+        # right user-facing origin.
+        if long_url.startswith("/"):
+            host = self.headers.get("Host") or "localhost"
+            scheme = "https" if self.headers.get(
+                "X-Forwarded-Proto", "").lower() == "https" else "http"
+            long_url = f"{scheme}://{host}{long_url}"
+        try:
+            svg = to_svg(long_url)
+        except ValueError as exc:
+            # URL too long for v10 — degrade with a tiny "URL too long"
+            # placeholder rather than 500.
+            _dbg("shortlink/qr/encode", exc, code)
+            self.send_error(400, "url too long for QR")
+            return
+        body = svg.encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "image/svg+xml; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        # QRs are deterministic per (code, host) → cache aggressively
+        self.send_header("Cache-Control", "public, max-age=3600")
+        self.end_headers()
+        self.wfile.write(body)
 
     def _serve_style_distances(self, run_id: str) -> None:
         """GET /style/distances/<run_id> → {filename: distance, ...}

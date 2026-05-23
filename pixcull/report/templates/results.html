@@ -372,6 +372,112 @@
     }
     .workspace-bar-spacer { flex: 1; }
 
+    /* v0.8-P1-3 — share-URL modal.  Centre-screen card with the QR
+       on the left + short URL / copy buttons on the right.  Reused
+       by both the share-link (/share/...) and sync-event flows. */
+    .share-url-modal {
+      position: fixed; inset: 0; z-index: 60;
+      background: rgba(0,0,0,0.72);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      display: none; align-items: center; justify-content: center;
+    }
+    .share-url-modal.show { display: flex; }
+    .share-url-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg, 12px);
+      box-shadow: var(--shadow-xl, 0 24px 60px rgba(0,0,0,0.6));
+      width: min(560px, calc(100vw - 32px));
+      max-height: calc(100vh - 64px); overflow-y: auto;
+      animation: shareUrlIn 200ms var(--ease-out);
+    }
+    @keyframes shareUrlIn {
+      from { opacity: 0; transform: translateY(8px) scale(0.98); }
+      to   { opacity: 1; transform: translateY(0)   scale(1); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .share-url-card { animation: none; }
+    }
+    .share-url-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 18px 10px; border-bottom: 1px solid var(--border);
+    }
+    .share-url-header h3 { margin: 0; font-size: 15px; font-weight: 600; }
+    .share-url-header .close {
+      width: 28px; height: 28px; border-radius: 6px;
+      background: transparent; border: 0; color: var(--muted);
+      cursor: pointer; font-size: 16px; line-height: 1;
+      transition: background 120ms var(--ease-out), color 120ms var(--ease-out);
+    }
+    .share-url-header .close:hover {
+      background: var(--surface-2, rgba(255,255,255,0.06)); color: var(--fg);
+    }
+    .share-url-body {
+      display: grid;
+      grid-template-columns: 200px 1fr;
+      gap: 18px;
+      padding: 18px;
+    }
+    .share-url-qr {
+      width: 200px; height: 200px;
+      background: #ffffff;
+      border-radius: 8px;
+      padding: 8px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .share-url-qr img { width: 100%; height: 100%; display: block; }
+    .share-url-meta { display: flex; flex-direction: column; gap: 12px;
+                      min-width: 0; }
+    .share-url-label { color: var(--muted); font-size: 12px;
+                       line-height: 1.5; }
+    .share-url-row {
+      display: flex; align-items: stretch; gap: 6px;
+    }
+    .share-url-row-label {
+      display: flex; align-items: center; padding: 0 8px;
+      font-size: 10.5px; letter-spacing: 0.05em; text-transform: uppercase;
+      color: var(--muted); font-weight: 600;
+      background: var(--surface-2, rgba(255,255,255,0.05));
+      border: 1px solid var(--border); border-right: 0;
+      border-radius: 6px 0 0 6px;
+    }
+    .share-url-row-label + .share-url-input { border-radius: 0; border-left: 0; }
+    .share-url-input {
+      flex: 1; min-width: 0;
+      padding: 7px 10px;
+      background: var(--surface-2, rgba(255,255,255,0.05));
+      color: var(--fg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 12px;
+      white-space: nowrap; overflow-x: auto;
+    }
+    .share-url-input:focus { outline: 2px solid var(--accent); }
+    .share-url-copy {
+      padding: 0 12px; font-size: 11.5px; font-weight: 600;
+      background: var(--accent); color: #fff;
+      border: 1px solid var(--accent); border-radius: 6px;
+      cursor: pointer;
+      transition: filter 120ms var(--ease-out);
+    }
+    .share-url-copy:hover { filter: brightness(1.1); }
+    .share-url-copy.ok { background: var(--c-success); border-color: var(--c-success); }
+    .share-url-long summary {
+      cursor: pointer; font-size: 11.5px; color: var(--muted);
+      padding: 4px 0; user-select: none;
+    }
+    .share-url-long summary:hover { color: var(--fg-2, var(--fg)); }
+    .share-url-long[open] summary { margin-bottom: 6px; }
+    .share-url-footnote { color: var(--muted); font-size: 11px;
+                          line-height: 1.5; }
+    @media (max-width: 640px) {
+      .share-url-body { grid-template-columns: 1fr; }
+      .share-url-qr { width: 100%; height: auto; aspect-ratio: 1; max-width: 280px;
+                      margin: 0 auto; }
+    }
+
     /* v0.8-P0-2 — sync-event status badge in the workspace bar.
        Shown only when the page URL carries ?event=<token>; turns
        amber-red when one or more local edits conflict with the
@@ -4526,6 +4632,50 @@
        and pulls a 4-6-pill subset from KBD_CHEAT_DATA below. -->
   <div class="kbd-cheat" id="kbdCheat" aria-hidden="true"
        role="status" aria-live="polite"></div>
+
+  <!-- v0.8-P1-3 — share-link modal (short URL + QR + copy).  Same
+       chassis used by /share/<run>/<token> AND /sync/event/<token>
+       URL surfacing — both call _openShareUrlModal(longUrl, title).
+       Replaces the native window.prompt() that was hard to read +
+       impossible to scan on a phone. -->
+  <div class="share-url-modal" id="shareUrlModal" role="dialog"
+       aria-hidden="true" aria-labelledby="shareUrlTitle">
+    <div class="share-url-card">
+      <div class="share-url-header">
+        <h3 class="modal-title" id="shareUrlTitle">分享链接</h3>
+        <button class="close" id="shareUrlClose" type="button"
+                aria-label="关闭">✕</button>
+      </div>
+      <div class="share-url-body">
+        <div class="share-url-qr">
+          <img id="shareUrlQrImg" alt="QR 码"
+               loading="lazy" decoding="async"/>
+        </div>
+        <div class="share-url-meta">
+          <div class="share-url-label" id="shareUrlSubtitle">
+            扫描二维码,或复制下面的链接发给对方:
+          </div>
+          <div class="share-url-row">
+            <span class="share-url-row-label">短链</span>
+            <input class="share-url-input" id="shareUrlShort" readonly
+                   onclick="this.select()"/>
+            <button class="share-url-copy" id="shareUrlShortCopy"
+                    type="button">复制</button>
+          </div>
+          <details class="share-url-long">
+            <summary>展开完整 URL</summary>
+            <div class="share-url-row">
+              <input class="share-url-input" id="shareUrlLong" readonly
+                     onclick="this.select()"/>
+              <button class="share-url-copy" id="shareUrlLongCopy"
+                      type="button">复制</button>
+            </div>
+          </details>
+          <div class="share-url-footnote" id="shareUrlFootnote"></div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- V14.5 shortcuts overlay — opens with `?`. Replaces a native
        alert() that was ugly + non-dismissible-on-Esc. Auto-discoverable
@@ -8915,11 +9065,120 @@
   });
 
   // ==================================================================
+  // ==================================================================
+  // v0.8-P1-3 — share-URL modal (QR + short link + copy buttons).
+  // Replaces the v0.7 native window.prompt() flow with a proper
+  // modal that surfaces a scannable QR + a one-click-copy short URL.
+  // Used by BOTH the share-link issuer (v0.7-P1-4) AND the sync-event
+  // issuer (v0.8-P0-2).
+  // ==================================================================
+  async function _mintShortLink(longUrl) {
+    try {
+      const r = await fetch("/s/issue", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ long_url: longUrl }),
+      });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return await r.json();
+    } catch (_e) {
+      return null;   // caller falls back to the long URL
+    }
+  }
+  async function _openShareUrlModal(longUrl, opts) {
+    opts = opts || {};
+    const modal     = document.getElementById("shareUrlModal");
+    const titleEl   = document.getElementById("shareUrlTitle");
+    const subtitle  = document.getElementById("shareUrlSubtitle");
+    const qrImg     = document.getElementById("shareUrlQrImg");
+    const shortIn   = document.getElementById("shareUrlShort");
+    const longIn    = document.getElementById("shareUrlLong");
+    const footnote  = document.getElementById("shareUrlFootnote");
+    const closeBtn  = document.getElementById("shareUrlClose");
+    if (!modal) return;
+    titleEl.textContent = opts.title || "分享链接";
+    subtitle.textContent = opts.subtitle ||
+      "扫描二维码,或复制下面的链接发给对方:";
+    footnote.textContent = opts.footnote || "";
+
+    // Optimistic UI: pre-fill long URL, show "正在生成短链…" while
+    // the /s/issue round-trip lands.
+    const fullLong = longUrl.startsWith("http")
+      ? longUrl : (location.origin + longUrl);
+    longIn.value = fullLong;
+    shortIn.value = "正在生成短链…";
+    qrImg.removeAttribute("src");
+    modal.classList.add("show");
+    modal.setAttribute("aria-hidden", "false");
+
+    const rec = await _mintShortLink(fullLong);
+    if (rec && rec.short_url) {
+      const shortFull = location.origin + rec.short_url;
+      shortIn.value = shortFull;
+      qrImg.src = rec.qr_url;
+      // Auto-copy short URL to clipboard for the "paste into
+      // iMessage immediately" workflow.
+      try { await navigator.clipboard.writeText(shortFull); } catch (_e) {}
+    } else {
+      // Short-link issue failed — fall back to QR of the long URL.
+      shortIn.value = fullLong;
+      // Inline-render a fallback QR via the public route if we have it.
+      // (We don't have a QR route for the long URL alone, so leave
+      // the QR slot empty + tell the user.)
+      qrImg.removeAttribute("src");
+      footnote.textContent = "(短链服务暂不可用,请直接复制长 URL)";
+    }
+  }
+
+  // Modal close wiring (singleton — set up once on boot).
+  (function _wireShareUrlModal() {
+    const modal = document.getElementById("shareUrlModal");
+    if (!modal) return;
+    const closeBtn = document.getElementById("shareUrlClose");
+    function close() {
+      modal.classList.remove("show");
+      modal.setAttribute("aria-hidden", "true");
+    }
+    closeBtn?.addEventListener("click", close);
+    // Click backdrop (NOT card) → close
+    modal.addEventListener("click", e => {
+      if (e.target === modal) close();
+    });
+    // Esc closes
+    document.addEventListener("keydown", e => {
+      if (e.key === "Escape" && modal.classList.contains("show")) {
+        close();
+      }
+    });
+    // Copy buttons (delegated)
+    function wireCopy(btnId, inputId) {
+      const b = document.getElementById(btnId);
+      const inp = document.getElementById(inputId);
+      if (!b || !inp) return;
+      b.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(inp.value);
+          const orig = b.textContent;
+          b.textContent = "已复制 ✓";
+          b.classList.add("ok");
+          setTimeout(() => {
+            b.textContent = orig;
+            b.classList.remove("ok");
+          }, 1400);
+        } catch (_e) {
+          // Fall back to selectAll so the user can ⌘C manually
+          inp.focus();
+          inp.select();
+        }
+      });
+    }
+    wireCopy("shareUrlShortCopy", "shareUrlShort");
+    wireCopy("shareUrlLongCopy",  "shareUrlLong");
+  })();
+
   // v0.7-P1-4 — client delivery share link.
   // Mints a token via POST /share/<run>/issue then surfaces the
-  // resulting URL.  We keep the prompt tiny so the workflow is
-  // "click button → paste URL into iMessage / email" — no modal
-  // form, no expiry picker by default (Phase 2 can add one).
+  // resulting URL in the share-URL modal (v0.8-P1-3).
   // ==================================================================
   document.getElementById("shareLinkBtn")?.addEventListener("click", async () => {
     const photographer = (localStorage.getItem("pixcull_photographer_name") || "").trim();
@@ -8947,21 +9206,12 @@
       if (!res.ok) throw new Error("HTTP " + res.status);
       const d = await res.json();
       if (!d.ok || !d.url) throw new Error("server returned no URL");
-      const fullUrl = location.origin + d.url;
-      let copied = false;
-      try {
-        await navigator.clipboard.writeText(fullUrl);
-        copied = true;
-      } catch (_e) {
-        /* clipboard write may be blocked; we still show the URL */
-      }
-      // Show the URL in a (regrettably native) prompt so the user
-      // can copy it manually if clipboard write was blocked, and
-      // open it to verify the layout.
-      const note = copied
-        ? "已复制到剪贴板。粘贴给客户即可。\n\n"
-        : "复制下面 URL(剪贴板被浏览器拒绝):\n\n";
-      window.prompt(note + "也可以右键 → 新标签打开:", fullUrl);
+      // v0.8-P1-3 — open the share-URL modal instead of native prompt.
+      await _openShareUrlModal(d.url, {
+        title:    "🔗 客户分享链接",
+        subtitle: "扫描二维码,或复制下面的链接,发给客户:",
+        footnote: "客户在浏览器里直接查看 keeps,不需要安装 PixCull。",
+      });
       showToast("分享链接已生成", "success");
     } catch (err) {
       showToast("生成失败: " + err.message, "error");
@@ -9102,16 +9352,12 @@
       if (!r.ok) throw new Error("HTTP " + r.status);
       const d = await r.json();
       if (!d.ok || !d.url) throw new Error("server returned no URL");
-      const fullUrl = location.origin + d.url;
-      let copied = false;
-      try {
-        await navigator.clipboard.writeText(fullUrl);
-        copied = true;
-      } catch (_e) {}
-      const note = copied
-        ? "已复制到剪贴板。粘贴给二摄 / 编辑即可。\n\n"
-        : "复制下面 URL(剪贴板被浏览器拒绝):\n\n";
-      window.prompt(note + "他们打开后会自动加入这个会话,每 5s 同步一次:", fullUrl);
+      // v0.8-P1-3 — open the share-URL modal instead of native prompt.
+      await _openShareUrlModal(d.url, {
+        title:    "📡 协作会话链接",
+        subtitle: "扫描二维码,或复制下面的链接,发给二摄 / 编辑:",
+        footnote: "他们打开后自动加入,每 5s 同步一次标注。",
+      });
       showToast("协作会话已生成", "success");
     } catch (err) {
       showToast("生成失败: " + err.message, "error");
