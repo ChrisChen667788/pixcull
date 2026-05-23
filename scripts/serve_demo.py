@@ -2064,6 +2064,10 @@ class _Handler(BaseHTTPRequestHandler):
         # appear (style_modes, scenes, etc.).
         if sub == "/taxonomy":
             return self._serve_api_v1_taxonomy()
+        # v0.8-P0-1 — i18n locale fetcher.
+        # GET /api/v1/locale?lang=en_US → {lang, strings: {...}}
+        if sub == "/locale":
+            return self._serve_api_v1_locale()
         # P-UX-9 — accumulated cull-reason counts so the picker can
         # sort by user frequency + admin can show "your cull habits".
         if sub == "/cull_reasons/stats":
@@ -2696,6 +2700,41 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+        return True
+
+    def _serve_api_v1_locale(self) -> bool:
+        """v0.8-P0-1 — return the requested locale's {key: string} map.
+
+        The client (results.html JS shim) calls this when the user
+        toggles language; the response is then merged into the
+        in-memory I18N map and every ``[data-i18n]`` element is
+        re-painted. Cached 5 minutes — locales don't change often.
+
+        Query string: ``?lang=en_US`` (or ``zh-CN`` etc; the i18n
+        module normalises). Falls back to zh_CN if unknown.
+        """
+        from urllib.parse import parse_qs, urlparse as _up
+        from pixcull.i18n import (
+            DEFAULT_LOCALE,
+            SUPPORTED_LOCALES,
+            load_locale,
+        )
+
+        qs = parse_qs(_up(self.path).query)
+        lang_arg = (qs.get("lang") or [DEFAULT_LOCALE])[0]
+        strings = load_locale(lang_arg)
+        body = _safe_dumps({
+            "schema":     "pixcull.api.v1.locale/v1",
+            "lang":       lang_arg,
+            "supported":  list(SUPPORTED_LOCALES),
+            "strings":    strings,
+        }).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "public, max-age=300")
         self.end_headers()
         self.wfile.write(body)
         return True

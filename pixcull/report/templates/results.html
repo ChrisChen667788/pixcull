@@ -371,6 +371,38 @@
       letter-spacing: 0.01em;
     }
     .workspace-bar-spacer { flex: 1; }
+
+    /* v0.8-P0-1 — language switcher button.  Sits at the right
+       of the workspace-bar between stats and other chrome.  Small
+       square pill with a one-char label; cycles zh ↔ en on click. */
+    .lang-switcher {
+      width: 28px; height: 28px;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: var(--surface-2, rgba(255,255,255,0.06));
+      border: 1px solid var(--border);
+      color: var(--fg-2, var(--fg));
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 11.5px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      padding: 0;
+      margin-left: 8px;
+      transition: background var(--duration-fast, 160ms) var(--ease-out),
+                  border-color var(--duration-fast, 160ms) var(--ease-out);
+    }
+    .lang-switcher:hover {
+      background: var(--surface-3, rgba(255,255,255,0.10));
+      border-color: var(--accent);
+      color: var(--fg);
+    }
+    .lang-switcher:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+    @media (max-width: 640px) {
+      .lang-switcher { width: 32px; height: 32px; font-size: 12px; }
+    }
     /* LEGACY h1 — kept hidden so older callers that probe by id
        still find an element to update.  All visible content now
        lives in .crumb-title. */
@@ -4016,14 +4048,23 @@
         <span class="wordmark">Pix<span>Cull</span></span>
       </a>
       <span class="crumb-divider">/</span>
-      <a href="/" class="crumb-back" title="返回上传新一批">← 上传</a>
+      <a href="/" class="crumb-back" title="返回上传新一批"
+         data-i18n="workspace.crumb.upload_again">← 上传</a>
       <span class="crumb-divider">/</span>
       <span class="crumb-title">
-        <span>分析结果</span>
+        <span data-i18n="workspace.crumb.results">分析结果</span>
         <span id="runPill" class="run-pill" style="display:none"></span>
       </span>
       <span class="workspace-bar-spacer"></span>
       <div class="stats" id="stats"></div>
+      <!-- v0.8-P0-1 — language switcher.  Cycles zh_CN → en_US.
+           Persists pixcull_lang in localStorage; updates every
+           [data-i18n] element in place without a reload. -->
+      <button class="lang-switcher" id="langSwitcher" type="button"
+              data-i18n-attr-aria-label="lang.switcher.aria"
+              title="中文 / English">
+        <span class="lang-label" id="langSwitcherLabel">中</span>
+      </button>
     </div>
     <!-- legacy h1 kept (hidden) for any JS that probes #title -->
     <h1 id="title">分析结果<span id="runTag" class="run-tag" style="display:none"></span></h1>
@@ -4036,9 +4077,10 @@
     <div class="library-panel-backdrop" id="libraryPanelBackdrop"></div>
     <aside class="library-panel" id="libraryPanel">
       <div class="lp-header">
-        <span class="lp-title">筛选 · Filters</span>
+        <span class="lp-title" data-i18n="library.title">Library</span>
         <button class="lp-collapse" id="lpCollapseBtn"
                 type="button"
+                data-i18n-attr-aria-label="library.collapse.aria"
                 title="收起 / 展开筛选面板 (B)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
                stroke-width="2.2" stroke-linecap="round"
@@ -4049,12 +4091,12 @@
       </div>
       <div class="lp-scroll">
         <details class="lp-group" open data-group="decision">
-          <summary>决定 · Decision</summary>
+          <summary data-i18n="library.group.decision">决定 · Decision</summary>
           <div class="lp-content" id="decisionPills">
-            <span class="pill active" data-d="all">全部</span>
-            <span class="pill" data-d="keep">keep</span>
-            <span class="pill" data-d="maybe">maybe</span>
-            <span class="pill" data-d="cull">cull</span>
+            <span class="pill active" data-d="all" data-i18n="decision.all">全部</span>
+            <span class="pill" data-d="keep" data-i18n="decision.keep">keep</span>
+            <span class="pill" data-d="maybe" data-i18n="decision.maybe">maybe</span>
+            <span class="pill" data-d="cull" data-i18n="decision.cull">cull</span>
           </div>
         </details>
         <details class="lp-group" open data-group="scene">
@@ -4599,6 +4641,123 @@
   const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => (
     {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
   ));
+
+  // ==================================================================
+  // v0.8-P0-1 — UI i18n shim (zh_CN ↔ en_US).
+  //
+  // Every translatable element in the template carries
+  //   data-i18n="key"               (for textContent)
+  //   data-i18n-attr-title="key"    (for the title attr)
+  //   data-i18n-attr-aria-label="key" (etc.)
+  // _applyLang(lang) fetches /api/v1/locale?lang=<lang>, merges the
+  // result into I18N_STRINGS, and re-paints every annotated element.
+  // The choice is persisted in localStorage so reloads / new tabs
+  // pick it up. Default is zh_CN.
+  //
+  // The first paint (DOMContentLoaded) only flips strings when the
+  // user has previously set a non-default language — avoids an
+  // unnecessary network round-trip on the common case.
+  // ==================================================================
+  const I18N_KEY = "pixcull_lang";
+  let I18N_STRINGS = {};        // key → translated string (current lang)
+  let I18N_CURRENT = "zh_CN";   // current language code
+
+  function _getStoredLang() {
+    try {
+      const v = localStorage.getItem(I18N_KEY);
+      return (v === "zh_CN" || v === "en_US") ? v : "zh_CN";
+    } catch (_e) { return "zh_CN"; }
+  }
+  function _setStoredLang(lang) {
+    try { localStorage.setItem(I18N_KEY, lang); } catch (_e) {}
+  }
+
+  async function _fetchLocale(lang) {
+    try {
+      const r = await fetch(`/api/v1/locale?lang=${encodeURIComponent(lang)}`);
+      if (!r.ok) return null;
+      const d = await r.json();
+      return (d && d.strings && typeof d.strings === "object") ? d.strings : null;
+    } catch (_e) { return null; }
+  }
+
+  // Re-paint every element carrying a data-i18n* attribute.
+  // Missing keys leave the existing text in place (the original
+  // template's hardcoded Chinese is a graceful fallback).
+  function _applyLangToDom() {
+    document.querySelectorAll("[data-i18n]").forEach(el => {
+      const key = el.getAttribute("data-i18n");
+      const txt = I18N_STRINGS[key];
+      if (typeof txt === "string" && txt.length) {
+        el.textContent = txt;
+      }
+    });
+    // Attribute-keyed translations (title / aria-label / placeholder)
+    document.querySelectorAll("[data-i18n-attr-title]").forEach(el => {
+      const v = I18N_STRINGS[el.getAttribute("data-i18n-attr-title")];
+      if (typeof v === "string" && v.length) el.setAttribute("title", v);
+    });
+    document.querySelectorAll("[data-i18n-attr-aria-label]").forEach(el => {
+      const v = I18N_STRINGS[el.getAttribute("data-i18n-attr-aria-label")];
+      if (typeof v === "string" && v.length) el.setAttribute("aria-label", v);
+    });
+    document.querySelectorAll("[data-i18n-attr-placeholder]").forEach(el => {
+      const v = I18N_STRINGS[el.getAttribute("data-i18n-attr-placeholder")];
+      if (typeof v === "string" && v.length) el.setAttribute("placeholder", v);
+    });
+    // Update the lang switcher label to show the language the user
+    // would switch TO if they clicked it.
+    const lblEl = document.getElementById("langSwitcherLabel");
+    if (lblEl) lblEl.textContent = I18N_CURRENT === "zh_CN" ? "EN" : "中";
+    // Update html lang attr so screen-readers + CSS :lang() rules work
+    document.documentElement.setAttribute("lang",
+      I18N_CURRENT === "zh_CN" ? "zh-CN" : "en");
+  }
+
+  async function _applyLang(lang) {
+    const strings = await _fetchLocale(lang);
+    if (!strings) {
+      // Couldn't fetch — leave the previous render in place.
+      return false;
+    }
+    I18N_STRINGS = strings;
+    I18N_CURRENT = lang;
+    _setStoredLang(lang);
+    _applyLangToDom();
+    return true;
+  }
+
+  // Helper for dynamic strings (e.g. emitted from JS templating)
+  // — returns the translated string or the key as fallback.
+  function _t(key, fallback) {
+    const v = I18N_STRINGS[key];
+    return (typeof v === "string" && v.length) ? v : (fallback || key);
+  }
+
+  // Wire the switcher button + boot.
+  document.addEventListener("DOMContentLoaded", () => {
+    const stored = _getStoredLang();
+    I18N_CURRENT = stored;
+    const lblEl = document.getElementById("langSwitcherLabel");
+    if (lblEl) lblEl.textContent = stored === "zh_CN" ? "EN" : "中";
+    if (stored !== "zh_CN") {
+      // The HTML is rendered server-side in zh — only fetch if the
+      // user previously chose non-default.
+      _applyLang(stored);
+    }
+    const btn = document.getElementById("langSwitcher");
+    if (btn) {
+      btn.addEventListener("click", async () => {
+        const next = I18N_CURRENT === "zh_CN" ? "en_US" : "zh_CN";
+        btn.disabled = true;
+        const ok = await _applyLang(next);
+        btn.disabled = false;
+        if (!ok && typeof showToast === "function") {
+          showToast("Locale switch failed", "error");
+        }
+      });
+    }
+  });
 
   // V16.0 — i18n display map. Keep token IDs (snake_case English) as
   // the wire format because (a) they're stable across versions and (b)
