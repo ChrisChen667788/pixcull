@@ -2068,6 +2068,12 @@ class _Handler(BaseHTTPRequestHandler):
         # GET /api/v1/locale?lang=en_US → {lang, strings: {...}}
         if sub == "/locale":
             return self._serve_api_v1_locale()
+        # v0.8-P0-2 — LAN sync change-list polling.
+        # GET /api/v1/sync/event/<token>/changes?since=<ms>
+        #   → {schema, run_id, server_ts, annotations: [...]}
+        if sub.startswith("/sync/event/") and sub.endswith("/changes"):
+            token = sub[len("/sync/event/"):-len("/changes")]
+            return self._serve_sync_event_changes(token)
         # P-UX-9 — accumulated cull-reason counts so the picker can
         # sort by user frequency + admin can show "your cull habits".
         if sub == "/cull_reasons/stats":
@@ -3611,6 +3617,19 @@ class _Handler(BaseHTTPRequestHandler):
         if path.startswith("/style/train/"):
             rid = path[len("/style/train/"):]
             return self._handle_style_train(rid)
+        # v0.8-P0-2 — issue a sync event token for a run.
+        # POST /sync/event/issue/<run_id>  body: {label?, ttl_hours?}
+        # → {ok, event_id, token, url, qr_url}
+        if path.startswith("/sync/event/issue/"):
+            rid = path[len("/sync/event/issue/"):]
+            return self._handle_sync_event_issue(rid)
+        # v0.8-P0-2 — revoke an event
+        # POST /sync/event/revoke/<run_id>/<event_id>
+        if path.startswith("/sync/event/revoke/"):
+            tail = path[len("/sync/event/revoke/"):]
+            if "/" in tail:
+                rid, eid = tail.split("/", 1)
+                return self._handle_sync_event_revoke(rid, eid)
         # v0.7-P2-2 — tethered live scoring (top-level shortcut routes
         # that call into the canonical P2.2 handlers defined further
         # down in this class).
@@ -4358,6 +4377,133 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body_bytes)
+
+    # ============================================================
+    # v0.8-P0-2 — LAN sync event endpoints
+    # ============================================================
+    def _handle_sync_event_issue(self, run_id: str) -> None:
+        """POST /sync/event/issue/<run_id>
+        body: {label?, ttl_hours?, issued_by?}
+        → {ok, event_id, token, url, expires_at}
+        """
+        run = _get_run(run_id) or _reload_run_from_disk(run_id)
+        if run is None:
+            self.send_error(404, "no such run")
+            return
+        try:
+            from pixcull.sync import issue_event
+        except Exception as exc:
+            _dbg("sync/import", exc, run_id)
+            self.send_error(500, "sync module import failed")
+            return
+        body = self._read_json_body()
+        label = str(body.get("label") or "")
+        issued_by = str(body.get("issued_by") or "")
+        try:
+            ttl = int(body.get("ttl_hours") or 12)
+        except (TypeError, ValueError):
+            ttl = 12
+        run_output_dir = Path(run["output_dir"])
+        try:
+            sess = issue_event(
+                run_output_dir, run_id,
+                label=label, issued_by=issued_by, ttl_hours=ttl,
+            )
+        except Exception as exc:
+            _dbg("sync/issue", exc, run_id)
+            self.send_error(500, "failed to issue event")
+            return
+        # Join URL is the existing /results/<run_id> page with ?event=<token>
+        # query param; the JS shim detects the param and switches into
+        # collaborative-polling mode.
+        self._json_ok({
+            "ok":          True,
+            "event_id":    sess.event_id,
+            "token":       sess.token,
+            "url":         f"/results/{run_id}?event={sess.token}",
+            "expires_at":  sess.expires_at,
+        })
+
+    def _handle_sync_event_revoke(self, run_id: str, event_id: str) -> None:
+        run = _get_run(run_id) or _reload_run_from_disk(run_id)
+        if run is None:
+            self.send_error(404, "no such run")
+            return
+        try:
+            from pixcull.sync import revoke_event
+        except Exception as exc:
+            _dbg("sync/import", exc, run_id)
+            self.send_error(500, "sync module import failed")
+            return
+        run_output_dir = Path(run["output_dir"])
+        changed = revoke_event(run_output_dir, event_id)
+        self._json_ok({"ok": True, "changed": bool(changed)})
+
+    def _serve_sync_event_changes(self, token: str) -> bool:
+        """GET /api/v1/sync/event/<token>/changes?since=<ms>
+
+        We scan ALL runs' events/ dirs for a matching token because
+        the client only knows the token, not the run_id.  Linear
+        scan is fine for the v1 single-host model — at most a few
+        runs per machine.
+        """
+        from urllib.parse import parse_qs, urlparse as _up
+        try:
+            from pixcull.sync import (
+                compute_changes_since, find_event_by_token,
+            )
+        except Exception as exc:
+            _dbg("sync/import", exc, "changes")
+            self.send_error(500, "sync module import failed")
+            return True
+        # Walk demo root for runs and look for a matching token.
+        # In a busy server this would be cached; v1 prioritises
+        # correctness over speed.
+        sess = None
+        run_dir_match = None
+        if _DEMO_ROOT.is_dir():
+            for child in _DEMO_ROOT.iterdir():
+                if not child.is_dir():
+                    continue
+                out_dir = child / "output"
+                if not out_dir.is_dir():
+                    continue
+                found = find_event_by_token(out_dir, token)
+                if found is not None:
+                    sess = found
+                    run_dir_match = out_dir
+                    break
+        if sess is None or run_dir_match is None:
+            self.send_error(404, "no such event")
+            return True
+        if not sess.is_active():
+            self.send_error(410, "event revoked or expired")
+            return True
+        qs = parse_qs(_up(self.path).query)
+        try:
+            since_ms = int((qs.get("since") or ["0"])[0])
+        except (TypeError, ValueError):
+            since_ms = 0
+        # Try the canonical v0.5+ JSONL file first; fall back to the
+        # legacy directory of *.json files (older runs, manual edits).
+        ann_jsonl = run_dir_match / "annotations.jsonl"
+        ann_dir = run_dir_match / "annotation"
+        src = ann_jsonl if ann_jsonl.exists() else ann_dir
+        annotations, server_ts = compute_changes_since(src, since_ms)
+        body = _safe_dumps({
+            "schema":      "pixcull.sync.changes/v1",
+            "run_id":      sess.run_id,
+            "event_id":    sess.event_id,
+            "server_ts":   server_ts,
+            "annotations": annotations,
+        }).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+        return True
 
     def _serve_style_distances(self, run_id: str) -> None:
         """GET /style/distances/<run_id> → {filename: distance, ...}

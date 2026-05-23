@@ -372,6 +372,44 @@
     }
     .workspace-bar-spacer { flex: 1; }
 
+    /* v0.8-P0-2 — sync-event status badge in the workspace bar.
+       Shown only when the page URL carries ?event=<token>; turns
+       amber-red when one or more local edits conflict with the
+       remote stream. */
+    .sync-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 10px;
+      background: rgba(74, 222, 128, 0.16);
+      color: #88e0a6;
+      border: 1px solid rgba(74, 222, 128, 0.32);
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      margin-left: 10px;
+      white-space: nowrap;
+    }
+    .sync-badge.conflict {
+      background: rgba(217, 163, 12, 0.20);
+      color: #e3c25e;
+      border-color: rgba(217, 163, 12, 0.45);
+    }
+    /* v0.8-P0-2 — conflict marker on cards.
+       Tiny corner triangle in amber when the row has a remote
+       annotation that disagrees with the local edit. */
+    .card.sync-conflict::before {
+      content: "⚠ 冲突";
+      position: absolute; top: 6px; left: 6px;
+      background: rgba(217, 163, 12, 0.92);
+      color: #1a1d24;
+      font-size: 9.5px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      z-index: 4;
+      pointer-events: none;
+    }
+
     /* v0.8-P0-1 — language switcher button.  Sits at the right
        of the workspace-bar between stats and other chrome.  Small
        square pill with a one-char label; cycles zh ↔ en on click. */
@@ -4240,6 +4278,12 @@
                the Inspector / on each card. -->
           <button class="export-btn" id="styleTrainBtn" role="menuitem"
                   title="把当前所有 keep 当作风格参考,学一个个人偏好模型,然后给所有其它照片打 风格距离">🎨 训练风格模型</button>
+          <!-- v0.8-P0-2 — issue a multi-user sync event so a
+               second-shooter / editor can open the same run in
+               their browser and see / merge in your annotations
+               in real-time. -->
+          <button class="export-btn" id="syncEventBtn" role="menuitem"
+                  title="生成一个协作会话链接,让二摄 / 编辑加入同一 run,实时看到你的标注">📡 协作会话</button>
           <!-- P2.5: auto-generate IPTC captions from structured data
                (scene + face labels + location + advice). Free / offline
                by default; Shift-click to enable LLM polish via DeepSeek
@@ -6057,7 +6101,9 @@
       };
       const cardCls = r.decision
         + (r.rubric_human_labeled ? " has-human" : "")
-        + (r.needs_review ? " needs-review" : "");
+        + (r.needs_review ? " needs-review" : "")
+        + (typeof _syncConflictFns !== "undefined"
+            && _syncConflictFns.has(r.filename) ? " sync-conflict" : "");
       // V9.0 style chip — V16.0 localized to Chinese label, raw token
       // still in tooltip so users can map to the wire format.
       const styleChips = (r.style_modes || []).map(
@@ -7883,6 +7929,10 @@
         prev_human_labeled: r.rubric_human_labeled,
       }]);
     }
+    // v0.8-P0-2 — record the local-edit timestamp so the sync
+    // poller knows this row is fresher than any incoming remote
+    // edit of the same photo.
+    if (typeof _markLocalEdit === "function") _markLocalEdit(focusedFn);
     const wasFn = focusedFn;
     try {
       await fetch(`/annotation/${run_id}/${encodeURIComponent(focusedFn)}`, {
@@ -8885,6 +8935,175 @@
     sortSel.appendChild(opt);
   }
   _hydrateStyleDistances();
+
+  // ==================================================================
+  // v0.8-P0-2 — LAN sync event (host side).
+  //
+  // Host clicks 📡 协作会话 → server mints a token → host pastes the
+  // URL into iMessage / AirDrop / iPad QR scan → guests open the URL
+  // → their browser sees ?event=<token> + starts polling
+  // /api/v1/sync/event/<token>/changes every 5s.
+  //
+  // The same results.html template handles both roles via the same
+  // code path; differentiation is purely by URL param.
+  // ==================================================================
+  document.getElementById("syncEventBtn")?.addEventListener("click", async () => {
+    const label = prompt(
+      "会话名(任填,显示在团队里;留空跳过)\n例: 婚礼-2026-06-15",
+      ""
+    );
+    if (label === null) return;
+    const btn = document.getElementById("syncEventBtn");
+    const orig = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "生成中…";
+    try {
+      const r = await fetch(`/sync/event/issue/${run_id}`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ label: label || "" }),
+      });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const d = await r.json();
+      if (!d.ok || !d.url) throw new Error("server returned no URL");
+      const fullUrl = location.origin + d.url;
+      let copied = false;
+      try {
+        await navigator.clipboard.writeText(fullUrl);
+        copied = true;
+      } catch (_e) {}
+      const note = copied
+        ? "已复制到剪贴板。粘贴给二摄 / 编辑即可。\n\n"
+        : "复制下面 URL(剪贴板被浏览器拒绝):\n\n";
+      window.prompt(note + "他们打开后会自动加入这个会话,每 5s 同步一次:", fullUrl);
+      showToast("协作会话已生成", "success");
+    } catch (err) {
+      showToast("生成失败: " + err.message, "error");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = orig;
+    }
+  });
+
+  // ==================================================================
+  // v0.8-P0-2 — LAN sync event (guest side).
+  //
+  // If the page URL carries ?event=<token>, switch into "collaborative
+  // pulling" mode: poll the host every 5s for annotation changes,
+  // merge them into rows[], flag conflicts (local edit newer than
+  // incoming remote of same photo with different decision).
+  // ==================================================================
+  const _SYNC_EVENT_TOKEN = (() => {
+    try {
+      const p = new URLSearchParams(location.search);
+      return p.get("event") || "";
+    } catch (_e) { return ""; }
+  })();
+  const _SYNC_POLL_MS = 5000;
+  let _syncLastTs = 0;
+  let _syncRowMtimes = {};  // filename → last local-edit mtime_ms
+  let _syncConflictFns = new Set();
+  let _syncPeers = 0;       // bookkeeping for the live badge
+
+  function _markLocalEdit(filename) {
+    if (!filename) return;
+    _syncRowMtimes[filename] = Date.now();
+  }
+
+  function _applyRemoteAnnotation(remote) {
+    if (!remote || !remote.filename) return null;
+    const row = rows.find(r => r.filename === remote.filename);
+    if (!row) return null;
+    // Mirror the fields the existing annotation flow writes to.
+    const fields = ["decision", "rubric_stars", "rubric_human_labeled",
+                    "rubric_human_user", "rubric_human_at",
+                    "cull_reason", "advice"];
+    let changed = false;
+    for (const f of fields) {
+      if (Object.prototype.hasOwnProperty.call(remote, f)
+          && JSON.stringify(row[f]) !== JSON.stringify(remote[f])) {
+        row[f] = remote[f];
+        changed = true;
+      }
+    }
+    return changed ? row : null;
+  }
+
+  async function _syncPollOnce() {
+    if (!_SYNC_EVENT_TOKEN) return;
+    try {
+      const url = `/api/v1/sync/event/${encodeURIComponent(_SYNC_EVENT_TOKEN)}`
+                 + `/changes?since=${_syncLastTs}`;
+      const r = await fetch(url);
+      if (r.status === 404 || r.status === 410) {
+        // Event revoked / expired
+        showToast("协作会话已失效", "error");
+        const badge = document.getElementById("syncBadge");
+        if (badge) badge.style.display = "none";
+        return false;
+      }
+      if (!r.ok) return false;
+      const d = await r.json();
+      const incoming = Array.isArray(d.annotations) ? d.annotations : [];
+      _syncLastTs = Number(d.server_ts) || _syncLastTs;
+      let applied = 0;
+      for (const remote of incoming) {
+        // Conflict rule: local edited AFTER this remote → mark
+        const remoteMs = Number(remote.updated_at_ms) || 0;
+        const localMs  = _syncRowMtimes[remote.filename] || 0;
+        const row      = rows.find(r => r.filename === remote.filename);
+        const decsDiffer = row && row.decision !== remote.decision;
+        if (decsDiffer && localMs > remoteMs) {
+          _syncConflictFns.add(remote.filename);
+          continue;
+        }
+        const updated = _applyRemoteAnnotation(remote);
+        if (updated) {
+          applied += 1;
+          // Remote application clears any prior conflict on this row.
+          _syncConflictFns.delete(remote.filename);
+        }
+      }
+      if (applied > 0 || _syncConflictFns.size > 0) {
+        // Re-render so chips refresh
+        render();
+        _refreshSyncBadge();
+      }
+      return true;
+    } catch (_e) {
+      return false;
+    }
+  }
+  function _refreshSyncBadge() {
+    const badge = document.getElementById("syncBadge");
+    if (!badge) return;
+    const conflicts = _syncConflictFns.size;
+    badge.style.display = "";
+    badge.textContent = conflicts > 0
+      ? `📡 协作中 · ${conflicts} 处冲突`
+      : "📡 协作中 · 同步";
+    badge.classList.toggle("conflict", conflicts > 0);
+  }
+  // Inject a sync-badge into the workspace bar once on boot if we're
+  // a guest (joined via ?event=). Hosts get the badge too — they see
+  // their own session "live".
+  function _initSyncBadge() {
+    if (!_SYNC_EVENT_TOKEN) return;
+    const bar = document.querySelector(".workspace-bar");
+    if (!bar) return;
+    const b = document.createElement("span");
+    b.id = "syncBadge";
+    b.className = "sync-badge";
+    b.textContent = "📡 协作中 · 连接中…";
+    bar.insertBefore(b,
+      document.getElementById("langSwitcher") || bar.lastElementChild);
+  }
+  _initSyncBadge();
+  if (_SYNC_EVENT_TOKEN) {
+    // First poll immediate, then every _SYNC_POLL_MS
+    _syncPollOnce().then(() => _refreshSyncBadge());
+    setInterval(_syncPollOnce, _SYNC_POLL_MS);
+  }
 
   document.getElementById("styleTrainBtn")?.addEventListener("click", async () => {
     const keepRows = rows.filter(r => r.decision === "keep");
