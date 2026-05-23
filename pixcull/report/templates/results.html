@@ -4369,6 +4369,13 @@
                   title="把 XMP/IPTC 内嵌到原图(DNG/JPG/TIFF),不写 sidecar — 单文件工作流。需要 exiftool。会修改原图。">内嵌到原图(单文件)</button>
           <a class="export-btn" id="csvBtn" role="menuitem"
              title="下载完整 scores.csv (Excel/Numbers 友好)">下载 CSV</a>
+          <!-- v0.8-P2-2 — structured (annotations + style distance + scores) -->
+          <a class="export-btn" id="csvStructuredBtn" role="menuitem"
+             data-i18n="export.csv" data-i18n-attr-title="export.csv.title"
+             title="结构化 CSV — scores + 标注 + 风格距离合并">结构化 CSV</a>
+          <a class="export-btn" id="jsonStructuredBtn" role="menuitem"
+             data-i18n="export.json" data-i18n-attr-title="export.json.title"
+             title="结构化 JSON — 全部字段 + 标注 + 风格距离">下载 JSON</a>
           <!-- V23.x: standalone HTML gallery export — self-contained
                zip the user can email/upload as-is to clients.
                Default = keep only; Shift-click for keep+maybe. -->
@@ -9003,6 +9010,17 @@
   const csvBtn = document.getElementById("csvBtn");
   csvBtn.href = `/scores_csv/${run_id}`;
   csvBtn.setAttribute("download", "");
+  // v0.8-P2-2 — structured exports (scores + annotations + style distances)
+  const csvStruct = document.getElementById("csvStructuredBtn");
+  if (csvStruct) {
+    csvStruct.href = `/export/structured/${run_id}.csv`;
+    csvStruct.setAttribute("download", "");
+  }
+  const jsonStruct = document.getElementById("jsonStructuredBtn");
+  if (jsonStruct) {
+    jsonStruct.href = `/export/structured/${run_id}.json`;
+    jsonStruct.setAttribute("download", "");
+  }
 
   // V23.x — standalone HTML gallery export. Plain link with the
   // download attr; Shift+click widens scope to keep+maybe.

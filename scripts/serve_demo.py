@@ -3580,6 +3580,15 @@ class _Handler(BaseHTTPRequestHandler):
         # V9.3: scores.csv direct download
         if path.startswith("/scores_csv/"):
             return self._serve_scores_csv(path[len("/scores_csv/"):])
+        # v0.8-P2-2 — structured export (CSV / JSON, all fields)
+        if path.startswith("/export/structured/"):
+            tail = path[len("/export/structured/"):]
+            if tail.endswith(".json"):
+                return self._serve_export_structured_json(tail[:-5])
+            if tail.endswith(".csv"):
+                return self._serve_export_structured_csv(tail[:-4])
+            self.send_error(404, "expected .json or .csv suffix")
+            return
         if path.startswith("/rubric/"):
             return self._serve_rubric(path[len("/rubric/"):])
         if path.startswith("/annotation/"):
@@ -6552,6 +6561,173 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
+
+    # ============================================================
+    # v0.8-P2-2 — structured CSV / JSON export
+    #
+    # Goes BEYOND the legacy scores.csv (which is just the analyser's
+    # native dump) by joining in:
+    #   * latest annotation per filename (decision / cull_reason /
+    #     rubric_human_stars / overall_label)
+    #   * bucket assignments (which delivery buckets a filename
+    #     belongs to — but those live in localStorage, so we surface
+    #     server-side annotations only)
+    #   * style distance map (v0.7-P2-1 + v0.8-P1-1) — v1, v2, blend
+    #
+    # The "Lr Catalog import template" (.lrcat-ready SQLite) is a
+    # bigger lift (LR's catalog schema is undocumented, reverse-
+    # engineered binary) → deferred to v0.9 / v1.0.  V1 here gives
+    # pros a clean JSON pipe into their own Lr-import scripts.
+    # ============================================================
+    def _collect_structured_rows(self, run: dict) -> list[dict]:
+        """Merge scores.csv + annotations.jsonl + style_distances.json
+        into one list of per-filename dicts.
+
+        Returns rows in scores.csv order so existing pipelines that
+        rely on row ordering keep working.
+        """
+        import csv as _csv
+
+        output_dir = Path(run["output_dir"])
+        scores_path = output_dir / "scores.csv"
+        if not scores_path.exists():
+            return []
+        rows: list[dict] = []
+        try:
+            with open(scores_path, "r", encoding="utf-8-sig", newline="") as fh:
+                for r in _csv.DictReader(fh):
+                    rows.append(dict(r))
+        except OSError as exc:
+            _dbg("export/structured/scores_read", exc, str(scores_path))
+            return []
+        # Latest annotation per filename (annotations.jsonl is
+        # append-only, last line wins).
+        ann_by_fn: dict = {}
+        ann_path = output_dir / "annotations.jsonl"
+        if ann_path.exists():
+            try:
+                with open(ann_path, "r", encoding="utf-8") as fh:
+                    for line in fh:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            row = json.loads(line)
+                        except ValueError:
+                            continue
+                        if not isinstance(row, dict):
+                            continue
+                        fn = row.get("filename")
+                        if isinstance(fn, str) and fn:
+                            ann_by_fn[fn] = row
+            except OSError as exc:
+                _dbg("export/structured/ann_read", exc, str(ann_path))
+        # Style distances (rich shape {v1, v2?, blend})
+        style_path = output_dir / "style_distances.json"
+        style_map: dict = {}
+        if style_path.exists():
+            try:
+                style_map = json.loads(style_path.read_text("utf-8"))
+                if not isinstance(style_map, dict):
+                    style_map = {}
+            except (OSError, ValueError):
+                style_map = {}
+        # Merge
+        for r in rows:
+            fn = r.get("filename") or ""
+            ann = ann_by_fn.get(fn) or {}
+            # Annotation overrides win for decision / cull_reason
+            if ann.get("overall_label"):
+                r["decision_human"] = ann.get("overall_label")
+            if ann.get("cull_reason"):
+                r["cull_reason_human"] = ann.get("cull_reason")
+            r["annotation_timestamp"] = ann.get("timestamp")
+            r["annotation_source"] = ann.get("source")
+            # Style distances
+            sd = style_map.get(fn)
+            if isinstance(sd, (int, float)):
+                r["style_distance"] = sd
+                r["style_distance_v1"] = sd
+            elif isinstance(sd, dict):
+                if "v1" in sd:    r["style_distance_v1"] = sd["v1"]
+                if "v2" in sd:    r["style_distance_v2"] = sd["v2"]
+                if "blend" in sd: r["style_distance"] = sd["blend"]
+        return rows
+
+    def _serve_export_structured_json(self, run_id: str) -> None:
+        """GET /export/structured/<run>.json → {schema, run_id, rows: [...]}
+
+        Schema is pixcull.export.structured/v1 — every row carries
+        every scores.csv column plus annotation + style-distance
+        overlays.  Useful for users writing their own LR-import
+        scripts or feeding the data into a separate analytics
+        pipeline.
+        """
+        run = _get_run(run_id) or _reload_run_from_disk(run_id)
+        if run is None:
+            self.send_error(404, "no such run")
+            return
+        rows = self._collect_structured_rows(run)
+        payload = {
+            "schema":      "pixcull.export.structured/v1",
+            "run_id":      run_id,
+            "exported_at": datetime.now(timezone.utc).isoformat(),
+            "n_rows":      len(rows),
+            "rows":        rows,
+        }
+        body = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header(
+            "Content-Disposition",
+            f'attachment; filename="pixcull_{run_id}_structured.json"',
+        )
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _serve_export_structured_csv(self, run_id: str) -> None:
+        """GET /export/structured/<run>.csv → same data as JSON variant
+        but in a flat CSV (one row per filename, union of all keys
+        as columns; missing → empty cell).
+        """
+        import csv as _csv
+        import io
+
+        run = _get_run(run_id) or _reload_run_from_disk(run_id)
+        if run is None:
+            self.send_error(404, "no such run")
+            return
+        rows = self._collect_structured_rows(run)
+        if not rows:
+            self.send_error(404, "no rows to export")
+            return
+        # Union of columns, preserving the order: scores.csv-natural
+        # columns first (taken from the first row), then any
+        # additional keys appended in encounter order.
+        seen: dict = {}
+        for r in rows:
+            for k in r.keys():
+                if k not in seen:
+                    seen[k] = True
+        fieldnames = list(seen.keys())
+        buf = io.StringIO()
+        # BOM for Excel
+        buf.write("﻿")
+        writer = _csv.DictWriter(buf, fieldnames=fieldnames)
+        writer.writeheader()
+        for r in rows:
+            writer.writerow({k: r.get(k, "") for k in fieldnames})
+        body = buf.getvalue().encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/csv; charset=utf-8")
+        self.send_header(
+            "Content-Disposition",
+            f'attachment; filename="pixcull_{run_id}_structured.csv"',
+        )
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
     def _serve_gallery_zip(self, rel: str) -> None:
         """V23.x — standalone HTML gallery export for a run.
