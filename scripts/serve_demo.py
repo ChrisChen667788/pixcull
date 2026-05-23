@@ -4352,11 +4352,71 @@ class _Handler(BaseHTTPRequestHandler):
             _dbg("style/train/write_profile", exc, run_id)
             self.send_error(500, "failed to write profile")
             return
-        # Eagerly compute distances for every row + persist
-        distances = compute_distances(all_rows, profile)
+        # V1 distances (axis-MAD + scene penalty)
+        v1_dists = compute_distances(all_rows, profile)
+
+        # v0.8-P1-1 — V2 (CLIP centroid) layered on top of V1.
+        # If the embeddings cache built by P-AI-2 semantic search
+        # exists, learn the visual centroid + score every row.
+        # Otherwise gracefully fall back to V1 only.
+        v2_dists: dict = {}
+        v2_summary: dict = {}
+        try:
+            from pixcull.style import (
+                blend, compute_visual_distances, DEFAULT_LAMBDA,
+                learn_visual_profile,
+            )
+            cache_path = Path(run["output_dir"]) / "embeddings.npz"
+            v2_profile = learn_visual_profile(list(ref_set), cache_path)
+            if v2_profile is not None:
+                v2_dists = compute_visual_distances(v2_profile, cache_path)
+                # Persist the V2 profile next to V1 (same dir, distinct name)
+                try:
+                    (Path(run["output_dir"]) / "style_profile_v2.json").write_text(
+                        json.dumps(v2_profile, ensure_ascii=False, indent=2),
+                        encoding="utf-8",
+                    )
+                except OSError as exc:
+                    _dbg("style/train/write_v2_profile", exc, run_id)
+                v2_summary = {
+                    "n_refs": v2_profile.get("n_refs", 0),
+                    "dim":    v2_profile.get("dim", 0),
+                    "model":  v2_profile.get("model", ""),
+                }
+        except Exception as exc:
+            # V2 is best-effort — log + continue with V1 only so a
+            # stale cache / missing numpy doesn't fail the whole
+            # training call.
+            _dbg("style/train/v2_compute", exc, run_id)
+            v2_dists = {}
+            v2_summary = {}
+        # Rich distances map: {filename: {v1, v2?, blend}} so the
+        # UI can render dual chips + the client can re-blend
+        # without a server round-trip when the user tunes λ.
+        try:
+            from pixcull.style import blend as _blend, DEFAULT_LAMBDA as _LAM
+            blend_fn = _blend
+            lam = _LAM
+        except Exception:
+            blend_fn = None
+            lam = 0.3
+        all_fns = set(v1_dists) | set(v2_dists)
+        rich: dict = {}
+        for fn in all_fns:
+            entry = {"v1": v1_dists.get(fn)}
+            if fn in v2_dists:
+                entry["v2"] = v2_dists[fn]
+            if blend_fn is not None:
+                b = blend_fn(entry.get("v1"), entry.get("v2"), lam)
+                if b is not None:
+                    entry["blend"] = b
+            # Drop any None values so the JSON file stays tidy
+            entry = {k: v for k, v in entry.items() if v is not None}
+            if entry:
+                rich[fn] = entry
         try:
             self._style_distances_path(run).write_text(
-                json.dumps(distances, ensure_ascii=False),
+                json.dumps(rich, ensure_ascii=False),
                 encoding="utf-8",
             )
         except OSError as exc:
@@ -4364,11 +4424,14 @@ class _Handler(BaseHTTPRequestHandler):
             # Distances are cacheable but not required to save —
             # the profile is the durable artifact.
         payload = {
-            "ok":           True,
-            "n_refs":       profile.get("n_refs", 0),
-            "n_scored":     len(distances),
-            "axis_median":  profile.get("axis_median", {}),
-            "scene_modes":  profile.get("scene_modes", {}),
+            "ok":            True,
+            "n_refs":        profile.get("n_refs", 0),
+            "n_scored":      len(rich),
+            "n_scored_v2":   len(v2_dists),
+            "axis_median":   profile.get("axis_median", {}),
+            "scene_modes":   profile.get("scene_modes", {}),
+            "v2":            v2_summary,
+            "lambda_default": lam,
         }
         body_bytes = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(200)

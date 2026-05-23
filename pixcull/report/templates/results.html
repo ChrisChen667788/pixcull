@@ -6691,6 +6691,30 @@
       st[sec] = !!det.open;
       _writeInspectorState(st);
     }, true);  // capture — <details> toggle doesn't bubble in some engines
+
+    // v0.8-P1-1 — λ-cycling chip click handler.  Cycles through
+    // [0.0, 0.3, 0.5, 0.7, 1.0] so the user can dial between
+    // "pure V2 (visual)" and "pure V1 (axis stars)".  Re-blends
+    // distances + re-renders without a server round-trip.
+    lbInfo.addEventListener("click", e => {
+      const chip = e.target.closest(".style-lambda-chip");
+      if (!chip) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const cycle = [0.0, 0.3, 0.5, 0.7, 1.0];
+      const cur = _getStyleLambda();
+      // Pick the next value > cur, wrapping around
+      let next = cycle.find(v => v > cur + 0.01);
+      if (next === undefined) next = cycle[0];
+      _rebleStyleDistances(next);
+      // Re-open the lightbox info pane (render() rebuilt lbInfo)
+      // — the existing flow expects the user is still inside it.
+      const fn = (typeof _lbCurrentFn === "string") ? _lbCurrentFn : null;
+      if (fn) {
+        const r = rows.find(x => x.filename === fn);
+        if (r) lbInfo.innerHTML = renderInfoPane(r);
+      }
+    });
   }
   // V14.4 — register for ARIA + focus trap. Existing call sites that
   // do ``lb.classList.add("show")`` continue to work; the observer
@@ -7349,9 +7373,10 @@
     // warning amber (≤ 0.50) → red beyond.  We deliberately don't
     // round to integer percent — the precision (0.0-1.0) matches
     // the underlying signal the user is sorting by.
-    let styleBadge = "";
-    if (typeof r.style_distance === "number") {
-      const d = r.style_distance;
+    // v0.7-P2-1 / v0.8-P1-1 — style-distance badges.  Up to three
+    // chips when both V1 (axis-MAD) and V2 (CLIP visual centroid)
+    // are available: one per-component + the blended scoreboard.
+    function _styleChipColor(d) {
       let bg = "rgba(148,148,160,0.18)";
       let fg = "var(--muted)";
       let bd = "rgba(148,148,160,0.35)";
@@ -7359,10 +7384,62 @@
       else if (d <= 0.30) { bg = "rgba(99,102,241,0.18)"; fg = "#a3a5f5"; bd = "rgba(99,102,241,0.35)"; }
       else if (d <= 0.50) { bg = "rgba(217,163,12,0.20)"; fg = "#e3c25e"; bd = "rgba(217,163,12,0.40)"; }
       else                { bg = "rgba(248,113,113,0.20)"; fg = "#ee8888"; bd = "rgba(248,113,113,0.40)"; }
-      styleBadge =
-        `<span class="badge" title="风格距离 ${d.toFixed(3)} (0=完全像你已 keep 的风格,1=完全不像)" ` +
-        `style="background:${bg};color:${fg};border:1px solid ${bd};font-size:9.5px">` +
-        `🎨 风格距离 ${d.toFixed(2)}</span>`;
+      return {bg, fg, bd};
+    }
+    function _styleChip(label, d, tip) {
+      const c = _styleChipColor(d);
+      return `<span class="badge" title="${esc(tip)}" ` +
+        `style="background:${c.bg};color:${c.fg};border:1px solid ${c.bd};font-size:9.5px">` +
+        `${label} ${d.toFixed(2)}</span>`;
+    }
+    let styleBadge = "";
+    const hasV1 = typeof r.style_distance_v1 === "number";
+    const hasV2 = typeof r.style_distance_v2 === "number";
+    if (hasV1 || hasV2) {
+      const parts = [];
+      if (hasV1 && hasV2) {
+        // Both components present — show dual + blended
+        parts.push(_styleChip("📐 评分",
+          r.style_distance_v1,
+          "评分距离 (axis-MAD V1): " + r.style_distance_v1.toFixed(3)
+          + " — 仅看 rubric 星 & scene 是否像参考"));
+        parts.push(_styleChip("🔭 视觉",
+          r.style_distance_v2,
+          "视觉距离 (CLIP V2): " + r.style_distance_v2.toFixed(3)
+          + " — 用 CLIP embedding 算的视觉相似度"));
+        if (typeof r.style_distance === "number") {
+          parts.push(_styleChip("🎨 综合",
+            r.style_distance,
+            "综合 = λ·V1 + (1-λ)·V2 — 点 λ 芯片切换权重"));
+        }
+        // v0.8-P1-1 — λ-cycling chip.  Click cycles 0.0 → 0.3 → 0.5
+        // → 0.7 → 1.0 → 0.3 …; "0.0" means pure V2 (visual only),
+        // "1.0" means pure V1 (axis-only).
+        const curLam = _getStyleLambda();
+        parts.push(
+          `<button class="badge style-lambda-chip" type="button"
+                   title="λ = V1 (axis) 权重 · 当前 ${curLam.toFixed(2)} → 点击循环"
+                   style="background:rgba(99,102,241,0.10);color:#a3a5f5;
+                          border:1px dashed rgba(99,102,241,0.40);
+                          font-size:9.5px;cursor:pointer;font-family:inherit">
+             λ ${curLam.toFixed(2)}
+           </button>`);
+      } else if (hasV1) {
+        // V1 only — same one-chip render as v0.7-P2-1
+        parts.push(_styleChip("🎨 风格距离",
+          r.style_distance_v1,
+          "风格距离 (V1): " + r.style_distance_v1.toFixed(3)
+          + " (0=完全像你 keep 的风格,1=完全不像)"));
+      } else {
+        parts.push(_styleChip("🔭 视觉",
+          r.style_distance_v2,
+          "视觉距离 (V2): " + r.style_distance_v2.toFixed(3)));
+      }
+      styleBadge = parts.join(" ");
+    } else if (typeof r.style_distance === "number") {
+      // Legacy / fallback when only the blended is set
+      styleBadge = _styleChip("🎨 风格距离", r.style_distance,
+        "风格距离: " + r.style_distance.toFixed(3));
     }
 
     // v0.6 (2/5) — sections are now LR Develop-style <details>
@@ -8900,6 +8977,30 @@
   // currently-keep filenames as references, server learns + saves a
   // profile + distance map, we re-fetch and re-render.
   // ==================================================================
+  // v0.8-P1-1 — user-tunable blend ratio between V1 (axis-MAD)
+  // and V2 (CLIP centroid).  Persisted per-run; default 0.3 matches
+  // pixcull.style.DEFAULT_LAMBDA.
+  const _STYLE_LAMBDA_KEY = `pixcull_style_lambda:${run_id}`;
+  function _getStyleLambda() {
+    try {
+      const v = parseFloat(localStorage.getItem(_STYLE_LAMBDA_KEY));
+      if (isFinite(v) && v >= 0 && v <= 1) return v;
+    } catch (_e) {}
+    return 0.3;
+  }
+  function _setStyleLambda(v) {
+    try { localStorage.setItem(_STYLE_LAMBDA_KEY, String(v)); }
+    catch (_e) {}
+  }
+  function _styleBlend(v1, v2, lam) {
+    if (typeof v1 !== "number" && typeof v2 !== "number") return null;
+    if (typeof v1 !== "number") return v2;
+    if (typeof v2 !== "number") return v1;
+    const L = Math.max(0, Math.min(1, lam == null ? _getStyleLambda() : lam));
+    return Math.round((L * v1 + (1 - L) * v2) * 1000) / 1000;
+  }
+  let _styleHasV2 = false;   // any row carries a V2 component?
+
   async function _hydrateStyleDistances() {
     try {
       const r = await fetch(`/style/distances/${run_id}`);
@@ -8907,21 +9008,56 @@
       const map = await r.json();
       if (!map || typeof map !== "object") return;
       let n = 0;
+      let anyV2 = false;
+      const lam = _getStyleLambda();
       for (const row of rows) {
-        const d = map[row.filename];
-        if (typeof d === "number") {
-          row.style_distance = d;
-          n++;
+        const entry = map[row.filename];
+        if (entry == null) continue;
+        // v0.8-P1-1 — entry is either:
+        //   number   → legacy v0.7-P2-1 format (V1 only)
+        //   object   → {v1, v2?, blend?} (v0.8+ format)
+        let v1 = null, v2 = null, blend = null;
+        if (typeof entry === "number") {
+          v1 = entry;
+          blend = entry;
+        } else if (typeof entry === "object") {
+          if (typeof entry.v1 === "number") v1 = entry.v1;
+          if (typeof entry.v2 === "number") v2 = entry.v2;
+          if (typeof entry.blend === "number") blend = entry.blend;
+          // Re-blend client-side using the user's chosen λ (server
+          // bakes in the default, but the slider tunes from there)
+          const local = _styleBlend(v1, v2, lam);
+          if (local !== null) blend = local;
+          if (v2 !== null) anyV2 = true;
         }
+        if (v1 !== null) row.style_distance_v1 = v1;
+        if (v2 !== null) row.style_distance_v2 = v2;
+        if (blend !== null) row.style_distance = blend;
+        n++;
       }
       if (n > 0) {
         // Make the new sort option available
         _styleHasDistances = true;
+        _styleHasV2 = anyV2;
         _refreshStyleSortOption();
         // Re-render so card chips appear
         render();
       }
     } catch (_e) { /* offline / no profile yet — silent */ }
+  }
+
+  // Re-blend without re-fetching: re-compute row.style_distance from
+  // existing v1/v2 components when the user moves the λ slider.
+  function _rebleStyleDistances(lam) {
+    if (typeof lam === "number") _setStyleLambda(lam);
+    const L = _getStyleLambda();
+    for (const row of rows) {
+      const v1 = row.style_distance_v1;
+      const v2 = row.style_distance_v2;
+      const b = _styleBlend(v1, v2, L);
+      if (b !== null) row.style_distance = b;
+    }
+    render();
   }
   let _styleHasDistances = false;
   function _refreshStyleSortOption() {

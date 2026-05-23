@@ -26,10 +26,23 @@ from pixcull.style.clone import (
     compute_distances,
     AXIS_NAMES,
 )
+# v0.8-P1-1 — V2 (CLIP embedding centroid) layered on top of V1.
+from pixcull.style.clip_clone import (
+    DEFAULT_LAMBDA,
+    blend,
+    compute_visual_distances,
+    learn_visual_profile,
+)
 
 __all__ = [
+    # V1 (axis-MAD)
     "learn_style_profile",
     "style_distance",
     "compute_distances",
     "AXIS_NAMES",
+    # V2 (CLIP)
+    "learn_visual_profile",
+    "compute_visual_distances",
+    "blend",
+    "DEFAULT_LAMBDA",
 ]
