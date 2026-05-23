@@ -39,6 +39,30 @@ def test_en_loads_and_matches_zh_keyset():
     assert not extra_in_en, f"EN has extra keys: {sorted(extra_in_en)}"
 
 
+def test_ja_loads_and_matches_zh_keyset():
+    """JA must have EXACTLY the same keys as zh_CN (same drift rule)."""
+    zh = set(all_keys("zh_CN"))
+    ja = set(all_keys("ja_JP"))
+    missing_in_ja = zh - ja
+    extra_in_ja = ja - zh
+    assert not missing_in_ja, f"JA missing keys: {sorted(missing_in_ja)}"
+    assert not extra_in_ja, f"JA has extra keys: {sorted(extra_in_ja)}"
+
+
+def test_ja_normalisation():
+    # All the BCP47 forms a Japanese browser might send
+    assert t("workspace.crumb.results", "ja") == "解析結果"
+    assert t("workspace.crumb.results", "ja-JP") == "解析結果"
+    assert t("workspace.crumb.results", "ja_JP") == "解析結果"
+
+
+def test_supported_locales_includes_three():
+    # Charter v0.8-P2-1: zh + en + ja must all be supported
+    assert "zh_CN" in SUPPORTED_LOCALES
+    assert "en_US" in SUPPORTED_LOCALES
+    assert "ja_JP" in SUPPORTED_LOCALES
+
+
 def test_t_returns_translation():
     assert t("workspace.crumb.results", "zh_CN") == "分析结果"
     assert t("workspace.crumb.results", "en_US") == "Analysis results"
@@ -64,9 +88,9 @@ def test_accept_language_normalization():
 
 
 def test_unknown_lang_falls_back_to_default():
-    # Korean's not supported in v0.8-P0-1; should serve zh_CN.
+    # Korean / French / etc. not supported; should fall back to zh_CN.
+    # (Japanese IS supported as of v0.8-P2-1 — see test_ja_normalisation.)
     assert t("workspace.crumb.results", "ko-KR") == "分析结果"
-    assert t("workspace.crumb.results", "ja-JP") == "分析结果"
     assert t("workspace.crumb.results", "fr") == "分析结果"
     assert t("workspace.crumb.results", "") == "分析结果"
     assert t("workspace.crumb.results", None) == "分析结果"  # type: ignore[arg-type]

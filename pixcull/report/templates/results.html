@@ -4244,43 +4244,43 @@
           </div>
         </details>
         <details class="lp-group" open data-group="scene">
-          <summary>场景 · Scene</summary>
+          <summary data-i18n="library.group.scene">场景</summary>
           <div class="lp-content">
             <span class="filter-group" id="sceneFilters"></span>
           </div>
         </details>
         <details class="lp-group" data-group="style">
-          <summary>风格 · Style</summary>
+          <summary data-i18n="library.group.style">风格</summary>
           <div class="lp-content">
             <span class="filter-group" id="styleFilters"></span>
           </div>
         </details>
         <details class="lp-group" data-group="face" id="lpFaceGroup" style="display:none">
-          <summary>人脸 · Faces</summary>
+          <summary data-i18n="library.group.faces">人脸</summary>
           <div class="lp-content">
             <span class="filter-group" id="faceFilters"></span>
           </div>
         </details>
         <details class="lp-group" data-group="location" id="lpLocationGroup" style="display:none">
-          <summary>位置 · Location</summary>
+          <summary data-i18n="library.group.location">位置</summary>
           <div class="lp-content">
             <span class="filter-group" id="locationFilters"></span>
           </div>
         </details>
         <details class="lp-group" data-group="burst" id="lpBurstGroup" style="display:none">
-          <summary>连拍 · Bursts</summary>
+          <summary data-i18n="library.group.bursts">连拍</summary>
           <div class="lp-content">
             <span class="filter-group" id="burstPeakFilter"></span>
           </div>
         </details>
         <details class="lp-group" data-group="reason" id="lpReasonGroup" style="display:none">
-          <summary>剔除原因 · Cull-reason</summary>
+          <summary data-i18n="library.group.cull_reason">剔除原因</summary>
           <div class="lp-content">
             <span class="filter-group" id="cullReasonFilter"></span>
           </div>
         </details>
         <details class="lp-group" data-group="al">
-          <summary>主动学习 · Active Learning</summary>
+          <summary data-i18n="library.group.al">主动学习</summary>
           <div class="lp-content">
             <span class="filter-group" id="activeLearningFilter"></span>
           </div>
@@ -4330,6 +4330,7 @@
            it under the run's output/ dir. -->
       <input id="semSearchInput" class="sort-select" type="search"
              placeholder="🔎 语义搜索 (自然语言)"
+             data-i18n-attr-placeholder="workspace.search.placeholder"
              title="CLIP 语义搜索 · Enter 执行"
              style="min-width:180px;font-size:11px" />
       <button class="export-btn" id="semSearchClearBtn"
@@ -4466,7 +4467,10 @@
     </div>
     <div class="bk-list" id="bucketsList"></div>
     <div class="bk-foot">
-      <input id="newBucketName" type="text" placeholder="新桶名(回车创建)" maxlength="32" />
+      <input id="newBucketName" type="text"
+             placeholder="新桶名(回车创建)"
+             data-i18n-attr-placeholder="buckets.new.placeholder"
+             maxlength="32" />
       <button class="bk-btn" id="newBucketBtn" type="button">+ 新建</button>
     </div>
   </aside>
@@ -4683,7 +4687,7 @@
   <div class="shortcuts-modal" id="shortcutsModal">
     <div class="shortcuts-card">
       <div class="shortcuts-header">
-        <h3 class="modal-title">键盘快捷键</h3>
+        <h3 class="modal-title" data-i18n="shortcuts.title">键盘快捷键</h3>
         <!-- P-UX-24 — context-aware label populated by showShortcuts():
              "网格 / 放大窗 / A/B 比较". The active section above gets
              a highlight ring + is reordered to the top so users with
@@ -4856,10 +4860,14 @@
   let I18N_STRINGS = {};        // key → translated string (current lang)
   let I18N_CURRENT = "zh_CN";   // current language code
 
+  // v0.8-P2-1 — supported locale cycle.
+  const I18N_CYCLE = ["zh_CN", "en_US", "ja_JP"];
+  // Single-char chip label per locale (what the switcher shows).
+  const I18N_CHIP_LABEL = {zh_CN: "中", en_US: "EN", ja_JP: "あ"};
   function _getStoredLang() {
     try {
       const v = localStorage.getItem(I18N_KEY);
-      return (v === "zh_CN" || v === "en_US") ? v : "zh_CN";
+      return I18N_CYCLE.includes(v) ? v : "zh_CN";
     } catch (_e) { return "zh_CN"; }
   }
   function _setStoredLang(lang) {
@@ -4900,12 +4908,17 @@
       if (typeof v === "string" && v.length) el.setAttribute("placeholder", v);
     });
     // Update the lang switcher label to show the language the user
-    // would switch TO if they clicked it.
+    // would switch TO next (cycles zh → en → ja → zh).
     const lblEl = document.getElementById("langSwitcherLabel");
-    if (lblEl) lblEl.textContent = I18N_CURRENT === "zh_CN" ? "EN" : "中";
+    if (lblEl) {
+      const idx = I18N_CYCLE.indexOf(I18N_CURRENT);
+      const next = I18N_CYCLE[(idx + 1) % I18N_CYCLE.length];
+      lblEl.textContent = I18N_CHIP_LABEL[next] || "EN";
+    }
     // Update html lang attr so screen-readers + CSS :lang() rules work
+    const _htmlLang = {zh_CN: "zh-CN", en_US: "en", ja_JP: "ja"};
     document.documentElement.setAttribute("lang",
-      I18N_CURRENT === "zh_CN" ? "zh-CN" : "en");
+      _htmlLang[I18N_CURRENT] || "en");
   }
 
   async function _applyLang(lang) {
@@ -4933,7 +4946,11 @@
     const stored = _getStoredLang();
     I18N_CURRENT = stored;
     const lblEl = document.getElementById("langSwitcherLabel");
-    if (lblEl) lblEl.textContent = stored === "zh_CN" ? "EN" : "中";
+    if (lblEl) {
+      const idx = I18N_CYCLE.indexOf(stored);
+      const next = I18N_CYCLE[(idx + 1) % I18N_CYCLE.length];
+      lblEl.textContent = I18N_CHIP_LABEL[next] || "EN";
+    }
     if (stored !== "zh_CN") {
       // The HTML is rendered server-side in zh — only fetch if the
       // user previously chose non-default.
@@ -4942,7 +4959,9 @@
     const btn = document.getElementById("langSwitcher");
     if (btn) {
       btn.addEventListener("click", async () => {
-        const next = I18N_CURRENT === "zh_CN" ? "en_US" : "zh_CN";
+        // Cycle zh → en → ja → zh
+        const idx = I18N_CYCLE.indexOf(I18N_CURRENT);
+        const next = I18N_CYCLE[(idx + 1) % I18N_CYCLE.length];
         btn.disabled = true;
         const ok = await _applyLang(next);
         btn.disabled = false;

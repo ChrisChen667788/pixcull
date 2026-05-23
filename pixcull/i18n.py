@@ -35,7 +35,8 @@ _LOCALE_DIR = Path(__file__).resolve().parent / "locale"
 # Supported locales. The ORDER is the fallback chain when the
 # client's preferred lang isn't explicitly in the list — we use
 # zh_CN as the default because the original product UI is zh.
-SUPPORTED_LOCALES: tuple[str, ...] = ("zh_CN", "en_US")
+# v0.8-P2-1 — added ja_JP.
+SUPPORTED_LOCALES: tuple[str, ...] = ("zh_CN", "en_US", "ja_JP")
 DEFAULT_LOCALE: str = "zh_CN"
 
 
@@ -94,6 +95,8 @@ def _normalize_lang(lang: str | None) -> str:
         return "zh_CN"
     if s.startswith("en"):
         return "en_US"
+    if s.startswith("ja"):
+        return "ja_JP"
     return DEFAULT_LOCALE
 
 
