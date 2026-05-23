@@ -3501,6 +3501,12 @@ class _Handler(BaseHTTPRequestHandler):
         # /share/<run_id>/<token>  → static-ish HTML showing keeps
         if path.startswith("/share/"):
             return self._serve_share_page(path[len("/share/"):])
+        # v0.7-P2-1 — fetch learned style distances for a run.
+        # GET /style/distances/<run_id>  → {filename: distance}
+        if path.startswith("/style/distances/"):
+            return self._serve_style_distances(
+                path[len("/style/distances/"):]
+            )
         if path.startswith("/gallery_zip/"):
             # V23.x — standalone HTML gallery export. Returns a zip
             # the user can email/upload as-is; index.html opens in
@@ -3548,6 +3554,12 @@ class _Handler(BaseHTTPRequestHandler):
         if path.startswith("/share/") and path.endswith("/issue"):
             rid = path[len("/share/"):-len("/issue")]
             return self._handle_share_issue(rid)
+        # v0.7-P2-1 — train (or retrain) a style-clone profile.
+        # POST /style/train/<run_id>  body: {refs: [filename,...]}
+        # → {ok, n_refs, profile_summary}
+        if path.startswith("/style/train/"):
+            rid = path[len("/style/train/"):]
+            return self._handle_style_train(rid)
         if path == "/browse":
             return self._handle_browse()
         if path.startswith("/export/"):
@@ -4177,6 +4189,143 @@ class _Handler(BaseHTTPRequestHandler):
   </footer>
 </body>
 </html>"""
+
+    # ============================================================
+    # v0.7-P2-1 — style-clone V1 endpoints
+    # ============================================================
+    def _style_profile_path(self, run: dict):
+        return Path(run["output_dir"]) / "style_profile.json"
+
+    def _style_distances_path(self, run: dict):
+        return Path(run["output_dir"]) / "style_distances.json"
+
+    def _load_scores_rows(self, run: dict) -> list:
+        """Read scores.csv into a list of dicts.  Best-effort — a
+        missing / unreadable file yields [] (caller treats that as
+        "nothing learnable yet", which is the right v1 fallback).
+        """
+        import csv as _csv
+
+        p = Path(run["output_dir"]) / "scores.csv"
+        if not p.exists():
+            return []
+        rows = []
+        try:
+            with open(p, "r", encoding="utf-8-sig", newline="") as fh:
+                for r in _csv.DictReader(fh):
+                    rows.append(dict(r))
+        except OSError as exc:
+            _dbg("style/load_scores", exc, str(p))
+        return rows
+
+    def _handle_style_train(self, run_id: str) -> None:
+        """POST /style/train/<run_id>  body: {refs: [filename,...]}
+        → {ok, n_refs, profile_summary}
+
+        Pulls the matching rows out of scores.csv, hands them to
+        ``learn_style_profile``, persists the resulting profile +
+        a full distance map to the run's output dir.  Subsequent
+        GET /style/distances/<run_id> calls just read the cached
+        map — no re-computation unless retrained.
+        """
+        run = _get_run(run_id) or _reload_run_from_disk(run_id)
+        if run is None:
+            self.send_error(404, "no such run")
+            return
+        try:
+            from pixcull.style.clone import (
+                compute_distances,
+                learn_style_profile,
+            )
+        except Exception as exc:
+            _dbg("style/train/import", exc, run_id)
+            self.send_error(500, "style module import failed")
+            return
+        try:
+            n = int(self.headers.get("Content-Length") or "0")
+        except ValueError:
+            n = 0
+        raw = self.rfile.read(n) if n > 0 else b""
+        try:
+            body = json.loads(raw or b"{}")
+        except ValueError:
+            body = {}
+        refs = body.get("refs") if isinstance(body, dict) else None
+        if not isinstance(refs, list) or not refs:
+            self.send_error(400, "expected {refs: [filename, ...]}")
+            return
+        ref_set = {str(x) for x in refs}
+        all_rows = self._load_scores_rows(run)
+        if not all_rows:
+            self.send_error(409, "no scores.csv to train from")
+            return
+        ref_rows = [r for r in all_rows if r.get("filename") in ref_set]
+        if not ref_rows:
+            self.send_error(409, "none of the refs matched a scores.csv row")
+            return
+        profile = learn_style_profile(ref_rows)
+        # Persist the profile JSON
+        try:
+            self._style_profile_path(run).write_text(
+                json.dumps(profile, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except OSError as exc:
+            _dbg("style/train/write_profile", exc, run_id)
+            self.send_error(500, "failed to write profile")
+            return
+        # Eagerly compute distances for every row + persist
+        distances = compute_distances(all_rows, profile)
+        try:
+            self._style_distances_path(run).write_text(
+                json.dumps(distances, ensure_ascii=False),
+                encoding="utf-8",
+            )
+        except OSError as exc:
+            _dbg("style/train/write_distances", exc, run_id)
+            # Distances are cacheable but not required to save —
+            # the profile is the durable artifact.
+        payload = {
+            "ok":           True,
+            "n_refs":       profile.get("n_refs", 0),
+            "n_scored":     len(distances),
+            "axis_median":  profile.get("axis_median", {}),
+            "scene_modes":  profile.get("scene_modes", {}),
+        }
+        body_bytes = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body_bytes)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body_bytes)
+
+    def _serve_style_distances(self, run_id: str) -> None:
+        """GET /style/distances/<run_id> → {filename: distance, ...}
+
+        Returns the persisted distance map or an empty {} when no
+        profile has been trained yet.  We never re-derive on the
+        fly — train explicitly via POST /style/train/<run_id>.
+        """
+        run = _get_run(run_id) or _reload_run_from_disk(run_id)
+        if run is None:
+            self.send_error(404, "no such run")
+            return
+        path = self._style_distances_path(run)
+        if not path.exists():
+            body = b"{}"
+        else:
+            try:
+                body = path.read_bytes()
+            except OSError as exc:
+                _dbg("style/serve_distances", exc, run_id)
+                body = b"{}"
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
 
     def _handle_sample_demo(self) -> None:
         """P-UX-21 — instant sample-data path.

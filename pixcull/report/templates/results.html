@@ -4193,6 +4193,11 @@
                browser without any download. -->
           <button class="export-btn" id="shareLinkBtn" role="menuitem"
                   title="生成一个可分享给客户的只读链接,只展示 keep 的照片">🔗 客户分享链接</button>
+          <!-- v0.7-P2-1 — train a style-clone profile from the
+               currently-keep photos and show "风格距离" per row in
+               the Inspector / on each card. -->
+          <button class="export-btn" id="styleTrainBtn" role="menuitem"
+                  title="把当前所有 keep 当作风格参考,学一个个人偏好模型,然后给所有其它照片打 风格距离">🎨 训练风格模型</button>
           <!-- P2.5: auto-generate IPTC captions from structured data
                (scene + face labels + location + advice). Free / offline
                by default; Shift-click to enable LLM polish via DeepSeek
@@ -5565,6 +5570,15 @@
     else if (s === "score_asc")  a.sort((x, y) => (x.score_final ?? 999) - (y.score_final ?? 999));
     else if (s === "datetime_asc")  a.sort((x, y) => (x.datetime || "").localeCompare(y.datetime || ""));
     else if (s === "datetime_desc") a.sort((x, y) => (y.datetime || "").localeCompare(x.datetime || ""));
+    // v0.7-P2-1 — sort by learned style distance (ascending = closest first).
+    // Rows without a distance go to the tail.
+    else if (s === "style_distance_asc") {
+      a.sort((x, y) => {
+        const dx = (typeof x.style_distance === "number") ? x.style_distance : 99;
+        const dy = (typeof y.style_distance === "number") ? y.style_distance : 99;
+        return dx - dy;
+      });
+    }
     else if (s === "cluster") {
       a.sort((x, y) => {
         const cx = x.cluster_id ?? 1e9, cy = y.cluster_id ?? 1e9;
@@ -7124,6 +7138,28 @@
         + `🎨 已应用 Lr 调色</span>`
       : '';
 
+    // v0.7-P2-1 — style-clone distance badge.  Only rendered when
+    // a profile has been trained AND this row has a distance.
+    // Color encodes nearness: green (≤ 0.15) → muted (≤ 0.30) →
+    // warning amber (≤ 0.50) → red beyond.  We deliberately don't
+    // round to integer percent — the precision (0.0-1.0) matches
+    // the underlying signal the user is sorting by.
+    let styleBadge = "";
+    if (typeof r.style_distance === "number") {
+      const d = r.style_distance;
+      let bg = "rgba(148,148,160,0.18)";
+      let fg = "var(--muted)";
+      let bd = "rgba(148,148,160,0.35)";
+      if (d <= 0.15)      { bg = "rgba(74,222,128,0.18)"; fg = "#88e0a6"; bd = "rgba(74,222,128,0.35)"; }
+      else if (d <= 0.30) { bg = "rgba(99,102,241,0.18)"; fg = "#a3a5f5"; bd = "rgba(99,102,241,0.35)"; }
+      else if (d <= 0.50) { bg = "rgba(217,163,12,0.20)"; fg = "#e3c25e"; bd = "rgba(217,163,12,0.40)"; }
+      else                { bg = "rgba(248,113,113,0.20)"; fg = "#ee8888"; bd = "rgba(248,113,113,0.40)"; }
+      styleBadge =
+        `<span class="badge" title="风格距离 ${d.toFixed(3)} (0=完全像你已 keep 的风格,1=完全不像)" ` +
+        `style="background:${bg};color:${fg};border:1px solid ${bd};font-size:9.5px">` +
+        `🎨 风格距离 ${d.toFixed(2)}</span>`;
+    }
+
     // v0.6 (2/5) — sections are now LR Develop-style <details>
     // blocks emitted via _sec() so users can fold the diagnostics
     // they never read.  Header (filename + meta + decision toolbar)
@@ -7197,6 +7233,7 @@
         <span class="badge ${dec}" title="${esc(dec)}">${esc(decLabel)}</span>
         ${peakBadge}
         ${developBadge}
+        ${styleBadge}
         <span title="${esc(r.scene || '')}">${esc(trGenre(r.scene) || '?')}</span>
         <span>综合分 ${scoreLine}</span>
         ${styleChips}
@@ -8642,6 +8679,96 @@
       showToast("分享链接已生成", "success");
     } catch (err) {
       showToast("生成失败: " + err.message, "error");
+    }
+  });
+
+  // ==================================================================
+  // v0.7-P2-1 — style-clone V1 client wiring.
+  //
+  // On boot, we GET /style/distances/<run> once so any previously-
+  // trained profile (from an earlier session) hydrates `rows[*].
+  // style_distance` for free.  Then the 🎨 button POSTs the
+  // currently-keep filenames as references, server learns + saves a
+  // profile + distance map, we re-fetch and re-render.
+  // ==================================================================
+  async function _hydrateStyleDistances() {
+    try {
+      const r = await fetch(`/style/distances/${run_id}`);
+      if (!r.ok) return;
+      const map = await r.json();
+      if (!map || typeof map !== "object") return;
+      let n = 0;
+      for (const row of rows) {
+        const d = map[row.filename];
+        if (typeof d === "number") {
+          row.style_distance = d;
+          n++;
+        }
+      }
+      if (n > 0) {
+        // Make the new sort option available
+        _styleHasDistances = true;
+        _refreshStyleSortOption();
+        // Re-render so card chips appear
+        render();
+      }
+    } catch (_e) { /* offline / no profile yet — silent */ }
+  }
+  let _styleHasDistances = false;
+  function _refreshStyleSortOption() {
+    const sortSel = document.getElementById("sortBy");
+    if (!sortSel) return;
+    // Only add once
+    if (sortSel.querySelector('option[value="style_distance_asc"]')) return;
+    const opt = document.createElement("option");
+    opt.value = "style_distance_asc";
+    opt.textContent = "🎨 像我风格的优先";
+    sortSel.appendChild(opt);
+  }
+  _hydrateStyleDistances();
+
+  document.getElementById("styleTrainBtn")?.addEventListener("click", async () => {
+    const keepRows = rows.filter(r => r.decision === "keep");
+    if (keepRows.length < 3) {
+      showToast(
+        `需要至少 3 张 keep 作为风格参考(当前 ${keepRows.length} 张)`,
+        "error"
+      );
+      return;
+    }
+    if (!confirm(
+      `把当前 ${keepRows.length} 张 keep 当作风格参考,训练一个个人偏好模型?\n\n` +
+      "训练后,每张照片都会有 “风格距离” 值,0 = 完全像你的风格,1 = 完全不像。"
+    )) return;
+    const btn = document.getElementById("styleTrainBtn");
+    const orig = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "训练中…";
+    try {
+      const r = await fetch(`/style/train/${run_id}`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({
+          refs: keepRows.map(x => x.filename),
+        }),
+      });
+      if (!r.ok) {
+        const detail = await r.text().catch(() => "");
+        throw new Error(`HTTP ${r.status} ${detail.slice(0, 80)}`);
+      }
+      const d = await r.json();
+      if (!d.ok) throw new Error("server returned ok=false");
+      // Re-pull distances to populate every row
+      await _hydrateStyleDistances();
+      showToast(
+        `风格模型已训练 · ${d.n_refs} 张参考 · ${d.n_scored} 张已打风格距离`,
+        "success"
+      );
+    } catch (err) {
+      showToast("训练失败: " + err.message, "error");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = orig;
     }
   });
 
