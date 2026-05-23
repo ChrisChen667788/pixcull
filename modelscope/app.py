@@ -145,15 +145,23 @@ with gr.Blocks(
 ) as demo:
     gr.Markdown(
         """
-# PixCull · AI 选片实时体验
+# PixCull · AI 选片实时体验 · v0.8
 
 > 本地优先的摄影师 AI 选片工具 — 上传一张照片,30 秒内得到 6 维评分 + 建议。
-> 完整版本(批量 + Lr 同步 + iOS 伴侣)请到
+> 完整版本(批量 + Lr 同步 + 协作 + iOS 伴侣 + 风格 clone)请到
 > [github.com/ChrisChen667788/pixcull](https://github.com/ChrisChen667788/pixcull) 部署。
 
-**注意**: 这里展示的是 *单张* 评分能力(自动 rubric)。
-全功能版本还包括跨张连拍峰值、人脸聚类、GPS 位置聚类、A/B 对比、
-XMP / IPTC 导出 等等 —— 都跑在你本机上,照片永不出磁盘。
+**v0.8 完整版包含**(本 Studio 只展示单张评分,以节省 ModelScope 算力):
+
+- 🪣 **批量 6 维评分** + 连拍峰值识别 + 人脸 / GPS 聚类
+- 🎨 **风格 clone V2** — 给 5-20 张你以前 keep 的,学你的个人风格(CLIP centroid)
+- 📡 **Tethered live** + **LAN 协作** — 二摄 / 编辑实时同步标注
+- 🔗 **客户分享链接 + QR 码** — 客户扫码即看 keeps,无需安装
+- ⌨️ **Photo Mechanic 级键盘** + hold-Space cheat sheet
+- 📐 **LR Library + Develop 风格 UX** — 左侧 8 组可折叠 filter + 右侧 9 段 Inspector
+- 🌐 **中 / EN / 日 三语切换**
+- 📤 **XMP / DNG / 结构化 CSV / JSON 导出** — Lr / C1 兼容
+- 💾 **5k+ 张稳定** — IndexedDB · 0 上传 · MIT 开源
         """
     )
     with gr.Row():
@@ -192,13 +200,19 @@ XMP / IPTC 导出 等等 —— 都跑在你本机上,照片永不出磁盘。
         """
 ---
 
-#### 关于 PixCull
+#### 关于 PixCull v0.8
 
 PixCull 是一个本地优先的摄影师 AI 选片工具。在你的电脑上跑,
-照片永远不上传。MIT 开源:
+照片永远不上传。Apache-2 开源:
 [github.com/ChrisChen667788/pixcull](https://github.com/ChrisChen667788/pixcull)
 
-如果觉得有用,在 GitHub 点个 ⭐ 是单人项目持续打磨下去的最大动力。
+v0.7 + v0.8 共 22 个 slice 已发布(charter trail 在
+`docs/ROADMAP-v0.4-charter.md` → `-v0.7-` → `-v0.8-`)。新功能包括
+风格 clone V2(CLIP)、LAN 协作、tethered live、客户分享 QR、
+i18n(zh/en/ja)、loupe RGB 读数、hold-Space cheat sheet 等。
+
+97 个 unit test 全过。如果觉得有用,在 GitHub 点个 ⭐ 是单人项目
+持续打磨下去的最大动力。
         """
     )
 
