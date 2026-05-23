@@ -3507,6 +3507,9 @@ class _Handler(BaseHTTPRequestHandler):
             return self._serve_style_distances(
                 path[len("/style/distances/"):]
             )
+        # v0.7-P2-4 — history timeline page (all past runs)
+        if path == "/history":
+            return self._serve_history_page()
         # v0.7-P2-2 — tethered live scoring.
         if path == "/tether":
             return self._serve_tether_page()
@@ -4367,6 +4370,265 @@ class _Handler(BaseHTTPRequestHandler):
         except ValueError:
             d = {}
         return d if isinstance(d, dict) else {}
+
+    # ============================================================
+    # v0.7-P2-4 — history timeline page (/history)
+    #
+    # Walks _DEMO_ROOT for every run dir, harvests:
+    #   - run_id (folder name)
+    #   - last-modified mtime (for sorting)
+    #   - scores.csv summary (count by decision, first thumb)
+    #   - manifest.json (for source label) when present
+    # Renders a date-sorted card grid. Each card links to
+    # /results/<run_id>. Self-contained HTML — reuses
+    # _DESIGN_TOKENS_CSS for visual consistency.
+    # ============================================================
+    def _collect_history_entries(self) -> list[dict]:
+        """Scan _DEMO_ROOT for runs, summarise each.
+
+        Best-effort: a missing scores.csv or manifest never throws
+        — we just emit a card with zeros and let the user click
+        through to see the (possibly broken) results page.
+        """
+        import csv as _csv
+
+        entries: list[dict] = []
+        if not _DEMO_ROOT.is_dir():
+            return entries
+        for child in _DEMO_ROOT.iterdir():
+            if not child.is_dir():
+                continue
+            run_id = child.name
+            if run_id.startswith("."):
+                continue
+            output_dir = child / "output"
+            scores = output_dir / "scores.csv"
+            manifest = output_dir / "manifest.json"
+            # Use the most recently-touched file in the dir as a
+            # proxy for "when did this run finish" — robust to
+            # systems where dir mtime is misleading.
+            try:
+                mtime = child.stat().st_mtime
+                for sub in (scores, manifest, output_dir):
+                    if sub.exists():
+                        m = sub.stat().st_mtime
+                        if m > mtime:
+                            mtime = m
+            except OSError:
+                continue
+
+            n_total = n_keep = n_maybe = n_cull = 0
+            first_filename: str | None = None
+            if scores.exists():
+                try:
+                    with open(scores, "r", encoding="utf-8-sig",
+                              newline="") as fh:
+                        for row in _csv.DictReader(fh):
+                            n_total += 1
+                            d = row.get("decision") or ""
+                            if d == "keep":
+                                n_keep += 1
+                            elif d == "maybe":
+                                n_maybe += 1
+                            elif d == "cull":
+                                n_cull += 1
+                            if first_filename is None:
+                                first_filename = row.get("filename") or None
+                except OSError as exc:
+                    _dbg("history/scores_read", exc, str(scores))
+
+            source_label = ""
+            if manifest.exists():
+                try:
+                    m = json.loads(manifest.read_text(encoding="utf-8"))
+                    # Manifest schema varies — try the most common
+                    # fields. Fall back to "scan" if any are set.
+                    if isinstance(m, dict):
+                        source_label = (
+                            m.get("source_dir")
+                            or m.get("input_dir")
+                            or "scan"
+                        )
+                except (OSError, ValueError):
+                    pass
+            elif (child / "input").is_dir():
+                source_label = "上传"
+
+            entries.append({
+                "run_id":          run_id,
+                "mtime":           mtime,
+                "n_total":         n_total,
+                "n_keep":          n_keep,
+                "n_maybe":         n_maybe,
+                "n_cull":          n_cull,
+                "first_filename":  first_filename,
+                "source_label":    source_label,
+            })
+        # Newest first
+        entries.sort(key=lambda e: e["mtime"], reverse=True)
+        return entries
+
+    def _serve_history_page(self) -> None:
+        entries = self._collect_history_entries()
+        # Build the cards
+        from html import escape as _esc
+
+        def _fmt_mtime(t: float) -> str:
+            try:
+                return datetime.fromtimestamp(t).strftime("%Y-%m-%d %H:%M")
+            except (ValueError, OSError):
+                return ""
+
+        def _decision_bar(e: dict) -> str:
+            tot = max(e["n_total"], 1)
+            kw = round(e["n_keep"] / tot * 100, 1)
+            mw = round(e["n_maybe"] / tot * 100, 1)
+            cw = round(e["n_cull"] / tot * 100, 1)
+            return (
+                '<div class="bar" title="' +
+                _esc(f"keep {e['n_keep']} · maybe {e['n_maybe']} · cull {e['n_cull']}") +
+                f'"><span class="seg k" style="width:{kw}%"></span>'
+                f'<span class="seg m" style="width:{mw}%"></span>'
+                f'<span class="seg c" style="width:{cw}%"></span></div>'
+            )
+
+        cards = []
+        for e in entries:
+            thumb = ""
+            if e["first_filename"]:
+                thumb = (
+                    f'<img loading="lazy" '
+                    f'src="/thumb/{_esc(e["run_id"])}/{_esc(e["first_filename"])}?w=420" '
+                    f'alt="thumbnail">'
+                )
+            else:
+                thumb = '<div class="no-thumb">·</div>'
+            cards.append(
+                f'<a class="card" href="/results/{_esc(e["run_id"])}">'
+                f'<div class="thumb">{thumb}</div>'
+                f'<div class="meta">'
+                f'<div class="rid" title="{_esc(e["run_id"])}">{_esc(e["run_id"])}</div>'
+                f'<div class="when">{_fmt_mtime(e["mtime"])}'
+                + (f' · <span class="src">{_esc(str(e["source_label"]))}</span>' if e["source_label"] else "")
+                + f'</div>'
+                f'{_decision_bar(e)}'
+                f'<div class="counts">{e["n_total"]} 张 · '
+                f'<span class="k">{e["n_keep"]}</span> · '
+                f'<span class="m">{e["n_maybe"]}</span> · '
+                f'<span class="c">{e["n_cull"]}</span></div>'
+                f'</div>'
+                f'</a>'
+            )
+        cards_html = "\n".join(cards) if cards else (
+            '<div class="empty">还没有跑过任何 run。<br>'
+            '<a href="/" style="color:var(--accent)">回上传页 →</a></div>'
+        )
+
+        page = (
+            r"""<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PixCull · 历史时间线</title>
+<style>
+"""
+            + _DESIGN_TOKENS_CSS
+            + r"""
+  *,*::before,*::after { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; background: var(--bg); color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+                 "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  header {
+    padding: 36px 24px 18px; border-bottom: 1px solid var(--border);
+    text-align: center;
+  }
+  header h1 { margin: 0 0 4px; font-size: 26px; font-weight: 700; }
+  header .sub { color: var(--muted); margin: 0; font-size: 13px; }
+  header a.back { color: var(--muted); font-size: 12px;
+                  text-decoration: none; margin-right: 12px; }
+  header a.back:hover { color: var(--fg); }
+  main { padding: 28px 24px; max-width: 1280px; margin: 0 auto; }
+  .count { text-align: center; color: var(--muted); font-size: 12px;
+           margin: 0 0 18px; letter-spacing: 0.04em; text-transform: uppercase; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 14px;
+  }
+  .card {
+    display: block; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: var(--radius-lg, 10px); overflow: hidden;
+    color: inherit; text-decoration: none;
+    transition: transform var(--duration-fast, 160ms) var(--ease-out),
+                border-color var(--duration-fast, 160ms) var(--ease-out);
+  }
+  .card:hover { transform: translateY(-2px); border-color: var(--accent); }
+  .thumb { aspect-ratio: 4/3; background: var(--surface-2, #1a1d22);
+           display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .no-thumb { color: var(--muted); font-size: 32px; opacity: 0.4; }
+  .meta { padding: 12px 14px; }
+  .rid {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 11.5px; color: var(--fg);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .when { color: var(--muted); font-size: 11px; margin-top: 2px; }
+  .when .src { color: var(--fg-2, var(--fg)); }
+  .bar {
+    display: flex; height: 6px; margin: 10px 0 6px;
+    border-radius: 3px; overflow: hidden; background: var(--surface-2, #2a2d33);
+  }
+  .bar .seg { display: inline-block; min-width: 0; height: 100%; }
+  .bar .seg.k { background: var(--c-success); }
+  .bar .seg.m { background: var(--c-warn); }
+  .bar .seg.c { background: var(--c-danger); }
+  .counts { font-size: 11px; color: var(--muted);
+            font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+  .counts .k { color: var(--c-success); }
+  .counts .m { color: var(--c-warn); }
+  .counts .c { color: var(--c-danger); }
+  .empty { text-align: center; color: var(--muted); padding: 60px 12px;
+           font-size: 14px; line-height: 1.6; }
+  @media (max-width: 640px) {
+    header { padding: 22px 14px 14px; }
+    header h1 { font-size: 19px; }
+    main { padding: 16px 12px; }
+    .grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
+  }
+</style>
+</head>
+<body>
+  <header>
+    <a class="back" href="/">← 上传页</a>
+    <h1>历史时间线</h1>
+    <p class="sub">所有跑过的 run · 按时间排序 · 点卡片跳回 grid</p>
+  </header>
+  <main>
+    <p class="count">"""
+            + f"{len(entries)} 个 run"
+            + r"""</p>
+    <div class="grid">
+"""
+            + cards_html
+            + r"""
+    </div>
+  </main>
+</body>
+</html>
+"""
+        )
+        body = page.encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
 
     # NOTE — _handle_tether_start / _handle_tether_stop already exist
     # further down (P2.2 base implementation). Top-level /tether/start
@@ -11683,6 +11945,7 @@ _UPLOAD_HTML = (r"""<!DOCTYPE html>
       · <a href="/admin" style="color:var(--muted)">存储管理</a>
     </span>
     · <a href="/tether" style="color:var(--muted)" title="监听文件夹,新照片落地即刻分析">📡 Tethered live</a>
+    · <a href="/history" style="color:var(--muted)" title="所有跑过的 run">🕒 历史</a>
     <span id="licenseHint" style="margin-left:8px"></span>
     · <a href="?tour=1" style="color:var(--muted)">再看一次教程</a>
   </div>
