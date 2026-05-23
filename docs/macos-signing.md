@@ -80,7 +80,7 @@ sign_update dist/PixCull-0.7.0.dmg \
 # Capture both into releases.json.
 
 # 6. Update dist/releases.json with the new entry — see
-#    dist/releases.example.json for the schema.
+#    docs/sparkle/releases.example.json for the schema.
 
 # 7. Regenerate the appcast.
 python scripts/build_appcast.py dist/releases.json --out dist/appcast.xml

@@ -142,11 +142,11 @@ def test_release_notes_in_cdata():
 
 
 def test_example_releases_json_renders():
-    """The shipped dist/releases.example.json must always render."""
+    """The shipped docs/sparkle/releases.example.json must always render."""
     import json as _j
     bc = _load_module()
     example = (Path(__file__).resolve().parent.parent
-               / "dist" / "releases.example.json")
+               / "docs" / "sparkle" / "releases.example.json")
     doc = _j.loads(example.read_text(encoding="utf-8"))
     xml = bc.render_appcast(doc)
     root = ET.fromstring(xml)

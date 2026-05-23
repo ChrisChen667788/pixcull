@@ -1,0 +1,32 @@
+{
+  "schema": "pixcull.releases/v1",
+  "feed": {
+    "title": "PixCull",
+    "link": "https://pixcull.app/",
+    "description": "Local-first AI photo culling for pros."
+  },
+  "releases": [
+    {
+      "version": "0.7.0",
+      "short_version": "0.7",
+      "min_system": "12.0",
+      "pub_date": "2026-06-15",
+      "url": "https://pixcull.app/downloads/PixCull-0.7.0.dmg",
+      "size_bytes": 48319201,
+      "ed_signature": "REPLACE_WITH_EdDSA_SIGNATURE_FROM_sign_update",
+      "release_notes": "<h2>What's new in 0.7</h2>\n<ul>\n  <li>A/B 比较窗 LR Compare-style 重设计</li>\n  <li>Annotation rubric modal 视觉星条 + cull-reason 内嵌</li>\n  <li>5k+ 张大批量稳定性 audit · IndexedDB 迁移</li>\n  <li>Loupe RGB 像素读数</li>\n  <li>Inspector 移动端 bottom-sheet</li>\n  <li>视图预设 v2(JSON export/import + starter presets)</li>\n  <li>客户分享链接 (/share/&lt;run&gt;/&lt;token&gt;)</li>\n  <li>风格 clone V1 — 学个人偏好</li>\n  <li>Tethered live scoring — 现场实时分析</li>\n  <li>历史时间线 (/history)</li>\n</ul>",
+      "critical": false
+    },
+    {
+      "version": "0.6.0",
+      "short_version": "0.6",
+      "min_system": "12.0",
+      "pub_date": "2026-05-23",
+      "url": "https://pixcull.app/downloads/PixCull-0.6.0.dmg",
+      "size_bytes": 46802432,
+      "ed_signature": "REPLACE_WITH_EdDSA_SIGNATURE_FROM_sign_update",
+      "release_notes": "<h2>v0.6 — UI/UX 收尾</h2>\n<ul>\n  <li>Left Library panel (LR Library pattern)</li>\n  <li>Inspector pane LR Develop-style</li>\n  <li>设计 token 统一(upload + admin + results)</li>\n  <li>Drag-reorder buckets + thumb ?w= 优化</li>\n  <li>Hold-Space cheat sheet</li>\n</ul>",
+      "critical": false
+    }
+  ]
+}
