@@ -100,6 +100,16 @@
         "Microsoft Yahei UI", sans-serif;
       --font-mono:
         ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+      /* v0.9-P0-3 — serif accent for hero numbers + headlines.
+         Pure-system stack (Charter + Iowan Old Style ship with
+         macOS; PT Serif / Source Serif are widely installed via
+         Office / browsers).  No webfont download — keeps the
+         "zero external dep" promise.  Used on .stat-value-large,
+         hero h1, large score numbers in /share + /history. */
+      --font-serif:
+        "Charter", "Iowan Old Style", "PT Serif", "Source Serif Pro",
+        "Source Serif 4", "Cambria", Georgia, "Songti SC",
+        "STZhongsong", serif;
       --t-hero:    28px;
       --t-h2:      18px;
       --t-h3:      14px;
@@ -351,7 +361,17 @@
       color: var(--fg);
       line-height: 1;
     }
-    .brand-mark .wordmark span { color: var(--accent); }
+    /* v0.9-P0-3 — second half of the wordmark ("Cull") is rendered
+       with the signature brand gradient.  Persistent brand anchor:
+       every workspace bar in every results page carries the gradient
+       in the top-left, reinforcing identity every time. */
+    .brand-mark .wordmark span {
+      background: var(--brand-gradient,
+        linear-gradient(135deg, #6E56CF, #EC4899));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
 
     .crumb-divider {
       color: var(--muted-soft); opacity: 0.55;
@@ -482,7 +502,12 @@
       to   { opacity: 1; transform: scale(1); }
     }
     /* Brand gradient on score numbers — applied during reveal,
-       persists after reveal completes (visual brand anchor). */
+       persists after reveal completes (visual brand anchor).
+       v0.9-P0-3 — serif font ($font-serif stack) for that
+       "magazine display number" feel.  Inter is excellent for
+       UI body but its digits are utilitarian; Charter / PT Serif
+       have the elegant tabular-num glyphs pros expect on hero
+       numerics. */
     .score-number,
     .stat-value-large {
       background: var(--brand-gradient,
@@ -490,8 +515,46 @@
       -webkit-background-clip: text;
       background-clip: text;
       color: transparent;
+      font-family: var(--font-serif, Georgia, serif);
       font-weight: 700;
-      font-variant-numeric: tabular-nums;
+      font-variant-numeric: tabular-nums lining-nums;
+      letter-spacing: -0.01em;
+    }
+    /* v0.9-P0-3 — primary CTA gradient.  Applies to the upload
+       page "Analyze" button + share-link "Generate" buttons.
+       Picked up via .btn.btn-primary or explicit class. */
+    .btn-brand-gradient,
+    button.btn-primary,
+    .export-btn.primary-cta {
+      background: var(--brand-gradient,
+        linear-gradient(135deg, #6E56CF, #EC4899)) !important;
+      color: #ffffff !important;
+      border: 0 !important;
+      box-shadow: 0 4px 14px rgba(110, 86, 207, 0.35);
+      transition: filter var(--duration-fast) var(--ease-out),
+                  transform var(--duration-fast) var(--ease-out),
+                  box-shadow var(--duration-normal) var(--ease-out);
+    }
+    .btn-brand-gradient:hover,
+    button.btn-primary:hover,
+    .export-btn.primary-cta:hover {
+      filter: brightness(1.08);
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(110, 86, 207, 0.45);
+    }
+    .btn-brand-gradient:active,
+    button.btn-primary:active,
+    .export-btn.primary-cta:active {
+      transform: translateY(0);
+      filter: brightness(0.95);
+    }
+    /* v0.9-P0-3 — share-URL modal QR slot gets a subtle
+       brand-gradient frame so it reads as "PixCull-branded QR",
+       not "generic QR".  ~3px outer frame, very soft. */
+    .share-url-qr {
+      box-shadow:
+        0 0 0 3px rgba(110, 86, 207, 0.20),
+        0 0 0 5px rgba(236, 72, 153, 0.10);
     }
     /* Reduced-motion: skip the reveal entirely, just static load.
        Brand-gradient text stays — it's a visual brand element,
@@ -4285,16 +4348,29 @@
          row underneath. -->
     <div class="workspace-bar">
       <a href="/" class="brand-mark" title="返回上传">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             stroke-width="1.6" stroke-linecap="round"
-             stroke-linejoin="round" aria-hidden="true">
-          <circle cx="12" cy="12" r="10"/>
-          <path d="M14.31 8 20.05 17.94"/>
-          <path d="M9.69 8h11.48"/>
-          <path d="M7.38 12 13.12 2.06"/>
-          <path d="M9.69 16 3.95 6.06"/>
-          <path d="M14.31 16H2.83"/>
-          <path d="M16.62 12 10.88 21.94"/>
+        <!-- v0.9-P0-3 — new logo mark.  "The spotlight on one in a
+             crowd" — the visual narrative of culling.  Four small
+             muted circles (the crowd) surround a large gradient
+             circle (the pick).  Replaces the generic wireframe star. -->
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <defs>
+            <linearGradient id="pcBrandGrad"
+                            x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%"   stop-color="#6E56CF"/>
+              <stop offset="100%" stop-color="#EC4899"/>
+            </linearGradient>
+          </defs>
+          <!-- the crowd -->
+          <circle cx="4"  cy="5"  r="1.6" fill="currentColor" opacity="0.32"/>
+          <circle cx="20" cy="6"  r="1.4" fill="currentColor" opacity="0.28"/>
+          <circle cx="3"  cy="19" r="1.8" fill="currentColor" opacity="0.30"/>
+          <circle cx="21" cy="20" r="1.3" fill="currentColor" opacity="0.28"/>
+          <!-- the picked one — slightly larger ring + filled core
+               so even at 16px the silhouette stays readable -->
+          <circle cx="12" cy="12" r="7"  fill="url(#pcBrandGrad)"/>
+          <circle cx="12" cy="12" r="7.5" fill="none"
+                  stroke="url(#pcBrandGrad)" stroke-width="0.6"
+                  opacity="0.5"/>
         </svg>
         <span class="wordmark">Pix<span>Cull</span></span>
       </a>

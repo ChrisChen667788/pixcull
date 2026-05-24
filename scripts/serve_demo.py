@@ -11769,6 +11769,44 @@ _DESIGN_TOKENS_CSS = r"""
       --duration-fast: 1ms; --duration-normal: 1ms; --duration-slow: 1ms;
     }
   }
+  /* v0.9-P0-3 — signature brand-wide gradient + CTA helper, available
+     on every page that uses _DESIGN_TOKENS_CSS (upload / admin / share).
+     Defined here so the token name + curve are project-wide single source. */
+  :root {
+    --brand-gradient:       linear-gradient(135deg, #6E56CF 0%, #EC4899 100%);
+    --brand-gradient-soft:  linear-gradient(135deg,
+                              rgba(110,86,207,0.18) 0%,
+                              rgba(236,72,153,0.18) 100%);
+  }
+  /* Primary CTA: signature gradient backdrop, white text, soft glow.
+     Hover lifts 1px + brightens; active settles. */
+  button.btn-primary,
+  .btn-brand-gradient {
+    background: var(--brand-gradient) !important;
+    color: #ffffff !important;
+    border: 0 !important;
+    box-shadow: 0 4px 14px rgba(110, 86, 207, 0.35);
+    transition: filter 120ms var(--ease-out, ease-out),
+                transform 120ms var(--ease-out, ease-out),
+                box-shadow 220ms var(--ease-out, ease-out);
+  }
+  button.btn-primary:hover,
+  .btn-brand-gradient:hover {
+    filter: brightness(1.08);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(110, 86, 207, 0.45);
+  }
+  button.btn-primary:active,
+  .btn-brand-gradient:active {
+    transform: translateY(0);
+    filter: brightness(0.95);
+  }
+  button.btn-primary:disabled {
+    filter: grayscale(0.4) brightness(0.6);
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
 """
 
 
@@ -11857,7 +11895,16 @@ _UPLOAD_HTML = (r"""<!DOCTYPE html>
       font-size: 17px; font-weight: 700; letter-spacing: -0.02em;
       color: var(--fg);
     }
-    .hero-wordmark b { color: #818cf8; font-weight: 700; }
+    /* v0.9-P0-3 — the "Cull" half of the wordmark uses the
+       signature brand gradient on every page that surfaces the
+       wordmark (matches results.html brand-mark .wordmark span). */
+    .hero-wordmark b {
+      font-weight: 700;
+      background: linear-gradient(135deg, #6E56CF 0%, #EC4899 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
     .hero-title {
       margin: 0 0 14px;
       font-size: 44px;
@@ -11866,10 +11913,16 @@ _UPLOAD_HTML = (r"""<!DOCTYPE html>
       line-height: 1.1;
       text-align: center;
       max-width: 720px;
-      background: linear-gradient(180deg, #ffffff 0%, #aab3c1 100%);
+      /* v0.9-P0-3 — hero title uses the signature gradient instead
+         of the previous flat white→gray.  Pure visual brand anchor
+         on the first surface every new user sees. */
+      background: linear-gradient(135deg, #6E56CF 0%, #EC4899 60%, #ffffff 100%);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
+      font-family: "Charter", "Iowan Old Style", "PT Serif",
+                   "Source Serif Pro", "Source Serif 4", "Cambria",
+                   Georgia, "Songti SC", "STZhongsong", serif;
     }
     .hero-subtitle {
       color: var(--muted); max-width: 560px; text-align: center;
@@ -12343,17 +12396,26 @@ _UPLOAD_HTML = (r"""<!DOCTYPE html>
        tool exists" feature strip.  Designed to read as a real
        product instead of a tool that needs context. -->
   <a href="#" class="hero-brand" aria-label="PixCull">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-         stroke-width="1.6" stroke-linecap="round"
-         stroke-linejoin="round" aria-hidden="true"
-         style="width:32px;height:32px;color:#818cf8">
-      <circle cx="12" cy="12" r="10"/>
-      <path d="M14.31 8 20.05 17.94"/>
-      <path d="M9.69 8h11.48"/>
-      <path d="M7.38 12 13.12 2.06"/>
-      <path d="M9.69 16 3.95 6.06"/>
-      <path d="M14.31 16H2.83"/>
-      <path d="M16.62 12 10.88 21.94"/>
+    <!-- v0.9-P0-3 — same "spotlight on one in a crowd" mark as
+         the results-page workspace bar.  Persistent identity
+         across surfaces. -->
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"
+         style="width:32px;height:32px;color:#aab3c1">
+      <defs>
+        <linearGradient id="pcBrandGradHero"
+                        x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%"   stop-color="#6E56CF"/>
+          <stop offset="100%" stop-color="#EC4899"/>
+        </linearGradient>
+      </defs>
+      <circle cx="4"  cy="5"  r="1.6" fill="currentColor" opacity="0.32"/>
+      <circle cx="20" cy="6"  r="1.4" fill="currentColor" opacity="0.28"/>
+      <circle cx="3"  cy="19" r="1.8" fill="currentColor" opacity="0.30"/>
+      <circle cx="21" cy="20" r="1.3" fill="currentColor" opacity="0.28"/>
+      <circle cx="12" cy="12" r="7"  fill="url(#pcBrandGradHero)"/>
+      <circle cx="12" cy="12" r="7.5" fill="none"
+              stroke="url(#pcBrandGradHero)" stroke-width="0.6"
+              opacity="0.5"/>
     </svg>
     <span class="hero-wordmark">Pix<b>Cull</b></span>
   </a>
@@ -12429,7 +12491,9 @@ _UPLOAD_HTML = (r"""<!DOCTYPE html>
     <div class="file-list" id="fileList" style="display:none"></div>
 
     <div class="actions">
-      <button id="uploadBtn" disabled>开始分析</button>
+      <!-- v0.9-P0-3 — primary CTA wears the signature brand gradient.
+           Most-clicked button on the most-seen page. -->
+      <button id="uploadBtn" class="btn-primary" disabled>开始分析</button>
       <button id="clearBtn" class="secondary">清空</button>
       <!-- P-UX-21: zero-friction sample data button. Skips upload +
            model warm-up, drops the visitor straight into a /results
