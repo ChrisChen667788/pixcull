@@ -2007,6 +2007,124 @@
     .card:hover .annotate-btn { opacity: 1; }
     .annotate-btn:hover { background: var(--accent); }
     .card.has-human .annotate-btn { opacity: 1; background: rgba(74,222,128,0.5); }
+    /* ============================================================
+       v0.9-P1-1 — card hover floating actions (top-right group).
+       Linear/Trello pattern: a 3-button micro-toolbar appears on
+       hover in the upper-right of each card so the most-frequent
+       discrete actions (zoom · add-to-bucket · compare) are one
+       click away without right-click hunting.
+
+       Sits on the OPPOSITE side from the existing v16.2 rotate /
+       v0.3 compare buttons (top-left), so neither steals from the
+       other.  All 28x28, frosted, brand-gradient on hover.
+       ============================================================ */
+    .card-actions {
+      position: absolute; top: 6px; right: 6px;
+      display: flex; gap: 4px;
+      opacity: 0;
+      transform: translateY(-3px);
+      transition: opacity var(--duration-fast, 160ms) var(--ease-out),
+                  transform var(--duration-fast, 160ms) var(--ease-out);
+      pointer-events: none;  /* avoid intercepting card hovers when hidden */
+      z-index: 4;
+    }
+    .card:hover .card-actions {
+      opacity: 1;
+      transform: translateY(0);
+      pointer-events: auto;
+    }
+    .card-action {
+      width: 28px; height: 28px;
+      border-radius: 7px;
+      background: rgba(20, 23, 28, 0.78);
+      backdrop-filter: blur(8px) saturate(140%);
+      -webkit-backdrop-filter: blur(8px) saturate(140%);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      color: #e8eaed; font-size: 13.5px; line-height: 1;
+      cursor: pointer; padding: 0;
+      display: inline-flex; align-items: center; justify-content: center;
+      transition: filter var(--duration-fast, 160ms) var(--ease-out),
+                  transform var(--duration-fast, 160ms) var(--ease-out),
+                  border-color var(--duration-fast, 160ms) var(--ease-out);
+    }
+    .card-action:hover {
+      background: var(--brand-gradient,
+        linear-gradient(135deg, #6E56CF, #EC4899));
+      border-color: transparent;
+      color: #ffffff;
+      transform: translateY(-1px) scale(1.06);
+      filter: brightness(1.05);
+    }
+    .card-action:active {
+      transform: translateY(0) scale(1.0);
+      filter: brightness(0.95);
+    }
+    /* SVG inside the button — uniform sizing */
+    .card-action svg {
+      width: 14px; height: 14px;
+      stroke-width: 2;
+      stroke: currentColor; fill: none;
+      stroke-linecap: round; stroke-linejoin: round;
+    }
+    @media (max-width: 640px) {
+      /* On touch the hover never fires; keep the actions visible
+         at slight opacity so they're still discoverable. */
+      .card-actions { opacity: 0.85; transform: none; pointer-events: auto; }
+      .card-action { width: 32px; height: 32px; }   /* WCAG tap target */
+    }
+
+    /* ============================================================
+       v0.9-P1-1 — modal visual differentiation.
+       4 modal classes with distinct border-top colour + primary
+       button styling so the user instantly reads what kind of
+       interaction the modal demands.
+
+       Apply by adding ONE of these to the modal's outermost card:
+         .modal-info        — passive (shortcuts / share-URL / cmdk)
+         .modal-action      — saves data (annotation rubric, bucket export)
+         .modal-destructive — irreversible (delete bucket, revoke share)
+         .modal-detail      — pure viewing (A/B compare, history detail)
+
+       Each adds a 3px border-top in the appropriate semantic colour;
+       no other CSS surface needs touching.  ``.modal-destructive``
+       additionally flips the primary/cancel button pair (red confirm
+       + accent cancel) so destructive clicks require deliberation —
+       Apple HIG / GNOME HIG / Linear-product convention.
+       ============================================================ */
+    .modal-info       { border-top: 3px solid rgba(255, 255, 255, 0.10) !important; }
+    .modal-action     {
+      border-top: 3px solid transparent !important;
+      border-image: var(--brand-gradient,
+        linear-gradient(135deg, #6E56CF, #EC4899)) 1 0 0 0 !important;
+      border-image-slice: 1 !important;
+    }
+    .modal-detail     { border-top: 3px solid var(--accent, #6366f1) !important; }
+    .modal-destructive {
+      border-top: 3px solid var(--c-danger, #ef4444) !important;
+    }
+    /* Primary-button colour overrides per modal class.
+       Targets .btn-primary inside the modal-action / -destructive. */
+    .modal-action .btn-primary,
+    .modal-action button[type="submit"] {
+      background: var(--brand-gradient,
+        linear-gradient(135deg, #6E56CF, #EC4899));
+      border: 0;
+      color: #ffffff;
+    }
+    .modal-destructive .btn-primary,
+    .modal-destructive button[type="submit"] {
+      background: var(--c-danger, #ef4444) !important;
+      border: 0 !important;
+      color: #ffffff !important;
+    }
+    .modal-destructive .btn-secondary,
+    .modal-destructive button.secondary {
+      background: var(--accent, #6366f1) !important;
+      color: #ffffff !important;
+      /* reverse-pair: cancel becomes the visually-primary button so
+         the user has to deliberately click the red one to confirm */
+    }
+
     /* V16.2 — manual rotate button on each card. Mirrors annotate-btn
        but lives on the LEFT so it doesn't collide with 标注 / ✓ 已标.
        Hidden until card hover (same affordance pattern). */
@@ -4919,7 +5037,8 @@
   </div>
 
   <!-- V9.2 cluster compare modal · P0.3 added next/prev burst nav -->
-  <div class="cmp-modal" id="cmpModal">
+  <!-- v0.9-P1-1 — .modal-detail = pure viewer (A/B compare, no save) -->
+  <div class="cmp-modal modal-detail" id="cmpModal">
     <div class="cmp-header">
       <h3 id="cmpTitle">连拍组比较</h3>
       <span class="muted" id="cmpMeta"></span>
@@ -4959,8 +5078,9 @@
        v0.7-P0-2: progress bar at the top (6 axis cells lit as
        rated), inline ann-cull-reasons picker (replaces the floating
        cullReasonTray when overall=cull), full-page mobile layout. -->
+  <!-- v0.9-P1-1 — .modal-action = saves data (rubric annotation) -->
   <div class="ann-modal" id="annModal">
-    <div class="ann-card">
+    <div class="ann-card modal-action">
       <!-- v0.7-P0-2 progress bar (full width, 6 axis segments) -->
       <div class="ann-progress" id="annProgress" aria-label="rubric 进度">
         <span class="ann-progress-count" id="annProgressCount">0 / 6</span>
@@ -5025,7 +5145,8 @@
        Singleton at body root so it overlays everything. -->
   <div class="cmdk-modal" id="cmdkModal" role="dialog"
        aria-hidden="true" aria-labelledby="cmdkLabel">
-    <div class="cmdk-card">
+    <!-- v0.9-P1-1 — .modal-info = passive lookup, neutral border-top -->
+    <div class="cmdk-card modal-info">
       <div class="cmdk-header">
         <svg class="cmdk-search-icon" viewBox="0 0 24 24" fill="none"
              stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
@@ -5052,7 +5173,8 @@
 
   <div class="share-url-modal" id="shareUrlModal" role="dialog"
        aria-hidden="true" aria-labelledby="shareUrlTitle">
-    <div class="share-url-card">
+    <!-- v0.9-P1-1 — .modal-info = passive (share URL is just a copy target) -->
+    <div class="share-url-card modal-info">
       <div class="share-url-header">
         <h3 class="modal-title" id="shareUrlTitle">分享链接</h3>
         <button class="close" id="shareUrlClose" type="button"
@@ -5093,7 +5215,8 @@
        alert() that was ugly + non-dismissible-on-Esc. Auto-discoverable
        via the floating "? 快捷键" pill in the bottom-right corner. -->
   <div class="shortcuts-modal" id="shortcutsModal">
-    <div class="shortcuts-card">
+    <!-- v0.9-P1-1 — .modal-info = passive lookup (just displays keys) -->
+    <div class="shortcuts-card modal-info">
       <div class="shortcuts-header">
         <h3 class="modal-title" data-i18n="shortcuts.title">键盘快捷键</h3>
         <!-- P-UX-24 — context-aware label populated by showShortcuts():
@@ -6749,6 +6872,33 @@
               <span class="thumb-overlay-fn" title="${fnEsc}">${fnEsc}</span>
               ${scoreText ? `<span class="thumb-overlay-score">${scoreText}</span>` : ""}
             </div>
+            <!-- v0.9-P1-1 — floating action group, top-right.
+                 Three discrete primary actions: zoom (open lightbox),
+                 add-to-bucket (quick assign), compare (alt path to ⇆). -->
+            <div class="card-actions" data-fn="${fnEsc}" role="group"
+                 aria-label="${esc(fnEsc)} 操作">
+              <button class="card-action card-action-zoom" type="button"
+                      data-fn="${fnEsc}" title="打开放大窗 (或 Space)">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                  <line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/>
+                </svg>
+              </button>
+              <button class="card-action card-action-bucket" type="button"
+                      data-fn="${fnEsc}" title="加入交付桶">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M5 7h14l-1.5 12.5a2 2 0 0 1-2 1.5h-7a2 2 0 0 1-2-1.5L5 7z"/>
+                  <path d="M9 7V5a3 3 0 0 1 6 0v2"/>
+                </svg>
+              </button>
+              <button class="card-action card-action-compare" type="button"
+                      data-fn="${fnEsc}" title="加入 A/B 比较(同 ⇆ / c)">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M7 16V4M3 8l4-4 4 4"/>
+                  <path d="M17 8v12M13 16l4 4 4-4"/>
+                </svg>
+              </button>
+            </div>
           </div>
           <button class="annotate-btn" data-fn="${fnEsc}" title="人工标注 (rubric)">${r.rubric_human_labeled ? "✓ 已标" : "标注"}</button>
           <button class="card-rot-btn" data-fn="${fnEsc}" type="button" title="顺时针旋转 90°(在放大窗中可继续微调)">↻</button>
@@ -8252,6 +8402,51 @@
       const fn = rotBtn.dataset.fn;
       if (!fn) return;
       _lbRotateCard(fn, +90);
+      return;
+    }
+    // v0.9-P1-1 — card-action floating buttons (top-right group).
+    // 3 discrete entry points so the most-frequent actions don't
+    // require right-click or keyboard hunting.
+    const actBtn = t.closest(".card-action");
+    if (actBtn) {
+      e.stopPropagation();
+      e.preventDefault();
+      const fn = actBtn.dataset.fn;
+      if (!fn) return;
+      if (actBtn.classList.contains("card-action-zoom")) {
+        openLightbox(fn);
+        return;
+      }
+      if (actBtn.classList.contains("card-action-compare")) {
+        // Delegate to the existing free-pick compare flow used by
+        // .card-cmp-btn / Shift-click / `c` key.  pinForCompare lives
+        // higher up in this script.
+        if (typeof pinForCompare === "function") pinForCompare(fn);
+        return;
+      }
+      if (actBtn.classList.contains("card-action-bucket")) {
+        // Open the buckets panel and pre-arm an assignment for this
+        // photo: if the user has a "last-used" bucket, push directly
+        // into it; otherwise just open the panel so they can pick.
+        const lastBucket = (() => {
+          try { return localStorage.getItem("pixcull_last_bucket:" + run_id); }
+          catch (_e) { return null; }
+        })();
+        if (lastBucket && typeof _readBuckets === "function") {
+          const b = _readBuckets();
+          if (b[lastBucket]) {
+            if (!b[lastBucket].includes(fn)) b[lastBucket].push(fn);
+            _writeBuckets(b);
+            _refreshCardBucketTags?.();
+            _renderBucketsPill?.();
+            showToast?.(`已加入 “${lastBucket}”`, "success");
+            return;
+          }
+        }
+        // Fall back: open the panel so the user picks.
+        document.getElementById("bucketsToggleBtn")?.click();
+        return;
+      }
       return;
     }
     if (t.tagName === "IMG" && t.classList.contains("thumb")) {
