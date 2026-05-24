@@ -153,6 +153,15 @@
       --ease-out-flat:   cubic-bezier(0.16, 1, 0.3, 1);
       --ease-in-out:     cubic-bezier(0.4, 0, 0.2, 1);
       --ease-spring:     cubic-bezier(0.34, 1.56, 0.64, 1);
+      /* v0.9-P0-2 (provisional, refined in v0.9-P0-3) — signature
+         brand gradient.  Purple→pink, ~LR Develop tonal-curve
+         feel, harmonises with existing indigo accent.  Lives in
+         logo wordmark, primary CTAs, loading bars, QR brand-frame,
+         large score numbers.  "See the gradient, know it's PixCull." */
+      --brand-gradient:  linear-gradient(135deg, #6E56CF 0%, #EC4899 100%);
+      --brand-gradient-soft: linear-gradient(135deg,
+                              rgba(110,86,207,0.18) 0%,
+                              rgba(236,72,153,0.18) 100%);
     }
     /* Honor system color-scheme + reduce-motion preferences */
     @media (prefers-reduced-motion: reduce) {
@@ -410,6 +419,93 @@
     @media (prefers-reduced-motion: reduce) {
       .share-url-card { animation: none; }
     }
+
+    /* ====================================================
+       v0.9-P0-2 — hero reveal animation (the signature moment).
+       Opening /results/<run> is the canonical "first 2 seconds"
+       of every PixCull session.  Industry peers (LR / C1 / PM)
+       all static-load this view.  We use the 2s to make it
+       feel inhabited: bars slide in from the edges, cards
+       stagger up from the bottom, stats count up from zero,
+       decision dots scale in with soft-bounce.
+       ==================================================== */
+
+    /* All hero-reveal animations are gated by the .hero-revealing
+       class on <body>, applied at boot and removed after 2.1s.
+       This way every later interaction (filter change → re-render)
+       gets instant static behaviour. */
+    body.hero-revealing .workspace-bar {
+      animation: heroSlideDown 380ms var(--ease-out) both;
+    }
+    body.hero-revealing .library-panel:not(.collapsed) {
+      animation: heroSlideRight 420ms var(--ease-out) both;
+      animation-delay: 60ms;
+    }
+    body.hero-revealing .grid-pane .tools-bar {
+      animation: heroFadeIn 320ms var(--ease-out) both;
+      animation-delay: 160ms;
+    }
+    /* Cards stagger up.  Stagger delay is injected per-card via
+       inline style="--idx:N" up to a 64-card cap (rendering 200
+       cards × 16ms = 3.2s; we cap at ~1s of stagger so the reveal
+       still feels 2s total). */
+    body.hero-revealing .grid .card {
+      animation: heroCardUp 460ms var(--ease-out) both;
+      animation-delay: calc(200ms + min(var(--idx, 0), 64) * 16ms);
+    }
+    /* Decision dot per card pops in slightly later with extra
+       soft-bounce so it reads as the "verdict landing".  When the
+       card itself has no decision yet (unset), this is a no-op. */
+    body.hero-revealing .grid .card .thumb-decision-glyph {
+      animation: heroDotPop 480ms var(--ease-out) both;
+      animation-delay: calc(360ms + min(var(--idx, 0), 64) * 16ms);
+    }
+    @keyframes heroSlideDown {
+      from { opacity: 0; transform: translateY(-12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes heroSlideRight {
+      from { opacity: 0; transform: translateX(-14px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes heroFadeIn {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+    @keyframes heroCardUp {
+      from { opacity: 0; transform: translateY(18px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes heroDotPop {
+      from { opacity: 0; transform: scale(0.4); }
+      60%  { opacity: 1; transform: scale(1.12); }   /* overshoot */
+      to   { opacity: 1; transform: scale(1); }
+    }
+    /* Brand gradient on score numbers — applied during reveal,
+       persists after reveal completes (visual brand anchor). */
+    .score-number,
+    .stat-value-large {
+      background: var(--brand-gradient,
+        linear-gradient(135deg, #6E56CF, #EC4899));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+    /* Reduced-motion: skip the reveal entirely, just static load.
+       Brand-gradient text stays — it's a visual brand element,
+       not an animation. */
+    @media (prefers-reduced-motion: reduce) {
+      body.hero-revealing .workspace-bar,
+      body.hero-revealing .library-panel,
+      body.hero-revealing .grid-pane .tools-bar,
+      body.hero-revealing .grid .card,
+      body.hero-revealing .grid .card .thumb-decision-glyph {
+        animation: none;
+      }
+    }
+
     .share-url-header {
       display: flex; align-items: center; justify-content: space-between;
       padding: 14px 18px 10px; border-bottom: 1px solid var(--border);
@@ -5341,7 +5437,10 @@
   // quickLabel / _lbLabel post-pass can update + pulse the matching
   // number without re-rendering the whole header.
   const stats = [
-    `<span>共 <b data-stat="total">${summary.n_total}</b> 张</span>`,
+    // v0.9-P0-2 — primary total renders with brand gradient (signature
+    // anchor visible at-a-glance in the workspace bar).  Per-decision
+    // counts keep their colour-coded look (keep/maybe/cull semantics).
+    `<span>共 <b data-stat="total" class="stat-value-large">${summary.n_total}</b> 张</span>`,
     `<span class="keep">keep <b data-stat="keep">${summary.n_keep}</b></span>`,
     `<span class="maybe">maybe <b data-stat="maybe">${summary.n_maybe}</b></span>`,
     `<span class="cull">cull <b data-stat="cull">${summary.n_cull}</b></span>`,
@@ -5392,6 +5491,31 @@
     }
   }
   statsEl.innerHTML = stats.join("");
+
+  // v0.9-P0-2 — count-up the four primary stat numbers from 0 to
+  // their final value over ~900ms.  Fires only during the initial
+  // hero reveal (body.hero-revealing is on); later quickLabel-
+  // triggered updates use the existing stat-pulse path so the
+  // numbers don't reset to 0 on every annotation.
+  if (document.body.classList.contains("hero-revealing")
+      && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    statsEl.querySelectorAll('b[data-stat]').forEach(el => {
+      const target = parseInt(el.textContent, 10);
+      if (!isFinite(target) || target < 0) return;
+      const start = performance.now();
+      const duration = 900;
+      el.textContent = "0";
+      function tick(now) {
+        const t = Math.min(1, (now - start) / duration);
+        // Ease-out cubic — number ramps fast then settles
+        const eased = 1 - Math.pow(1 - t, 3);
+        el.textContent = String(Math.round(target * eased));
+        if (t < 1) requestAnimationFrame(tick);
+        else el.textContent = String(target);
+      }
+      requestAnimationFrame(tick);
+    });
+  }
 
   // V17.8 — wire the promote-to-bank button if it rendered
   const promoteBtn = document.getElementById("promoteBtn");
@@ -6577,6 +6701,55 @@
     }
   }
   render();
+
+  // ============================================================
+  // v0.9-P0-2 — hero reveal (the signature moment).
+  //
+  // On page boot (and only then — not on filter re-renders), add
+  // body.hero-revealing so the CSS keyframes fire.  Walk grid
+  // cards, set --idx so the staggered animation-delay works.
+  // After ~2.1s remove the class — any subsequent re-render is
+  // instant.  prefers-reduced-motion users skip the reveal
+  // entirely (CSS @media handles that).
+  // ============================================================
+  (function _heroReveal() {
+    // Skip on slow connections / save-data — animation work is
+    // wasted CPU on those clients.
+    if (navigator.connection
+        && navigator.connection.saveData === true) return;
+    document.body.classList.add("hero-revealing");
+    // Per-card stagger index.  Set on every initial card whose
+    // animation will fire.  IntersectionObserver-materialised
+    // placeholders catch up via the MutationObserver below.
+    function setStaggerIndices() {
+      let i = 0;
+      grid.querySelectorAll(".card").forEach(card => {
+        card.style.setProperty("--idx", String(i));
+        i += 1;
+      });
+    }
+    setStaggerIndices();
+    // Late-materialised placeholders (P-UX-18 large-batch streaming)
+    // get their --idx set when they swap into real .card elements.
+    const lateObs = new MutationObserver(muts => {
+      for (const m of muts) {
+        for (const node of m.addedNodes) {
+          if (node.nodeType === 1 && node.classList?.contains("card")) {
+            // Continue stagger from the current visible count
+            const idx = grid.querySelectorAll(".card").length - 1;
+            // Cap to 64 to match the CSS clamp
+            node.style.setProperty("--idx", String(Math.min(idx, 64)));
+          }
+        }
+      }
+    });
+    lateObs.observe(grid, { childList: true });
+    // Tear down after the reveal finishes
+    setTimeout(() => {
+      document.body.classList.remove("hero-revealing");
+      lateObs.disconnect();
+    }, 2200);
+  })();
 
   // V9.0 sort dropdown
   document.getElementById("sortBy").addEventListener("change", e => {
