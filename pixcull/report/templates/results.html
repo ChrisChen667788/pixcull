@@ -873,6 +873,125 @@
       pointer-events: none;
     }
 
+    /* ───────────────────────────────────────────────────────────
+       v0.9-P1-2 — multiplayer presence pill in the workspace bar.
+       Sits next to the sync-badge so the "📡 协作中 · 同步" badge
+       reads as the *infrastructure* state and the presence pill
+       reads as the *who's here doing what* state. We mirror the
+       sync-badge palette (translucent indigo over the workspace
+       glass) so the two pills feel like a matched set, then layer
+       a tiny presence dot + subtle pulse so peers FEEL alive.
+       ─────────────────────────────────────────────────────────── */
+    .presence-pill {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 4px 10px 4px 8px;
+      background: rgba(110, 86, 207, 0.16);     /* brand indigo wash */
+      color: #c8b7ff;
+      border: 1px solid rgba(110, 86, 207, 0.34);
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      margin-left: 10px;
+      white-space: nowrap;
+      cursor: pointer;                          /* click → expand modal */
+      transition: background var(--motion-fast, 160ms) ease,
+                  border-color var(--motion-fast, 160ms) ease;
+    }
+    .presence-pill:hover {
+      background: rgba(110, 86, 207, 0.24);
+      border-color: rgba(168, 85, 247, 0.55);
+    }
+    .presence-pill .pp-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #4ade80;                      /* green = live */
+      box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.55);
+      animation: pp-pulse 2.4s ease-out infinite;
+    }
+    @keyframes pp-pulse {
+      0%   { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.55); }
+      70%  { box-shadow: 0 0 0 6px rgba(74, 222, 128, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); }
+    }
+    .presence-pill.solo .pp-dot {
+      background: #9ca3af;
+      animation: none;
+    }
+    .presence-pill.solo {
+      color: #8a93a3;
+      background: rgba(255, 255, 255, 0.04);
+      border-color: rgba(255, 255, 255, 0.08);
+      cursor: default;
+    }
+    .presence-pill .pp-actor { color: #fff; }
+
+    /* Expanded presence panel — quick popover the pill opens. Uses
+       the same .modal chrome but a smaller, top-right anchored shell
+       so it feels like Figma/Linear's avatar-stack popover. */
+    #presenceModal {
+      position: fixed; inset: 0;
+      display: none; align-items: flex-start; justify-content: flex-end;
+      padding: 64px 16px 0 0;
+      background: rgba(8, 10, 14, 0.32);
+      backdrop-filter: blur(2px);
+      z-index: 1340;
+    }
+    #presenceModal.show { display: flex; }
+    #presenceModal .pp-card {
+      width: min(380px, 96vw);
+      background: var(--surface-1, #1c1f27);
+      border: 1px solid rgba(168, 85, 247, 0.40);
+      border-top: 3px solid transparent;
+      border-image: linear-gradient(90deg, #6E56CF, #A855F7, #EC4899) 1;
+      border-radius: 14px;
+      padding: 16px 18px;
+      box-shadow: 0 18px 40px -8px rgba(0, 0, 0, 0.55);
+    }
+    #presenceModal .pp-title {
+      font-size: 11px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: #b3a3f0;
+      margin: 0 0 8px;
+    }
+    #presenceModal .pp-list { display: flex; flex-direction: column; gap: 10px; }
+    #presenceModal .pp-row {
+      display: flex; gap: 10px; align-items: flex-start;
+      padding: 8px 10px;
+      background: rgba(255, 255, 255, 0.025);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 10px;
+    }
+    #presenceModal .pp-avatar {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #6E56CF, #EC4899);
+      color: #fff;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 700;
+      flex: 0 0 28px;
+    }
+    #presenceModal .pp-name { font-weight: 600; color: #fff; font-size: 13px; }
+    #presenceModal .pp-meta { font-size: 11px; color: #9ca3af; margin-top: 2px; line-height: 1.5; }
+    #presenceModal .pp-fn { color: #c8b7ff; }
+    #presenceModal .pp-action { color: #4ade80; }
+    #presenceModal .pp-empty { color: #6b7280; font-size: 12px; padding: 12px 4px; }
+    #presenceModal .pp-foot {
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      font-size: 11px;
+      color: #6b7280;
+      display: flex; justify-content: space-between; gap: 8px; align-items: center;
+    }
+    #presenceModal .pp-foot a {
+      color: #c8b7ff;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    #presenceModal .pp-foot a:hover { color: #fff; text-decoration: underline; }
+
     /* v0.8-P0-1 — language switcher button.  Sits at the right
        of the workspace-bar between stats and other chrome.  Small
        square pill with a one-char label; cycles zh ↔ en on click. */
@@ -5214,6 +5333,29 @@
   <!-- V14.5 shortcuts overlay — opens with `?`. Replaces a native
        alert() that was ugly + non-dismissible-on-Esc. Auto-discoverable
        via the floating "? 快捷键" pill in the bottom-right corner. -->
+  <!-- v0.9-P1-2 — multiplayer presence popover. Opened by clicking
+       the .presence-pill in the workspace bar; closed by clicking
+       the backdrop or ✕. List-of-peers rendered from JS — sticks
+       to the brand-gradient border-top language we set up in
+       v0.9-P1-1 modal-action so the popover reads as actionable
+       (you can rename yourself, copy the share URL etc.). -->
+  <div id="presenceModal" role="dialog" aria-modal="true"
+       aria-labelledby="presenceTitle">
+    <div class="pp-card">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+        <h3 class="pp-title" id="presenceTitle">协作者 · live</h3>
+        <button class="close" id="presenceClose" aria-label="关闭协作面板">✕</button>
+      </div>
+      <div class="pp-list" id="presenceList">
+        <div class="pp-empty">连接中…</div>
+      </div>
+      <div class="pp-foot">
+        <span>你显示为 <span id="presenceMyName" style="color:#fff;">…</span></span>
+        <a id="presenceRename">改名</a>
+      </div>
+    </div>
+  </div>
+
   <div class="shortcuts-modal" id="shortcutsModal">
     <!-- v0.9-P1-1 — .modal-info = passive lookup (just displays keys) -->
     <div class="shortcuts-card modal-info">
@@ -8857,8 +8999,9 @@
     }
     // v0.8-P0-2 — record the local-edit timestamp so the sync
     // poller knows this row is fresher than any incoming remote
-    // edit of the same photo.
-    if (typeof _markLocalEdit === "function") _markLocalEdit(focusedFn);
+    // edit of the same photo.  v0.9-P1-2 — pass the action verb
+    // (keep/maybe/cull) so peers see "✅ 二摄 标 keep · IMG_001".
+    if (typeof _markLocalEdit === "function") _markLocalEdit(focusedFn, label);
     const wasFn = focusedFn;
     try {
       await fetch(`/annotation/${run_id}/${encodeURIComponent(focusedFn)}`, {
@@ -10476,9 +10619,19 @@
   let _syncConflictFns = new Set();
   let _syncPeers = 0;       // bookkeeping for the live badge
 
-  function _markLocalEdit(filename) {
+  function _markLocalEdit(filename, action) {
     if (!filename) return;
     _syncRowMtimes[filename] = Date.now();
+    // v0.9-P1-2 — feed the same call-site into the presence pipeline
+    // so anywhere we record a local edit, peers automatically see
+    // "📝 编辑刚标 IMG_007 · keep". The action arg is optional —
+    // older call-sites pre-P1-2 pass only the filename, in which
+    // case we record the action as "edit" (generic).
+    try {
+      if (typeof _presenceMarkAction === "function") {
+        _presenceMarkAction(filename, action || "edit");
+      }
+    } catch (_e) { /* presence is best-effort */ }
   }
 
   function _applyRemoteAnnotation(remote) {
@@ -10574,6 +10727,337 @@
     // First poll immediate, then every _SYNC_POLL_MS
     _syncPollOnce().then(() => _refreshSyncBadge());
     setInterval(_syncPollOnce, _SYNC_POLL_MS);
+  }
+
+  // ==================================================================
+  // v0.9-P1-2 — multiplayer presence (Figma-lite "who's looking
+  // at what").  Only active when ?event=<token> is in the URL.
+  //
+  // Wire model
+  //   client_id    persistent per-tab (sessionStorage so cmd-T
+  //                opens a NEW peer, but a reload re-uses the
+  //                same id — matches Figma/Linear's mental model).
+  //   display_name persistent per-browser (localStorage, editable
+  //                from the presence-popover's "改名" link).
+  //   heartbeat    POST every 30s with last_viewed_filename +
+  //                last_action (carried forward by the server
+  //                across view-only beats).
+  //   poll         GET every 10s for the peer list — short enough
+  //                that "二摄 just looked at IMG_007" lands within
+  //                a beat of them looking, long enough that we're
+  //                not hammering the LAN.
+  //   disconnect   sendBeacon on pagehide / visibilitychange so
+  //                peers clear instantly instead of waiting 90s
+  //                for the stale-TTL evict.
+  // ==================================================================
+  const PRESENCE_ENABLED = !!_SYNC_EVENT_TOKEN;
+  const PRESENCE_HB_MS   = 30_000;   // 30s — see comment above
+  const PRESENCE_POLL_MS = 10_000;   // 10s
+  let _presenceClientId  = "";
+  let _presenceDisplay   = "";
+  let _presenceLastView  = "";
+  let _presenceLastAction       = "";
+  let _presenceLastActionFile   = "";
+  let _presencePending   = false;
+  let _presencePeers     = [];
+
+  function _presenceLoadIdentity() {
+    // Per-tab client_id so two tabs from the same browser show as
+    // two peers (which they are — the user can scroll in one tab
+    // while editing in another).
+    try {
+      _presenceClientId = sessionStorage.getItem("pixcull_presence_cid") || "";
+      if (!_presenceClientId) {
+        const rand = Math.random().toString(36).slice(2, 10);
+        _presenceClientId = `web-${rand}`;
+        sessionStorage.setItem("pixcull_presence_cid", _presenceClientId);
+      }
+    } catch (_e) {
+      _presenceClientId = "web-fallback-" + Math.random().toString(36).slice(2, 8);
+    }
+    try {
+      _presenceDisplay = localStorage.getItem("pixcull_presence_name") || "";
+    } catch (_e) { _presenceDisplay = ""; }
+    if (!_presenceDisplay) {
+      // Friendly default like "二摄-AB12" — encourages the user
+      // to rename via the presence-popover's "改名" link but
+      // doesn't block first-use.
+      const hex = _presenceClientId.slice(-4).toUpperCase();
+      _presenceDisplay = `二摄-${hex}`;
+    }
+  }
+
+  function _presenceSaveName(name) {
+    _presenceDisplay = (name || "").trim().slice(0, 40) || _presenceDisplay;
+    try { localStorage.setItem("pixcull_presence_name", _presenceDisplay); }
+    catch (_e) { /* private mode — fine */ }
+    const my = document.getElementById("presenceMyName");
+    if (my) my.textContent = _presenceDisplay;
+  }
+
+  // Called from _markLocalEdit when a row is edited.  Records
+  // both the action verb (keep / cull / maybe / star / bucket /
+  // edit) and the filename so the heartbeat can advertise:
+  //   "📝 编辑刚标 IMG_007 · keep"
+  function _presenceMarkAction(filename, action) {
+    if (!PRESENCE_ENABLED) return;
+    _presenceLastAction     = (action || "edit").slice(0, 32);
+    _presenceLastActionFile = filename || "";
+    // Don't wait for the 30s heartbeat — fire an extra beat so
+    // peers see the action within the poll window.  We rate-limit
+    // via _presencePending so a rapid-fire keep-spree doesn't spam
+    // the LAN.
+    _presenceHeartbeat({ throttled: true });
+  }
+
+  function _presenceMarkView(filename) {
+    if (!PRESENCE_ENABLED) return;
+    if (!filename || filename === _presenceLastView) return;
+    _presenceLastView = filename;
+    // Defer the heartbeat to the next interval tick — viewer
+    // position changes way too fast (scroll, hover, lightbox
+    // next/prev) for a per-change POST to be sane.
+  }
+
+  async function _presenceHeartbeat(opts) {
+    if (!PRESENCE_ENABLED) return false;
+    if (_presencePending && (opts && opts.throttled)) return false;
+    _presencePending = true;
+    try {
+      const body = {
+        client_id:            _presenceClientId,
+        display_name:         _presenceDisplay,
+        last_viewed_filename: _presenceLastView || null,
+      };
+      if (_presenceLastAction) {
+        body.action          = _presenceLastAction;
+        body.action_filename = _presenceLastActionFile || null;
+      }
+      const r = await fetch(
+        `/sync/event/${encodeURIComponent(_SYNC_EVENT_TOKEN)}/presence`,
+        {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify(body),
+        }
+      );
+      if (r.status === 404 || r.status === 410) {
+        // Event revoked — give up silently; sync poller already
+        // toasted "协作会话已失效" for the user.
+        return false;
+      }
+      // Clear the one-shot action so a quiet next-beat doesn't
+      // re-broadcast a stale action.  The server has persisted it
+      // for peers; we don't need to keep re-sending.
+      _presenceLastAction     = "";
+      _presenceLastActionFile = "";
+      return r.ok;
+    } catch (_e) {
+      return false;
+    } finally {
+      _presencePending = false;
+    }
+  }
+
+  async function _presencePollOnce() {
+    if (!PRESENCE_ENABLED) return;
+    try {
+      const url = `/api/v1/sync/event/${encodeURIComponent(_SYNC_EVENT_TOKEN)}`
+                + `/presence?exclude=${encodeURIComponent(_presenceClientId)}`;
+      const r = await fetch(url);
+      if (!r.ok) return;
+      const d = await r.json();
+      _presencePeers = Array.isArray(d.peers) ? d.peers : [];
+      _presenceRenderPill();
+      _presenceRenderPanel();
+    } catch (_e) { /* swallow — best-effort */ }
+  }
+
+  // The ⏱-ago text we sprinkle in the popover.  Keeps the UI alive
+  // even between polls — a "2 分钟前" doesn't suddenly become "just
+  // now" again, only older.
+  function _presenceAgo(ms) {
+    if (!ms) return "—";
+    const d = Date.now() - ms;
+    if (d < 30_000)   return "刚刚";
+    if (d < 60_000)   return Math.floor(d / 1000) + "s 前";
+    if (d < 3600_000) return Math.floor(d / 60000) + " 分钟前";
+    return Math.floor(d / 3600000) + " 小时前";
+  }
+
+  // Map of server-side action verbs → emoji + zh label.  The
+  // server stores whatever string the client sent; we don't
+  // enforce a closed vocab so future call-sites (e.g. ranker,
+  // crop, rotate) can add new verbs without a server change.
+  const _PRESENCE_ACTION_ZH = {
+    keep:   ["✅", "标 keep"],
+    maybe:  ["🤔", "标 maybe"],
+    cull:   ["✂️", "标 cull"],
+    star:   ["⭐", "改星级"],
+    bucket: ["🗂️", "入桶"],
+    ann:    ["📝", "评分"],
+    edit:   ["📝", "编辑"],
+  };
+
+  function _presenceFmtAction(rec) {
+    if (!rec.last_action) return "";
+    const [emoji, label] = _PRESENCE_ACTION_ZH[rec.last_action]
+                          || ["📝", rec.last_action];
+    const fn = rec.last_action_filename || "—";
+    return `${emoji} ${label} · <span class="pp-fn">${_escHtml(fn)}</span>`;
+  }
+
+  function _escHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;",
+      '"': "&quot;", "'": "&#39;",
+    }[c]));
+  }
+
+  function _presenceRenderPill() {
+    const pill = document.getElementById("presencePill");
+    if (!pill) return;
+    const live = _presencePeers.length;
+    if (live === 0) {
+      pill.classList.add("solo");
+      pill.innerHTML = `<span class="pp-dot"></span><span>独自工作中</span>`;
+      return;
+    }
+    pill.classList.remove("solo");
+    if (live === 1) {
+      const p = _presencePeers[0];
+      const verb = p.last_viewed_filename
+        ? `正在看 <span class="pp-actor">${_escHtml(p.last_viewed_filename)}</span>`
+        : "在线";
+      pill.innerHTML = `<span class="pp-dot"></span>`
+                     + `<span><span class="pp-actor">${_escHtml(p.display_name || "peer")}</span> ${verb}</span>`;
+    } else {
+      pill.innerHTML = `<span class="pp-dot"></span>`
+                     + `<span><span class="pp-actor">${live}</span> 协作者在线 · 详情</span>`;
+    }
+  }
+
+  function _presenceRenderPanel() {
+    const list = document.getElementById("presenceList");
+    if (!list) return;
+    if (_presencePeers.length === 0) {
+      list.innerHTML = `<div class="pp-empty">没有其他协作者在线。`
+                     + `把分享链接发给二摄/编辑,他们打开后会出现在这里。</div>`;
+      return;
+    }
+    list.innerHTML = _presencePeers.map(p => {
+      const name = _escHtml(p.display_name || "peer");
+      const initial = (p.display_name || "?").trim().slice(0, 1);
+      const view = p.last_viewed_filename
+        ? `<div class="pp-meta">👁️ 正在看 <span class="pp-fn">${_escHtml(p.last_viewed_filename)}</span></div>`
+        : `<div class="pp-meta">👁️ 还没打开任何照片</div>`;
+      const action = p.last_action
+        ? `<div class="pp-meta"><span class="pp-action">${_presenceFmtAction(p)}</span> · ${_presenceAgo(p.last_action_at_ms)}</div>`
+        : "";
+      const seen = `<div class="pp-meta">最近活跃 · ${_presenceAgo(p.last_seen_ms)}</div>`;
+      return `<div class="pp-row">
+        <span class="pp-avatar">${_escHtml(initial)}</span>
+        <div style="flex:1; min-width:0;">
+          <div class="pp-name">${name}</div>
+          ${view}${action}${seen}
+        </div>
+      </div>`;
+    }).join("");
+  }
+
+  function _presenceInjectPill() {
+    if (!PRESENCE_ENABLED) return;
+    const bar = document.querySelector(".workspace-bar");
+    if (!bar) return;
+    const pill = document.createElement("span");
+    pill.id = "presencePill";
+    pill.className = "presence-pill solo";
+    pill.innerHTML = `<span class="pp-dot"></span><span>连接中…</span>`;
+    pill.title = "协作者状态 · 点击查看详情";
+    pill.addEventListener("click", () => {
+      const m = document.getElementById("presenceModal");
+      if (!m) return;
+      // Refresh on open so the popover isn't 10s stale.
+      _presencePollOnce();
+      _presenceRenderPanel();
+      const my = document.getElementById("presenceMyName");
+      if (my) my.textContent = _presenceDisplay;
+      m.classList.add("show");
+    });
+    // Insert right before the sync-badge (which we put before the
+    // langSwitcher) so the two pills sit together at the right
+    // edge of the workspace bar.
+    const anchor = document.getElementById("syncBadge")
+                || document.getElementById("langSwitcher")
+                || bar.lastElementChild;
+    bar.insertBefore(pill, anchor);
+  }
+
+  function _presenceBindModal() {
+    const m = document.getElementById("presenceModal");
+    if (!m) return;
+    document.getElementById("presenceClose")?.addEventListener(
+      "click", () => m.classList.remove("show"));
+    m.addEventListener("click", (e) => {
+      if (e.target === m) m.classList.remove("show");
+    });
+    document.getElementById("presenceRename")?.addEventListener("click", () => {
+      const nv = prompt("显示给协作者的名字(最多 40 字)", _presenceDisplay);
+      if (nv === null) return;
+      _presenceSaveName(nv);
+      _presenceHeartbeat({ throttled: false });
+    });
+  }
+
+  // viewer-position hooks: wrap openLightbox so every lightbox-open
+  // marks the viewer's focus on that filename.  Grid hover doesn't
+  // mark — too noisy + the lightbox is the user's "I'm really
+  // looking at this" signal.
+  function _presenceWrapLightbox() {
+    if (typeof window.openLightbox !== "function") return;
+    const orig = window.openLightbox;
+    window.openLightbox = function (fn) {
+      try { _presenceMarkView(fn); } catch (_e) {}
+      return orig.apply(this, arguments);
+    };
+  }
+  // openLightbox is declared as a function (hoisted) but is a
+  // module-local — wrap by overwriting the local symbol via the
+  // existing identifier path.  In our codebase openLightbox sits
+  // on window via implicit hoisting; if a stricter scope shows up
+  // later this wrapper becomes a no-op (the function still exists,
+  // we just don't get viewer-tracking on lightbox opens).
+  try { window.openLightbox = openLightbox; _presenceWrapLightbox(); }
+  catch (_e) { /* viewer-tracking is best-effort */ }
+
+  if (PRESENCE_ENABLED) {
+    _presenceLoadIdentity();
+    _presenceInjectPill();
+    _presenceBindModal();
+    // First heartbeat + poll immediate, then on intervals.
+    _presenceHeartbeat({ throttled: false }).then(_presencePollOnce);
+    setInterval(() => _presenceHeartbeat({ throttled: false }), PRESENCE_HB_MS);
+    setInterval(_presencePollOnce, PRESENCE_POLL_MS);
+    // Refresh pill timestamps once a minute so "刚刚" turns into
+    // "1 分钟前" without waiting for the next server poll.
+    setInterval(_presenceRenderPanel, 60_000);
+    // Disconnect cleanly so peers see us gone immediately.
+    const _disconnect = () => {
+      try {
+        const blob = new Blob(
+          [JSON.stringify({ client_id: _presenceClientId, disconnect: true })],
+          { type: "application/json" }
+        );
+        navigator.sendBeacon(
+          `/sync/event/${encodeURIComponent(_SYNC_EVENT_TOKEN)}/presence`,
+          blob
+        );
+      } catch (_e) { /* sendBeacon unavailable — server will TTL-evict */ }
+    };
+    window.addEventListener("pagehide", _disconnect);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") _disconnect();
+    });
   }
 
   document.getElementById("styleTrainBtn")?.addEventListener("click", async () => {

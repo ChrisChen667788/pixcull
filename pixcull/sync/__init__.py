@@ -36,6 +36,13 @@ from pixcull.sync.event import (
     load_event,
     revoke_event,
 )
+# v0.9-P1-2 — multiplayer presence (Figma-lite "who's looking at what")
+from pixcull.sync.presence import (
+    drop_peer,
+    presence_path,
+    read_presence,
+    update_presence,
+)
 
 __all__ = [
     "EventSession",
@@ -45,4 +52,9 @@ __all__ = [
     "issue_event",
     "load_event",
     "revoke_event",
+    # v0.9-P1-2
+    "drop_peer",
+    "presence_path",
+    "read_presence",
+    "update_presence",
 ]

@@ -136,13 +136,29 @@ Linear / Notion / Raycast 的 keyboard-first 入口。20+ actions 可触达:
   - destructive(删桶 / clear all)→ danger 红 border-top + 红色 confirm
     + 主色 cancel(reverse pair 要求用户 deliberate)
 
-#### v0.9-P1-2 · Multiplayer presence(协作模式可见性)
-**估时**: 2-3 天
+#### v0.9-P1-2 · Multiplayer presence(协作模式可见性) ✅
+**估时**: 2-3 天 · **实际**: 1 天 · **已发布**
 
 v0.8-P0-2 的 LAN 协作只有 polling 增量,看不到"另一个人此刻在看哪张"。
-v0.9 加:每个连接客户端每 30s 发心跳带 `last_viewed_filename`;workspace
-bar 顶部显示 "👁️ 二摄正在看 IMG_001 · 📝 编辑刚标 IMG_007"。Figma-lite,
-快速增强协作存在感。
+v0.9 已加:每个连接客户端每 30s heartbeat,workspace bar 上的 indigo
+**presence pill** 实时显示 "👁️ 二摄-AB12 正在看 IMG_001"(单 peer)或
+"👥 3 协作者在线 · 详情"(多 peer)。点 pill 打开弹层显示每位 peer 的
+头像 + 当前看的照片 + 最近动作(✅ 标 keep · IMG_002 · 12s 前)+ 最近活跃。
+
+后端
+- 新模块 `pixcull.sync.presence` —— per-event JSON store,atomic write
+- POST `/sync/event/<token>/presence` —— heartbeat / disconnect 复用
+- GET `/api/v1/sync/event/<token>/presence?exclude=<cid>` —— peers 列表
+- 90s stale TTL evict ghost peers · 32 peer hard cap
+
+前端
+- `client_id` per-tab(sessionStorage)· `display_name` per-browser(localStorage)
+- 30s heartbeat + 10s poll · `_markLocalEdit(fn, action)` 自动触发额外 beat
+- `sendBeacon` on pagehide / visibilitychange === hidden 即时 disconnect
+- 7 zh action verbs(keep/maybe/cull/star/bucket/ann/edit)→ emoji + 中文
+
+测试: 9 new tests in `tests/test_sync_presence.py`(field truncation,
+stale TTL evict, MAX_PEERS cap, atomic write, drop_peer idempotency, ...)。
 
 #### v0.9-P1-3 · PDF executive summary + Strava-style annual review
 **估时**: 4-5 天

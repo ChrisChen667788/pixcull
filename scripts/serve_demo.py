@@ -2074,6 +2074,12 @@ class _Handler(BaseHTTPRequestHandler):
         if sub.startswith("/sync/event/") and sub.endswith("/changes"):
             token = sub[len("/sync/event/"):-len("/changes")]
             return self._serve_sync_event_changes(token)
+        # v0.9-P1-2 — multiplayer presence list.
+        # GET /api/v1/sync/event/<token>/presence
+        #   → {schema, server_ts, peers: [...]}
+        if sub.startswith("/sync/event/") and sub.endswith("/presence"):
+            token = sub[len("/sync/event/"):-len("/presence")]
+            return self._serve_sync_event_presence(token)
         # P-UX-9 — accumulated cull-reason counts so the picker can
         # sort by user frequency + admin can show "your cull habits".
         if sub == "/cull_reasons/stats":
@@ -3662,6 +3668,16 @@ class _Handler(BaseHTTPRequestHandler):
             if "/" in tail:
                 rid, eid = tail.split("/", 1)
                 return self._handle_sync_event_revoke(rid, eid)
+        # v0.9-P1-2 — multiplayer presence heartbeat.
+        # POST /sync/event/<token>/presence
+        #   body: {client_id, display_name?, last_viewed_filename?,
+        #          action?, action_filename?, disconnect?}
+        #   → {ok, peer_count, you: {<echoed presence record>}}
+        if (path.startswith("/sync/event/")
+                and path.endswith("/presence")
+                and path.count("/") == 4):
+            token = path[len("/sync/event/"):-len("/presence")]
+            return self._handle_sync_event_presence(token)
         # v0.7-P2-2 — tethered live scoring (top-level shortcut routes
         # that call into the canonical P2.2 handlers defined further
         # down in this class).
@@ -5310,6 +5326,134 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
+        return True
+
+    # ============================================================
+    # v0.9-P1-2 — multiplayer presence
+    # ============================================================
+    def _find_event_and_dir(self, token: str):
+        """Walk demo runs and return (session, run_output_dir) for the
+        first matching token, or (None, None) if not found.  Used by
+        both the presence-GET and presence-POST handlers — the v1
+        protocol carries no run_id in the URL on purpose so guests
+        only need to remember the token.
+        """
+        try:
+            from pixcull.sync import find_event_by_token
+        except Exception as exc:
+            _dbg("sync/import", exc, "presence")
+            return None, None
+        if not _DEMO_ROOT.is_dir():
+            return None, None
+        for child in _DEMO_ROOT.iterdir():
+            if not child.is_dir():
+                continue
+            out_dir = child / "output"
+            if not out_dir.is_dir():
+                continue
+            found = find_event_by_token(out_dir, token)
+            if found is not None:
+                return found, out_dir
+        return None, None
+
+    def _serve_sync_event_presence(self, token: str) -> bool:
+        """GET /api/v1/sync/event/<token>/presence
+        → {schema, server_ts, peers: [...]}.
+        Optional ?exclude=<client_id> hides the requesting peer from
+        the response — handy so the UI doesn't display itself.
+        """
+        from urllib.parse import parse_qs, urlparse as _up
+        try:
+            from pixcull.sync import read_presence
+        except Exception as exc:
+            _dbg("sync/import", exc, "presence")
+            self.send_error(500, "presence import failed")
+            return True
+        sess, out_dir = self._find_event_and_dir(token)
+        if sess is None or out_dir is None:
+            self.send_error(404, "no such event")
+            return True
+        if not sess.is_active():
+            self.send_error(410, "event revoked or expired")
+            return True
+        qs = parse_qs(_up(self.path).query)
+        exclude = (qs.get("exclude") or [""])[0]
+        peers_map = read_presence(out_dir, sess.event_id)
+        peers = [rec for cid, rec in peers_map.items() if cid != exclude]
+        peers.sort(key=lambda r: int(r.get("last_seen_ms") or 0), reverse=True)
+        body = _safe_dumps({
+            "schema":    "pixcull.sync.presence/v1",
+            "event_id":  sess.event_id,
+            "run_id":    sess.run_id,
+            "server_ts": int(time.time() * 1000),
+            "peers":     peers,
+        }).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+        return True
+
+    def _handle_sync_event_presence(self, token: str) -> bool:
+        """POST /sync/event/<token>/presence — heartbeat or disconnect.
+
+        Both heartbeat and disconnect go through here so the client
+        can fire-and-forget via ``navigator.sendBeacon`` on
+        ``visibilitychange`` / ``pagehide``.  Body shape:
+
+          {client_id, display_name?, last_viewed_filename?,
+           action?, action_filename?, disconnect?: bool}
+
+        Returns {ok, peer_count, you}.  Never returns an error for
+        well-formed disconnect calls (so sendBeacon never warns).
+        """
+        try:
+            from pixcull.sync import (
+                drop_peer, read_presence, update_presence,
+            )
+        except Exception as exc:
+            _dbg("sync/import", exc, "presence")
+            self.send_error(500, "presence import failed")
+            return True
+        sess, out_dir = self._find_event_and_dir(token)
+        if sess is None or out_dir is None:
+            self.send_error(404, "no such event")
+            return True
+        if not sess.is_active():
+            self.send_error(410, "event revoked or expired")
+            return True
+        body = self._read_json_body()
+        client_id = str(body.get("client_id") or "").strip()[:64]
+        if not client_id:
+            self.send_error(400, "missing client_id")
+            return True
+        if body.get("disconnect"):
+            drop_peer(out_dir, sess.event_id, client_id)
+            self._json_ok({"ok": True, "dropped": True})
+            return True
+        try:
+            you = update_presence(
+                out_dir, sess.event_id, client_id,
+                display_name        = str(body.get("display_name") or "").strip()[:60] or None,
+                last_viewed_filename= (str(body.get("last_viewed_filename") or "").strip() or None),
+                action              = str(body.get("action") or "").strip() or None,
+                action_filename     = (str(body.get("action_filename") or "").strip() or None),
+            )
+        except ValueError as exc:
+            self.send_error(400, str(exc))
+            return True
+        except Exception as exc:
+            _dbg("sync/presence", exc, sess.event_id)
+            self.send_error(500, "presence update failed")
+            return True
+        peer_count = len(read_presence(out_dir, sess.event_id))
+        self._json_ok({
+            "ok":         True,
+            "you":        you,
+            "peer_count": peer_count,
+        })
         return True
 
     # ============================================================
