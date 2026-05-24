@@ -719,6 +719,170 @@ def _markdown_to_print_html(md: str, run_id: str) -> str:
     )
 
 
+def _resolve_thumb_path(
+    row_filename: str,
+    out_dir: Path,
+    image_root: Path | None,
+    row: dict | None = None,
+) -> Path | None:
+    """Best-effort lookup of a photo's image file.
+
+    Tries — in order — the absolute `path` column (scan-mode runs),
+    image_root / filename (upload-mode runs with a user-supplied
+    root), out_dir.parent / "input" / filename (the canonical
+    upload-mode location), and the run's own `thumbs/<filename>`
+    cache (always present after a finished run).
+    """
+    if row is not None:
+        abs_p = row.get("path")
+        if isinstance(abs_p, str) and abs_p:
+            p = Path(abs_p)
+            if p.is_file():
+                return p
+    if image_root is not None:
+        p = image_root / row_filename
+        if p.is_file():
+            return p
+    # Standard upload-mode layout
+    p = out_dir.parent / "input" / row_filename
+    if p.is_file():
+        return p
+    # Cached thumbnail (always present after a finished pipeline)
+    for sub in ("thumbs", "thumb"):
+        p = out_dir / sub / row_filename
+        if p.is_file():
+            return p
+        # Some runs cache as <stem>.jpg regardless of source extension
+        p_jpg = (out_dir / sub / Path(row_filename).with_suffix(".jpg").name)
+        if p_jpg.is_file():
+            return p_jpg
+    return None
+
+
+def _build_executive_html_for_print(
+    scores_csv: Path,
+    out_dir: Path,
+    image_root: Path | None,
+    run_id: str,
+    audit_md: str,
+    *,
+    photographer: str = "",
+    client: str = "",
+    event: str = "",
+    event_date: str = "",
+) -> str:
+    """v0.9-P1-3 entry point.
+
+    Reads scores.csv → rolls up the dashboard → picks best 5 +
+    inconsistencies → embeds thumbnails → hands the whole thing to
+    pixcull.report.executive_pdf to render the print-ready HTML.
+    Falls back gracefully when scores.csv is missing (rare, but
+    the unit test does it on purpose).
+    """
+    try:
+        import pandas as pd
+    except ImportError:
+        # Pandas is a core dep; this branch only fires in extreme
+        # test envs.  Render an empty dashboard rather than crash
+        # the whole --pdf flow.
+        rows: list[dict] = []
+    else:
+        try:
+            df = pd.read_csv(scores_csv)
+            # Coerce NaN → "" so the renderer's `or ""` patterns
+            # work without spraying None into the HTML.
+            rows = [{k: ("" if pd.isna(v) else v) for k, v in r.items()}
+                    for _, r in df.iterrows()]
+        except (FileNotFoundError, ValueError):
+            rows = []
+
+    from pixcull.report.executive_pdf import (
+        build_executive_html, compute_dashboard, inline_thumb,
+        pick_best_n, pick_inconsistencies,
+    )
+
+    dashboard = compute_dashboard(rows)
+    best   = pick_best_n(rows, n=5)
+    incons = pick_inconsistencies(rows, n=3)
+
+    def _to_card(r: dict, badge: str, note: str = "") -> dict:
+        fn = str(r.get("filename") or "")
+        thumb_path = _resolve_thumb_path(fn, out_dir, image_root, row=r)
+        return {
+            "thumb":  inline_thumb(thumb_path),
+            "fn":     fn,
+            "badge":  badge,
+            "score":  r.get("score_final"),
+            "note":   note,
+        }
+
+    best_cards = [_to_card(r, "BEST") for r in best]
+    incon_cards = []
+    for r in incons:
+        decision = str(r.get("decision") or "—").upper()
+        sf = r.get("score_final")
+        try:
+            sf_n = float(sf)
+            note = f"模型决定 {decision} · 综合分 {round(sf_n * 100)}%"
+        except (TypeError, ValueError):
+            note = f"模型决定 {decision}"
+        incon_cards.append(_to_card(r, "WATCH", note=note))
+
+    # Render the markdown audit body as a fragment (no <html>/<head>)
+    # so it can be embedded inside the executive shell.
+    audit_body_fragment = _markdown_to_body_fragment(audit_md)
+
+    return build_executive_html(
+        cover={
+            "photographer": photographer,
+            "client":       client,
+            "event":        event,
+            "event_date":   event_date,
+        },
+        dashboard=dashboard,
+        best_cards=best_cards,
+        inconsistency_cards=incon_cards,
+        cull_top=list(dashboard.get("cull_reasons_top") or []),
+        body_html=audit_body_fragment,
+        run_id=run_id,
+    )
+
+
+def _markdown_to_body_fragment(md: str) -> str:
+    """Same regex pipeline as :func:`_markdown_to_print_html` but
+    without the surrounding <html>/<head>/<body> chrome — so the
+    output can be embedded inside another document.
+    """
+    import html as _html
+    import re as _re
+    out = _html.escape(md)
+    out = _re.sub(r"^## +(.+)$", r"<h2>\1</h2>", out, flags=_re.MULTILINE)
+    out = _re.sub(r"^# +(.+)$",  r"<h1>\1</h1>", out, flags=_re.MULTILINE)
+    out = _re.sub(r"\*\*([^*\n]+)\*\*", r"<b>\1</b>", out)
+    out = _re.sub(r"`([^`\n]+)`", r"<code>\1</code>", out)
+    out = _re.sub(r"(?<!\w)_([^_\n]+)_(?!\w)", r"<i>\1</i>", out)
+    def _tablize(block: str) -> str:
+        lines = block.strip().splitlines()
+        if len(lines) < 2:
+            return block
+        head = [c.strip() for c in lines[0].strip("|").split("|")]
+        rows = []
+        for ln in lines[2:]:
+            cells = [c.strip() for c in ln.strip("|").split("|")]
+            tds = "".join(f"<td>{c}</td>" for c in cells)
+            rows.append(f"<tr>{tds}</tr>")
+        ths = "".join(f"<th>{c}</th>" for c in head)
+        return ("<table><thead><tr>" + ths + "</tr></thead>"
+                "<tbody>" + "".join(rows) + "</tbody></table>")
+    out = _re.sub(r"(?:^\|.*\|$\n){2,}",
+                  lambda m: _tablize(m.group(0)), out, flags=_re.MULTILINE)
+    out = _re.sub(r"^( {0,4})- +(.+)$",
+                  r"\1<li>\2</li>", out, flags=_re.MULTILINE)
+    out = _re.sub(r"(?:<li>.+</li>\n)+",
+                  lambda m: "<ul>" + m.group(0) + "</ul>", out)
+    return out
+
+
 def _try_chrome_headless_pdf(html: str, out_pdf: Path) -> bool:
     """Try to print the HTML to PDF via Chrome headless.
 
@@ -814,6 +978,29 @@ def main() -> None:
                          "Edge headless (auto-detected).  If no browser "
                          "is reachable, writes the print-ready HTML "
                          "instead and tells you to Cmd+P / Ctrl+P it.")
+    # v0.9-P1-3 — executive-summary PDF mode.  Adds cover + ToC +
+    # Strava-style key-numbers dashboard + thumbnail walls in front
+    # of the existing audit body.  Only takes effect alongside --pdf.
+    ap.add_argument("--executive", action="store_true",
+                    help="v0.9-P1-3 — prepend a brand cover + ToC + "
+                         "Strava-style key-numbers dashboard + thumbnail "
+                         "walls to the --pdf output.  Use this for the "
+                         "client-facing delivery report; the plain --pdf "
+                         "remains the engineering audit format.")
+    ap.add_argument("--client", default="",
+                    help="v0.9-P1-3 — client name for the executive "
+                         "cover page (e.g. '李慧 & 李翔').  Ignored "
+                         "unless --executive is set.")
+    ap.add_argument("--event", default="",
+                    help="v0.9-P1-3 — event title for the cover "
+                         "(e.g. '婚礼 · 仪式 + 草坪宴').")
+    ap.add_argument("--event-date", default="",
+                    help="v0.9-P1-3 — event date for the cover, "
+                         "free-text (e.g. '2026-06-15').  Defaults to "
+                         "today when omitted.")
+    ap.add_argument("--photographer", default="",
+                    help="v0.9-P1-3 — photographer / studio name shown "
+                         "in the cover eyebrow.")
     args = ap.parse_args()
 
     if args.scores_csv:
@@ -862,9 +1049,21 @@ def main() -> None:
     report = "\n".join(p for p in parts if p)
 
     # v0.4 P2 (4/4) — optional PDF render via Chrome headless.
+    # v0.9-P1-3 — when --executive is set, swap in the executive-
+    # summary HTML (cover + ToC + dashboard + thumbnail walls) and
+    # pass the existing audit HTML as the trailing body.
     if args.pdf:
         args.pdf.parent.mkdir(parents=True, exist_ok=True)
-        html_for_print = _markdown_to_print_html(report, run_id)
+        if args.executive:
+            html_for_print = _build_executive_html_for_print(
+                scores_csv, out_dir, image_root, run_id, report,
+                photographer=args.photographer,
+                client=args.client,
+                event=args.event,
+                event_date=args.event_date,
+            )
+        else:
+            html_for_print = _markdown_to_print_html(report, run_id)
         if _try_chrome_headless_pdf(html_for_print, args.pdf):
             print(f"wrote {args.pdf}", file=sys.stderr)
         else:

@@ -160,12 +160,32 @@ v0.9 已加:每个连接客户端每 30s heartbeat,workspace bar 上的 indigo
 测试: 9 new tests in `tests/test_sync_presence.py`(field truncation,
 stale TTL evict, MAX_PEERS cap, atomic write, drop_peer idempotency, ...)。
 
-#### v0.9-P1-3 · PDF executive summary + Strava-style annual review
-**估时**: 4-5 天
+#### v0.9-P1-3 · PDF executive summary + Strava-style annual review ✅
+**估时**: 4-5 天 · **实际**: 1 天 · **已发布**
 
-cli_audit PDF 加 cover page(brand + 客户名 + 日期)+ ToC + key-numbers
-dashboard(卡片式 layout 类 Strava annual review)+ 关键缩略图墙(最佳 5
-张 + 矛盾警示 3 张 + cull reason top 5)。
+`cli_audit --pdf --executive --client ... --event ... --event-date ...`
+产生一份 11 页 A4 客户交付 PDF:
+
+1. **Cover**: brand SVG + 摄影师 eyebrow + serif gradient 标题(`Charter`)+
+   客户名 + 日期 + 提交 / 入选 / 入选率 3 个 keynum
+2. **ToC**: serif decimal-leading-zero 编号 + dashed page break
+3. **Dashboard**: Strava-annual-review 风格 6-card grid(入选率 hero card +
+   提交张数 / 需复核 / 已剔除 / 综合分中位 / 人工标注 + scene chips row)
+4. **最佳 5 张**: 5-up thumbnail wall,brand-gradient "BEST" badge,
+   综合分 chip,score-sorted keep rows
+5. **需要复核的 3 张**: human-vs-model 不一致 → 边界分 fallback,
+   "WATCH" badge + 模型决定 + 综合分 注释
+6. **未入选原因 top 5**: horizontal bar chart,brand-gradient fill,
+   zh-CN cull reason 翻译(对焦不准 / 模糊抖动 / ...)
+7-11. **技术质量审计**: 现有 cli_audit 的 scene / face / wedding / ICC /
+   EXIF sections,作为 PDF 的"技术附录"
+
+新模块: `pixcull.report.executive_pdf` — pure-function data + render
+layer,thumbnails as data: URIs(self-contained PDF,可发邮件)。
+20 unit tests in `tests/test_executive_pdf.py`,加 1147-row 真实婚礼
+run e2e:11 页 / 1.3 MB / cover 显示真实客户名 + 76% 入选率。
+
+默认 `--pdf`(无 `--executive`)行为不变 — 5-page engineering audit PDF。
 
 #### v0.9-P1-4 · AI 视觉化
 **估时**: 3-4 天
