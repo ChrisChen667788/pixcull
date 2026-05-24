@@ -1,0 +1,17 @@
+{
+  "projectName": "PixCull",
+  "slug": "pixcull",
+  "mascot": "stylized lightroom-aesthetic photo culling mascot — a single bright, sharp photo print catching warm rim light, surrounded by 4-5 faded soft-focus prints fading into a dark cosmic gradient, professional photo studio mood, premium SaaS product aesthetic",
+  "tagline": "本地 AI 帮你 6 秒挑出一晚要拍的全部精选。",
+  "subtitle": "LOCAL-FIRST AI PHOTO CULLING",
+  "footerLine": "github.com/ChrisChen667788/pixcull",
+  "palette": {
+    "wordmarkStart": "#6E56CF",
+    "wordmarkMid":   "#A855F7",
+    "wordmarkEnd":   "#EC4899",
+    "bgDeep":        "#0b0d10",
+    "bgMid":         "#1a1230",
+    "bgCosmic":      "#3d1b69"
+  },
+  "outputDir": "docs/brand"
+}

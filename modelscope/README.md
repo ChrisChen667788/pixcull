@@ -29,22 +29,42 @@ tasks:
 - image-quality-assessment
 ---
 
-![PixCull · 摄影师本地优先 AI 选片工具](docs/assets/github-hero.svg)
+<!-- v0.9-MARKETING — brand kit hero from scripts/brand/gen_brand_svg.py.
+     Absolute raw.githubusercontent.com URLs so the image still resolves
+     once this README is copied into the ModelScope-side repo (which
+     doesn't carry docs/brand/). -->
+![PixCull · 本地优先 AI 选片](https://raw.githubusercontent.com/ChrisChen667788/pixcull/main/docs/brand/pixcull-horizontal-lockup.svg)
+
+<!-- Animated SVG hero-reveal demo — same source path strategy. -->
+![PixCull 启动动画](https://raw.githubusercontent.com/ChrisChen667788/pixcull/main/docs/brand/pixcull-hero-reveal-demo.svg)
 
 [![GitHub](https://img.shields.io/badge/GitHub-ChrisChen667788%2Fpixcull-181717.svg?style=flat-square&logo=github)](https://github.com/ChrisChen667788/pixcull)
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](https://github.com/ChrisChen667788/pixcull/blob/main/LICENSE)
 ![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-3776AB.svg?style=flat-square&logo=python&logoColor=white)
 ![本地优先](https://img.shields.io/badge/本地优先-照片永不上传-34d399.svg?style=flat-square)
+[![v0.7](https://img.shields.io/github/v/release/ChrisChen667788/pixcull?style=flat-square&color=6E56CF)](https://github.com/ChrisChen667788/pixcull/releases/latest)
 
 # PixCull · 摄影师专用的本地 AI 选片工具
 
-> **本地优先 · 6 维评分 · XMP / IPTC 一键导出 · Lr / C1 直通**
+> **本地优先 · 6 维评分 · 风格 clone · LAN 协作 · 客户分享 QR · Lr/C1 直通**
 >
 > 一场 1,500 张的婚礼,人工选片要花一个晚上;PixCull 把它压缩到一杯咖啡的时间,
 > 而且 *给你解释每一张为什么入选*。
 
 完整源码 + iOS 伴侣 App + Lightroom 插件,均在 GitHub:
 **[github.com/ChrisChen667788/pixcull](https://github.com/ChrisChen667788/pixcull)**
+
+## v0.7 → v0.9 主要更新
+
+- **v0.9**(进行中):全产品 signature soft-bounce 动效 · `/results` 2 秒
+  hero reveal · brand identity 重做(渐变 + 新 logo + Charter serif accent)
+  · ⌘K 命令面板(27 actions + fuzzy match)
+- **v0.8**:i18n 中 / EN / 日 · LAN 协作(token + 5s 增量同步 + 冲突标记)
+  · 风格 clone V2(CLIP 嵌入中心)· 短链 + 二维码 · 结构化 CSV/JSON 导出
+- **v0.7**:A/B 比较窗 / Annotation modal 重设计 · 5k+ 稳定性
+  · Loupe RGB 像素读数 · Inspector mobile bottom-sheet · 视图预设 v2
+  · `/share/<run>/<token>` 客户分享页 · 风格 clone V1 · tethered live ·
+  `/history` 时间线
 
 ## 实机截图(2022 川西行拍摄数据)
 

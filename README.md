@@ -1,9 +1,21 @@
+<!-- v0.9-MARKETING — hero banner from scripts/brand/gen_brand_svg.py.
+     The signature gradient (#6E56CF → #EC4899) + the "spotlight on
+     one in a crowd" logo + serif wordmark.  Regenerate via:
+       python scripts/brand/gen_brand_svg.py -->
 <div align="center">
-  <img src="docs/assets/github-hero.svg" alt="PixCull — AI photo culling for professional photographers" width="100%" />
+  <img src="docs/brand/pixcull-horizontal-lockup.svg"
+       alt="PixCull · Local-first AI photo culling for working photographers"
+       width="100%" />
 </div>
 
+<!-- Animated hero-reveal demo: SVG SMIL keyframes mirroring the
+     v0.9-P0-2 in-product opening sequence (workspace bar slide-in,
+     sidebar slide-in, 24 cards stagger fade-up, stats count from 0).
+     Regenerate via: python scripts/brand/gen_animated_demo.py -->
 <div align="center">
-  <img src="docs/assets/github-demo.svg" alt="9-second animated demo — drag folder, AI scores, get keep/maybe/cull" width="100%" />
+  <img src="docs/brand/pixcull-hero-reveal-demo.svg"
+       alt="PixCull hero reveal — workspace bar slides in, Library sidebar slides in, 24 photo cards stagger fade-up, keep/maybe/cull stats count from 0 to final"
+       width="100%" />
 </div>
 
 <p align="center">
@@ -13,19 +25,50 @@
   <img alt="Platform" src="https://img.shields.io/badge/macOS-Apple%20Silicon%20%26%20Intel-000.svg?style=flat-square&logo=apple" />
   <img alt="Local-first" src="https://img.shields.io/badge/local--first-photos%20never%20upload-34d399.svg?style=flat-square" />
   <a href="https://github.com/ChrisChen667788/pixcull/stargazers"><img alt="stars" src="https://img.shields.io/github/stars/ChrisChen667788/pixcull?style=flat-square" /></a>
+  <a href="https://github.com/ChrisChen667788/pixcull/releases/latest"><img alt="latest release" src="https://img.shields.io/github/v/release/ChrisChen667788/pixcull?style=flat-square&color=6E56CF" /></a>
 </p>
 
 <p align="center">
   <b>English</b> ·
   <a href="#中文">简体中文</a> ·
-  <a href="https://www.modelscope.cn/profile/haozi667788">ModelScope</a>
+  日本語 (in-app) ·
+  <a href="https://www.modelscope.cn/profile/haozi667788">ModelScope</a> ·
+  <a href="https://github.com/ChrisChen667788/pixcull/releases">Releases</a>
 </p>
 
 <p align="center">
-  <i>The local-first AI culling tool for working photographers.<br/>
-  Six calibrated axes, photographer-grade XMP / IPTC / gallery export,<br/>
-  Lightroom &amp; Capture One ready, no photo ever leaves your disk.</i>
+  <i>Local-first AI culling for working photographers.<br/>
+  Six calibrated axes · style clone (CLIP) · LAN multi-shooter sync ·<br/>
+  tethered live scoring · client share links + QR · Lr/C1 round-trip.<br/>
+  <b>No photo ever leaves your disk.</b></i>
 </p>
+
+> **v0.9 is in flight.** Hero reveal · signature soft-bounce motion ·
+> brand identity refresh · ⌘K command palette already shipped (4 / 13).
+> Full charter at [`docs/ROADMAP-v0.9-charter.md`](docs/ROADMAP-v0.9-charter.md).
+
+---
+
+## What's new
+
+**v0.9** *(in flight)* — Brand identity refresh (signature gradient
++ logo redo + serif accent) · Hero reveal "first 2 seconds" signature
+moment · soft-bounce motion curve project-wide · ⌘K command palette
+(27 actions, fuzzy match, recent-used). See
+[`docs/ROADMAP-v0.9-charter.md`](docs/ROADMAP-v0.9-charter.md).
+
+**v0.8** — i18n 中 / EN / 日 · LAN collaboration (event token + 5s
+polling + conflict markers) · style clone V2 (CLIP embedding
+centroid) · short links + QR + share-URL modal · structured CSV /
+JSON export (annotations + style distances joined) ·
+[`docs/ROADMAP-v0.8-charter.md`](docs/ROADMAP-v0.8-charter.md).
+
+**v0.7** — A/B compare modal redesign · annotation rubric modal
+redesign · 5k+ photo stability (IndexedDB adapter) · Loupe RGB
+readout · Inspector mobile bottom-sheet · view-preset v2 ·
+`/share/<run>/<token>` · style clone V1 · tethered live · Sparkle
+auto-update infra · `/history`. See
+[`docs/RELEASE_NOTES-v0.7.md`](docs/RELEASE_NOTES-v0.7.md).
 
 ---
 
@@ -200,16 +243,53 @@ an existing folder in place (zero-copy, RAW + DNG friendly).
 
 ### Every surface at a glance
 
-| Surface | What it does |
-|---|---|
-| `/` upload page | Drag-drop a folder; live progress as scoring runs. Vertical chooser + active user switcher. |
-| `/results/<run>` | The main culling surface (1st screenshot above). 3-col grid, swipe-style hotkeys. |
-| `/results/<run>` lightbox | Rubric stars + V20 advice + GPS map + face clusters + similar photos + sticky decision toolbar (2nd screenshot above). |
-| `/results/<run>` 1:1 zoom | Click any photo in the lightbox to zoom to 100%; drag to pan; mouse-wheel to fine-tune. Hi-res image swaps in on the first zoom. |
-| `/results/<run>` A/B compare | Pin any 2 photos via ⇆ button; synced 1:1 zoom across both cells (3rd screenshot above). |
-| `/admin` | Storage info; run management; license token; sync configuration. |
-| `/verticals` | Per-genre policy editor; promote a sample to the team bank. |
-| iOS companion | SwiftUI grid + per-photo swipe annotator + rich lightbox. |
+| Surface | What it does | Shipped |
+|---|---|---|
+| `/` upload page | Drag-drop a folder; live progress as scoring runs. Vertical chooser + active user switcher. Brand-gradient hero. | v0.1 + v0.9-P0-3 |
+| `/results/<run>` | The main culling surface. LR Library left sidebar (8 collapsible filter groups) + 3-col grid + LR Develop right Inspector (9 collapsible sections). Hero reveal on open. | v0.6 + v0.9-P0-2 |
+| `/results/<run>` lightbox | Rubric stars + V20 advice + GPS map + face clusters + similar photos + sticky decision toolbar. RGB readout in 1:1 mode. | v0.1 + v0.7-P1-1 |
+| `/results/<run>` Inspector mobile | At ≤640px the Inspector becomes a pull-up bottom sheet (LR Mobile-Library style). | v0.7-P1-2 |
+| `/results/<run>` 1:1 zoom | Click any photo to zoom to 100%; drag to pan; wheel to fine-tune. Loupe RGB readout follows the cursor. | v0.7-P1-1 |
+| `/results/<run>` A/B compare | Pin any 2 photos via ⇆ button; synced 1:1 zoom + pixel readout across both cells. | v0.7-P0-1 |
+| `/results/<run>` ⌘K command palette | Linear/Raycast-style keyboard-first action entry. 27 actions across 7 groups, fuzzy match, recent-used. | **v0.9-P0-4** |
+| `/results/<run>` hold-Space | Press & hold Space for ~350ms surfaces a context-aware shortcut cheat-sheet (macOS Finder pattern). | v0.6 (5/5) |
+| `/results/<run>?event=<token>` | LAN collaboration: second-shooter / editor opens this URL, polls host every 5s for annotation changes, shows conflict markers. | v0.8-P0-2 |
+| `/share/<run>/<token>` | Token-gated client delivery page; only keeps surfaced; photographer brand + client watermark; share-URL modal with QR. | v0.7-P1-4 + v0.8-P1-3 |
+| `/tether` | Watch a Lr/C1 tether folder; new RAWs analyze on landing; live status cards. | v0.7-P2-2 |
+| `/history` | Date-sorted timeline of every past run; decision distribution chips; one-click jump back. | v0.7-P2-4 |
+| `/s/<6-char>` | Short-link issuer + inline SVG QR (pure-Python QR encoder, no JS bundle). | v0.8-P1-3 |
+| `/admin` | Storage info; run management; license token; sync configuration. | v0.1 |
+| `/verticals` | Per-genre policy editor; promote a sample to the team bank. | v0.4 |
+| iOS companion | SwiftUI grid + per-photo swipe annotator + rich lightbox. | v0.5 |
+
+### What sets PixCull apart
+
+If you've seen Aftershoot, FilterPixel, Narrative, or any other "AI photo
+culling" SaaS, the things you'll notice immediately on PixCull:
+
+1. **Photos never leave your disk.** RAW decode, scoring, faces, GPS,
+   CLIP embeddings — every byte stays on your machine. There's an
+   optional DeepSeek meta-judge that calls *your* API token, and even
+   that just sends the rubric numbers (not the image).
+2. **Style clone learns YOU, not the average photographer.** Give
+   PixCull 5-20 of your past keepers, it learns a personal style
+   centroid (V1 axis-MAD + V2 CLIP embedding). Next event, it
+   re-ranks by "would the user keep this?" — not a hardcoded
+   notion of "good".
+3. **LAN multi-shooter sync.** Main shooter on Mac, second shooter on
+   iPad, editor on a laptop. One token; all three see annotations
+   merge in real-time. No cloud round-trip. v0.8-P0-2.
+4. **Lightroom round-trip both ways.** XMP sidecars Lightroom writes
+   pulled BACK into PixCull annotations — your manual Lr edits
+   feed the next training cycle. Not just "export to XMP", actual
+   bidirectional integration.
+5. **A real keyboard product.** Photo Mechanic-grade hotkeys (1/2/3 +
+   Shift-modified rhythm + `[` / `]` for verdict tweaks + `c` for
+   compare + ⌘K command palette + hold-Space cheat sheet + `?` full
+   shortcut overlay).
+6. **Open source, MIT.** Bring your own training data. Bring your
+   own scene model. The pipeline.py is 600 lines of Python you can
+   actually read.
 
 ## Quick start
 
