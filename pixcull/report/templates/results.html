@@ -139,7 +139,18 @@
       --duration-fast:   120ms;
       --duration-normal: 220ms;
       --duration-slow:   320ms;
-      --ease-out:        cubic-bezier(0.16, 1, 0.3, 1);
+      /* v0.9-P0-1 — "signature motion curve".
+         The old ease-out (0.16, 1, 0.3, 1) lands the transition
+         flat at the destination. The new curve overshoots by ~6%
+         and settles back (peak at y≈1.04, settles at 1.00 — what
+         Linear / Stripe / Apple Photos use).  Single-line change
+         that turns every 200+ var(--ease-out) usage from
+         "competent" to "alive".
+         (Original linear-extreme curve preserved as --ease-out-flat
+         for the rare case a true flat landing is needed — e.g.
+         data-bar widths, where overshoot would be misleading.) */
+      --ease-out:        cubic-bezier(0.34, 1.56, 0.64, 1);
+      --ease-out-flat:   cubic-bezier(0.16, 1, 0.3, 1);
       --ease-in-out:     cubic-bezier(0.4, 0, 0.2, 1);
       --ease-spring:     cubic-bezier(0.34, 1.56, 0.64, 1);
     }

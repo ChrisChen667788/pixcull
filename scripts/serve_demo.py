@@ -11731,9 +11731,14 @@ _DESIGN_TOKENS_CSS = r"""
     --shadow-xl: 0 24px 56px rgba(0,0,0,0.55);
     /* motion */
     --duration-fast: 120ms; --duration-normal: 220ms; --duration-slow: 320ms;
-    --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
-    --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
-    --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+    /* v0.9-P0-1 — signature soft-bounce: every transition gains
+       ~6% overshoot at the destination, mirroring Linear / Stripe /
+       Apple Photos.  Original flat curve preserved as --ease-out-flat
+       for the rare case overshoot would mislead (data bar widths). */
+    --ease-out:      cubic-bezier(0.34, 1.56, 0.64, 1);
+    --ease-out-flat: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-in-out:   cubic-bezier(0.4, 0, 0.2, 1);
+    --ease-spring:   cubic-bezier(0.34, 1.56, 0.64, 1);
   }
   /* Light theme override — same shape as results.html */
   html[data-theme="light"] {
