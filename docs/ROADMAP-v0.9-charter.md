@@ -213,11 +213,26 @@ SVG `<defs>` 加 `#aiBrandGrad`(diagonal)和 `#aiBrandGradV`(vertical),
 验证(dashoffset 0→44 随 score 0→1 线性变化;sparkline 路径随 axis
 values 起伏)。506/506 tests pass(无回归)。
 
-#### v0.9-P1-5 · iPad lightbox(swipe + pinch + tap-zoom)
-**估时**: 2-3 天
+#### v0.9-P1-5 · iPad lightbox(swipe + pinch + tap-zoom) ✅
+**估时**: 2-3 天 · **实际**: 1 天 · **已发布**
 
-当前必须点 ←→ 箭头 / 方向键。Apple Photos 风格 swipe gesture + pinch
-zoom + tap-to-zoom-here。vanilla touch event(无第三方库),~80 行 JS。
+完整 Apple Photos 触摸语义,vanilla TouchEvent(零第三方库,~180 行 JS):
+
+- **1 指水平 swipe ≥ 60 px**(fit 模式)→ prev/next 照片;
+  sub-threshold motion → 弹回(rubber-band damped 0.6 follow)
+- **1 指垂直 swipe down ≥ 100 px**(fit 模式)→ 关闭 lightbox
+  (Apple Photos 收起手势);drag-down 时图片同步缩小 + 下移给反馈
+- **1 指 drag**(1:1 模式)→ pan;复用现有 `_lbClampPan()` 边界
+- **2 指 pinch** → 缩放,围绕双指中点为锚点(用 `_lbZoomToPoint`);
+  startScale × (currentDist / startDist) 的标准 Apple 算法
+- **tap < 8 px / < 220 ms**(1 指)→ `_lbZoomToggleAt`,fit ↔ 1:1 切换
+
+CSS: `touch-action: none` + `user-select: none` + `-webkit-touch-callout`
+让 JS 完全拿到手势(防止 iOS 原生 pinch / 长按 magnify);`.dragging`
+class 在 drag 过程中关闭 transform transition 防 rubbery 跟手。
+
+无新单测(纯 TouchEvent 逻辑,jsdom 不模拟)— 端到端在 1147-row 真实
+婚礼 run 上人工验证。506/506 既有 tests pass(无回归)。
 
 ### P2(锦上添花,视情况)
 

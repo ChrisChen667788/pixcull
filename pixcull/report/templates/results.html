@@ -4217,6 +4217,22 @@
        slow enough to read direction). */
     .lightbox .img-pane img {
       transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
+      /* v0.9-P1-5 — iPad gesture ownership.  touch-action: none lets
+         the JS touchstart handler claim the whole gesture stream
+         (no native pinch-to-zoom or swipe-back interference).
+         user-select: none stops a long-press from triggering iOS
+         text selection on the image. */
+      touch-action: none;
+      -webkit-user-select: none;
+              user-select: none;
+      -webkit-touch-callout: none;
+    }
+    /* Suppress the rotation transition WHILE the user is actively
+       dragging — otherwise every pan-tick chases its own tail and
+       feels rubbery.  _lbZoom.dragging adds .dragging on touchstart
+       and removes it on touchend, matching the existing mouse path. */
+    .lightbox .img-pane img.dragging {
+      transition: none;
     }
     @media (prefers-reduced-motion: reduce) {
       .lightbox .img-pane img { transition-duration: 0.01ms; }
@@ -8959,6 +8975,181 @@
     const target = (_lbZoom.scale || 1) * factor;
     _lbZoomToPoint(target, e.clientX, e.clientY);
   }, { passive: false });
+
+  // ==================================================================
+  // v0.9-P1-5 — iPad / touch gestures for the lightbox.
+  //
+  // Three gestures, all vanilla TouchEvent — no third-party library:
+  //
+  //   * 1-finger swipe (when fit) — horizontal Δ > 60 px → prev/next.
+  //     Vertical Δ > 100 px → close lightbox (Apple Photos pattern).
+  //     Always wins over a tap; sub-threshold motion falls through
+  //     to the tap-to-zoom branch on touchend.
+  //
+  //   * 1-finger drag (when zoomed) — pan, identical to the existing
+  //     mouse-drag path but adapted for TouchEvent coords. Clamps via
+  //     the same _lbClampPan() so the photo can't drift off-screen.
+  //
+  //   * 2-finger pinch — zoom around the midpoint of the two fingers,
+  //     calling _lbZoomToPoint with scale = current * (now / start).
+  //
+  //   * tap (Δ < 8 px, < 200 ms, 1 finger) — _lbZoomToggleAt at the
+  //     touch point. Apple Photos: first tap fit → 1:1, second tap 1:1
+  //     → fit. Stays out of the way of two-finger pinches and swipes.
+  //
+  // Wired directly on lbImg + the lightbox shell so the user can grab
+  // either; native scroll/zoom is suppressed via touch-action CSS plus
+  // preventDefault on the start event (one-time, so iOS Safari's
+  // default tap-to-magnify never fires).
+  // ==================================================================
+  const _LB_TOUCH = {
+    active:        false,
+    startTime:     0,
+    // 1-finger
+    startX:        0,
+    startY:        0,
+    startPanX:     0,
+    startPanY:     0,
+    lastDX:        0,
+    lastDY:        0,
+    didSwipe:      false,
+    // 2-finger pinch
+    pinching:      false,
+    startDist:     0,
+    startMidX:     0,
+    startMidY:     0,
+    startScale:    1,
+    // gesture classification thresholds
+    tapDist:       8,
+    tapMs:         220,
+    swipeNavPx:    60,
+    swipeClosePx:  100,
+  };
+
+  function _lbTouchDist(t0, t1) {
+    return Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+  }
+  function _lbTouchMid(t0, t1) {
+    return [(t0.clientX + t1.clientX) / 2,
+            (t0.clientY + t1.clientY) / 2];
+  }
+
+  lbImg.addEventListener("touchstart", e => {
+    if (!lb.classList.contains("show")) return;
+    // Suppress iOS Safari's native pinch/scroll/tap-magnify so we
+    // own the gesture entirely.  touch-action: none on .lb-img
+    // (CSS below) handles it for browsers that honour it, but we
+    // still preventDefault for the older WebKit fallback.
+    if (e.touches.length >= 1) e.preventDefault();
+    _LB_TOUCH.active    = true;
+    _LB_TOUCH.startTime = Date.now();
+    _LB_TOUCH.didSwipe  = false;
+    if (e.touches.length === 1) {
+      _LB_TOUCH.pinching  = false;
+      _LB_TOUCH.startX    = e.touches[0].clientX;
+      _LB_TOUCH.startY    = e.touches[0].clientY;
+      _LB_TOUCH.startPanX = _lbZoom.panX;
+      _LB_TOUCH.startPanY = _lbZoom.panY;
+      _LB_TOUCH.lastDX    = 0;
+      _LB_TOUCH.lastDY    = 0;
+      if (_lbZoom.mode === "1to1") lbImg.classList.add("dragging");
+    } else if (e.touches.length === 2) {
+      _LB_TOUCH.pinching   = true;
+      _LB_TOUCH.startDist  = _lbTouchDist(e.touches[0], e.touches[1]);
+      const [mx, my]       = _lbTouchMid(e.touches[0], e.touches[1]);
+      _LB_TOUCH.startMidX  = mx;
+      _LB_TOUCH.startMidY  = my;
+      _LB_TOUCH.startScale = _lbZoom.scale || 1;
+      lbImg.classList.remove("dragging");
+    }
+  }, { passive: false });
+
+  lbImg.addEventListener("touchmove", e => {
+    if (!_LB_TOUCH.active) return;
+    e.preventDefault();
+    if (_LB_TOUCH.pinching && e.touches.length === 2) {
+      const dist = _lbTouchDist(e.touches[0], e.touches[1]);
+      const ratio = dist / (_LB_TOUCH.startDist || dist || 1);
+      const target = _LB_TOUCH.startScale * ratio;
+      const [mx, my] = _lbTouchMid(e.touches[0], e.touches[1]);
+      // Anchor the zoom around the midpoint of the two fingers so
+      // the pixel the user pinched stays under their fingers.
+      _lbZoomToPoint(target, mx, my);
+      return;
+    }
+    if (e.touches.length === 1) {
+      const dx = e.touches[0].clientX - _LB_TOUCH.startX;
+      const dy = e.touches[0].clientY - _LB_TOUCH.startY;
+      _LB_TOUCH.lastDX = dx;
+      _LB_TOUCH.lastDY = dy;
+      if (_lbZoom.mode === "1to1") {
+        // Drag-pan when zoomed.
+        _lbZoom.panX = _LB_TOUCH.startPanX + dx;
+        _lbZoom.panY = _LB_TOUCH.startPanY + dy;
+        _lbClampPan();
+        _applyLbTransform();
+      } else {
+        // Fit-mode: preview the swipe with a small follow-the-finger
+        // translate so the user feels the gesture being recognised.
+        // Only horizontal — vertical close-gesture also nudges DOWN
+        // for visual feedback.
+        const absX = Math.abs(dx), absY = Math.abs(dy);
+        if (absX > _LB_TOUCH.tapDist || absY > _LB_TOUCH.tapDist) {
+          _LB_TOUCH.didSwipe = true;
+          // Damped follow (60% of finger movement) gives a rubber-
+          // band feel without committing to a full transform.
+          if (absX > absY) {
+            lbImg.style.transform = `translateX(${dx * 0.6}px)`;
+          } else if (dy > 0) {
+            lbImg.style.transform = `translate(0, ${dy * 0.6}px) scale(${1 - dy / 1200})`;
+          }
+        }
+      }
+    }
+  }, { passive: false });
+
+  function _lbEndTouch() {
+    _LB_TOUCH.active = false;
+    _LB_TOUCH.pinching = false;
+    lbImg.classList.remove("dragging");
+  }
+
+  lbImg.addEventListener("touchend", e => {
+    if (!_LB_TOUCH.active) return;
+    const dt = Date.now() - _LB_TOUCH.startTime;
+    const dx = _LB_TOUCH.lastDX;
+    const dy = _LB_TOUCH.lastDY;
+    const wasPinching = _LB_TOUCH.pinching;
+    _lbEndTouch();
+    if (wasPinching) return;
+    // Tap-to-zoom: short, tight, not a swipe
+    if (!_LB_TOUCH.didSwipe
+        && Math.hypot(dx, dy) < _LB_TOUCH.tapDist
+        && dt < _LB_TOUCH.tapMs
+        && e.changedTouches.length === 1) {
+      const t = e.changedTouches[0];
+      _lbZoomToggleAt(t.clientX, t.clientY);
+      return;
+    }
+    // Reset any drag preview translate before deciding nav-vs-snap-back
+    if (_lbZoom.mode !== "1to1") lbImg.style.transform = "";
+    if (_lbZoom.mode === "1to1") return;  // pan completed — nothing else to do
+    const absX = Math.abs(dx), absY = Math.abs(dy);
+    if (absX > _LB_TOUCH.swipeNavPx && absX > absY) {
+      // Horizontal swipe: prev / next
+      lightboxStep(dx < 0 ? +1 : -1);
+    } else if (dy > _LB_TOUCH.swipeClosePx && absY > absX) {
+      // Vertical drag-down: close (Apple Photos)
+      lb.classList.remove("show");
+    }
+    // sub-threshold → snap back (the transform reset above already did it)
+  }, { passive: false });
+
+  lbImg.addEventListener("touchcancel", () => {
+    _lbEndTouch();
+    // Snap back from any partial swipe preview
+    if (_lbZoom.mode !== "1to1") lbImg.style.transform = "";
+  });
 
   // ============================================================
   // v0.7-P1-1 — Loupe RGB readout (lightbox).  Mirrors the
