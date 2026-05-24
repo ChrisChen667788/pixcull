@@ -3623,11 +3623,21 @@ class _Handler(BaseHTTPRequestHandler):
             run_id = path[len("/buckets/export/"):]
             return self._handle_bucket_export(run_id)
         # v0.7-P1-4 — issue a fresh share token for the run.
-        # POST /share/<run_id>/issue  body: {photographer?, client?}
+        # POST /share/<run_id>/issue  body: {photographer?, client?, event?, ...}
         # → {ok, token, url}
         if path.startswith("/share/") and path.endswith("/issue"):
             rid = path[len("/share/"):-len("/issue")]
             return self._handle_share_issue(rid)
+        # v0.9-P0-5 — client comment from the /share page.
+        # POST /share/<run_id>/<token>/comment  body: {body, author?}
+        # → {ok, n_comments}
+        if (path.startswith("/share/")
+                and path.endswith("/comment")
+                and path.count("/") == 4):
+            tail = path[len("/share/"):-len("/comment")]
+            if "/" in tail:
+                rid, tok = tail.split("/", 1)
+                return self._handle_share_comment(rid, tok)
         # v0.7-P2-1 — train (or retrain) a style-clone profile.
         # POST /style/train/<run_id>  body: {refs: [filename,...]}
         # → {ok, n_refs, profile_summary}
@@ -4042,6 +4052,11 @@ class _Handler(BaseHTTPRequestHandler):
             "token":        token,
             "photographer": str(body.get("photographer") or "").strip()[:80],
             "client":       str(body.get("client") or "").strip()[:80],
+            # v0.9-P0-5 — event metadata for the portfolio hero block.
+            # Optional; defaults to "" + auto-derived date range.
+            "event":        str(body.get("event") or "").strip()[:120],
+            "event_date":   str(body.get("event_date") or "").strip()[:30],
+            "contact":      str(body.get("contact") or "").strip()[:120],
             "issued_at":    datetime.now(timezone.utc).isoformat(),
         }
         try:
@@ -4106,16 +4121,24 @@ class _Handler(BaseHTTPRequestHandler):
         # *server-side* so a client can't toggle off the filter from
         # the page (the share contract is "you see what I picked").
         try:
-            keeps = self._share_collect_keeps(run)
+            keeps, meta = self._share_collect_keeps(run)
         except Exception as exc:
             _dbg("share/collect_keeps", exc, run_id)
             self.send_error(500, "failed to read run")
             return
 
+        # Read previously-saved client comments (one append-only file
+        # per run; the share page surfaces them under the comment box).
+        comments = self._share_read_comments(run)
+
         photographer = rec.get("photographer") or ""
-        client = rec.get("client") or ""
+        client       = rec.get("client") or ""
+        event        = rec.get("event") or ""
+        event_date   = rec.get("event_date") or ""
+        contact      = rec.get("contact") or ""
         html = self._render_share_html(
-            run_id, token, photographer, client, keeps
+            run_id, token, photographer, client,
+            event, event_date, contact, keeps, meta, comments,
         )
         body = html.encode("utf-8")
         self.send_response(200)
@@ -4127,17 +4150,42 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _share_collect_keeps(self, run: dict) -> list:
-        """Return [(filename, score_final), ...] for keep rows only."""
+    def _share_collect_keeps(self, run: dict) -> tuple[list, dict]:
+        """Return (rich_keep_rows, run_meta) for the share page.
+
+        v0.9-P0-5 — was previously ``[(filename, score), ...]``.  The
+        portfolio redesign needs chapter grouping + metadata tiles +
+        date range, so we now return:
+
+          keeps: [{filename, score, scene, wedding_moment, datetime,
+                   chapter}, ...]
+          meta:  {n_keeps, n_total, ratio, date_first, date_last,
+                  scenes: {name: count}, has_chapters: bool}
+
+        Chapter resolves to:
+          row["wedding_moment"] if present and non-empty
+            (e.g., "ceremony", "vows", "rings", "kiss"),
+          else row["scene"] mapped to a friendly bucket,
+          else "其他".
+
+        We also collapse annotation/* JSON-on-disk overrides (legacy
+        layout) AND annotations.jsonl last-line wins (v0.5+ canonical),
+        so a photo the user manually marked keep after the original
+        run still shows up.
+        """
         import csv as _csv
 
         scores_path = Path(run["output_dir"]) / "scores.csv"
         if not scores_path.exists():
-            return []
-        # Honor annotation/* overrides — a photo annotated as keep
-        # after the fact should appear too.
+            return [], {
+                "n_keeps": 0, "n_total": 0, "ratio": 0.0,
+                "date_first": "", "date_last": "",
+                "scenes": {}, "has_chapters": False,
+            }
+
+        # Annotation overrides — both layouts.
+        ann_overrides: dict[str, str] = {}
         ann_dir = Path(run["output_dir"]) / "annotation"
-        ann_overrides = {}
         if ann_dir.is_dir():
             for f in ann_dir.glob("*.json"):
                 try:
@@ -4148,10 +4196,63 @@ class _Handler(BaseHTTPRequestHandler):
                         ann_overrides[fn] = dec
                 except (OSError, ValueError):
                     continue
-        keeps = []
+        ann_jsonl = Path(run["output_dir"]) / "annotations.jsonl"
+        if ann_jsonl.exists():
+            try:
+                with open(ann_jsonl, "r", encoding="utf-8") as fh:
+                    for line in fh:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            d = json.loads(line)
+                        except ValueError:
+                            continue
+                        fn = d.get("filename")
+                        lbl = d.get("overall_label") or d.get("decision")
+                        if fn and lbl in {"keep", "maybe", "cull"}:
+                            ann_overrides[fn] = lbl
+            except OSError:
+                pass
+
+        # Friendly Chinese chapter labels for common scenes / moments.
+        _MOMENT_ZH = {
+            "ceremony":  "💒 仪式 · Ceremony",
+            "vows":      "📝 誓词 · Vows",
+            "rings":     "💍 戒指 · Rings",
+            "kiss":      "💋 亲吻 · Kiss",
+            "entrance":  "🚪 入场 · Entrance",
+            "speeches":  "🎤 致词 · Speeches",
+            "first_dance": "💃 第一支舞 · First Dance",
+            "cake":      "🎂 切蛋糕 · Cake",
+            "group":     "👥 合影 · Group Photo",
+            "detail":    "🔍 细节 · Details",
+            "candid":    "📸 抓拍 · Candid",
+            "portrait":  "👤 人像 · Portrait",
+        }
+        _SCENE_ZH = {
+            "landscape":   "🏞 风光 · Landscape",
+            "wildlife":    "🦅 野生 · Wildlife",
+            "portrait":    "👤 人像 · Portrait",
+            "wedding":     "💒 婚礼 · Wedding",
+            "sports":      "⚽ 运动 · Sports",
+            "street":      "🚶 街拍 · Street",
+            "architecture":"🏛 建筑 · Architecture",
+            "night":       "🌃 夜景 · Night",
+            "macro":       "🔬 微距 · Macro",
+            "abstract":    "🎨 抽象 · Abstract",
+            "stilllife":   "🍎 静物 · Still Life",
+            "documentary": "📰 纪实 · Documentary",
+        }
+
+        keeps: list = []
+        scenes: dict[str, int] = {}
+        dates: list[str] = []
+        n_total = 0
+        has_chapters = False
         with open(scores_path, "r", encoding="utf-8-sig", newline="") as fh:
-            reader = _csv.DictReader(fh)
-            for row in reader:
+            for row in _csv.DictReader(fh):
+                n_total += 1
                 fn = row.get("filename") or ""
                 if not fn:
                     continue
@@ -4162,10 +4263,125 @@ class _Handler(BaseHTTPRequestHandler):
                     score = float(row.get("score_final") or 0)
                 except ValueError:
                     score = 0.0
-                keeps.append((fn, score))
-        # Sort by score desc — best-first delivery
-        keeps.sort(key=lambda t: t[1], reverse=True)
-        return keeps
+                scene = (row.get("scene") or "").strip()
+                wmoment = (row.get("wedding_moment") or "").strip()
+                dt = (row.get("datetime") or "").strip()
+                if dt:
+                    dates.append(dt)
+                # Chapter: prefer wedding_moment, fall back to scene.
+                if wmoment:
+                    chapter = _MOMENT_ZH.get(wmoment, wmoment)
+                    has_chapters = True
+                elif scene:
+                    chapter = _SCENE_ZH.get(scene, scene)
+                else:
+                    chapter = "📷 其他 · Other"
+                if scene:
+                    scenes[scene] = scenes.get(scene, 0) + 1
+                keeps.append({
+                    "filename": fn,
+                    "score":    score,
+                    "scene":    scene,
+                    "wedding_moment": wmoment,
+                    "datetime": dt,
+                    "chapter":  chapter,
+                })
+        # Sort: best-first within each chapter; chapter ordering follows
+        # first-appearance order (preserves wedding chronology).
+        keeps.sort(key=lambda r: -r["score"])
+        dates.sort()
+        meta = {
+            "n_keeps":   len(keeps),
+            "n_total":   n_total,
+            "ratio":     round(len(keeps) / n_total, 4) if n_total else 0.0,
+            "date_first": dates[0][:10] if dates else "",
+            "date_last":  dates[-1][:10] if dates else "",
+            "scenes":     scenes,
+            "has_chapters": has_chapters,
+        }
+        return keeps, meta
+
+    # v0.9-P0-5 — client comment box.  Clients drop short feedback
+    # ("re-pick #007 + #023 please") that the photographer reads from
+    # within /results.  Stored append-only so audit trail survives
+    # even if the photographer later revokes the token.
+    def _share_comments_path(self, run: dict) -> Path:
+        return Path(run["output_dir"]) / "share_comments.json"
+
+    def _share_read_comments(self, run: dict) -> list[dict]:
+        p = self._share_comments_path(run)
+        if not p.exists():
+            return []
+        try:
+            data = json.loads(p.read_text("utf-8"))
+        except (OSError, ValueError):
+            return []
+        return data if isinstance(data, list) else []
+
+    def _handle_share_comment(
+        self, run_id: str, token: str
+    ) -> None:
+        """POST /share/<run_id>/<token>/comment  body: {body, author?}
+        → {ok, n_comments}  (idempotent on identical (token, body, author)
+        within 60s — guards against double-submit on slow networks).
+        """
+        run = _get_run(run_id) or _reload_run_from_disk(run_id)
+        if run is None:
+            self.send_error(404, "no such run")
+            return
+        tokens = self._read_share_tokens(run)
+        rec = tokens.get(token)
+        if not rec:
+            self.send_error(404, "share link not found")
+            return
+        try:
+            n = int(self.headers.get("Content-Length") or "0")
+        except ValueError:
+            n = 0
+        raw = self.rfile.read(n) if n > 0 else b""
+        try:
+            body = json.loads(raw or b"{}")
+        except ValueError:
+            body = {}
+        if not isinstance(body, dict):
+            body = {}
+        text = str(body.get("body") or "").strip()[:2000]
+        if not text:
+            self.send_error(400, "missing 'body'")
+            return
+        author = str(body.get("author") or rec.get("client") or "").strip()[:80]
+        now = datetime.now(timezone.utc).isoformat()
+        new_entry = {
+            "ts":     now,
+            "author": author,
+            "body":   text,
+            "token":  token,
+        }
+        comments = self._share_read_comments(run)
+        # Idempotency guard (double-submit)
+        from datetime import timedelta
+        cutoff = datetime.now(timezone.utc) - timedelta(seconds=60)
+        for c in comments[-5:]:   # only scan tail
+            try:
+                ts_dt = datetime.fromisoformat(c.get("ts", ""))
+            except ValueError:
+                continue
+            if (c.get("token") == token and c.get("body") == text
+                    and c.get("author") == author and ts_dt >= cutoff):
+                self._json_ok({"ok": True, "n_comments": len(comments),
+                                "duplicate": True})
+                return
+        comments.append(new_entry)
+        try:
+            self._share_comments_path(run).write_text(
+                json.dumps(comments, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except OSError as exc:
+            _dbg("share/comment_write", exc, run_id)
+            self.send_error(500, "failed to save comment")
+            return
+        self._json_ok({"ok": True, "n_comments": len(comments)})
 
     def _render_share_html(
         self,
@@ -4173,120 +4389,626 @@ class _Handler(BaseHTTPRequestHandler):
         token: str,
         photographer: str,
         client: str,
+        event: str,
+        event_date: str,
+        contact: str,
         keeps: list,
+        meta: dict,
+        comments: list,
     ) -> str:
-        """Render the minimal client-delivery page (self-contained)."""
+        """v0.9-P0-5 — portfolio-style client delivery page.
+
+        Layout:
+          1. Workspace bar (PixCull brand + photographer + event)
+          2. Hero block (event name in serif, date, photographer/client)
+          3. Metadata tiles (4 stat tiles in brand gradient)
+          4. Chapter sections (auto-grouped by wedding_moment / scene)
+          5. Comment box + recent client comments
+          6. Signature footer (photographer + contact + Powered by)
+          + Inline JS lightbox (click any card → full-screen view + nav)
+        """
         from html import escape as _esc
 
-        cards = []
-        for fn, score in keeps:
-            cards.append(
-                f'''<a class="card" href="/full/{run_id}/{_esc(fn)}" target="_blank" rel="noopener">
-                  <img loading="lazy" src="/thumb/{run_id}/{_esc(fn)}?w=420" alt="{_esc(fn)}">
-                  <div class="cap">{_esc(fn)}</div>
-                </a>'''
+        # --- Group keeps by chapter, preserve first-appearance order ---
+        chapter_order: list[str] = []
+        chapter_keeps: dict[str, list[dict]] = {}
+        for r in keeps:
+            ch = r.get("chapter") or "📷 其他 · Other"
+            if ch not in chapter_keeps:
+                chapter_keeps[ch] = []
+                chapter_order.append(ch)
+            chapter_keeps[ch].append(r)
+
+        # Build URLs once
+        def _thumb_url(fn: str) -> str:
+            return f"/thumb/{run_id}/{_esc(fn)}?w=600"
+
+        def _full_url(fn: str) -> str:
+            return f"/full/{run_id}/{_esc(fn)}"
+
+        # --- Card HTML for one filename ---
+        def _card(r: dict, idx: int) -> str:
+            fn = r["filename"]
+            return (
+                f'<a class="ph-card" data-idx="{idx}" '
+                f'href="{_full_url(fn)}" target="_blank" rel="noopener">'
+                f'<img loading="lazy" src="{_thumb_url(fn)}" alt="{_esc(fn)}">'
+                f'<div class="ph-cap"><span class="ph-fn">{_esc(fn)}</span></div>'
+                f'</a>'
             )
-        cards_html = "\n".join(cards) if cards else (
-            '<div class="empty">摄影师还没有挑出片 — 请稍后再来。</div>'
+
+        # --- Chapter sections ---
+        all_idx = 0
+        chapter_sections: list[str] = []
+        flat_filenames: list[str] = []  # for lightbox nav order
+        if not keeps:
+            chapter_sections.append(
+                '<div class="ph-empty">'
+                '摄影师还没有挑出片 — 请稍后再来。'
+                '</div>'
+            )
+        else:
+            for ch in chapter_order:
+                rows = chapter_keeps[ch]
+                cards = []
+                for r in rows:
+                    cards.append(_card(r, all_idx))
+                    flat_filenames.append(r["filename"])
+                    all_idx += 1
+                chapter_sections.append(
+                    f'<section class="ph-chapter">'
+                    f'  <header class="ph-ch-header">'
+                    f'    <h2 class="ph-ch-title">{_esc(ch)}</h2>'
+                    f'    <span class="ph-ch-count">{len(rows)} 张</span>'
+                    f'  </header>'
+                    f'  <div class="ph-grid">{chr(10).join(cards)}</div>'
+                    f'</section>'
+                )
+        all_cards_json = json.dumps(flat_filenames, ensure_ascii=False)
+
+        # --- Hero / metadata ---
+        event_title = event or (
+            f"{client}'s gallery" if client else "精选交付"
         )
-        header_lines = []
-        if photographer:
-            header_lines.append(
-                f'<span class="lbl">摄影师</span><span class="val">{_esc(photographer)}</span>'
+        date_line = ""
+        if event_date:
+            date_line = event_date
+        elif meta.get("date_first") and meta.get("date_last"):
+            if meta["date_first"] == meta["date_last"]:
+                date_line = meta["date_first"]
+            else:
+                date_line = f"{meta['date_first']} → {meta['date_last']}"
+        ratio_pct = f"{meta.get('ratio', 0) * 100:.1f}%"
+
+        # --- Comments list (newest first) ---
+        comments_html = ""
+        if comments:
+            items = []
+            for c in reversed(comments[-50:]):  # cap at last 50
+                ts = (c.get("ts") or "")[:16].replace("T", " ")
+                a = _esc(c.get("author") or "客户")
+                t = _esc(c.get("body") or "").replace("\n", "<br>")
+                items.append(
+                    f'<li class="ph-comment">'
+                    f'<div class="ph-comment-head">'
+                    f'  <span class="ph-comment-author">{a}</span>'
+                    f'  <span class="ph-comment-ts">{_esc(ts)}</span>'
+                    f'</div>'
+                    f'<div class="ph-comment-body">{t}</div>'
+                    f'</li>'
+                )
+            comments_html = (
+                f'<div class="ph-comment-list-wrap">'
+                f'  <h3 class="ph-comment-list-title">'
+                f'    最近 {len(comments)} 条留言'
+                f'  </h3>'
+                f'  <ul class="ph-comment-list">{"".join(items)}</ul>'
+                f'</div>'
             )
-        if client:
-            header_lines.append(
-                f'<span class="lbl">客户</span><span class="val">{_esc(client)}</span>'
+
+        contact_html = ""
+        if contact:
+            contact_html = (
+                f'<div class="ph-sig-contact">'
+                f'  {_esc(contact)}'
+                f'</div>'
             )
-        header_html = (
-            f'<div class="head-meta">{"".join(header_lines)}</div>'
-            if header_lines else ""
-        )
+
         return f"""<!doctype html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
-<title>{_esc(photographer or "PixCull")} · 精选交付</title>
+<title>{_esc(event_title)} · {_esc(photographer or "PixCull")}</title>
 <style>
   :root {{
     color-scheme: dark;
-    --bg: #0b0d10; --bg-card: #14171c;
-    --fg: #e8eaed; --fg-2: #c6c9cf; --muted: #8a8e96;
+    --bg: #0a0a1e; --bg-card: #14171c; --bg-soft: #1a1230;
+    --fg: #e8eaed; --fg-2: #c6c9cf; --muted: #8a8e96; --muted-soft: #6b7280;
     --border: rgba(255,255,255,0.10);
-    --accent: #6366f1;
+    --border-hi: rgba(255,255,255,0.18);
+    --brand-gradient: linear-gradient(135deg, #6E56CF 0%, #A855F7 50%, #EC4899 100%);
+    --brand-gradient-soft: linear-gradient(135deg, rgba(110,86,207,0.18) 0%, rgba(236,72,153,0.18) 100%);
+    --accent: #A855F7;
+    --font-serif: "Charter","Iowan Old Style","PT Serif","Source Serif Pro","Cambria",Georgia,"Songti SC",serif;
+    --font-sans: -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
+    --ease-out: cubic-bezier(0.34, 1.56, 0.64, 1);
   }}
   *,*::before,*::after {{ box-sizing: border-box; }}
   html,body {{ margin: 0; padding: 0; background: var(--bg); color: var(--fg);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
-                 "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-    -webkit-font-smoothing: antialiased; }}
-  header {{
-    padding: 36px 24px 24px;
+    font-family: var(--font-sans); -webkit-font-smoothing: antialiased;
+    line-height: 1.5; }}
+
+  /* ===== Workspace bar (sticky brand + photographer) ===== */
+  .ph-bar {{
+    position: sticky; top: 0; z-index: 5;
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 24px;
+    background: rgba(10,10,30,0.85);
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
     border-bottom: 1px solid var(--border);
-    text-align: center;
+    font-size: 13px;
   }}
-  header h1 {{ margin: 0 0 6px; font-size: 24px; font-weight: 700; letter-spacing: 0.02em; }}
-  header .sub {{ margin: 0; color: var(--muted); font-size: 13px; }}
-  .head-meta {{
-    display: inline-flex; flex-wrap: wrap; justify-content: center;
-    gap: 6px 14px; margin-top: 14px;
-    font-size: 12px;
+  .ph-bar-logo {{ width: 24px; height: 24px; display: flex; }}
+  .ph-bar-mark {{ font-weight: 700; letter-spacing: -0.01em; color: var(--fg); }}
+  .ph-bar-mark .grad {{
+    background: var(--brand-gradient);
+    -webkit-background-clip: text; background-clip: text;
+    color: transparent;
   }}
-  .head-meta .lbl {{ color: var(--muted); margin-right: 4px; }}
-  .head-meta .val {{ color: var(--fg-2); font-weight: 600; }}
-  main {{ padding: 24px; max-width: 1280px; margin: 0 auto; }}
-  .count {{ color: var(--muted); font-size: 12px; margin: 0 0 16px;
-            text-align: center; letter-spacing: 0.04em; text-transform: uppercase; }}
-  .grid {{
+  .ph-bar-spacer {{ flex: 1; }}
+  .ph-bar-pp {{ color: var(--muted); font-size: 12px; }}
+  .ph-bar-pp b {{ color: var(--fg-2); font-weight: 600; margin-right: 4px; }}
+
+  /* ===== Hero block ===== */
+  .ph-hero {{
+    padding: 80px 24px 60px; text-align: center;
+    position: relative; overflow: hidden;
+  }}
+  .ph-hero::before {{
+    /* Soft brand-gradient glow behind the title */
+    content: ""; position: absolute; left: 50%; top: 30%;
+    width: 720px; height: 480px; transform: translate(-50%, -50%);
+    background: var(--brand-gradient); opacity: 0.18;
+    filter: blur(80px); pointer-events: none;
+  }}
+  .ph-hero-event {{
+    margin: 0 0 14px; font-family: var(--font-serif);
+    font-size: clamp(36px, 6vw, 64px); font-weight: 700;
+    letter-spacing: -0.01em; line-height: 1.1;
+    background: linear-gradient(180deg, #ffffff 0%, #cbd0d8 100%);
+    -webkit-background-clip: text; background-clip: text;
+    color: transparent; position: relative;
+  }}
+  .ph-hero-meta {{
+    color: var(--muted); font-size: 14px; letter-spacing: 0.04em;
+    text-transform: uppercase; position: relative;
+  }}
+  .ph-hero-meta b {{ color: var(--fg-2); font-weight: 600; }}
+  .ph-hero-meta .sep {{ opacity: 0.4; margin: 0 12px; }}
+
+  /* ===== Stat tiles ===== */
+  .ph-tiles {{
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 12px; max-width: 880px; margin: 30px auto 60px;
+    padding: 0 24px;
+  }}
+  .ph-tile {{
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 18px 16px;
+    position: relative; overflow: hidden;
+  }}
+  .ph-tile::before {{
+    /* Soft gradient wash bottom-right */
+    content: ""; position: absolute; right: -20%; bottom: -50%;
+    width: 200%; height: 200%;
+    background: var(--brand-gradient-soft);
+    opacity: 0.6; pointer-events: none;
+  }}
+  .ph-tile-v {{
+    font-family: var(--font-serif); font-weight: 700;
+    font-size: 36px; line-height: 1; letter-spacing: -0.01em;
+    background: var(--brand-gradient);
+    -webkit-background-clip: text; background-clip: text;
+    color: transparent;
+    font-variant-numeric: tabular-nums lining-nums;
+    position: relative;
+  }}
+  .ph-tile-k {{
+    color: var(--muted); font-size: 11.5px; margin-top: 4px;
+    letter-spacing: 0.05em; text-transform: uppercase;
+    position: relative;
+  }}
+
+  /* ===== Chapter sections ===== */
+  main.ph-main {{ max-width: 1280px; margin: 0 auto; padding: 0 24px 40px; }}
+  .ph-chapter {{ margin-bottom: 48px; }}
+  .ph-ch-header {{
+    display: flex; align-items: baseline; gap: 14px;
+    padding: 0 0 14px; margin-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }}
+  .ph-ch-title {{
+    margin: 0; font-family: var(--font-serif); font-weight: 700;
+    font-size: 22px; letter-spacing: -0.01em; color: var(--fg);
+  }}
+  .ph-ch-count {{
+    color: var(--muted); font-size: 12px;
+    letter-spacing: 0.04em; text-transform: uppercase;
+  }}
+  .ph-grid {{
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
     gap: 12px;
   }}
-  .card {{
+  .ph-card {{
     display: block; text-decoration: none; color: inherit;
     background: var(--bg-card); border: 1px solid var(--border);
-    border-radius: 8px; overflow: hidden;
-    transition: transform 160ms ease-out, border-color 160ms ease-out;
+    border-radius: 10px; overflow: hidden;
+    transition: transform 200ms var(--ease-out),
+                border-color 200ms var(--ease-out),
+                box-shadow 200ms var(--ease-out);
+    position: relative;
   }}
-  .card:hover {{ transform: translateY(-2px); border-color: var(--accent); }}
-  .card img {{ display: block; width: 100%; aspect-ratio: 3/2; object-fit: cover; background: #1c1f24; }}
-  .card .cap {{
-    padding: 8px 10px; font-size: 11px; color: var(--muted);
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  .ph-card:hover {{
+    transform: translateY(-3px);
+    border-color: rgba(168,85,247,0.55);
+    box-shadow: 0 12px 28px rgba(110,86,207,0.25);
   }}
-  .empty {{ text-align: center; color: var(--muted); padding: 48px 12px; font-size: 13px; }}
-  footer {{
-    margin-top: 32px; padding: 18px 24px;
+  .ph-card img {{
+    display: block; width: 100%; aspect-ratio: 3/2;
+    object-fit: cover; background: #1c1f24;
+  }}
+  .ph-cap {{
+    padding: 8px 12px; font-size: 11px; color: var(--muted);
     border-top: 1px solid var(--border);
-    text-align: center; color: var(--muted); font-size: 11px;
-    letter-spacing: 0.04em;
   }}
-  footer a {{ color: var(--fg-2); text-decoration: none; }}
+  .ph-fn {{
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    display: inline-block; max-width: 100%;
+  }}
+  .ph-empty {{
+    text-align: center; color: var(--muted); padding: 80px 12px;
+    font-size: 15px;
+  }}
+
+  /* ===== Comment box ===== */
+  .ph-comments {{
+    max-width: 720px; margin: 40px auto 60px; padding: 0 24px;
+  }}
+  .ph-comment-form {{
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 14px; padding: 18px 18px 14px;
+  }}
+  .ph-comment-form h3 {{
+    margin: 0 0 8px; font-family: var(--font-serif); font-weight: 700;
+    font-size: 19px; color: var(--fg);
+  }}
+  .ph-comment-form p {{
+    color: var(--muted); font-size: 12.5px; margin: 0 0 12px;
+  }}
+  .ph-comment-form textarea {{
+    width: 100%; min-height: 84px; resize: vertical;
+    background: var(--bg); color: var(--fg);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 12px; font: inherit; font-size: 13.5px;
+    transition: border-color 160ms var(--ease-out);
+  }}
+  .ph-comment-form textarea:focus {{
+    outline: 0; border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(168,85,247,0.20);
+  }}
+  .ph-comment-form-row {{
+    display: flex; gap: 10px; margin-top: 10px;
+  }}
+  .ph-comment-form input[name="author"] {{
+    flex: 1; background: var(--bg); color: var(--fg);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 12px; font: inherit; font-size: 12.5px;
+    min-width: 0;
+  }}
+  .ph-comment-form button {{
+    padding: 0 18px; font-size: 13px; font-weight: 600;
+    background: var(--brand-gradient); color: #ffffff;
+    border: 0; border-radius: 8px; cursor: pointer;
+    box-shadow: 0 4px 14px rgba(110,86,207,0.35);
+    transition: filter 160ms var(--ease-out),
+                transform 160ms var(--ease-out);
+  }}
+  .ph-comment-form button:hover {{ filter: brightness(1.08); transform: translateY(-1px); }}
+  .ph-comment-form button:disabled {{ filter: grayscale(0.4) brightness(0.6); cursor: not-allowed; }}
+  .ph-comment-form-status {{
+    font-size: 11.5px; color: var(--muted); margin-top: 8px; min-height: 16px;
+  }}
+  .ph-comment-form-status.ok {{ color: #88e0a6; }}
+  .ph-comment-form-status.err {{ color: #ee8888; }}
+  .ph-comment-list-wrap {{ margin-top: 26px; }}
+  .ph-comment-list-title {{
+    margin: 0 0 12px; font-size: 12.5px; color: var(--muted);
+    letter-spacing: 0.05em; text-transform: uppercase; font-weight: 600;
+  }}
+  .ph-comment-list {{ list-style: none; margin: 0; padding: 0; }}
+  .ph-comment {{
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 14px; margin-bottom: 8px;
+  }}
+  .ph-comment-head {{
+    display: flex; align-items: baseline; gap: 10px;
+    margin-bottom: 4px; font-size: 12px;
+  }}
+  .ph-comment-author {{ color: var(--fg-2); font-weight: 600; }}
+  .ph-comment-ts {{ color: var(--muted-soft); font-family: ui-monospace, monospace; font-size: 11px; }}
+  .ph-comment-body {{ color: var(--fg); font-size: 13.5px; line-height: 1.55; }}
+
+  /* ===== Signature footer ===== */
+  footer.ph-foot {{
+    border-top: 1px solid var(--border);
+    padding: 40px 24px 28px; text-align: center;
+    color: var(--muted); font-size: 12px; letter-spacing: 0.04em;
+  }}
+  .ph-sig {{ margin-bottom: 18px; }}
+  .ph-sig-name {{
+    font-family: var(--font-serif); font-weight: 700;
+    font-size: 22px; color: var(--fg-2);
+    letter-spacing: 0; text-transform: none; margin-bottom: 4px;
+  }}
+  .ph-sig-contact {{
+    color: var(--muted); font-size: 11.5px; letter-spacing: 0.02em;
+  }}
+  .ph-powered a {{
+    background: var(--brand-gradient);
+    -webkit-background-clip: text; background-clip: text;
+    color: transparent;
+    text-decoration: none; font-weight: 600;
+  }}
+
+  /* ===== Lightbox ===== */
+  .ph-lb {{
+    position: fixed; inset: 0; z-index: 50;
+    background: rgba(0,0,0,0.94);
+    display: none; align-items: center; justify-content: center;
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  }}
+  .ph-lb.show {{ display: flex; }}
+  .ph-lb-img {{
+    max-width: 95vw; max-height: 88vh;
+    object-fit: contain; border-radius: 6px;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.7);
+  }}
+  .ph-lb-caption {{
+    position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%);
+    color: var(--muted); font-size: 12px;
+    font-family: ui-monospace, monospace;
+  }}
+  .ph-lb-nav {{
+    position: absolute; top: 50%; transform: translateY(-50%);
+    width: 44px; height: 44px; border-radius: 50%;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.18);
+    color: #fff; font-size: 20px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 160ms var(--ease-out);
+  }}
+  .ph-lb-nav:hover {{ background: rgba(255,255,255,0.18); }}
+  .ph-lb-prev {{ left: 18px; }}
+  .ph-lb-next {{ right: 18px; }}
+  .ph-lb-close {{
+    position: absolute; top: 16px; right: 16px;
+    width: 36px; height: 36px; border-radius: 50%;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.15);
+    color: #fff; cursor: pointer; font-size: 18px;
+    display: flex; align-items: center; justify-content: center;
+  }}
+
   @media (max-width: 640px) {{
-    header {{ padding: 24px 14px 16px; }}
-    header h1 {{ font-size: 19px; }}
-    main {{ padding: 16px 12px; }}
-    .grid {{ grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }}
+    .ph-bar {{ padding: 8px 14px; font-size: 12px; }}
+    .ph-bar-pp {{ display: none; }}
+    .ph-hero {{ padding: 50px 14px 40px; }}
+    .ph-tiles {{ grid-template-columns: repeat(2, 1fr); gap: 8px;
+                  margin: 18px auto 36px; padding: 0 14px; }}
+    .ph-tile {{ padding: 12px 12px; }}
+    .ph-tile-v {{ font-size: 26px; }}
+    main.ph-main {{ padding: 0 14px 20px; }}
+    .ph-grid {{ grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }}
+    .ph-ch-title {{ font-size: 17px; }}
+    .ph-comments {{ padding: 0 14px; }}
+    .ph-lb-nav {{ width: 36px; height: 36px; font-size: 16px; }}
   }}
 </style>
 </head>
 <body>
-  <header>
-    <h1>{_esc(photographer or "精选交付")}</h1>
-    <p class="sub">PixCull · 客户交付预览</p>
-    {header_html}
-  </header>
-  <main>
-    <p class="count">{len(keeps)} 张精选</p>
-    <div class="grid">
-      {cards_html}
+
+  <!-- ===== Sticky brand bar ===== -->
+  <div class="ph-bar">
+    <span class="ph-bar-logo" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none">
+        <defs>
+          <linearGradient id="pcSharePg" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%"   stop-color="#6E56CF"/>
+            <stop offset="100%" stop-color="#EC4899"/>
+          </linearGradient>
+        </defs>
+        <circle cx="4"  cy="5"  r="1.6" fill="currentColor" opacity="0.32"/>
+        <circle cx="20" cy="6"  r="1.4" fill="currentColor" opacity="0.28"/>
+        <circle cx="3"  cy="19" r="1.8" fill="currentColor" opacity="0.30"/>
+        <circle cx="21" cy="20" r="1.3" fill="currentColor" opacity="0.28"/>
+        <circle cx="12" cy="12" r="7"  fill="url(#pcSharePg)"/>
+      </svg>
+    </span>
+    <span class="ph-bar-mark">Pix<span class="grad">Cull</span></span>
+    <span class="ph-bar-spacer"></span>
+    {f'<span class="ph-bar-pp"><b>摄影师</b>{_esc(photographer)}</span>' if photographer else ''}
+  </div>
+
+  <!-- ===== Hero ===== -->
+  <section class="ph-hero">
+    <h1 class="ph-hero-event">{_esc(event_title)}</h1>
+    <p class="ph-hero-meta">
+      {f'<b>{_esc(photographer)}</b>' if photographer else ''}
+      {('<span class="sep">·</span>' if photographer and client else '')}
+      {f'<b>{_esc(client)}</b>' if client else ''}
+      {('<span class="sep">·</span>' if (photographer or client) and date_line else '')}
+      {f'<b>{_esc(date_line)}</b>' if date_line else ''}
+    </p>
+  </section>
+
+  <!-- ===== Metadata tiles ===== -->
+  <div class="ph-tiles">
+    <div class="ph-tile">
+      <div class="ph-tile-v">{meta.get('n_keeps', 0)}</div>
+      <div class="ph-tile-k">精选</div>
     </div>
+    <div class="ph-tile">
+      <div class="ph-tile-v">{meta.get('n_total', 0)}</div>
+      <div class="ph-tile-k">原片</div>
+    </div>
+    <div class="ph-tile">
+      <div class="ph-tile-v">{ratio_pct}</div>
+      <div class="ph-tile-k">入选率</div>
+    </div>
+    <div class="ph-tile">
+      <div class="ph-tile-v">{len(chapter_order)}</div>
+      <div class="ph-tile-k">{'章节' if meta.get('has_chapters') else '场景'}</div>
+    </div>
+  </div>
+
+  <!-- ===== Chapter sections (or empty state) ===== -->
+  <main class="ph-main">
+    {chr(10).join(chapter_sections)}
   </main>
-  <footer>
-    Powered by <a href="https://github.com/haozi667788/pixcull" rel="noopener" target="_blank">PixCull</a>
+
+  <!-- ===== Comment box + recent comments ===== -->
+  <div class="ph-comments">
+    <form class="ph-comment-form" id="phCommentForm" action="#">
+      <h3>留言 / 反馈</h3>
+      <p>有想重选 / 重修的照片?在这里告诉摄影师即可,留言会直接出现在他的 PixCull 工作台。</p>
+      <textarea name="body" placeholder="例: IMG_023 + IMG_087 可以换张笑得更自然的吗?谢谢!"
+                maxlength="2000" required></textarea>
+      <div class="ph-comment-form-row">
+        <input name="author" placeholder="您的称呼(可选)"
+               value="{_esc(client)}" maxlength="80"/>
+        <button type="submit" id="phCommentSubmit">发送留言</button>
+      </div>
+      <div class="ph-comment-form-status" id="phCommentStatus" aria-live="polite"></div>
+    </form>
+    {comments_html}
+  </div>
+
+  <!-- ===== Signature footer ===== -->
+  <footer class="ph-foot">
+    {f'<div class="ph-sig"><div class="ph-sig-name">{_esc(photographer)}</div>{contact_html}</div>' if photographer else ''}
+    <div class="ph-powered">
+      Powered by
+      <a href="https://github.com/ChrisChen667788/pixcull" rel="noopener" target="_blank">PixCull</a>
+      — 本地优先 AI 摄影选片
+    </div>
   </footer>
+
+  <!-- ===== Lightbox (inline, vanilla JS) ===== -->
+  <div class="ph-lb" id="phLb" role="dialog" aria-hidden="true">
+    <button class="ph-lb-close" id="phLbClose" type="button" aria-label="关闭">✕</button>
+    <button class="ph-lb-nav ph-lb-prev" id="phLbPrev" type="button" aria-label="上一张">‹</button>
+    <img class="ph-lb-img" id="phLbImg" alt=""/>
+    <button class="ph-lb-nav ph-lb-next" id="phLbNext" type="button" aria-label="下一张">›</button>
+    <div class="ph-lb-caption" id="phLbCaption"></div>
+  </div>
+
+<script>
+(function() {{
+  // ----- Lightbox: click any card opens full-screen viewer -----
+  const FNS = {all_cards_json};
+  const RUN_ID = {json.dumps(run_id)};
+  const lb       = document.getElementById("phLb");
+  const lbImg    = document.getElementById("phLbImg");
+  const lbCap    = document.getElementById("phLbCaption");
+  const lbClose  = document.getElementById("phLbClose");
+  const lbPrev   = document.getElementById("phLbPrev");
+  const lbNext   = document.getElementById("phLbNext");
+  let curIdx = -1;
+  function open(i) {{
+    if (i < 0 || i >= FNS.length) return;
+    curIdx = i;
+    const fn = FNS[i];
+    lbImg.src = `/full/${{RUN_ID}}/${{encodeURIComponent(fn)}}`;
+    lbCap.textContent = `${{fn}} · ${{i + 1}} / ${{FNS.length}}`;
+    lb.classList.add("show");
+    lb.setAttribute("aria-hidden", "false");
+  }}
+  function close() {{
+    lb.classList.remove("show");
+    lb.setAttribute("aria-hidden", "true");
+    lbImg.src = "";
+  }}
+  function step(d) {{
+    let i = curIdx + d;
+    if (i < 0) i = FNS.length - 1;
+    if (i >= FNS.length) i = 0;
+    open(i);
+  }}
+  document.querySelectorAll(".ph-card").forEach((c, i) => {{
+    c.addEventListener("click", e => {{
+      e.preventDefault();
+      open(parseInt(c.dataset.idx, 10));
+    }});
+  }});
+  lbClose.addEventListener("click", close);
+  lbPrev.addEventListener("click", () => step(-1));
+  lbNext.addEventListener("click", () => step(+1));
+  lb.addEventListener("click", e => {{ if (e.target === lb) close(); }});
+  document.addEventListener("keydown", e => {{
+    if (!lb.classList.contains("show")) return;
+    if (e.key === "Escape") close();
+    else if (e.key === "ArrowLeft")  step(-1);
+    else if (e.key === "ArrowRight") step(+1);
+  }});
+
+  // ----- Comment form submit -----
+  const form    = document.getElementById("phCommentForm");
+  const submit  = document.getElementById("phCommentSubmit");
+  const status  = document.getElementById("phCommentStatus");
+  form.addEventListener("submit", async e => {{
+    e.preventDefault();
+    const body   = form.body.value.trim();
+    const author = form.author.value.trim();
+    if (!body) {{
+      status.textContent = "留言不能为空";
+      status.className   = "ph-comment-form-status err";
+      return;
+    }}
+    submit.disabled = true;
+    status.textContent = "正在发送…";
+    status.className = "ph-comment-form-status";
+    try {{
+      const r = await fetch(`/share/{run_id}/{token}/comment`, {{
+        method:  "POST",
+        headers: {{"Content-Type": "application/json"}},
+        body:    JSON.stringify({{body, author}}),
+      }});
+      if (!r.ok) {{
+        const t = await r.text().catch(() => "");
+        throw new Error(`HTTP ${{r.status}} ${{t.slice(0, 60)}}`);
+      }}
+      status.textContent = "✓ 已发送 — 摄影师会在 PixCull 工作台里看到。";
+      status.className = "ph-comment-form-status ok";
+      form.body.value = "";
+      // Soft reload after 1.5s so the new comment appears below
+      setTimeout(() => location.reload(), 1500);
+    }} catch (err) {{
+      status.textContent = "发送失败:" + err.message;
+      status.className = "ph-comment-form-status err";
+    }} finally {{
+      submit.disabled = false;
+    }}
+  }});
+}})();
+</script>
 </body>
 </html>"""
 

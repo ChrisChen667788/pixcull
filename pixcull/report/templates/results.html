@@ -10054,19 +10054,37 @@
   // resulting URL in the share-URL modal (v0.8-P1-3).
   // ==================================================================
   document.getElementById("shareLinkBtn")?.addEventListener("click", async () => {
-    const photographer = (localStorage.getItem("pixcull_photographer_name") || "").trim();
+    // v0.9-P0-5 — collect richer brand meta so the new portfolio-style
+    // share page can render: photographer / client / event name / event
+    // date / photographer contact line.  Each prompt has a sensible
+    // localStorage prefill so the photographer's identity persists.
+    const _ls = (k) => { try { return localStorage.getItem(k) || ""; } catch (_e) { return ""; } };
+    const _save = (k, v) => { try { localStorage.setItem(k, v || ""); } catch (_e) {} };
+
     const photographerIn = prompt(
       "摄影师名字(显示在分享页头部 / 留空跳过)",
-      photographer
+      _ls("pixcull_photographer_name").trim()
     );
-    if (photographerIn === null) return;  // user cancelled
-    const clientIn = prompt("客户名字(可留空)", "");
+    if (photographerIn === null) return;
+    const clientIn = prompt("客户名字(可选)", "");
     if (clientIn === null) return;
-    try {
-      localStorage.setItem(
-        "pixcull_photographer_name", photographerIn || ""
-      );
-    } catch (_e) {}
+    const eventIn = prompt(
+      "事件名(显示在大标题上 / 留空用「<客户>的相册」)\n例: 婚礼 · 2026 春 / 张家口冬奥 / 周末野生鸟类",
+      ""
+    );
+    if (eventIn === null) return;
+    const dateIn = prompt(
+      "活动日期(可选,YYYY-MM-DD 或自由文本 / 留空自动用拍摄日期范围)",
+      ""
+    );
+    if (dateIn === null) return;
+    const contactIn = prompt(
+      "你的联系方式(显示在 footer / 留空跳过)\n例: weibo @photographer-zhang / wx photog001 / hi@chenhr.com",
+      _ls("pixcull_photographer_contact")
+    );
+    if (contactIn === null) return;
+    _save("pixcull_photographer_name", photographerIn || "");
+    _save("pixcull_photographer_contact", contactIn || "");
     try {
       const res = await fetch(`/share/${run_id}/issue`, {
         method:  "POST",
@@ -10074,6 +10092,9 @@
         body: JSON.stringify({
           photographer: photographerIn || "",
           client:       clientIn || "",
+          event:        eventIn || "",
+          event_date:   dateIn || "",
+          contact:      contactIn || "",
         }),
       });
       if (!res.ok) throw new Error("HTTP " + res.status);
