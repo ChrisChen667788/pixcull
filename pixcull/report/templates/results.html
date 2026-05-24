@@ -2103,6 +2103,148 @@
     .row3 .ax.s3 { color: var(--muted); }
     .row3 .ax.s4 { color: #88cc88; }
     .row3 .ax.s5 { color: var(--keep); }
+
+    /* ────────────────────────────────────────────────────────────
+       v0.9-P1-4 — AI visualization
+       ────────────────────────────────────────────────────────────
+       Three small additions that turn raw AI numbers into glanceable
+       visual signals:
+         1. .score-radial  — tiny SVG ring around the score_final
+                              text; ring fill ∝ score, stroke uses
+                              the brand gradient.
+         2. .ai-num        — apply to score_final / similar key
+                              numbers; brand-gradient text fill.
+         3. .row3 .ax      — gains a bottom-up fill bar (linear-
+                              gradient background) so each chip is
+                              already a 6-bar bullet chart even
+                              before reading the numeric value.
+       Lightbox inspector pane reuses the same classes at larger
+       sizes (.score-radial.lg / .row .ax.lg-ax).
+       ──────────────────────────────────────────────────────────── */
+    .ai-num {
+      background: linear-gradient(135deg,
+                  var(--brand-indigo, #6E56CF) 0%,
+                  var(--brand-violet, #A855F7) 50%,
+                  var(--brand-pink,   #EC4899) 100%);
+      -webkit-background-clip: text;
+              background-clip: text;
+      -webkit-text-fill-color: transparent;
+              color: transparent;
+      font-weight: 700;
+      font-feature-settings: "tnum" 1;       /* tabular nums — no jitter on update */
+    }
+    .score-radial {
+      display: inline-flex; align-items: center; gap: 5px;
+      vertical-align: -3px;
+    }
+    .score-radial svg {
+      width: 18px; height: 18px;
+      flex: 0 0 18px;
+      overflow: visible;
+    }
+    .score-radial .sr-track {
+      fill: none;
+      stroke: rgba(255, 255, 255, 0.08);
+      stroke-width: 2.5;
+    }
+    .score-radial .sr-fill {
+      fill: none;
+      stroke: url(#aiBrandGrad);
+      stroke-width: 2.5;
+      stroke-linecap: round;
+      transform: rotate(-90deg);
+      transform-origin: center;
+      transition: stroke-dashoffset var(--duration-mid, 280ms)
+                  var(--ease-out, cubic-bezier(0.34, 1.56, 0.64, 1));
+    }
+    .score-radial.lg svg { width: 36px; height: 36px; flex-basis: 36px; }
+    .score-radial.lg .sr-track,
+    .score-radial.lg .sr-fill { stroke-width: 3.5; }
+
+    /* Bottom-up fill bar inside each row3 axis chip.  Driven by
+       inline --axis-fill (0..1) — no extra DOM, just a stacked
+       linear-gradient over the existing chip background.  When
+       --axis-fill is unset (legacy rendering / no data) the chip
+       renders unchanged. */
+    .row3 .ax {
+      position: relative;
+      overflow: hidden;            /* contain the fill behind the text */
+    }
+    .row3 .ax::before {
+      content: "";
+      position: absolute; left: 0; right: 0; bottom: 0;
+      height: calc(var(--axis-fill, 0) * 100%);
+      background: linear-gradient(180deg,
+                  rgba(110, 86, 207, 0.32),
+                  rgba(232, 72, 153, 0.32));
+      pointer-events: none;
+      z-index: 0;
+      transition: height var(--duration-mid, 280ms)
+                  var(--ease-out, cubic-bezier(0.34, 1.56, 0.64, 1));
+    }
+    .row3 .ax > * { position: relative; z-index: 1; }
+    /* The s5 (max) chip gets an extra crown — saturated brand gradient,
+       not the muted wash. */
+    .row3 .ax.s5::before {
+      background: linear-gradient(180deg,
+                  rgba(110, 86, 207, 0.55),
+                  rgba(232, 72, 153, 0.55));
+    }
+    /* Inspector pane reuses the same .ax pattern at a bigger size
+       — same ::before logic still works thanks to inline --axis-fill. */
+    .info .ax {
+      position: relative;
+      overflow: hidden;
+    }
+    .info .ax::before {
+      content: "";
+      position: absolute; left: 0; right: 0; bottom: 0;
+      height: calc(var(--axis-fill, 0) * 100%);
+      background: linear-gradient(180deg,
+                  rgba(110, 86, 207, 0.25),
+                  rgba(232, 72, 153, 0.25));
+      pointer-events: none;
+      z-index: 0;
+    }
+    .info .ax > * { position: relative; z-index: 1; }
+
+    /* Inline sparkline for the 6 axis values across the top of the
+       inspector pane — gives a glanceable "shape" of the rubric
+       without the user having to read 6 numbers. */
+    .ai-sparkline {
+      display: block;
+      width: 100%;
+      max-width: 280px;
+      height: 36px;
+      margin: 4px 0 8px;
+    }
+    .ai-sparkline .sp-area {
+      fill: url(#aiBrandGradV);
+      opacity: 0.18;
+    }
+    .ai-sparkline .sp-line {
+      fill: none;
+      stroke: url(#aiBrandGrad);
+      stroke-width: 2;
+      stroke-linejoin: round;
+      stroke-linecap: round;
+    }
+    .ai-sparkline .sp-dot {
+      fill: url(#aiBrandGrad);
+    }
+    .ai-sparkline .sp-axis {
+      stroke: rgba(255, 255, 255, 0.06);
+      stroke-width: 1;
+      stroke-dasharray: 2 3;
+    }
+    .ai-sparkline-lab {
+      display: flex; justify-content: space-between;
+      font-size: 9px; letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-top: -4px;
+      padding: 0 2px;
+    }
     .row4 { font-size: 10px; color: var(--muted); margin-top: 6px;
             text-overflow: ellipsis; overflow: hidden; white-space: nowrap; }
     .row5 { font-size: 10px; margin-top: 4px; line-height: 1.35;
@@ -4595,6 +4737,18 @@
        ============================================================ -->
   <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
     <defs>
+      <!-- v0.9-P1-4 — brand gradient handles for the radial / sparkline.
+           Diagonal version drives 1-D stroke + dot fills; vertical drives
+           the area-under-the-curve fill in the inspector sparkline. -->
+      <linearGradient id="aiBrandGrad" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%"   stop-color="#6E56CF"/>
+        <stop offset="55%"  stop-color="#A855F7"/>
+        <stop offset="100%" stop-color="#EC4899"/>
+      </linearGradient>
+      <linearGradient id="aiBrandGradV" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%"   stop-color="#6E56CF"/>
+        <stop offset="100%" stop-color="#EC4899"/>
+      </linearGradient>
       <!-- Archive / bucket — for the P-UX-22 deliverable buckets toggle -->
       <symbol id="icon-archive" viewBox="0 0 24 24" fill="none"
               stroke="currentColor" stroke-width="1.8"
@@ -6907,6 +7061,74 @@
     }
     const sorted = sortRows(filtered);
 
+    // ──────────────────────────────────────────────────────────────
+    // v0.9-P1-4 — AI visualization helpers.
+    //
+    // _aiRadialSvg(score)   — radial progress ring around score_final
+    // _aiSparklineSvg(vals) — 6-axis line graph for rubric_stars
+    //
+    // Both reference the #aiBrandGrad gradient defined in the SVG
+    // sprite block (line ~4738) — single source of truth for the
+    // signature indigo→violet→pink palette.  When the page renders
+    // outside the main IIFE scope (e.g. the inline /share page) the
+    // helpers degrade silently to a plain number.
+    // ──────────────────────────────────────────────────────────────
+    function _aiRadialSvg(score, opts) {
+      const s = (score == null || isNaN(score)) ? null : Math.max(0, Math.min(1, +score));
+      const lg = !!(opts && opts.large);
+      // r=7 gives a 22 px outer box (r + stroke + tiny padding).
+      // Circumference 2π·7 ≈ 44; round so dasharray maths is stable.
+      const r = lg ? 14 : 7;
+      const c = Math.PI * 2 * r;
+      const offset = s == null ? c : c * (1 - s);
+      return `<svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle class="sr-track" cx="12" cy="12" r="${r}"></circle>
+        <circle class="sr-fill"  cx="12" cy="12" r="${r}"
+          stroke-dasharray="${c.toFixed(2)}"
+          stroke-dashoffset="${offset.toFixed(2)}"></circle>
+      </svg>`;
+    }
+    function _aiSparklineSvg(vals, opts) {
+      // vals: array of 6 stars (1..5), missing → null.
+      const W = 280, H = 36, PAD_X = 6, PAD_Y = 4;
+      const usable = W - PAD_X * 2;
+      const stepX = usable / 5;            // 6 axes → 5 segments
+      const yFor = (v) =>
+        (v == null) ? null
+        : H - PAD_Y - ((v - 1) / 4) * (H - PAD_Y * 2);
+      const pts = vals.map((v, i) => {
+        const y = yFor(v);
+        if (y == null) return null;
+        return { x: PAD_X + i * stepX, y, v };
+      });
+      const linePts = pts.filter(p => p != null);
+      if (linePts.length < 2) {
+        // Not enough data for a meaningful line; render a placeholder
+        // rule so the layout doesn't pop.
+        return `<svg class="ai-sparkline" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
+          <line class="sp-axis" x1="${PAD_X}" y1="${H/2}" x2="${W - PAD_X}" y2="${H/2}"/>
+        </svg>`;
+      }
+      const lineD = linePts.map((p, i) =>
+        (i === 0 ? "M" : "L") + p.x.toFixed(1) + "," + p.y.toFixed(1)
+      ).join(" ");
+      // Area path: line + drop to bottom edge for the filled wash
+      const areaD = lineD
+        + ` L${linePts[linePts.length - 1].x.toFixed(1)},${H - PAD_Y}`
+        + ` L${linePts[0].x.toFixed(1)},${H - PAD_Y} Z`;
+      const dots = linePts.map(p =>
+        `<circle class="sp-dot" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2"/>`
+      ).join("");
+      // Mid-line ref so eyes have a sense of "3 stars = baseline"
+      const midY = (H - PAD_Y - 0.5 * (H - PAD_Y * 2)).toFixed(1);
+      return `<svg class="ai-sparkline" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
+        <line class="sp-axis" x1="${PAD_X}" y1="${midY}" x2="${W - PAD_X}" y2="${midY}"/>
+        <path class="sp-area" d="${areaD}"/>
+        <path class="sp-line" d="${lineD}"/>
+        ${dots}
+      </svg>`;
+    }
+
     // Card renderer (extracted)
     function renderCard(r) {
       const thumb = `/thumb/${run_id}/${encodeURIComponent(r.filename)}`;
@@ -6967,7 +7189,11 @@
         if (stars == null) return `<div class="ax"><span class="k">${axisAbbr[name]}</span><span class="v">--</span></div>`;
         const s = Math.round(stars);
         const cls = `s${s}` + (r.rubric_human_labeled ? " human" : "");
-        return `<div class="ax ${cls}" title="${name}: ${stars.toFixed(1)}★${r.rubric_human_labeled?' (human)':''}"><span class="k">${axisAbbr[name]}</span><span class="v">${stars.toFixed(1)}</span></div>`;
+        // v0.9-P1-4 — inline --axis-fill drives the ::before bottom-up
+        // wash so each chip is already a 6-bar bullet chart even
+        // without scanning numbers.  Clamp to [0, 1].
+        const fill = Math.max(0, Math.min(1, (stars - 1) / 4));
+        return `<div class="ax ${cls}" style="--axis-fill:${fill.toFixed(3)}" title="${name}: ${stars.toFixed(1)}★${r.rubric_human_labeled?' (human)':''}"><span class="k">${axisAbbr[name]}</span><span class="v">${stars.toFixed(1)}</span></div>`;
       };
       const cardCls = r.decision
         + (r.rubric_human_labeled ? " has-human" : "")
@@ -7082,7 +7308,13 @@
             </div>
             <div class="row2">
               <span class="scene" title="${esc(r.scene || '')}">${esc(trGenre(r.scene) || "?")}</span>
-              <span>综合分 ${r.score_final == null ? "--" : r.score_final.toFixed(2)}</span>
+              <!-- v0.9-P1-4 — radial progress + brand-gradient
+                   text-fill turn score_final into a glanceable visual
+                   signal.  Falls back gracefully on null. -->
+              <span class="score-radial" title="score_final ${r.score_final == null ? '(unavailable)' : r.score_final.toFixed(3) + ' · 0..1'}">
+                ${_aiRadialSvg(r.score_final)}
+                <span>综合分 <span class="ai-num">${r.score_final == null ? "--" : r.score_final.toFixed(2)}</span></span>
+              </span>
             </div>
             <div class="row3">
               ${ax("technical")}${ax("subject")}${ax("composition")}
@@ -8239,7 +8471,10 @@
         ? ` title="4 个评分源在此维度上分歧 ±${noise.toFixed(2)}★ — 建议人工复核"` :
           (noise != null && noise >= 0.05)
             ? ` title="4 源在此维度的标准差 ±${noise.toFixed(2)}★"` : "";
-      return `<div class="ax ${cls}${noisyCls}"${noisyTitle}><span class="k">${axisAbbr[n]}</span><span class="v">${s == null ? '--' : s.toFixed(1)}</span>${errChip}</div>`;
+      // v0.9-P1-4 — inline --axis-fill drives the same bottom-up
+      // wash as the grid card row, just at a bigger size.
+      const inFill = (s == null) ? 0 : Math.max(0, Math.min(1, (s - 1) / 4));
+      return `<div class="ax ${cls}${noisyCls}" style="--axis-fill:${inFill.toFixed(3)}"${noisyTitle}><span class="k">${axisAbbr[n]}</span><span class="v">${s == null ? '--' : s.toFixed(1)}</span>${errChip}</div>`;
     }).join("");
     // Per-source comparison (auto / model / vlm / human if present)
     // V16.0 — labels translated through I18N_SOURCE so users see
@@ -8388,11 +8623,25 @@
         "风格距离: " + r.style_distance.toFixed(3));
     }
 
+    // v0.9-P1-4 — sparkline showing the 6-axis shape across the
+    // top of the scores section.  Same data the chips below carry,
+    // but glanceable: high-tech low-moment shows as an asymmetric
+    // peak; a balanced "everything is 4★" reads as a flat plateau.
+    const _sparkVals = axisNames.map(n =>
+      r.rubric_stars && r.rubric_stars[n] != null
+        ? r.rubric_stars[n] : null
+    );
+    const sparklineSvg = _aiSparklineSvg(_sparkVals);
+    const sparklineLab = `<div class="ai-sparkline-lab" aria-hidden="true">`
+      + axisNames.map(n => `<span>${axisAbbr[n]}</span>`).join("")
+      + `</div>`;
+
     // v0.6 (2/5) — sections are now LR Develop-style <details>
     // blocks emitted via _sec() so users can fold the diagnostics
     // they never read.  Header (filename + meta + decision toolbar)
     // stays uncollapsible.
-    const scoresBody = `<div class="axis-grid">${finalStars}</div>
+    const scoresBody = `${sparklineSvg}${sparklineLab}
+        <div class="axis-grid">${finalStars}</div>
         ${detailHtml ? `<div class="axis-grid-detail">${detailHtml}</div>` : ''}`;
     const similarBody = `<div id="lbSimilarBody" class="similar-loading">寻找类似…</div>
         <div class="similar-hint">点击跳转 · Shift+点击 = 加入 A/B 比较</div>`;
@@ -8463,7 +8712,13 @@
         ${developBadge}
         ${styleBadge}
         <span title="${esc(r.scene || '')}">${esc(trGenre(r.scene) || '?')}</span>
-        <span>综合分 ${scoreLine}</span>
+        <!-- v0.9-P1-4 — radial + brand-gradient text on score_final,
+             at .lg size so it carries weight in the bigger inspector
+             pane.  Falls back to "--" cleanly when score is missing. -->
+        <span class="score-radial lg" title="score_final · 0..1">
+          ${_aiRadialSvg(r.score_final, {large:true})}
+          <span>综合分 <span class="ai-num" style="font-size:1.1em">${scoreLine}</span></span>
+        </span>
         ${styleChips}
         ${r.cluster_id != null ? `<span title="连拍组 ID">连拍组 ${r.cluster_id}</span>` : ''}
         ${r.rubric_human_labeled ? '<span style="color:var(--keep)">✓ 人工已标</span>' : ''}

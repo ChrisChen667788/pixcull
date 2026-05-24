@@ -187,14 +187,31 @@ run e2e:11 页 / 1.3 MB / cover 显示真实客户名 + 76% 入选率。
 
 默认 `--pdf`(无 `--executive`)行为不变 — 5-page engineering audit PDF。
 
-#### v0.9-P1-4 · AI 视觉化
-**估时**: 3-4 天
+#### v0.9-P1-4 · AI 视觉化 ✅
+**估时**: 3-4 天 · **实际**: 1 天 · **已发布**
 
-- score_final 旁加 micro radial progress(score/1.0,亮度对应分值)
-- rubric stars 旁加 sparkline 显示 6 axis values
-- 所有 ML 输出(face cluster confidence、scene probabilities)visually
-  encoded,不只是数字
-- brand gradient 加到关键 AI 输出数字(`score_final`、综合风格距离)
+3 small visual additions turn raw AI numbers into glanceable signals:
+
+1. **`.score-radial`** —— score_final 旁微型 18 px SVG ring,brand-gradient
+   stroke (`url(#aiBrandGrad)`),`stroke-dashoffset` driven by 1-score。
+   inspector pane 用 `.lg` 36 px 版本。
+2. **`.ai-num`** —— brand-gradient `background-clip:text` + `tnum`
+   tabular nums。应用到 `score_final`(card row2 + inspector meta line)
+   和未来更多关键数字(综合风格距离 / face cluster confidence)。
+3. **`.row3 .ax::before`** —— 每个 rubric chip 的底向上填充条,
+   `height: calc(var(--axis-fill,0) * 100%)`。每张 card 现在自带 6-bar
+   bullet chart,不用读数字就看出 axis shape。`s5` chip 用更饱和的
+   brand wash 强化"满分"信号。
+4. **inspector `.ai-sparkline`** —— 280×36 px SVG 折线,brand-gradient
+   stroke + 18% opacity area-under-curve fill,展示 rubric 6 axis 的
+   "shape"。high-tech low-moment 立刻看出来。
+
+SVG `<defs>` 加 `#aiBrandGrad`(diagonal)和 `#aiBrandGradV`(vertical),
+单一来源给所有 brand-gradient stroke / fill 复用。
+
+无新单测 —— helpers `_aiRadialSvg` 和 `_aiSparklineSvg` 通过 node 端到端
+验证(dashoffset 0→44 随 score 0→1 线性变化;sparkline 路径随 axis
+values 起伏)。506/506 tests pass(无回归)。
 
 #### v0.9-P1-5 · iPad lightbox(swipe + pinch + tap-zoom)
 **估时**: 2-3 天
