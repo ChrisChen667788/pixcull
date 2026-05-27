@@ -2119,6 +2119,10 @@ class _Handler(BaseHTTPRequestHandler):
             return self._serve_users_list()
         if sub == "/users/active":
             return self._serve_users_active()
+        # v0.10-P1-1 — team taste aggregate (multi-user discrepancy
+        # report for /admin/team_taste).
+        if sub == "/team_taste":
+            return self._serve_team_taste()
         # /runs/<id> and its sub-resources
         if sub.startswith("/runs/"):
             tail = sub[len("/runs/"):]
@@ -7015,6 +7019,58 @@ class _Handler(BaseHTTPRequestHandler):
         """
         from pixcull.users import get_active_user
         body = _safe_dumps({"active": get_active_user()}).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+        return True
+
+    def _serve_team_taste(self) -> bool:
+        """v0.10-P1-1 — GET /api/v1/team_taste
+
+        Walks every user under <data_root>/users/<uid>/preferences.json
+        and emits the team baseline + per-user discrepancy report.
+        Caller-side UI (admin page) renders the high-z-score pairs
+        first so a studio lead sees "小李 偏好 composition +0.18
+        over team mean" at the top.
+        """
+        try:
+            from pixcull.team import (
+                aggregate_taste, discrepancy_report, load_user_taste,
+            )
+            from pixcull.users import list_users, user_root
+        except Exception as exc:
+            _dbg("team_taste/import", exc, "init")
+            self.send_error(500, "team module import failed")
+            return True
+        try:
+            users = list_users()
+        except Exception as exc:
+            _dbg("team_taste/list_users", exc, "init")
+            users = []
+        per_user_tastes: dict[str, dict[str, float]] = {}
+        for u in users:
+            uid = u.get("user_id") if isinstance(u, dict) else None
+            if not uid:
+                continue
+            try:
+                root = user_root(uid)
+            except Exception:
+                continue
+            pref_path = Path(root) / "preferences.json"
+            taste = load_user_taste(pref_path)
+            if taste is not None:
+                per_user_tastes[uid] = taste
+        base = aggregate_taste(per_user_tastes)
+        disc = discrepancy_report(per_user_tastes, baseline=base)
+        body = _safe_dumps({
+            "schema":     "pixcull.api.v1.team_taste/v1",
+            "n_users":    len(per_user_tastes),
+            "baseline":   base,
+            "discrepancy": disc,
+        }).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))

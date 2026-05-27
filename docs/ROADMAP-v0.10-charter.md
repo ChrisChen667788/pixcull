@@ -131,8 +131,10 @@ EAR/blink),目标 recall@5 ≥ baseline + 3%。
 
 iOS V0.6 → V0.7 跨越,本 charter 完成 V0.7 release。
 
-#### v0.10-P0-5 · 跑通真实分发(macOS + Win + Linux)
-**估时**: 1 周(等 Apple Developer / SignPath / GPG 凭据)
+#### v0.10-P0-5 · 跑通真实分发(macOS + Win + Linux) 🟡 **凭据阻塞**
+**估时**: 1 周(等 Apple Developer / SignPath / GPG 凭据)·
+基础设施已在 [pixcull@439e26a](https://github.com/ChrisChen667788/pixcull/commit/439e26a)
+就绪。需要外部动作:Apple Developer 注册 / SignPath OSS 审批 / GPG 密钥生成。
 
 - macOS:用户完成 Apple Developer enrollment → 跑
   `scripts/release_macos.sh 0.10.0` → 推到 `homebrew-pixcull` tap →
@@ -151,8 +153,8 @@ iOS V0.6 → V0.7 跨越,本 charter 完成 V0.7 release。
 
 ### P1(应该做)
 
-#### v0.10-P1-1 · 工作室多账户 profile + 团队 taste 合并
-**估时**: 1 周
+#### v0.10-P1-1 · 工作室多账户 profile + 团队 taste 合并 ✅
+**估时**: 1 周 · **实际**: 同次 commit · **已发布**
 
 v0.8-P-UX-12 做了 single-user taste profile。v0.10 加 multi-user:
 
