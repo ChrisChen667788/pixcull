@@ -156,20 +156,90 @@ class TetherSession:
     def _append_row(self, result: dict) -> None:
         """Append one analyzed row to scores.csv. The header is
         written on first call so the file is self-describing for
-        any tool reading it mid-session."""
+        any tool reading it mid-session.
+
+        v0.10-P1-2 — also extends the schema with mtime + sharpness
+        + is_burst_peak so the streaming peak picker (below) can
+        re-evaluate the trailing-window's burst flags on every
+        new arrival.
+        """
         import csv
         scores_path = self._output_dir() / "scores.csv"
         is_new = not scores_path.exists()
+        # v0.10-P1-2 — header now carries the streaming-burst fields.
         cols = ["filename", "path", "scene", "decision",
-                "score_final", "flags", "reason"]
+                "score_final", "flags", "reason",
+                "mtime", "sharpness", "is_burst_peak"]
         # Persist as a single-line CSV row (flags joined w/ "|")
         flat = dict(result)
         flat["flags"] = "|".join(result.get("flags") or [])
+        # Default the new columns when the analyzer didn't fill them.
+        flat.setdefault("mtime",         time.time())
+        flat.setdefault("sharpness",     "")
+        flat.setdefault("is_burst_peak", False)
         with scores_path.open("a", encoding="utf-8", newline="") as f:
             w = csv.DictWriter(f, fieldnames=cols)
             if is_new:
                 w.writeheader()
             w.writerow({c: flat.get(c, "") for c in cols})
+        # v0.10-P1-2 — re-evaluate burst peaks across the trailing
+        # window every time a new row lands.  This is the streaming
+        # equivalent of the offline peak-picker; the photographer's
+        # 🏆 badge will now transfer to the newer winning frame
+        # within ~1 s of the file landing on disk.
+        try:
+            self._restream_burst_peaks(scores_path)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[tether] burst restream failed: "
+                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
+
+    def _restream_burst_peaks(self, scores_path: Path) -> None:
+        """v0.10-P1-2 — re-rank burst peaks across the trailing
+        window of scores.csv after a new row was appended.
+
+        Only the last WINDOW_SIZE rows are touched; older bursts
+        are frozen (their peak doesn't change retroactively).  We
+        rewrite the trailing window slice in place — the file is
+        small enough (a few MB even for a 5k-photo wedding) that
+        an O(window) rewrite per arrival is fine.
+        """
+        import csv
+        from pixcull.tether_stream import update_burst_peaks, WINDOW_SIZE
+
+        if not scores_path.exists():
+            return
+        with scores_path.open("r", encoding="utf-8", newline="") as f:
+            reader = csv.DictReader(f)
+            all_rows = list(reader)
+            fieldnames = reader.fieldnames or []
+        if not all_rows:
+            return
+        # Slice the trailing window, re-rank, splice back.
+        head = all_rows[:-WINDOW_SIZE]
+        tail = all_rows[-WINDOW_SIZE:]
+        # Coerce mtime to float so the streamer's comparisons work
+        # — DictReader returns everything as strings.
+        for r in tail:
+            try:
+                r["_mtime_float"] = float(r.get("mtime") or 0.0)
+            except (TypeError, ValueError):
+                r["_mtime_float"] = 0.0
+            r["mtime"] = r["_mtime_float"]   # update_burst_peaks reads this
+        retoured = update_burst_peaks(tail)
+        # Stitch + write back.  Drop the _mtime_float helper.
+        for r in retoured:
+            r.pop("_mtime_float", None)
+            r["mtime"] = str(r.get("mtime") or "")
+            r["is_burst_peak"] = "True" if r.get("is_burst_peak") else "False"
+        for r in head:
+            r.pop("_mtime_float", None)
+        with scores_path.open("w", encoding="utf-8", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            for r in head:
+                writer.writerow({c: r.get(c, "") for c in fieldnames})
+            for r in retoured:
+                writer.writerow({c: r.get(c, "") for c in fieldnames})
 
     def _write_manifest(self) -> None:
         """Marker file so ``_reload_run_from_disk`` recognizes the

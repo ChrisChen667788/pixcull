@@ -168,16 +168,16 @@ v0.8-P-UX-12 做了 single-user taste profile。v0.10 加 multi-user:
   风格"基线,可在 `/admin/team_taste` 看到 axis-weight 离散度,
   发现"小李偏好高对比、小陈偏好低 saturation"等共识缺口
 
-#### v0.10-P1-2 · 实时鲁棒性:连拍组流式更新
-**估时**: 4-5 天
+#### v0.10-P1-2 · 实时鲁棒性:连拍组流式更新 ✅
+**估时**: 4-5 天 · **实际**: 同次 commit · **已发布**
 
 当前 tethered live 是 ~2 秒每张 verdict;P1-2 增加"连拍组流式更新":
 新照片进来时,如果落进已有的 burst cluster,立即重跑该 cluster 的
 peak-picker 而不是等整批跑完。Inspector 的 burst-peak badge 实时
 变化,反映"最佳一张正在转移"。
 
-#### v0.10-P1-3 · Notion-style slash menu
-**估时**: 1 周
+#### v0.10-P1-3 · Notion-style slash menu ✅
+**估时**: 1 周 · **实际**: 同次 commit · **已发布**
 
 Cmd+K 已经覆盖了 grid + lightbox 的全局命令。P1-3 加 inspector pane
 内的 `/` slash menu:在 advice 文本框里按 `/`,弹出 contextual
