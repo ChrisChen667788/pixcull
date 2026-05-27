@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>PixCull illustration set · v0.10 AI draft contact sheet</title>
+<style>
+  :root {
+    --bg:       #1a1c20;
+    --bg-card:  #23262c;
+    --fg:       #f1f3f7;
+    --muted:    #a8b2c1;
+    --border:   #232830;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+    padding: 40px 24px;
+  }
+  h1 {
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    margin: 0 0 4px;
+    background: linear-gradient(135deg, #6E56CF 0%, #A855F7 55%, #EC4899 100%);
+    -webkit-background-clip: text;
+            background-clip: text;
+    -webkit-text-fill-color: transparent;
+            color: transparent;
+    display: inline-block;
+  }
+  .sub { color: var(--muted); font-size: 13px; margin: 0 0 32px; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+  }
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+  }
+  .card .frame {
+    aspect-ratio: 4 / 3;
+    background: var(--bg);
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 12px;
+  }
+  .card svg { width: 80%; height: 80%; }
+  .card .label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    margin-bottom: 2px;
+  }
+  .card .title { font-size: 14px; font-weight: 600; }
+  .card .surface {
+    margin-top: 6px;
+    font-size: 11.5px;
+    color: var(--muted);
+    line-height: 1.55;
+  }
+  .light {
+    background: #fbf9f5;
+    color: #1a1d24;
+  }
+  .light .card { background: #ffffff; border-color: #e3ddcf; }
+  .light .card .frame { background: #f0ebe1; }
+  .light .card .label,
+  .light .card .surface { color: #5b6473; }
+  .switcher {
+    display: inline-flex;
+    gap: 6px;
+    margin-left: 24px;
+    vertical-align: middle;
+    background: var(--bg-card);
+    padding: 4px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+  }
+  .switcher button {
+    background: transparent;
+    border: 0;
+    color: var(--muted);
+    font-size: 11px;
+    padding: 4px 12px;
+    border-radius: 999px;
+    cursor: pointer;
+  }
+  .switcher button.active {
+    background: var(--bg);
+    color: var(--fg);
+  }
+</style>
+</head>
+<body>
+<h1>PixCull illustration set</h1>
+<span class="switcher" role="tablist">
+  <button class="active" onclick="document.body.classList.remove('light')">Dark</button>
+  <button onclick="document.body.classList.add('light')">Light</button>
+</span>
+<p class="sub">
+  v0.10 AI draft · contact sheet for Phase B handoff ·
+  open this file in a browser to review all 10 side-by-side
+</p>
+
+<div class="grid">
+  <div class="card">
+    <div class="frame"><object data="01-art-empty-inbox.svg" type="image/svg+xml"></object></div>
+    <div class="label">01</div>
+    <div class="title">art-empty-inbox</div>
+    <div class="surface">Run with zero rows — first photo on its way</div>
+  </div>
+  <div class="card">
+    <div class="frame"><object data="02-art-no-match.svg" type="image/svg+xml"></object></div>
+    <div class="label">02</div>
+    <div class="title">art-no-match</div>
+    <div class="surface">Filter cleared every photo from the batch</div>
+  </div>
+  <div class="card">
+    <div class="frame"><object data="03-art-analyzing.svg" type="image/svg+xml"></object></div>
+    <div class="label">03</div>
+    <div class="title">art-analyzing</div>
+    <div class="surface">Loading / thinking state (future use)</div>
+  </div>
+  <div class="card">
+    <div class="frame"><object data="04-art-empty-buckets.svg" type="image/svg+xml"></object></div>
+    <div class="label">04</div>
+    <div class="title">art-empty-buckets</div>
+    <div class="surface">/buckets panel before any bucket created</div>
+  </div>
+  <div class="card">
+    <div class="frame"><object data="05-art-empty-history.svg" type="image/svg+xml"></object></div>
+    <div class="label">05</div>
+    <div class="title">art-empty-history</div>
+    <div class="surface">/history with no archived runs</div>
+  </div>
+  <div class="card">
+    <div class="frame"><object data="06-art-no-peer.svg" type="image/svg+xml"></object></div>
+    <div class="label">06</div>
+    <div class="title">art-no-peer</div>
+    <div class="surface">LAN sync presence with no collaborators yet</div>
+  </div>
+  <div class="card">
+    <div class="frame"><object data="07-art-no-annotations.svg" type="image/svg+xml"></object></div>
+    <div class="label">07</div>
+    <div class="title">art-no-annotations</div>
+    <div class="surface">0 human-rubric-labeled rows in this run</div>
+  </div>
+  <div class="card">
+    <div class="frame"><object data="08-art-no-search.svg" type="image/svg+xml"></object></div>
+    <div class="label">08</div>
+    <div class="title">art-no-search</div>
+    <div class="surface">CLIP semantic search returns no matches</div>
+  </div>
+  <div class="card">
+    <div class="frame"><object data="09-art-style-train-empty.svg" type="image/svg+xml"></object></div>
+    <div class="label">09</div>
+    <div class="title">art-style-train-empty (NEW)</div>
+    <div class="surface">Style-train clicked with &lt; 3 keep refs</div>
+  </div>
+  <div class="card">
+    <div class="frame"><object data="10-art-tether-waiting.svg" type="image/svg+xml"></object></div>
+    <div class="label">10</div>
+    <div class="title">art-tether-waiting (NEW)</div>
+    <div class="surface">Tether session live, no photos arrived yet</div>
+  </div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  v0.10 AI DRAFT · Illustration 05 — art-empty-history
+  Vintage editorial clock — hands frozen at 12, drifting dust.
+  Surface: /history with no archived runs yet.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 120" fill="none"
+     stroke-linecap="round" stroke-linejoin="round">
+  <defs>
+    <linearGradient id="brandGrad-05" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"  stop-color="#6E56CF"/>
+      <stop offset="100%" stop-color="#EC4899"/>
+    </linearGradient>
+  </defs>
+
+  <ellipse cx="80" cy="103" rx="50" ry="5" fill="rgba(99,102,241,0.10)"/>
+
+  <!-- clock body (warm muted, like an editorial photograph) -->
+  <circle cx="80" cy="56" r="32"
+          stroke="#a8b2c1" stroke-width="2"
+          fill="rgba(167,182,193,0.06)"/>
+  <!-- inner ring for depth -->
+  <circle cx="80" cy="56" r="28"
+          stroke="#7a8696" stroke-width="1" opacity="0.5"/>
+
+  <!-- 12-marker only -->
+  <line x1="80" y1="28" x2="80" y2="33"
+        stroke="url(#brandGrad-05)" stroke-width="2.4"/>
+
+  <!-- 4 quarter-hour ticks (subtle) -->
+  <line x1="80" y1="80" x2="80" y2="83" stroke="#7a8696" stroke-width="1.4" opacity="0.4"/>
+  <line x1="104" y1="56" x2="107" y2="56" stroke="#7a8696" stroke-width="1.4" opacity="0.4"/>
+  <line x1="56" y1="56" x2="53" y2="56" stroke="#7a8696" stroke-width="1.4" opacity="0.4"/>
+
+  <!-- hands — frozen at 12:00 (hour to top, minute slightly to right) -->
+  <path d="M80 56v-20" stroke="url(#brandGrad-05)" stroke-width="2.8"/>
+  <path d="M80 56l16 6" stroke="url(#brandGrad-05)" stroke-width="2" opacity="0.7"/>
+  <circle cx="80" cy="56" r="3" fill="url(#brandGrad-05)"/>
+
+  <!-- drifting dust particles -->
+  <circle cx="34" cy="42" r="1.4" fill="#6E56CF" opacity="0.55"/>
+  <circle cx="126" cy="36" r="1.2" fill="#EC4899" opacity="0.45"/>
+  <circle cx="46" cy="22" r="1.6" fill="#6E56CF" opacity="0.65"/>
+  <circle cx="124" cy="78" r="1.1" fill="#A855F7" opacity="0.50"/>
+</svg>

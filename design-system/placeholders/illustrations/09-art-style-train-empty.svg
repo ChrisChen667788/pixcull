@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  v0.10 AI DRAFT · Illustration 09 — art-style-train-empty (NEW)
+  Three pinned reference frames on a mood-board.  Two are empty
+  outlines + one has the hint of a great photo (subject silhouette).
+  Surface: user clicked "Train style model" with < 3 keeps marked.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 120" fill="none"
+     stroke-linecap="round" stroke-linejoin="round">
+  <defs>
+    <linearGradient id="brandGrad-09" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"  stop-color="#6E56CF"/>
+      <stop offset="55%" stop-color="#A855F7"/>
+      <stop offset="100%" stop-color="#EC4899"/>
+    </linearGradient>
+  </defs>
+
+  <ellipse cx="80" cy="103" rx="50" ry="5" fill="rgba(99,102,241,0.10)"/>
+
+  <!-- mood-board horizon line (the wall) -->
+  <line x1="18" y1="36" x2="142" y2="36"
+        stroke="#7a8696" stroke-width="1" stroke-dasharray="2 5" opacity="0.4"/>
+
+  <!-- frame 1 (left) — empty outline, rotated slightly -->
+  <g transform="translate(28 56) rotate(-6)" stroke="#7a8696" stroke-width="1.6"
+     fill="rgba(167,182,193,0.04)">
+    <rect x="-16" y="-20" width="32" height="40" rx="2"/>
+    <!-- pinhole pin -->
+    <circle cx="0" cy="-23" r="1.4" fill="#7a8696"/>
+  </g>
+
+  <!-- frame 2 (centre) — has a photo · brand-gradient subject silhouette -->
+  <g transform="translate(80 54)">
+    <!-- frame -->
+    <rect x="-18" y="-22" width="36" height="44" rx="2"
+          stroke="url(#brandGrad-09)" stroke-width="2"
+          fill="rgba(110,86,207,0.08)"/>
+    <circle cx="0" cy="-25" r="1.4" fill="url(#brandGrad-09)"/>
+    <!-- inside: a soft horizon + a tiny figure standing in light -->
+    <line x1="-14" y1="6" x2="14" y2="6" stroke="url(#brandGrad-09)" stroke-width="1.2" opacity="0.55"/>
+    <circle cx="0" cy="0" r="2.6" fill="url(#brandGrad-09)"/>
+    <path d="M-1.5 2v8M1.5 2v8" stroke="url(#brandGrad-09)" stroke-width="1.4"
+          stroke-linecap="round"/>
+  </g>
+
+  <!-- frame 3 (right) — empty + slight other rotation -->
+  <g transform="translate(132 58) rotate(8)" stroke="#7a8696" stroke-width="1.6"
+     fill="rgba(167,182,193,0.04)">
+    <rect x="-16" y="-20" width="32" height="40" rx="2"/>
+    <circle cx="0" cy="-23" r="1.4" fill="#7a8696"/>
+  </g>
+
+  <!-- arrows pointing at the two empty frames — "+ 2 more selects please" -->
+  <g stroke="#7a8696" stroke-width="1.4" opacity="0.7" fill="none">
+    <path d="M44 78l-12 -16"/>
+    <path d="M36 60l-4 2 4 1"/>
+    <path d="M116 78l12 -16"/>
+    <path d="M124 60l4 2-4 1"/>
+  </g>
+
+  <!-- "+2" hint badge -->
+  <g transform="translate(80 92)">
+    <rect x="-12" y="-7" width="24" height="14" rx="7"
+          stroke="url(#brandGrad-09)" stroke-width="1.6"
+          fill="rgba(110,86,207,0.12)"/>
+    <text x="0" y="3" text-anchor="middle" font-family="Inter, sans-serif"
+          font-size="8" font-weight="600" fill="url(#brandGrad-09)">+2</text>
+  </g>
+</svg>

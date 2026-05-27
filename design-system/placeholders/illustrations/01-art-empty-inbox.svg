@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  v0.10 AI DRAFT · Illustration 01 — art-empty-inbox
+  Empty inbox tray + a single sparkle suggesting "first photo arriving".
+  Surface: a run with zero rows.
+  Replace in Phase B (Brief 02 deliverable).
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 120" fill="none"
+     stroke-linecap="round" stroke-linejoin="round">
+  <defs>
+    <linearGradient id="brandGrad-01" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"  stop-color="#6E56CF"/>
+      <stop offset="55%" stop-color="#A855F7"/>
+      <stop offset="100%" stop-color="#EC4899"/>
+    </linearGradient>
+  </defs>
+
+  <!-- floor shadow (canonical) -->
+  <ellipse cx="80" cy="103" rx="50" ry="5" fill="rgba(99,102,241,0.10)"/>
+
+  <!-- back-wall hint (very subtle horizon line) -->
+  <line x1="20" y1="58" x2="140" y2="58"
+        stroke="#7a8696" stroke-width="1" stroke-dasharray="2 4" opacity="0.4"/>
+
+  <!-- inbox tray — wider stance for editorial proportions -->
+  <!-- top edge with the slot cut-out -->
+  <path d="M28 60h28l4 8h40l4-8h28"
+        stroke="#a8b2c1" stroke-width="2"/>
+  <!-- side walls + bottom -->
+  <path d="M28 60v32a4 4 0 0 0 4 4h96a4 4 0 0 0 4-4V60"
+        stroke="#a8b2c1" stroke-width="2"
+        fill="rgba(167,182,193,0.05)"/>
+  <!-- inbox label tag on the front -->
+  <rect x="68" y="80" width="24" height="6" rx="1"
+        stroke="#7a8696" stroke-width="1.2" fill="none"/>
+
+  <!-- single brand-gradient sparkle (the "first photo on its way" hint) -->
+  <g transform="translate(80, 30)">
+    <path d="M0 -8 L1.5 -1.5 L8 0 L1.5 1.5 L0 8 L-1.5 1.5 L-8 0 L-1.5 -1.5 Z"
+          fill="url(#brandGrad-01)"/>
+  </g>
+
+  <!-- two small ambient sparkles -->
+  <circle cx="48" cy="36" r="1.4" fill="#6E56CF" opacity="0.5"/>
+  <circle cx="116" cy="40" r="1.2" fill="#EC4899" opacity="0.45"/>
+</svg>

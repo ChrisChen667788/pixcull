@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  v0.10 AI DRAFT · Illustration 06 — art-no-peer
+  WiFi-style ripples + lone photographer figure.
+  Surface: LAN sync presence panel with no other collaborators yet.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 120" fill="none"
+     stroke-linecap="round" stroke-linejoin="round">
+  <defs>
+    <linearGradient id="brandGrad-06" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"  stop-color="#6E56CF"/>
+      <stop offset="100%" stop-color="#EC4899"/>
+    </linearGradient>
+  </defs>
+
+  <ellipse cx="80" cy="103" rx="50" ry="5" fill="rgba(99,102,241,0.10)"/>
+
+  <!-- 3 concentric arcs (signal ripples), outer two muted -->
+  <path d="M30 80a50 50 0 0 1 100 0"
+        stroke="#7a8696" stroke-width="1.4" opacity="0.4"/>
+  <path d="M44 80a36 36 0 0 1 72 0"
+        stroke="#a8b2c1" stroke-width="1.8" opacity="0.65"/>
+  <path d="M58 80a22 22 0 0 1 44 0"
+        stroke="url(#brandGrad-06)" stroke-width="2.4"/>
+
+  <!-- center antenna (the user themselves) -->
+  <circle cx="80" cy="82" r="4" fill="url(#brandGrad-06)"/>
+  <!-- antenna stem suggests "you broadcasting" -->
+  <line x1="80" y1="82" x2="80" y2="92"
+        stroke="url(#brandGrad-06)" stroke-width="2"/>
+
+  <!-- lone-figure silhouette in the corner — "just you for now" -->
+  <g transform="translate(124, 50)" stroke="#a8b2c1" stroke-width="1.8"
+     fill="rgba(167,182,193,0.06)">
+    <!-- head -->
+    <circle cx="0" cy="0" r="5"/>
+    <!-- camera body around chest -->
+    <rect x="-8" y="8" width="16" height="10" rx="2"/>
+    <!-- camera lens -->
+    <circle cx="0" cy="13" r="3"/>
+    <!-- camera strap (tiny editorial touch) -->
+    <path d="M-8 9c-3-4-3-7 8-7s11 3 8 7"
+          fill="none" opacity="0.5"/>
+  </g>
+
+  <!-- subtle "?" floating to the right of the lone figure
+       — invites "send the link to bring others in" -->
+  <text x="142" y="42" font-family="Inter, sans-serif"
+        font-size="10" fill="#7a8696" opacity="0.6">?</text>
+</svg>

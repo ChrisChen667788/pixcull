@@ -22,9 +22,13 @@ public enum BrandTokens {
   public static let color_border_default: String = "#232830"
   public static let color_border_hi: String = "#2f3742"
   public static let color_brand_gradient: String = "linear-gradient(135deg, #6E56CF 0%, #A855F7 55%, #EC4899 100%)"
+  public static let color_brand_gradient_b: String = "linear-gradient(135deg, #5841C7 0%, #9F3FD9 55%, #EE3F8A 100%)"
   public static let color_brand_indigo: String = "#6E56CF"
+  public static let color_brand_indigo_b: String = "#5841C7"
   public static let color_brand_pink: String = "#EC4899"
+  public static let color_brand_pink_b: String = "#EE3F8A"
   public static let color_brand_violet: String = "#A855F7"
+  public static let color_brand_violet_b: String = "#9F3FD9"
   public static let color_decision_cull: String = "#ef6363"
   public static let color_decision_cull_cb: String = "#d946ef"
   public static let color_decision_keep: String = "#34d399"
@@ -79,6 +83,7 @@ public enum BrandTokens {
   public static let motion_ease_in_out: String = "cubic-bezier(0.4, 0, 0.2, 1)"
   public static let motion_ease_out: String = "cubic-bezier(0.34, 1.56, 0.64, 1)"
   public static let motion_ease_out_flat: String = "cubic-bezier(0.16, 1, 0.3, 1)"
+  public static let motion_ease_pixcull_overshoot: String = "cubic-bezier(0.34, 1.56, 0.64, 1)"
   public static let motion_ease_spring: String = "cubic-bezier(0.34, 1.56, 0.64, 1)"
 
   // MARK: radius

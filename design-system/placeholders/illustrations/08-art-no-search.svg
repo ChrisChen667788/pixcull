@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  v0.10 AI DRAFT · Illustration 08 — art-no-search
+  Search field + dashed ghost text + magnifier + floating ?
+  Surface: CLIP semantic search returns no matches.
+  Visually distinct from 02 (filter empty): emphasis is the
+  INPUT FIELD + the user-typed query that didn't land.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 120" fill="none"
+     stroke-linecap="round" stroke-linejoin="round">
+  <defs>
+    <linearGradient id="brandGrad-08" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"  stop-color="#6E56CF"/>
+      <stop offset="100%" stop-color="#EC4899"/>
+    </linearGradient>
+  </defs>
+
+  <ellipse cx="80" cy="103" rx="50" ry="5" fill="rgba(99,102,241,0.10)"/>
+
+  <!-- search input rectangle (pill shape, editorial) -->
+  <rect x="20" y="60" width="120" height="28" rx="14"
+        stroke="#a8b2c1" stroke-width="2"
+        fill="rgba(167,182,193,0.04)"/>
+
+  <!-- caret bar inside the input — "user typed here" -->
+  <line x1="36" y1="68" x2="36" y2="80"
+        stroke="url(#brandGrad-08)" stroke-width="2" opacity="0.9"/>
+
+  <!-- typed-text ghost (a few dashed lines, didn't resolve) -->
+  <path d="M44 74h44"
+        stroke="#7a8696" stroke-width="1.8"
+        stroke-dasharray="3 3" opacity="0.6"/>
+
+  <!-- magnifier on the right of the input -->
+  <g stroke="url(#brandGrad-08)" stroke-width="2" fill="none">
+    <circle cx="116" cy="74" r="6"/>
+    <line x1="120" y1="78" x2="125" y2="83"/>
+  </g>
+
+  <!-- floating question mark — "system asked back, no match" -->
+  <g transform="translate(80, 28)">
+    <path d="M-6 -6c0-5 4-9 9-9s9 4 9 9c0 5-9 6-9 11"
+          stroke="url(#brandGrad-08)" stroke-width="2.4"
+          fill="none"/>
+    <circle cx="3" cy="14" r="2" fill="url(#brandGrad-08)"/>
+  </g>
+
+  <!-- two small sparkles near the question mark — "we looked everywhere" -->
+  <circle cx="62" cy="20" r="1.2" fill="#6E56CF" opacity="0.5"/>
+  <circle cx="108" cy="32" r="1.2" fill="#EC4899" opacity="0.5"/>
+</svg>

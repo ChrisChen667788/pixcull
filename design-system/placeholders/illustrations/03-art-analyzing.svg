@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  v0.10 AI DRAFT · Illustration 03 — art-analyzing
+  Pulsing concentric rings around a small lens — the "thinking" state.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 120" fill="none"
+     stroke-linecap="round" stroke-linejoin="round">
+  <defs>
+    <linearGradient id="brandGrad-03" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"  stop-color="#6E56CF"/>
+      <stop offset="55%" stop-color="#A855F7"/>
+      <stop offset="100%" stop-color="#EC4899"/>
+    </linearGradient>
+  </defs>
+
+  <ellipse cx="80" cy="103" rx="50" ry="5" fill="rgba(99,102,241,0.10)"/>
+
+  <!-- 4 concentric rings, increasingly opaque toward center -->
+  <circle cx="80" cy="58" r="40" stroke="#6E56CF" stroke-width="1.2" opacity="0.12"/>
+  <circle cx="80" cy="58" r="30" stroke="#A855F7" stroke-width="1.5" opacity="0.28"/>
+  <circle cx="80" cy="58" r="20" stroke="#EC4899" stroke-width="1.8" opacity="0.55"/>
+
+  <!-- inner ring (full brand-gradient stroke) -->
+  <circle cx="80" cy="58" r="12" stroke="url(#brandGrad-03)" stroke-width="2.4"
+          fill="rgba(110,86,207,0.14)"/>
+
+  <!-- center dot -->
+  <circle cx="80" cy="58" r="3.5" fill="url(#brandGrad-03)"/>
+
+  <!-- 4 orbit dots equally spaced around the inner ring -->
+  <circle cx="80"  cy="46" r="1.4" fill="#A855F7" opacity="0.85"/>
+  <circle cx="92"  cy="58" r="1.4" fill="#A855F7" opacity="0.85"/>
+  <circle cx="80"  cy="70" r="1.4" fill="#A855F7" opacity="0.85"/>
+  <circle cx="68"  cy="58" r="1.4" fill="#A855F7" opacity="0.85"/>
+</svg>

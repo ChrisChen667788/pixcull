@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  v0.10 AI DRAFT · Illustration 07 — art-no-annotations
+  Clipboard + half-drawn pencil + first sketched star.
+  Surface: 0 human-rubric-labeled rows in this run.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 120" fill="none"
+     stroke-linecap="round" stroke-linejoin="round">
+  <defs>
+    <linearGradient id="brandGrad-07" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"  stop-color="#6E56CF"/>
+      <stop offset="55%" stop-color="#A855F7"/>
+      <stop offset="100%" stop-color="#EC4899"/>
+    </linearGradient>
+  </defs>
+
+  <ellipse cx="80" cy="103" rx="50" ry="5" fill="rgba(99,102,241,0.10)"/>
+
+  <!-- clipboard body -->
+  <rect x="46" y="22" width="68" height="76" rx="4"
+        stroke="#a8b2c1" stroke-width="2"
+        fill="rgba(167,182,193,0.06)"/>
+
+  <!-- clip on top -->
+  <rect x="68" y="16" width="24" height="10" rx="2"
+        stroke="#a8b2c1" stroke-width="2"
+        fill="rgba(167,182,193,0.15)"/>
+  <!-- screw nub on clip -->
+  <circle cx="80" cy="21" r="1.6" fill="#7a8696"/>
+
+  <!-- 3 guide lines (rubric rows waiting) -->
+  <line x1="56" y1="44" x2="102" y2="44"
+        stroke="#7a8696" stroke-width="1.4"
+        stroke-dasharray="3 4" opacity="0.65"/>
+  <line x1="56" y1="58" x2="102" y2="58"
+        stroke="#7a8696" stroke-width="1.4"
+        stroke-dasharray="3 4" opacity="0.55"/>
+  <line x1="56" y1="72" x2="86"  y2="72"
+        stroke="#7a8696" stroke-width="1.4"
+        stroke-dasharray="3 4" opacity="0.45"/>
+
+  <!-- pencil hovering over the third line (mid-thought, no ink yet) -->
+  <g stroke="url(#brandGrad-07)" stroke-width="2" stroke-linecap="round">
+    <!-- pencil body -->
+    <path d="M104 64l16-16"/>
+    <!-- tip detail -->
+    <path d="M120 48l4 4"/>
+    <!-- pencil end (eraser) -->
+    <path d="M124 52l-4-4" opacity="0.6"/>
+  </g>
+  <!-- pencil-tip dot, suggesting the next mark is imminent -->
+  <circle cx="100" cy="68" r="2" fill="url(#brandGrad-07)"/>
+
+  <!-- star outline at the bottom — "this is where ratings will go" -->
+  <path d="M56 86l3 6 6 1-4 4 1 6-5-3-5 3 1-6-4-4 6-1z"
+        stroke="url(#brandGrad-07)" stroke-width="1.6"
+        fill="rgba(110,86,207,0.08)" opacity="0.7"/>
+</svg>
