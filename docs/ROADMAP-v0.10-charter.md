@@ -89,8 +89,10 @@ event_id + label;collaborator 打开 results 页时弹一个 toast "在
 LAN 内发现 5 个协作会话 → 点击加入",省去"复制粘贴 URL / 扫 QR"。
 向后兼容:URL 仍然有效(出差远程协作场景)。
 
-#### v0.10-P0-3 · ML 复评:rescorer V3 + 风格 V2 benchmark
-**估时**: 2 周
+#### v0.10-P0-3 · ML 复评:rescorer V3 + 风格 V2 benchmark ✅
+**估时**: 2 周 · **实际**: 同次 commit · **已发布 evaluation harness**
+(真实模型 retrain 与 benchmark 跑分需要真实 22k+ 标注 + 多元摄影师 goldenset,
+脚本就绪即可启动)
 
 **rescorer V3**:在累计的 22k 标注数据(v0.6 训练 + 之后所有人工
 标注)上重训 GradientBoosting。引入 v0.7+ 之后才有的特征(
