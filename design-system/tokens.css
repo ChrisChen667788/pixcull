@@ -1,0 +1,92 @@
+/*
+ * AUTO-GENERATED — DO NOT EDIT BY HAND.
+ *
+ * Source of truth: design-system/tokens.json
+ * Regenerate via:  python scripts/build_design_tokens.py
+ *
+ * Phase A of docs/DESIGN-SYSTEM-ROADMAP.md.  Edits to the JSON
+ * propagate to web (this CSS file), iOS (BrandTokens.swift), and
+ * Python (tokens.python.json) simultaneously on the next build.
+ */
+
+:root {
+  --color-accent-default: #6366f1;
+  --color-accent-focus-ring: rgba(129,140,248,0.55);
+  --color-accent-glow: rgba(99,102,241,0.40);
+  --color-accent-hi: #818cf8;
+  --color-accent-soft: rgba(99,102,241,0.14);
+  --color-border-default: #232830;
+  --color-border-hi: #2f3742;
+  --color-brand-gradient: linear-gradient(135deg, #6E56CF 0%, #A855F7 55%, #EC4899 100%);
+  --color-brand-indigo: #6E56CF;
+  --color-brand-pink: #EC4899;
+  --color-brand-violet: #A855F7;
+  --color-decision-cull: #ef6363;
+  --color-decision-cull-cb: #d946ef;
+  --color-decision-keep: #34d399;
+  --color-decision-keep-cb: #0ea5e9;
+  --color-decision-maybe: #fbbf24;
+  --color-decision-maybe-cb: #f59e0b;
+  --color-fg-muted: #a8b2c1;
+  --color-fg-muted-soft: #7a8696;
+  --color-fg-primary: #f1f3f7;
+  --color-fg-secondary: #c5cad4;
+  --color-semantic-danger: #ef6363;
+  --color-semantic-danger-border: rgba(239,99,99,0.40);
+  --color-semantic-danger-tint: rgba(239,99,99,0.14);
+  --color-semantic-info: #38bdf8;
+  --color-semantic-info-border: rgba(56,189,248,0.40);
+  --color-semantic-info-tint: rgba(56,189,248,0.14);
+  --color-semantic-neutral: #a8b2c1;
+  --color-semantic-neutral-border: rgba(168,178,193,0.30);
+  --color-semantic-neutral-tint: rgba(168,178,193,0.10);
+  --color-semantic-success: #34d399;
+  --color-semantic-success-border: rgba(52,211,153,0.40);
+  --color-semantic-success-tint: rgba(52,211,153,0.14);
+  --color-semantic-warn: #fbbf24;
+  --color-semantic-warn-border: rgba(251,191,36,0.40);
+  --color-semantic-warn-tint: rgba(251,191,36,0.14);
+  --color-surface-bg: #1a1c20;
+  --color-surface-bg-card: #23262c;
+  --color-surface-bg-card-hi: #2a2e35;
+  --color-surface-chrome: #14161a;
+  --color-surface-surface-2: #2a2e35;
+  --color-surface-surface-3: #34383f;
+  --font-family-body: Inter, -apple-system, BlinkMacSystemFont, Segoe UI Variable, Segoe UI, PingFang SC, Microsoft Yahei UI, sans-serif;
+  --font-family-display: Inter Display, Inter, -apple-system, BlinkMacSystemFont, Segoe UI Variable, Segoe UI, PingFang SC, Microsoft Yahei UI, sans-serif;
+  --font-family-mono: ui-monospace, SF Mono, JetBrains Mono, Menlo, monospace;
+  --font-family-serif: Charter, Iowan Old Style, PT Serif, Source Serif Pro, Source Serif 4, Cambria, Georgia, Songti SC, STZhongsong, serif;
+  --font-lineheight-loose: 1.7;
+  --font-lineheight-normal: 1.55;
+  --font-lineheight-tight: 1.25;
+  --font-size-body: 13px;
+  --font-size-h2: 18px;
+  --font-size-h3: 14px;
+  --font-size-hero: 28px;
+  --font-size-small: 11.5px;
+  --font-size-tiny: 10.5px;
+  --motion-duration-fast: 120ms;
+  --motion-duration-normal: 220ms;
+  --motion-duration-slow: 320ms;
+  --motion-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --motion-ease-out: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --motion-ease-out-flat: cubic-bezier(0.16, 1, 0.3, 1);
+  --motion-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --radius-lg: 10px;
+  --radius-md: 6px;
+  --radius-pill: 999px;
+  --radius-sm: 4px;
+  --radius-xl: 14px;
+  --shadow-lg: 0 12px 32px rgba(0,0,0,0.50);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.40);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.30);
+  --shadow-xl: 0 24px 56px rgba(0,0,0,0.55);
+  --spacing-1: 4px;
+  --spacing-2: 8px;
+  --spacing-3: 12px;
+  --spacing-4: 16px;
+  --spacing-5: 20px;
+  --spacing-6: 24px;
+  --spacing-7: 32px;
+  --spacing-8: 48px;
+}
