@@ -236,27 +236,61 @@ class 在 drag 过程中关闭 transform transition 防 rubbery 跟手。
 
 ### P2(锦上添花,视情况)
 
-#### v0.9-P2-1 · Light theme V2
-**估时**: 2-3 天
+#### v0.9-P2-1 · Light theme V2 ✅
+**估时**: 2-3 天 · **实际**: 同次 commit · **已发布**
 
-当前 light theme 是 afterthought。重做 shadow(暖色调,不是 rgba(0,0,0,X))
-+ 不同的 surface-2/-3 配色 + 不同的 type weight。让 light 和 dark 都有
-"我精心调过这个 theme"感。
+V1 是"反转暗主题"的 afterthought;V2 用三轴 polish 让 light 也感到
+"精心调过":
 
-#### v0.9-P2-2 · Filter group color hints + table-first admin perf
-**估时**: 3-4 天
+1. **Warm shadows** —— `rgba(89, 54, 18, X)` burnt-sienna 底,替代 V1 的
+   cold slate `rgba(15, 23, 42, X)`。在暖背景上 cool shadow 看起来像
+   sticker 贴的;warm shadow 读得像 editorial 自然光的真实阴影。
+2. **Sand-cream surface ramp** —— `--bg: #fbf9f5`(90 gsm paper)、
+   `--surface-2: #f0ebe1`(sand chip 1)、`--surface-3: #e6dfd2`
+   (sand chip 2)、`--border: #e3ddcf`(muted khaki)。surface 现在
+   感觉是分层的纸,不只是不同灰度。
+3. **Type-weight bumps** —— light 上 retina halo 会把 glyph 视觉重量
+   削掉 ~30g;补偿用 `--weight-display: 700` / `--weight-emph: 600` /
+   `--weight-body: 450`。只在 light 应用,dark 保持原样。
 
-- 8 个 library group 各加 6px leading dot,颜色对应该 group 的 semantic
-  (Decision = accent / Scene = success / Style = warn / Face = info /
-  Bursts = danger …)Notion-style。
-- `/admin/perf` 改成 first-class data table(列可拖、列可隐藏、cell
-  inline-edit)。当前是 fixed-card 布局。
+#### v0.9-P2-2 · Filter group color hints + table-first admin perf ✅
+**估时**: 3-4 天 · **实际**: 同次 commit · **已发布**
 
-#### v0.9-P2-3 · 5 个新 empty-state SVG 插画
-**估时**: 2-3 天
+两个独立 polish 一并打包:
 
-buckets 空 / 历史空 / sync 无 peer / annotation 0 完成 / search 无结果。
-每个 ~100 行 SVG,沿用 v0.4 P1 (3/4) 的两色调 palette。
+**Filter group color dots(Notion-style)** —— 8 个 `.lp-group` 每个
+summary 行末尾加 6 px leading dot,颜色 = 该 group 的 semantic family:
+decision→accent indigo / scene→success green / style→warn amber /
+face→info cyan / location→pink / burst→danger red / reason→violet /
+al→amber。`[open]` 状态用 `color-mix(in srgb, var(--lp-dot) 22%,
+transparent)` 加 3 px outer glow。
+
+**`/admin/perf` 改成 first-class data table** —— 5-col 表格,可点表头
+排序(asc → desc → none cycle),列设置弹窗 toggle 可见性,
+draggable headers 拖拽重排序,所有偏好持久化到 `localStorage[
+pixcull_admin_perf_cols]`。size 列还加一个 zebra-行 chip 颜色编码
+(tiny→neutral / small→keep / med→maybe / large→cull)。row count +
+last-refreshed 时间挂在 toolbar。
+
+#### v0.9-P2-3 · 5 个新 empty-state SVG 插画 ✅
+**估时**: 2-3 天 · **实际**: 同次 commit · **已发布**
+
+5 个新 160×120 symbol,沿用 v0.4 P1 (3/4) 的两色调 palette
+(`var(--muted)` 描边 + `var(--accent)` 高亮 + `rgba(99,102,241,X)`
+soft wash),整套 art system 跨所有 empty 表面读起来是一致家族:
+
+- **`art-empty-buckets`** —— 三只 bucket 剪影 + 居中 "+" 浮在上面,
+  线框 P-UX-22 的桶语义。**已 wired**:`_renderBucketsPanel` zero-bucket。
+- **`art-empty-history`** —— 时钟表盘 + 凝固在 12 点 + dust 粒子,
+  暗示"无时间线"。**已 wired**:`_serve_history_page` zero-entries。
+- **`art-no-peer`** —— wifi 同心圆 + 角落孤独人像,sync 无协作者用。
+  **已 wired**:v0.9-P1-2 presence popover zero-peers。
+- **`art-no-annotations`** —— clipboard + 半铅笔 + 第一行未画的星,
+  人工标注 0 完成态。**SVG 已加,等 call-site 接入**。
+- **`art-no-search`** —— search input + 浮动 ? + 输入框内 dashed ghost,
+  CLIP 搜索 0 命中,与 filter-empty 视觉 + 文案区分(refine vs
+  synonym)。**已 wired**:grid empty-state 根据
+  `filterState.semSearch.q` 分流。
 
 ## 建议外部资源 / 灵感参考
 

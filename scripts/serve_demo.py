@@ -5787,9 +5787,38 @@ class _Handler(BaseHTTPRequestHandler):
                 f'</div>'
                 f'</a>'
             )
+        # v0.9-P2-3 — illustrated empty state.  /history is a
+        # self-contained page (no shared sprite from results.html),
+        # so we inline the same art-empty-history SVG path data
+        # rather than reference an external symbol.  Keep the
+        # vector in sync with the symbol in
+        # pixcull/report/templates/results.html (line ~4994).
+        empty_history_svg = (
+            '<svg viewBox="0 0 160 120" fill="none" '
+            'stroke-linecap="round" stroke-linejoin="round" '
+            'style="width:160px;height:120px;margin-bottom:14px;'
+            'filter:drop-shadow(0 8px 24px var(--accent-glow))">'
+            '<ellipse cx="80" cy="103" rx="50" ry="5" fill="rgba(99,102,241,0.10)"/>'
+            '<circle cx="80" cy="58" r="32" fill="var(--surface-2)" '
+            'stroke="var(--muted)" stroke-width="2"/>'
+            '<path d="M80 58v-22" stroke="var(--accent)" stroke-width="2.6"/>'
+            '<path d="M80 58l14 6" stroke="var(--accent)" stroke-width="2" opacity="0.6"/>'
+            '<circle cx="80" cy="58" r="3" fill="var(--accent)"/>'
+            '<path d="M80 30v4" stroke="var(--accent)" stroke-width="2.4"/>'
+            '<circle cx="36" cy="40" r="1.4" fill="var(--accent)" opacity="0.55"/>'
+            '<circle cx="124" cy="36" r="1.2" fill="var(--accent)" opacity="0.45"/>'
+            '<circle cx="48" cy="22" r="1.6" fill="var(--accent)" opacity="0.65"/>'
+            '</svg>'
+        )
         cards_html = "\n".join(cards) if cards else (
-            '<div class="empty">还没有跑过任何 run。<br>'
-            '<a href="/" style="color:var(--accent)">回上传页 →</a></div>'
+            '<div class="empty" style="text-align:center;padding:40px 24px">'
+            + empty_history_svg
+            + '<div style="font-size:18px;font-weight:600;color:var(--fg);'
+              'letter-spacing:-0.01em">还没有跑过任何 run</div>'
+              '<div style="margin-top:8px;color:var(--muted);font-size:13px">'
+              '上传第一批照片,运行结果会自动归档到这里。</div>'
+              '<a class="btn primary" href="/" '
+              'style="margin-top:18px;display:inline-block">回上传页 →</a></div>'
         )
 
         page = (
@@ -15256,6 +15285,14 @@ PYTHONPATH=. python scripts/eval_on_golden_set.py golden/ \
 # v0.7-P0-3 — performance debug page.  Self-contained HTML with the
 # same _DESIGN_TOKENS_CSS palette as upload/admin so light/dark
 # themes apply uniformly.  Auto-refreshes every 4 s via /admin/perf.json.
+#
+# v0.9-P2-2 — the per-run section is now a first-class data table:
+#  * every column sorts on click (asc → desc → original)
+#  * a toolbar of checkboxes hides / shows columns
+#  * column headers are drag-to-reorder
+#  * a row count + last-refreshed timestamp grounds the live data
+#  * preferences (column order + visibility) persist in localStorage
+#    so a power user's layout survives the next admin session
 _ADMIN_PERF_HTML = (r"""<!DOCTYPE html>
 <html lang="zh-CN" data-theme="dark">
 <head>
@@ -15314,19 +15351,6 @@ _ADMIN_PERF_HTML = (r"""<!DOCTYPE html>
     font-size: var(--t-small); color: var(--muted-soft, var(--muted));
     margin-top: 2px;
   }
-  table {
-    width: 100%; border-collapse: collapse;
-    font-size: var(--t-small);
-  }
-  th, td {
-    padding: 6px 10px; text-align: left;
-    border-bottom: 1px solid var(--border);
-  }
-  th {
-    color: var(--muted); font-weight: 600;
-    font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;
-  }
-  tr:last-child td { border-bottom: 0; }
   .back {
     color: var(--muted); text-decoration: none;
     font-size: var(--t-small); margin-bottom: 12px; display: inline-block;
@@ -15347,6 +15371,99 @@ _ADMIN_PERF_HTML = (r"""<!DOCTYPE html>
   }
   .gauge .fill.warn { background: var(--maybe); box-shadow: 0 0 6px var(--maybe); }
   .gauge .fill.bad  { background: var(--cull);  box-shadow: 0 0 6px var(--cull);  }
+
+  /* v0.9-P2-2 — first-class data table for /admin/perf.
+     Notion / Linear pattern: sortable headers, draggable columns,
+     a column-toggle popover, sticky header, zebra rows. */
+  .dt-bar {
+    display: flex; flex-wrap: wrap; gap: 10px;
+    align-items: center; margin-bottom: 10px;
+    font-size: var(--t-small);
+  }
+  .dt-bar .dt-meta { color: var(--muted); }
+  .dt-bar .dt-spacer { flex: 1; }
+  .dt-bar .dt-btn {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--fg);
+    border-radius: var(--radius-pill);
+    padding: 4px 12px; font-size: 11.5px;
+    cursor: pointer;
+    transition: background var(--duration-fast) var(--ease-out);
+  }
+  .dt-bar .dt-btn:hover { background: var(--surface-3); }
+  .dt-pop {
+    position: relative; display: inline-block;
+  }
+  .dt-pop-menu {
+    position: absolute; top: 100%; right: 0; margin-top: 6px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-hi, var(--border));
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    padding: 8px 4px;
+    min-width: 200px;
+    z-index: 30;
+    display: none;
+  }
+  .dt-pop.open .dt-pop-menu { display: block; }
+  .dt-pop-menu label {
+    display: flex; align-items: center; gap: 8px;
+    padding: 5px 12px; font-size: 12px;
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+  }
+  .dt-pop-menu label:hover { background: var(--surface-2); }
+  .dt-pop-menu input[type="checkbox"] { accent-color: var(--accent); }
+  .dt-table {
+    width: 100%; border-collapse: collapse;
+    font-size: var(--t-small);
+    table-layout: fixed;
+  }
+  .dt-table th, .dt-table td {
+    padding: 7px 11px;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .dt-table th {
+    color: var(--muted); font-weight: 600;
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;
+    cursor: pointer; user-select: none;
+    background: var(--bg-card);
+    position: sticky; top: 0;
+    border-bottom: 1px solid var(--border-hi, var(--border));
+  }
+  .dt-table th[data-numeric] { text-align: right; }
+  .dt-table td[data-numeric] { text-align: right; }
+  .dt-table th .sort-glyph {
+    display: inline-block; width: 10px;
+    color: var(--muted-soft); margin-left: 4px;
+    font-size: 10px;
+  }
+  .dt-table th.asc  .sort-glyph::after { content: "▲"; color: var(--accent); }
+  .dt-table th.desc .sort-glyph::after { content: "▼"; color: var(--accent); }
+  .dt-table th:hover { color: var(--fg); }
+  .dt-table th.dragging { opacity: 0.5; }
+  .dt-table th.drop-target {
+    box-shadow: inset 3px 0 0 0 var(--accent);
+  }
+  .dt-table tr:nth-child(even) td { background: var(--surface-2); }
+  .dt-table tr.empty td {
+    text-align: center; color: var(--muted);
+    padding: 18px; font-style: italic;
+    background: transparent !important;
+  }
+  /* Soft size-class chip lights the cache column at a glance. */
+  .dt-table .sz-chip {
+    display: inline-block; padding: 1px 8px;
+    border-radius: 999px; font-size: 10.5px;
+    font-weight: 600; letter-spacing: 0.02em;
+  }
+  .dt-table .sz-tiny  { background: rgba(75, 85, 99, 0.18);  color: var(--muted); }
+  .dt-table .sz-small { background: rgba(16, 185, 129, 0.18); color: var(--keep, #10b981); }
+  .dt-table .sz-med   { background: rgba(217, 119, 6, 0.18);  color: var(--maybe, #d97706); }
+  .dt-table .sz-large { background: rgba(220, 38, 38, 0.18);  color: var(--cull, #dc2626); }
 </style>
 </head>
 <body>
@@ -15373,12 +15490,20 @@ _ADMIN_PERF_HTML = (r"""<!DOCTYPE html>
 </div>
 
 <div class="panel">
-  <h2><span class="dot"></span>Per-run 行数 + 缓存大小</h2>
-  <table id="runsTable">
-    <thead>
-      <tr><th>run_id</th><th style="text-align:right">行数</th><th style="text-align:right">缓存</th></tr>
-    </thead>
-    <tbody></tbody>
+  <h2><span class="dot"></span>Per-run 数据表</h2>
+  <div class="dt-bar">
+    <span class="dt-meta" id="dtRowCount">…</span>
+    <span class="dt-meta">最后刷新 <span id="dtLastTs">—</span></span>
+    <span class="dt-spacer"></span>
+    <div class="dt-pop" id="dtColsPop">
+      <button class="dt-btn" id="dtColsBtn" type="button">列设置</button>
+      <div class="dt-pop-menu" id="dtColsMenu"></div>
+    </div>
+    <button class="dt-btn" id="dtResetBtn" type="button" title="恢复默认列顺序 + 显示">重置</button>
+  </div>
+  <table class="dt-table" id="dtRunsTable">
+    <thead><tr id="dtHeadRow"></tr></thead>
+    <tbody id="dtBody"></tbody>
   </table>
 </div>
 
@@ -15390,6 +15515,221 @@ function fmtBytes(n) {
   if (n < 1024 * 1024 * 1024) return (n / 1024 / 1024).toFixed(1) + " MB";
   return (n / 1024 / 1024 / 1024).toFixed(2) + " GB";
 }
+function fmtSizeChip(n) {
+  if (n == null) return '<span class="sz-chip sz-tiny">—</span>';
+  let cls = "sz-tiny";
+  if (n > 1024 * 1024 * 1024)      cls = "sz-large";
+  else if (n > 256 * 1024 * 1024)  cls = "sz-med";
+  else if (n > 1024 * 1024)        cls = "sz-small";
+  return `<span class="sz-chip ${cls}">${fmtBytes(n)}</span>`;
+}
+
+// ===================================================================
+// v0.9-P2-2 — first-class data table for /admin/perf.
+//
+// Column definitions are the single source of truth — adding a new
+// metric is a one-line append here.  Each column carries:
+//   key       — keyed on the row data dict
+//   label     — header cell text
+//   numeric   — right-align + numeric sort
+//   sortVal   — explicit sort key (defaults to raw value)
+//   render    — cell HTML; defaults to mono-text of the value
+// ===================================================================
+const DT_COLS_DEFAULT = [
+  { key: "run_id",   label: "run_id",
+    render: r => `<span class="mono">${r.run_id}</span>` },
+  { key: "rows",     label: "行数", numeric: true,
+    render: r => `<span class="mono">${r.rows ?? "—"}</span>` },
+  { key: "size",     label: "缓存", numeric: true,
+    sortVal: r => r.size || 0,
+    render: r => fmtSizeChip(r.size) },
+  { key: "size_raw", label: "缓存 (字节)", numeric: true,
+    sortVal: r => r.size || 0,
+    render: r => `<span class="mono">${r.size ?? "—"}</span>` },
+  { key: "per_row",  label: "每行平均", numeric: true,
+    sortVal: r => (r.rows && r.size) ? (r.size / r.rows) : 0,
+    render: r => `<span class="mono">${r.rows ? fmtBytes(r.size / r.rows) : "—"}</span>` },
+];
+const DT_DEFAULT_HIDDEN = new Set(["size_raw"]);  // raw bytes hidden by default
+const DT_PREF_KEY = "pixcull_admin_perf_cols";
+
+const dtState = {
+  order: DT_COLS_DEFAULT.map(c => c.key),
+  hidden: new Set(DT_DEFAULT_HIDDEN),
+  sortKey: null,
+  sortDir: 0,       // 0 = none, 1 = asc, -1 = desc
+  data: [],
+};
+loadDtPrefs();
+
+function loadDtPrefs() {
+  try {
+    const raw = localStorage.getItem(DT_PREF_KEY);
+    if (!raw) return;
+    const j = JSON.parse(raw);
+    if (Array.isArray(j.order)) {
+      // Keep only known keys; append any newly-introduced cols at the
+      // end so a future schema addition doesn't disappear.
+      const known = new Set(DT_COLS_DEFAULT.map(c => c.key));
+      const filtered = j.order.filter(k => known.has(k));
+      DT_COLS_DEFAULT.forEach(c => { if (!filtered.includes(c.key)) filtered.push(c.key); });
+      dtState.order = filtered;
+    }
+    if (Array.isArray(j.hidden)) dtState.hidden = new Set(j.hidden);
+  } catch (_e) { /* private mode / corruption → defaults */ }
+}
+function saveDtPrefs() {
+  try {
+    localStorage.setItem(DT_PREF_KEY, JSON.stringify({
+      order:  dtState.order,
+      hidden: Array.from(dtState.hidden),
+    }));
+  } catch (_e) {}
+}
+
+function dtColByKey(k) { return DT_COLS_DEFAULT.find(c => c.key === k); }
+
+function renderDtHead() {
+  const row = document.getElementById("dtHeadRow");
+  const cells = [];
+  for (const key of dtState.order) {
+    if (dtState.hidden.has(key)) continue;
+    const c = dtColByKey(key);
+    if (!c) continue;
+    const dir = dtState.sortKey === key ? dtState.sortDir : 0;
+    const cls = dir === 1 ? "asc" : dir === -1 ? "desc" : "";
+    const num = c.numeric ? ' data-numeric="1"' : "";
+    cells.push(`<th class="${cls}" data-key="${key}"${num} draggable="true">
+        ${c.label}<span class="sort-glyph"></span>
+      </th>`);
+  }
+  row.innerHTML = cells.join("");
+  // Sort-click handlers
+  row.querySelectorAll("th").forEach(th => {
+    th.addEventListener("click", () => {
+      const k = th.dataset.key;
+      if (dtState.sortKey === k) {
+        // asc → desc → none cycle so users can return to the
+        // server's natural ordering (rows desc) without a reload.
+        dtState.sortDir = dtState.sortDir === 1 ? -1 : dtState.sortDir === -1 ? 0 : 1;
+        if (dtState.sortDir === 0) dtState.sortKey = null;
+      } else {
+        dtState.sortKey = k;
+        dtState.sortDir = 1;
+      }
+      renderDtHead();
+      renderDtBody();
+    });
+  });
+  // Drag-to-reorder column handlers
+  let dragKey = null;
+  row.querySelectorAll("th").forEach(th => {
+    th.addEventListener("dragstart", e => {
+      dragKey = th.dataset.key;
+      th.classList.add("dragging");
+      e.dataTransfer.effectAllowed = "move";
+      // Some browsers need data set to fire dragend reliably.
+      e.dataTransfer.setData("text/plain", dragKey);
+    });
+    th.addEventListener("dragend", () => {
+      row.querySelectorAll("th").forEach(t => t.classList.remove("dragging", "drop-target"));
+      dragKey = null;
+    });
+    th.addEventListener("dragover", e => {
+      e.preventDefault();
+      row.querySelectorAll("th").forEach(t => t.classList.remove("drop-target"));
+      th.classList.add("drop-target");
+    });
+    th.addEventListener("drop", e => {
+      e.preventDefault();
+      const dropKey = th.dataset.key;
+      if (!dragKey || dragKey === dropKey) return;
+      const from = dtState.order.indexOf(dragKey);
+      const to   = dtState.order.indexOf(dropKey);
+      if (from < 0 || to < 0) return;
+      dtState.order.splice(from, 1);
+      dtState.order.splice(to, 0, dragKey);
+      saveDtPrefs();
+      renderDtHead();
+      renderDtBody();
+    });
+  });
+}
+
+function renderDtBody() {
+  const body = document.getElementById("dtBody");
+  let rows = dtState.data.slice();
+  if (dtState.sortKey && dtState.sortDir !== 0) {
+    const col = dtColByKey(dtState.sortKey);
+    const valFn = col && col.sortVal
+      ? col.sortVal
+      : (r => r[dtState.sortKey]);
+    rows.sort((a, b) => {
+      const va = valFn(a), vb = valFn(b);
+      if (va == null && vb == null) return 0;
+      if (va == null) return  1;
+      if (vb == null) return -1;
+      if (typeof va === "number" && typeof vb === "number") return va - vb;
+      return String(va).localeCompare(String(vb));
+    });
+    if (dtState.sortDir === -1) rows.reverse();
+  }
+  if (rows.length === 0) {
+    body.innerHTML = `<tr class="empty"><td colspan="${dtState.order.length - dtState.hidden.size}">(无活跃 run)</td></tr>`;
+    return;
+  }
+  const cells = rows.map(r => {
+    const tds = [];
+    for (const key of dtState.order) {
+      if (dtState.hidden.has(key)) continue;
+      const c = dtColByKey(key);
+      if (!c) continue;
+      const num = c.numeric ? ' data-numeric="1"' : "";
+      tds.push(`<td${num}>${c.render(r)}</td>`);
+    }
+    return `<tr>${tds.join("")}</tr>`;
+  });
+  body.innerHTML = cells.join("");
+}
+
+function renderDtColsMenu() {
+  const m = document.getElementById("dtColsMenu");
+  m.innerHTML = dtState.order.map(k => {
+    const c = dtColByKey(k); if (!c) return "";
+    const checked = dtState.hidden.has(k) ? "" : "checked";
+    return `<label><input type="checkbox" data-key="${k}" ${checked}/>${c.label}</label>`;
+  }).join("");
+  m.querySelectorAll("input").forEach(cb => {
+    cb.addEventListener("change", () => {
+      const k = cb.dataset.key;
+      if (cb.checked) dtState.hidden.delete(k);
+      else            dtState.hidden.add(k);
+      saveDtPrefs();
+      renderDtHead();
+      renderDtBody();
+    });
+  });
+}
+
+document.getElementById("dtColsBtn").addEventListener("click", e => {
+  e.stopPropagation();
+  document.getElementById("dtColsPop").classList.toggle("open");
+});
+document.addEventListener("click", e => {
+  if (!e.target.closest("#dtColsPop")) {
+    document.getElementById("dtColsPop").classList.remove("open");
+  }
+});
+document.getElementById("dtResetBtn").addEventListener("click", () => {
+  dtState.order  = DT_COLS_DEFAULT.map(c => c.key);
+  dtState.hidden = new Set(DT_DEFAULT_HIDDEN);
+  dtState.sortKey = null; dtState.sortDir = 0;
+  saveDtPrefs();
+  renderDtHead();
+  renderDtBody();
+  renderDtColsMenu();
+});
+
 async function refresh() {
   try {
     const res = await fetch("/admin/perf.json");
@@ -15406,19 +15746,23 @@ async function refresh() {
     g.classList.remove("warn", "bad");
     if (usedPct > 90) g.classList.add("bad");
     else if (usedPct > 75) g.classList.add("warn");
-    const rows = Object.entries(d.run_row_counts || {})
-      .sort((a, b) => (b[1] || 0) - (a[1] || 0));
+    const rowsRaw = Object.entries(d.run_row_counts || {});
     const sizes = d.disk_per_run || {};
-    document.querySelector("#runsTable tbody").innerHTML = rows.length
-      ? rows.map(([rid, n]) => `
-          <tr>
-            <td class="mono">${rid}</td>
-            <td class="mono" style="text-align:right">${n}</td>
-            <td class="mono" style="text-align:right">${fmtBytes(sizes[rid])}</td>
-          </tr>`).join("")
-      : `<tr><td colspan="3" style="color:var(--muted);text-align:center;padding:14px">(无活跃 run)</td></tr>`;
+    dtState.data = rowsRaw.map(([rid, n]) => ({
+      run_id: rid,
+      rows:   n,
+      size:   sizes[rid],
+    }));
+    document.getElementById("dtRowCount").textContent =
+      dtState.data.length + " 个 run · " +
+      (dtState.order.length - dtState.hidden.size) + " 列可见";
+    document.getElementById("dtLastTs").textContent =
+      new Date().toLocaleTimeString();
+    renderDtBody();
   } catch (_e) {}
 }
+renderDtHead();
+renderDtColsMenu();
 refresh();
 setInterval(refresh, 4000);
 </script>

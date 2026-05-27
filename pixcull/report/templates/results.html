@@ -183,7 +183,7 @@
     }
 
     /* ============================================================
-       v0.4 P2 (1/4) · LIGHT THEME
+       v0.4 P2 (1/4) · LIGHT THEME    (v0.9-P2-1 ←  V2 polish)
        ============================================================
        Token overrides applied via data-theme="light" on <html>.
        Auto-applied when (a) the user toggles via the new
@@ -191,29 +191,41 @@
        the user hasn't explicitly chosen "dark" (persisted in
        localStorage[pixcull_theme]).
 
+       V2 (v0.9-P2-1) tuning — V1 was an "invert the dark theme"
+       afterthought; V2 is a deliberately *warm* palette so light
+       mode feels like a paper-and-ink editorial, not bleached-out
+       dark mode.  Three shifts:
+
+         1. SHADOWS are warm (slate→amber undertone) instead of
+            cold blue-grey.  Photographers spend their work life
+            looking at warm-balanced skin tones; cold shadows on
+            white feel like a bad backlight.  See --shadow-* below.
+         2. SURFACE-2/-3 carry a faint sand tint instead of being
+            "darker grey of grey" — the surfaces now feel layered
+            rather than just shaded.
+         3. TYPE WEIGHT bumps on the largest text — light bgs need
+            ~30g more body to feel solid against bright surrounds.
+            See --weight-display / --weight-body below.
+
        Same semantic colors (success / warn / danger / info /
-       neutral) — only the tint + border alphas shift.  Surface
-       backgrounds invert: bg becomes #f5f6f8 (warm off-white),
-       cards become #ffffff with subtle borders.  Shadow ramps
-       lighten dramatically (0.06–0.12 alpha vs dark's 0.30–0.55)
-       since white surfaces don't need heavy shadows to elevate.
+       neutral) — only the tint + border alphas shift.
        ============================================================ */
     html[data-theme="light"] {
-      /* —— SURFACES —— */
-      --bg:           #f5f6f8;
+      /* —— SURFACES (V2 — sand-cream gradient, not cold grey) —— */
+      --bg:           #fbf9f5;    /* warm off-white, like 90 gsm paper */
       --bg-card:      #ffffff;
-      --bg-card-hi:   #f0f2f5;
-      --surface-2:    #ebedf0;
-      --surface-3:    #e0e3e8;
+      --bg-card-hi:   #f4eee4;    /* hover state, hint of vanilla */
+      --surface-2:    #f0ebe1;    /* sand chip 1 — buckets, panels */
+      --surface-3:    #e6dfd2;    /* sand chip 2 — inset cells */
       --chrome:       #ffffff;    /* sticky chrome reads as white card */
       /* —— TEXT —— */
       --fg:           #1a1d24;
       --fg-2:         #3c4250;
       --muted:        #5b6473;
       --muted-soft:   #8c95a3;
-      /* —— BORDERS —— */
-      --border:       #e0e3e8;
-      --border-hi:    #c8cdd5;
+      /* —— BORDERS (slightly warmer; muted khaki not steel) —— */
+      --border:       #e3ddcf;
+      --border-hi:    #c9c0ad;
       /* —— ACCENT (deeper indigo for AA contrast on white) —— */
       --accent:       #4f46e5;
       --accent-hi:    #6366f1;
@@ -236,11 +248,40 @@
       --c-neutral-tint:   rgba(75,85,99,0.06);
       --c-neutral-border: rgba(75,85,99,0.22);
       --c-neutral:        #4b5563;
-      /* —— SHADOWS (much lighter on white) —— */
-      --shadow-sm: 0 1px 2px rgba(15,23,42,0.06);
-      --shadow-md: 0 4px 12px rgba(15,23,42,0.08);
-      --shadow-lg: 0 12px 32px rgba(15,23,42,0.10);
-      --shadow-xl: 0 24px 56px rgba(15,23,42,0.12);
+      /* —— SHADOWS (V2 — warm amber undertone, not cold slate) ——
+         Using rgba(89, 54, 18, X) — burnt-sienna base, ~15% of full
+         opacity at each rung.  On a warm bg the cool blue-slate
+         shadow we shipped in V1 reads as "sticker pasted on the
+         page"; the amber one reads as a real object casting a real
+         shadow under warm tungsten / natural-light editorial. */
+      --shadow-sm: 0 1px 2px  rgba(89, 54, 18, 0.07);
+      --shadow-md: 0 4px 14px rgba(89, 54, 18, 0.09);
+      --shadow-lg: 0 14px 34px rgba(89, 54, 18, 0.10);
+      --shadow-xl: 0 28px 60px rgba(89, 54, 18, 0.12);
+      /* —— TYPE WEIGHT (V2 — display bumps to 600/700 on light) ——
+         Cheap visual trick: white surfaces eat ~30g of perceived
+         weight (the "halo" of bright pixels around a glyph blooms
+         on retina + thins the stroke).  We pre-compensate by
+         bumping display weights one step on the light theme only —
+         dark mode still feels right at the original weight. */
+      --weight-display: 700;     /* h1 / hero numerals */
+      --weight-emph:    600;     /* h2 / section heads */
+      --weight-body:    450;     /* body — gets 50g over the default 400 */
+    }
+    /* Apply the V2 weight bumps only in light mode.  Wrapping in a
+       single selector keeps the dark theme exactly as-shipped (so
+       we're additive, not destructive). */
+    html[data-theme="light"] body { font-weight: var(--weight-body, 400); }
+    html[data-theme="light"] h1,
+    html[data-theme="light"] .ai-num,
+    html[data-theme="light"] .keynum-v,
+    html[data-theme="light"] .pixcull-wordmark {
+      font-weight: var(--weight-display, 700);
+    }
+    html[data-theme="light"] h2,
+    html[data-theme="light"] h3,
+    html[data-theme="light"] .modal-title {
+      font-weight: var(--weight-emph, 600);
     }
     /* The browser-tab theme color must match the actual theme so
        PWA-installed iOS shows the right status-bar tint. */
@@ -4615,6 +4656,38 @@
       line-height: 1;
     }
     .lp-group[open] > summary::before { transform: rotate(90deg); }
+    /* v0.9-P2-2 — Notion-style 6px leading color dot per group.
+       Color carries the *semantic family* of the filter (decision =
+       accent indigo, scene = success green, style = warn amber, ...)
+       so 8 groups read as a typed taxonomy at a glance, not eight
+       indistinguishable accordion bars.  Token map kept in sync with
+       the data-group attribute set on each <details> element. */
+    .lp-group > summary {
+      position: relative;
+    }
+    .lp-group > summary::after {
+      content: "";
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--lp-dot, var(--muted-soft));
+      flex: 0 0 6px;
+      margin-left: 4px;
+      box-shadow: 0 0 0 0 var(--lp-dot, transparent);
+      transition: box-shadow var(--duration-fast) var(--ease-out);
+    }
+    .lp-group[open] > summary::after {
+      /* Subtle outer glow when the group is expanded — confirms the
+         dot's color and reinforces "this group is active". */
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--lp-dot) 22%, transparent);
+    }
+    .lp-group[data-group="decision"] > summary { --lp-dot: var(--accent, #6366f1); }
+    .lp-group[data-group="scene"]    > summary { --lp-dot: var(--c-success, #10b981); }
+    .lp-group[data-group="style"]    > summary { --lp-dot: var(--c-warn, #d97706); }
+    .lp-group[data-group="face"]     > summary { --lp-dot: var(--c-info, #0ea5e9); }
+    .lp-group[data-group="location"] > summary { --lp-dot: #ec4899; }   /* brand pink */
+    .lp-group[data-group="burst"]    > summary { --lp-dot: var(--c-danger, #ef4444); }
+    .lp-group[data-group="reason"]   > summary { --lp-dot: #a855f7; }   /* brand violet */
+    .lp-group[data-group="al"]       > summary { --lp-dot: #f59e0b; }   /* amber-amber */
     .lp-group .lp-count {
       margin-left: auto;
       font-size: 10.5px;
@@ -4917,6 +4990,148 @@
         <circle cx="80" cy="60" r="12" fill="var(--accent-soft)"
                 stroke="var(--accent)" stroke-width="2"/>
         <circle cx="80" cy="60" r="3" fill="var(--accent)"/>
+      </symbol>
+
+      <!-- ============================================================
+           v0.9-P2-3 · FIVE NEW EMPTY-STATE ILLUSTRATIONS
+           ============================================================
+           Same 160×120 viewport + two-tone palette (var(--muted) for
+           outlines, var(--accent) for the "this is the meaningful
+           thing" highlight, rgba(99,102,241,X) for soft wash) as the
+           v0.4 P1 (3/4) trio above, so the art system reads as a
+           single coherent family across all empty surfaces.
+           ============================================================ -->
+
+      <!-- 1. "Empty buckets" — three nested bucket silhouettes.
+           Used when /buckets has zero deliverable buckets defined. -->
+      <symbol id="art-empty-buckets" viewBox="0 0 160 120" fill="none"
+              stroke-linecap="round" stroke-linejoin="round">
+        <ellipse cx="80" cy="103" rx="50" ry="5"
+                 fill="rgba(99,102,241,0.10)"/>
+        <!-- Background buckets (muted, drift away to suggest "more await") -->
+        <path d="M28 50h28l-3 38a3 3 0 0 1-3 3H34a3 3 0 0 1-3-3z"
+              stroke="var(--muted-soft)" stroke-width="1.6"
+              fill="var(--surface-2)" opacity="0.55"/>
+        <path d="M104 50h28l-3 38a3 3 0 0 1-3 3h-19a3 3 0 0 1-3-3z"
+              stroke="var(--muted-soft)" stroke-width="1.6"
+              fill="var(--surface-2)" opacity="0.55"/>
+        <!-- Centre bucket (accent — the one the user would create) -->
+        <path d="M64 44h32l-4 46a4 4 0 0 1-4 4H72a4 4 0 0 1-4-4z"
+              stroke="var(--accent)" stroke-width="2.4"
+              fill="rgba(99,102,241,0.16)"/>
+        <path d="M64 48h32" stroke="var(--accent)" stroke-width="1.6" opacity="0.5"/>
+        <!-- Tiny "+" sign hovering above the centre bucket — implies "add one" -->
+        <path d="M80 28v10M75 33h10"
+              stroke="var(--accent)" stroke-width="2.4" opacity="0.85"/>
+      </symbol>
+
+      <!-- 2. "Empty history" — clock dial with no time markers + dust.
+           Used by /history when no archived runs exist. -->
+      <symbol id="art-empty-history" viewBox="0 0 160 120" fill="none"
+              stroke-linecap="round" stroke-linejoin="round">
+        <ellipse cx="80" cy="103" rx="50" ry="5"
+                 fill="rgba(99,102,241,0.10)"/>
+        <!-- Clock body -->
+        <circle cx="80" cy="58" r="32"
+                fill="var(--surface-2)" stroke="var(--muted)"
+                stroke-width="2"/>
+        <!-- Hands frozen at 12 — empty timeline, no progress -->
+        <path d="M80 58v-22" stroke="var(--accent)" stroke-width="2.6"/>
+        <path d="M80 58l14 6" stroke="var(--accent)" stroke-width="2"
+              opacity="0.6"/>
+        <circle cx="80" cy="58" r="3" fill="var(--accent)"/>
+        <!-- 12 marker only (the rest of the dial is unbuilt — "nothing logged yet") -->
+        <path d="M80 30v4" stroke="var(--accent)" stroke-width="2.4"/>
+        <!-- Dust particles drifting up to suggest "this is dormant" -->
+        <circle cx="36" cy="40" r="1.4" fill="var(--accent)" opacity="0.55"/>
+        <circle cx="124" cy="36" r="1.2" fill="var(--accent)" opacity="0.45"/>
+        <circle cx="48" cy="22" r="1.6" fill="var(--accent)" opacity="0.65"/>
+      </symbol>
+
+      <!-- 3. "No peer" — wifi-style ripples ending in an empty centre.
+           Used by the v0.9-P1-2 presence panel when no collaborators
+           are connected. -->
+      <symbol id="art-no-peer" viewBox="0 0 160 120" fill="none"
+              stroke-linecap="round" stroke-linejoin="round">
+        <ellipse cx="80" cy="103" rx="50" ry="5"
+                 fill="rgba(99,102,241,0.10)"/>
+        <!-- Three concentric arcs (signal ripples), outer two muted -->
+        <path d="M44 78a40 40 0 0 1 72 0"
+              stroke="var(--muted-soft)" stroke-width="2" opacity="0.45"/>
+        <path d="M54 78a30 30 0 0 1 52 0"
+              stroke="var(--muted)" stroke-width="2" opacity="0.65"/>
+        <path d="M64 78a20 20 0 0 1 32 0"
+              stroke="var(--accent)" stroke-width="2.4"/>
+        <!-- Dot at the centre — but with a subtle X over it to read "no signal" -->
+        <circle cx="80" cy="80" r="4" fill="var(--accent)"/>
+        <!-- Lone-figure silhouette beside the dot — "just you for now" -->
+        <circle cx="124" cy="56" r="6"
+                fill="var(--surface-2)" stroke="var(--accent)"
+                stroke-width="2"/>
+        <path d="M114 80c0-6 5-10 10-10s10 4 10 10"
+              stroke="var(--accent)" stroke-width="2"
+              fill="var(--surface-2)"/>
+      </symbol>
+
+      <!-- 4. "No annotations" — clipboard with a pencil sketching the
+           first row, but the page is otherwise blank.  Used by the
+           review queue / per-axis rubric panels when 0 rows are
+           human-labelled. -->
+      <symbol id="art-no-annotations" viewBox="0 0 160 120" fill="none"
+              stroke-linecap="round" stroke-linejoin="round">
+        <ellipse cx="80" cy="103" rx="50" ry="5"
+                 fill="rgba(99,102,241,0.10)"/>
+        <!-- Clipboard body -->
+        <rect x="48" y="20" width="64" height="74" rx="5"
+              fill="var(--surface-2)" stroke="var(--muted)"
+              stroke-width="2"/>
+        <!-- Clip on top -->
+        <rect x="68" y="14" width="24" height="10" rx="2"
+              fill="var(--muted)" stroke="var(--muted)" stroke-width="2"/>
+        <!-- Faint guide lines (would hold annotations) -->
+        <path d="M58 44h44M58 56h44M58 68h28"
+              stroke="var(--muted-soft)" stroke-width="1.6"
+              stroke-dasharray="3 4" opacity="0.7"/>
+        <!-- Pencil hovering over the third line (mid-thought, no ink yet) -->
+        <path d="M104 66l16-16 6 6-16 16zM118 52l4 4"
+              stroke="var(--accent)" stroke-width="2"
+              fill="rgba(99,102,241,0.16)"/>
+        <circle cx="100" cy="70" r="2" fill="var(--accent)"/>
+        <!-- Star outline — implies "ratings would go here" -->
+        <path d="M58 84l3 6 6 1-4 4 1 6-5-3-5 3 1-6-4-4 6-1z"
+              stroke="var(--accent)" stroke-width="1.4"
+              fill="none" opacity="0.55"/>
+      </symbol>
+
+      <!-- 5. "No search results" — input field with magnifier + a
+           drifting question mark.  Different from art-no-match
+           (which targets *filter* misses); this one's for keyword /
+           semantic search.  The visual difference matters: filter is
+           "you set criteria, refine", search is "phrase didn't land,
+           try synonyms". -->
+      <symbol id="art-no-search" viewBox="0 0 160 120" fill="none"
+              stroke-linecap="round" stroke-linejoin="round">
+        <ellipse cx="80" cy="103" rx="50" ry="5"
+                 fill="rgba(99,102,241,0.10)"/>
+        <!-- Search input rectangle (suggests the text field that fired) -->
+        <rect x="22" y="62" width="116" height="28" rx="14"
+              fill="var(--surface-2)" stroke="var(--muted)"
+              stroke-width="2"/>
+        <!-- Caret bar inside the input — "you typed something here" -->
+        <path d="M38 70v12" stroke="var(--accent)" stroke-width="2"
+              opacity="0.85"/>
+        <!-- Typed-text ghost (a few dashed lines, didn't resolve) -->
+        <path d="M46 76h44" stroke="var(--muted-soft)" stroke-width="1.8"
+              stroke-dasharray="2 3"/>
+        <!-- Magnifier on the right of the input -->
+        <circle cx="116" cy="76" r="6"
+                fill="var(--bg-card)" stroke="var(--accent)"
+                stroke-width="2"/>
+        <path d="M120 80l5 5" stroke="var(--accent)" stroke-width="2"/>
+        <!-- Floating question mark — "the system asked back, no match" -->
+        <path d="M76 32c0-5 4-9 9-9s9 4 9 9c0 5-9 6-9 11M85 50v3"
+              stroke="var(--accent)" stroke-width="2.4"
+              fill="none"/>
       </symbol>
 
       <!-- Sun + Moon — for the v0.4 P2 light-theme toggle -->
@@ -7426,7 +7641,30 @@
         const totalFilters = filterState.scenes.size + filterState.styles.size +
                              filterState.weddingMoments.size +
                              (filterState.decision !== "all" ? 1 : 0);
-        emptyHtml = `
+        // v0.9-P2-3 — differentiate filter-empty from search-empty.
+        // Filter-empty = user set criteria (decision / scene / style…).
+        // Search-empty = user typed a CLIP query that didn't land.
+        // Different art + framing keeps the two failure modes legible:
+        // "refine your filter" vs "try a synonym".
+        const isSearch = !!(filterState.semSearch
+                            && filterState.semSearch.q);
+        if (isSearch) {
+          emptyHtml = `
+          <div class="empty-state">
+            <svg class="empty-art"><use href="#art-no-search"/></svg>
+            <div class="empty-title">没有照片匹配你的搜索</div>
+            <div class="empty-hint">
+              CLIP 没有在 ${rows.length} 张图中找到匹配
+              <b>"${esc(filterState.semSearch.q)}"</b> 的照片。
+              试试同义词,或更宽泛的描述
+              (比如 "sunset over water" 替代 "golden hour beach")。
+            </div>
+            <div class="empty-actions">
+              <button class="btn primary" id="resetSearchBtn">清除搜索</button>
+            </div>
+          </div>`;
+        } else {
+          emptyHtml = `
           <div class="empty-state">
             <svg class="empty-art"><use href="#art-no-match"/></svg>
             <div class="empty-title">当前筛选下没有图片</div>
@@ -7437,6 +7675,7 @@
               <button class="btn primary" id="resetFiltersBtn">重置所有筛选</button>
             </div>
           </div>`;
+        }
       }
       grid.innerHTML = emptyHtml;
       const reset = document.getElementById("resetFiltersBtn");
@@ -7451,6 +7690,18 @@
         document.querySelectorAll("#decisionPills .pill, #sceneFilters .pill, #styleFilters .pill, #cullReasonFilter .pill")
           .forEach(el => el.classList.remove("active"));
         document.querySelector('#decisionPills .pill[data-d="all"]')?.classList.add("active");
+        render();
+      });
+      // v0.9-P2-3 — search-empty CTA: clear just the semantic search,
+      // leaving other filters intact (a user who's iterating on the
+      // query string doesn't want their scene + decision pills wiped).
+      const resetSearch = document.getElementById("resetSearchBtn");
+      if (resetSearch) resetSearch.addEventListener("click", () => {
+        filterState.semSearch = null;
+        const ssi = document.getElementById("semSearchInput");
+        const ssc = document.getElementById("semSearchClearBtn");
+        if (ssi) ssi.value = "";
+        if (ssc) ssc.style.display = "none";
         render();
       });
     } else if (segments.length <= BATCH_THRESHOLD) {
@@ -11387,8 +11638,22 @@
     const list = document.getElementById("presenceList");
     if (!list) return;
     if (_presencePeers.length === 0) {
-      list.innerHTML = `<div class="pp-empty">没有其他协作者在线。`
-                     + `把分享链接发给二摄/编辑,他们打开后会出现在这里。</div>`;
+      // v0.9-P2-3 — illustrated empty state instead of bare text.
+      // Uses the new #art-no-peer symbol from the sprite, mirroring
+      // the .empty-art chrome from v0.4 P1 (3/4) at a smaller size
+      // (the presence popover is ~380 px wide; 120×90 fits).
+      list.innerHTML = `<div class="pp-empty" style="text-align:center;padding:18px 12px">
+            <svg viewBox="0 0 160 120" style="width:120px;height:90px;opacity:0.92;
+                 filter:drop-shadow(0 6px 18px var(--accent-glow))">
+              <use href="#art-no-peer"/>
+            </svg>
+            <div style="margin-top:6px;font-weight:600;color:var(--fg);font-size:13px">
+              暂无其他协作者在线
+            </div>
+            <div style="margin-top:4px;line-height:1.5">
+              把分享链接发给二摄 / 编辑,他们打开后会出现在这里。
+            </div>
+          </div>`;
       return;
     }
     list.innerHTML = _presencePeers.map(p => {
@@ -12619,8 +12884,18 @@
     // for names not yet in the order array.
     const names = _readBucketOrder(b);
     if (!names.length) {
-      bucketsList.innerHTML = `<div class="muted" style="padding:14px;text-align:center;font-size:11.5px;line-height:1.6">
-        还没有桶。在下面输入名字 + Enter 创建第一个。<br><br>
+      // v0.9-P2-3 — illustrated empty state.  Compact (110×82) so
+      // the SVG sits comfortably inside the narrow buckets panel.
+      bucketsList.innerHTML = `<div class="muted" style="padding:14px 12px;text-align:center;font-size:11.5px;line-height:1.65">
+        <svg viewBox="0 0 160 120" style="width:110px;height:82px;
+             margin-bottom:6px;opacity:0.95;
+             filter:drop-shadow(0 6px 18px var(--accent-glow))">
+          <use href="#art-empty-buckets"/>
+        </svg>
+        <div style="font-weight:600;color:var(--fg);font-size:12.5px;margin-bottom:4px">
+          还没有桶
+        </div>
+        在下面输入名字 + Enter 创建第一个。<br>
         创建后,把卡片拖到桶上即可归属。<br>
         每个桶可以单独导出 zip / 复制文件名 / 清空。
       </div>`;
