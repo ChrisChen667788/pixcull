@@ -2181,6 +2181,12 @@ class _Handler(BaseHTTPRequestHandler):
                 qs = urlparse(self.path).query
                 rel = f"{run_id}?{qs}" if qs else run_id
                 self._serve_next_to_label(rel); return True
+            # v0.10-P0-4 — iOS Companion portfolio JSON.  Same data
+            # the web /share/<run>/<token> page builds, but as JSON
+            # without requiring a share token (iOS hits this through
+            # its existing API-key channel).
+            if rest == "portfolio":
+                return self._serve_run_portfolio_json(run_id)
         return False
 
     def _dispatch_api_v1_post(self, path: str) -> bool:
@@ -3258,6 +3264,54 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "max-age=30")
+        self.end_headers()
+        self.wfile.write(body)
+        return True
+
+    def _serve_run_portfolio_json(self, run_id: str) -> bool:
+        """v0.10-P0-4 — GET /api/v1/runs/<run_id>/portfolio
+
+        JSON variant of the v0.9-P0-5 /share/<run>/<token>
+        portfolio page.  iOS Companion's PortfolioView renders this
+        — same chapter grouping + keynums + per-row metadata as
+        the web, but in JSON not HTML.
+
+        Doesn't require a share token (iOS uses the existing
+        X-PixCull-API-Key channel for auth).  Skips the
+        share-page-only fields (comments, photographer name from
+        share-record) because those live in the share lifecycle,
+        not the run.
+        """
+        run = _get_run(run_id) or _reload_run_from_disk(run_id)
+        if run is None:
+            self.send_error(404, "no such run")
+            return True
+        try:
+            keeps, meta = self._share_collect_keeps(run)
+        except Exception as exc:
+            _dbg("api/v1/portfolio", exc, run_id)
+            self.send_error(500, "portfolio collect failed")
+            return True
+        # Shape the response for iOS's PortfolioResponse decoder.
+        payload = {
+            "meta": {
+                "photographer": None,   # iOS will pull from its own settings
+                "client":       None,
+                "event":        None,
+                "event_date":   meta.get("date_last"),
+                "contact":      None,
+                "n_total":      meta.get("n_total"),
+                "n_keeps":      meta.get("n_keeps"),
+                "ratio":        meta.get("ratio"),
+                "scenes":       list((meta.get("scenes") or {}).keys()),
+            },
+            "rows": keeps,
+        }
+        body = _safe_dumps(payload).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
         return True

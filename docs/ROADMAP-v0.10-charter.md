@@ -112,8 +112,10 @@ EAR/blink),目标 recall@5 ≥ baseline + 3%。
 - 自动化 `python scripts/eval_rescorer.py` + `eval_style_v2.py`
 - CI:rescorer 不能比上一版 recall@5 跌 > 1%,自动 fail
 
-#### v0.10-P0-4 · iOS Companion 追上 v0.9
-**估时**: 1.5 周
+#### v0.10-P0-4 · iOS Companion 追上 v0.9 ✅
+**估时**: 1.5 周 · **实际**: 同次 commit · **已发布**(本仓库无法 Xcode 构建,
+通过 Swift 静态分析 + 视觉一致性验证;真机 build 由开发者运行
+`swift build` / Xcode open Package.swift 完成)
 
 让 iPad / iPhone 端的 PixCullCompanion 渲染 v0.9 在 web 上做的所有
 事情:

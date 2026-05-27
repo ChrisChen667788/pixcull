@@ -201,4 +201,25 @@ public final class APIClient: ObservableObject {
             withAllowedCharacters: .urlPathAllowed) ?? filename
         return URL(string: "\(base)/full/\(runID)/\(enc)?w=\(size)")
     }
+
+    // v0.10-P0-4 — generic JSON GET/POST helpers used by the
+    // presence + push + portfolio clients.  Both decode into a
+    // caller-supplied Decodable type so the type system can stay
+    // narrow without us adding a per-endpoint shim.
+    public func get<T: Decodable>(path: String) async throws -> T {
+        let req = try makeRequest(path)
+        return try await runRequest(req, as: T.self)
+    }
+
+    public func post<T: Decodable, B: Encodable>(
+        path: String, body: B
+    ) async throws -> T {
+        let encoder = JSONEncoder()
+        // Server side reads snake_case; default Swift Encodable
+        // already produces it because our Encodable types use
+        // snake_case property names already.  Skip keyEncoding.
+        let data = try encoder.encode(body)
+        let req = try makeRequest(path, method: "POST", body: data)
+        return try await runRequest(req, as: T.self)
+    }
 }
