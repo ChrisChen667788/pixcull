@@ -152,3 +152,132 @@ def test_example_releases_json_renders():
     root = ET.fromstring(xml)
     # 2 entries in the example
     assert len(root.findall(".//item")) == 2
+
+
+# ---------------------------------------------------------------------------
+# v0.8-P1-2 — multi-platform schema (macOS DMG + Windows MSI + Linux AppImage
+# all coexist in one item, each with its own sparkle:os enclosure).
+# ---------------------------------------------------------------------------
+
+
+def test_legacy_schema_emits_sparkle_os_macos():
+    """A pre-v0.8 release with only a top-level url/sig still works
+    — but the emitted enclosure now carries `sparkle:os="macos"` so
+    Windows/Linux clients ignore it instead of mis-routing."""
+    bc = _load_module()
+    doc = {
+        "releases": [
+            {
+                "version": "0.7.0",
+                "pub_date": "2026-06-15",
+                "url": "https://x.com/PC.dmg",
+                "size_bytes": 12345,
+                "ed_signature": "SIG_MAC",
+            }
+        ]
+    }
+    xml = bc.render_appcast(doc)
+    root = ET.fromstring(xml)
+    encs = root.findall(".//enclosure")
+    assert len(encs) == 1
+    assert encs[0].get("sparkle:os",
+                       encs[0].get(
+                           "{http://www.andymatuschak.org/xml-namespaces/sparkle}os"
+                       )) == "macos"
+    assert encs[0].get("url") == "https://x.com/PC.dmg"
+
+
+def test_multi_platform_schema_emits_three_enclosures():
+    """An 0.8+ release with a platforms[] array emits one enclosure
+    per platform, each tagged sparkle:os."""
+    bc = _load_module()
+    doc = {
+        "releases": [
+            {
+                "version": "0.8.0",
+                "pub_date": "2026-09-01",
+                "release_notes": "<p>multi-platform release</p>",
+                "platforms": [
+                    {
+                        "os": "macos",
+                        "url": "https://x.com/PC-0.8.dmg",
+                        "size_bytes": 11111,
+                        "ed_signature": "SIG_MAC",
+                    },
+                    {
+                        "os": "windows",
+                        "url": "https://x.com/PC-0.8.msi",
+                        "size_bytes": 22222,
+                        "ed_signature": "SIG_WIN",
+                        "installer_arguments": "/passive",
+                    },
+                    {
+                        "os": "linux",
+                        "url": "https://x.com/PC-0.8.AppImage",
+                        "size_bytes": 33333,
+                        "ed_signature": "SIG_LIN",
+                    },
+                ],
+            }
+        ]
+    }
+    xml = bc.render_appcast(doc)
+    root = ET.fromstring(xml)
+    item = root.find(".//item")
+    encs = item.findall("enclosure")
+    assert len(encs) == 3
+    sp_ns = "{http://www.andymatuschak.org/xml-namespaces/sparkle}"
+    by_os = {e.get(f"{sp_ns}os"): e for e in encs}
+    assert set(by_os) == {"macos", "windows", "linux"}
+    assert by_os["macos"].get("url") == "https://x.com/PC-0.8.dmg"
+    assert by_os["windows"].get("url") == "https://x.com/PC-0.8.msi"
+    assert by_os["linux"].get("url") == "https://x.com/PC-0.8.AppImage"
+    # Per-platform sigs
+    assert by_os["macos"].get(f"{sp_ns}edSignature") == "SIG_MAC"
+    assert by_os["windows"].get(f"{sp_ns}edSignature") == "SIG_WIN"
+    assert by_os["linux"].get(f"{sp_ns}edSignature") == "SIG_LIN"
+    # Windows-only installer arguments propagate
+    assert by_os["windows"].get(f"{sp_ns}installerArguments") == "/passive"
+    # macOS + Linux entries don't carry the windows-only attr
+    assert by_os["macos"].get(f"{sp_ns}installerArguments") is None
+    assert by_os["linux"].get(f"{sp_ns}installerArguments") is None
+
+
+def test_multi_platform_missing_url_raises():
+    """A platform entry without `url` must blow up loudly — never
+    ship an enclosure with no download target."""
+    bc = _load_module()
+    import pytest
+    with pytest.raises(SystemExit):
+        bc.render_appcast({
+            "releases": [{
+                "version": "0.8.0",
+                "pub_date": "2026-09-01",
+                "platforms": [
+                    {"os": "windows", "size_bytes": 1},  # url missing
+                ],
+            }]
+        })
+
+
+def test_per_platform_sizes_propagate():
+    """Each platform's size_bytes ends up in the matching enclosure's
+    length attribute — not collapsed across variants."""
+    bc = _load_module()
+    doc = {
+        "releases": [{
+            "version": "0.8.0",
+            "pub_date": "2026-09-01",
+            "platforms": [
+                {"os": "macos",   "url": "u1", "size_bytes": 100},
+                {"os": "windows", "url": "u2", "size_bytes": 200},
+            ],
+        }]
+    }
+    xml = bc.render_appcast(doc)
+    root = ET.fromstring(xml)
+    encs = root.findall(".//enclosure")
+    sp_ns = "{http://www.andymatuschak.org/xml-namespaces/sparkle}"
+    by_os = {e.get(f"{sp_ns}os"): e for e in encs}
+    assert by_os["macos"].get("length") == "100"
+    assert by_os["windows"].get("length") == "200"

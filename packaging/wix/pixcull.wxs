@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  v0.8-P1-2 — WiX Toolset MSI definition for PixCull.
+
+  Companion file: scripts/release_windows.sh runs `heat` against
+  dist/PixCull/ to produce _files.wxs (the file-tree fragment), then
+  `candle` + `light` to combine it with this main file into the MSI.
+
+  We bind to the .exe at INSTALLFOLDER/PixCull.exe so the
+  Start-menu shortcut + uninstall registration both resolve cleanly
+  after install.
+
+  Version is passed in via -dVersion=... at candle time, so this
+  template doesn't need to be edited per-release.
+-->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product Id="*"
+           Name="PixCull"
+           Language="1033"
+           Version="$(var.Version)"
+           Manufacturer="ChrisChen Studio"
+           UpgradeCode="C9C7B6A0-1A7D-4D8A-9AF2-49E1A2B3C4D5">
+    <!--
+      UpgradeCode is the *product identity* across versions —
+      keep this GUID stable forever; bumping Version is enough to
+      trigger a major upgrade.
+    -->
+
+    <Package InstallerVersion="500"
+             Compressed="yes"
+             InstallScope="perMachine"
+             Description="PixCull — local-first AI photo culling"
+             Comments="https://github.com/ChrisChen667788/pixcull" />
+
+    <MajorUpgrade
+        DowngradeErrorMessage="A newer version of PixCull is already installed." />
+
+    <MediaTemplate EmbedCab="yes" />
+
+    <Feature Id="ProductFeature" Title="PixCull" Level="1">
+      <ComponentGroupRef Id="PixCullComponents" />
+      <ComponentRef Id="StartMenuShortcut" />
+    </Feature>
+
+    <!-- Default install path: Program Files\PixCull -->
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFiles64Folder">
+        <Directory Id="INSTALLFOLDER" Name="PixCull" />
+      </Directory>
+      <Directory Id="ProgramMenuFolder">
+        <Directory Id="ApplicationProgramsFolder" Name="PixCull" />
+      </Directory>
+    </Directory>
+
+    <!-- Start-menu shortcut -->
+    <DirectoryRef Id="ApplicationProgramsFolder">
+      <Component Id="StartMenuShortcut"
+                 Guid="A8F3C1B2-9D4E-4F2A-8B5C-6E7F8A9B0C1D">
+        <Shortcut Id="PixCullStartMenuShortcut"
+                  Name="PixCull"
+                  Description="Local-first AI photo culling"
+                  Target="[INSTALLFOLDER]PixCull.exe"
+                  WorkingDirectory="INSTALLFOLDER" />
+        <RemoveFolder Id="ApplicationProgramsFolder"
+                      On="uninstall" />
+        <RegistryValue Root="HKCU"
+                       Key="Software\PixCull"
+                       Name="installed"
+                       Type="integer"
+                       Value="1"
+                       KeyPath="yes" />
+      </Component>
+    </DirectoryRef>
+
+    <!-- Standard UI: license + install-path picker + progress -->
+    <UIRef Id="WixUI_InstallDir" />
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+
+    <!-- Icon shown in Add/Remove Programs.  The .ico ships in
+         packaging/wix/ alongside this file. -->
+    <Icon Id="PixCullIcon.ico" SourceFile="packaging/wix/pixcull.ico" />
+    <Property Id="ARPPRODUCTICON" Value="PixCullIcon.ico" />
+    <Property Id="ARPHELPLINK"
+              Value="https://github.com/ChrisChen667788/pixcull" />
+    <Property Id="ARPURLINFOABOUT"
+              Value="https://github.com/ChrisChen667788/pixcull" />
+  </Product>
+</Wix>

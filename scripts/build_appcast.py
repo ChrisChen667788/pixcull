@@ -125,17 +125,40 @@ def render_appcast(releases_doc: dict) -> str:
     for r in sorted_rel:
         version = str(r.get("version") or "")
         short = str(r.get("short_version") or version)
-        url = str(r.get("url") or "")
-        size = int(r.get("size_bytes") or 0)
-        sig = str(r.get("ed_signature") or "")
         notes = str(r.get("release_notes") or "")
         pub = _rfc822_date(str(r.get("pub_date") or "1970-01-01"))
         min_sys = str(r.get("min_system") or "")
         critical = bool(r.get("critical"))
-        if not version or not url:
+
+        # v0.8-P1-2 — backward-compat with the v0.7-P2-3 single-
+        # platform schema: when a release has only a top-level url /
+        # size_bytes / ed_signature, we emit one enclosure as before
+        # (and tag it macos so Sparkle on Windows / Linux ignores it
+        # rather than mis-routing).  When `platforms: [...]` is
+        # present, we emit one enclosure per platform with the
+        # appropriate sparkle:os attribute — Sparkle on each OS
+        # picks the enclosure tagged for its platform.
+        platforms = r.get("platforms")
+        if not isinstance(platforms, list) or not platforms:
+            platforms = [{
+                "os":           "macos",
+                "url":          r.get("url"),
+                "size_bytes":   r.get("size_bytes"),
+                "ed_signature": r.get("ed_signature"),
+                "min_system":   min_sys,
+            }]
+
+        if not version:
             raise SystemExit(
-                f"release entry missing required version/url: {r!r}"
+                f"release entry missing required 'version': {r!r}"
             )
+        # Each platform variant must at least have a url.
+        for plat in platforms:
+            if not plat.get("url"):
+                raise SystemExit(
+                    f"platform entry in v{version} missing 'url': {plat!r}"
+                )
+
         parts.append("    <item>")
         parts.append(f"      <title>Version {_esc(short)}</title>")
         parts.append(
@@ -159,21 +182,38 @@ def render_appcast(releases_doc: dict) -> str:
             # "Skip this version" / "Remind me later" UI is
             # disabled — used sparingly (data-loss fixes only).
             parts.append('      <sparkle:criticalUpdate />')
-        # Enclosure carries the actual binary URL + signature.
-        # ``sparkle:edSignature`` is the modern EdDSA variant; the
-        # legacy ``sparkle:dsaSignature`` is deprecated since
-        # Sparkle 2.0.
-        enclosure_attrs = [
-            f'url="{_esc(url)}"',
-            'type="application/octet-stream"',
-        ]
-        if size > 0:
-            enclosure_attrs.append(f'length="{size}"')
-        if sig:
-            enclosure_attrs.append(f'sparkle:edSignature="{_esc(sig)}"')
-        parts.append(
-            "      <enclosure " + " ".join(enclosure_attrs) + " />"
-        )
+
+        for plat in platforms:
+            os_name = str(plat.get("os") or "macos").lower()
+            p_url   = str(plat.get("url") or "")
+            p_size  = int(plat.get("size_bytes") or 0)
+            p_sig   = str(plat.get("ed_signature") or "")
+            # Enclosure carries the actual binary URL + signature.
+            # ``sparkle:edSignature`` is the modern EdDSA variant;
+            # the legacy ``sparkle:dsaSignature`` is deprecated
+            # since Sparkle 2.0.
+            enclosure_attrs = [
+                f'url="{_esc(p_url)}"',
+                f'sparkle:os="{_esc(os_name)}"',
+                'type="application/octet-stream"',
+            ]
+            if p_size > 0:
+                enclosure_attrs.append(f'length="{p_size}"')
+            if p_sig:
+                enclosure_attrs.append(
+                    f'sparkle:edSignature="{_esc(p_sig)}"'
+                )
+            # Optional installer args — Windows MSI takes /passive
+            # so the user doesn't get a "click Next 5 times" UAC
+            # popup on update.  Linux + macOS ignore this.
+            inst_args = plat.get("installer_arguments")
+            if inst_args:
+                enclosure_attrs.append(
+                    f'sparkle:installerArguments="{_esc(str(inst_args))}"'
+                )
+            parts.append(
+                "      <enclosure " + " ".join(enclosure_attrs) + " />"
+            )
         parts.append("    </item>")
     parts.append("  </channel>")
     parts.append("</rss>")
