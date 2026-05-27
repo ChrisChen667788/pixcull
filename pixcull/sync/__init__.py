@@ -49,6 +49,14 @@ from pixcull.sync.push import (
     normalize_edit,
     push_edits,
 )
+# v0.10-P0-2 — mDNS auto-discovery (optional zeroconf)
+from pixcull.sync.discovery import (
+    ZEROCONF_AVAILABLE,
+    advertise_event,
+    close_zc,
+    discover_events,
+    unadvertise_event,
+)
 
 __all__ = [
     "EventSession",
@@ -67,4 +75,10 @@ __all__ = [
     "append_edits_jsonl",
     "normalize_edit",
     "push_edits",
+    # v0.10-P0-2
+    "ZEROCONF_AVAILABLE",
+    "advertise_event",
+    "close_zc",
+    "discover_events",
+    "unadvertise_event",
 ]

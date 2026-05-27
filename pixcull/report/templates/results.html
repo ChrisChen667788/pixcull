@@ -11522,6 +11522,81 @@
   }
 
   // ==================================================================
+  // v0.10-P0-2 — mDNS auto-discovery of LAN sync events.
+  //
+  // Only fires when we're NOT already in an event session (no point
+  // hunting for sessions when we're already collaborating).  Hits
+  // /api/v1/sync/discover once on page-ready; if zeroconf is
+  // available on the server AND there are active sessions, shows a
+  // toast with a "join" CTA.  Sessions discovered later (host
+  // starts a session mid-session) are picked up on the next
+  // explicit user-driven refresh — we don't poll, since that would
+  // burn UDP traffic for what's already a low-frequency event.
+  // ==================================================================
+  async function _discoverLanSessions() {
+    if (_SYNC_EVENT_TOKEN) return;  // already in a session
+    try {
+      const r = await fetch("/api/v1/sync/discover?timeout=2.0");
+      if (!r.ok) return;
+      const d = await r.json();
+      if (!d.available) return;     // zeroconf not installed
+      const sessions = Array.isArray(d.sessions) ? d.sessions : [];
+      // Filter out sessions tied to runs other than this one — a
+      // collaborator browsing /results/<run_A> doesn't care about
+      // an event scoping /results/<run_B>.
+      const sameRun = sessions.filter(s => s.run_id === run_id);
+      if (sameRun.length === 0) return;
+      // Show a non-blocking toast (or a small banner) with a join CTA.
+      const s = sameRun[0];      // for multi-session, prefer first
+      const label = s.label ? `"${s.label}"` : "未命名会话";
+      const banner = document.createElement("div");
+      banner.id = "lanDiscoverBanner";
+      banner.style.cssText = (
+        "position:fixed;bottom:24px;left:50%;transform:translateX(-50%);" +
+        "background:var(--surface-2);color:var(--fg);" +
+        "border:1px solid var(--accent);" +
+        "border-radius:999px;padding:8px 16px;" +
+        "box-shadow:var(--shadow-md);" +
+        "z-index:1200;display:flex;gap:10px;align-items:center;" +
+        "font-size:12px;"
+      );
+      banner.innerHTML =
+        `<span>📡 在 LAN 内发现协作会话 ${esc(label)}</span>` +
+        `<a class="btn primary" style="padding:4px 12px;font-size:11.5px"` +
+        ` href="${esc(s.host_url)}/results/${esc(run_id)}` +
+        `?event=" data-token-prefix="${esc(s.token_prefix)}">加入</a>` +
+        `<button class="btn" style="padding:4px 10px;font-size:11.5px"` +
+        ` id="lanDiscoverDismiss">×</button>`;
+      document.body.appendChild(banner);
+      // Note — the join link can't auto-populate the FULL token (mDNS
+      // TXT only carries the prefix on purpose).  Joining requires
+      // the user to ask the host for the full token over the same
+      // channel they'd otherwise paste from (iMessage / AirDrop /
+      // QR scan).  The prefix is shown so they can verify they're
+      // joining the right session.
+      banner.querySelector("a").addEventListener("click", (e) => {
+        e.preventDefault();
+        const full = prompt(
+          `请输入完整 token(前 6 字符应该是 ${s.token_prefix}…):`,
+          s.token_prefix
+        );
+        if (!full) return;
+        if (!full.startsWith(s.token_prefix)) {
+          showToast("token 前缀不匹配 — 请确认", "error");
+          return;
+        }
+        location.href = `${s.host_url}/results/${encodeURIComponent(run_id)}`
+                      + `?event=${encodeURIComponent(full)}`;
+      });
+      banner.querySelector("#lanDiscoverDismiss")
+            .addEventListener("click", () => banner.remove());
+    } catch (_e) { /* discovery is best-effort */ }
+  }
+  // Kick discovery 600ms after page-ready so it doesn't race with
+  // first-render — the toast appearing mid-reveal would feel jittery.
+  setTimeout(_discoverLanSessions, 600);
+
+  // ==================================================================
   // v0.10-P0-1 — Two-way sync push + offline queue + conflict modal.
   //
   // Three pieces:

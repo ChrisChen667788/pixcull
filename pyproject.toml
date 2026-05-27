@@ -93,6 +93,12 @@ bird = [
     "ultralytics>=8.2",       # YOLOv8
     "segment-anything>=1.0",  # Meta SAM
 ]
+# v0.10-P0-2 — opt-in mDNS auto-discovery for LAN sync sessions.
+# Without this extra, /sync still works (paste URL or scan QR), but
+# the auto-detect-host-on-LAN toast doesn't fire.
+sync = [
+    "zeroconf>=0.131",
+]
 
 [project.urls]
 Homepage      = "https://github.com/ChrisChen667788/pixcull"

@@ -88,6 +88,12 @@ from urllib.parse import unquote, urlparse
 _RUNS: dict[str, dict] = {}
 _RUNS_LOCK = threading.Lock()
 
+# v0.10-P0-2 — live mDNS service handles, keyed by event_id.  The
+# event-issue handler populates this on advertise; the revoke
+# handler pops + unadvertises.  Module-level so the daemon-thread
+# server class can reach it across all request handlers.
+_MDNS_ADVERTS: dict[str, dict] = {}
+
 # V2.1 retrain state — one global slot since you only ever want one
 # training job running at a time. Guarded by _RUNS_LOCK to keep the
 # /retrain handler simple.
@@ -2080,6 +2086,11 @@ class _Handler(BaseHTTPRequestHandler):
         if sub.startswith("/sync/event/") and sub.endswith("/presence"):
             token = sub[len("/sync/event/"):-len("/presence")]
             return self._serve_sync_event_presence(token)
+        # v0.10-P0-2 — mDNS discovery (LAN auto-detect of sessions).
+        # GET /api/v1/sync/discover?timeout=2
+        #   → {schema, available, sessions: [...]}
+        if sub == "/sync/discover":
+            return self._serve_sync_discover()
         # P-UX-9 — accumulated cull-reason counts so the picker can
         # sort by user frequency + admin can show "your cull habits".
         if sub == "/cull_reasons/stats":
@@ -5248,6 +5259,25 @@ class _Handler(BaseHTTPRequestHandler):
             _dbg("sync/issue", exc, run_id)
             self.send_error(500, "failed to issue event")
             return
+        # v0.10-P0-2 — also broadcast the event on mDNS so peers on
+        # the same LAN auto-discover it (saves the user from copy-
+        # paste).  Best-effort: if zeroconf isn't installed, this
+        # silently no-ops and URL sharing still works.
+        try:
+            from pixcull.sync import advertise_event
+            adv_port = int(getattr(self.server, "server_port", 0) or 0)
+            if adv_port:
+                handle = advertise_event(
+                    event_id=sess.event_id,
+                    label=label,
+                    run_id=run_id,
+                    port=adv_port,
+                    token=sess.token,
+                )
+                if handle is not None:
+                    _MDNS_ADVERTS[sess.event_id] = handle
+        except Exception as exc:
+            _dbg("sync/advertise", exc, run_id)
         # Join URL is the existing /results/<run_id> page with ?event=<token>
         # query param; the JS shim detects the param and switches into
         # collaborative-polling mode.
@@ -5260,6 +5290,15 @@ class _Handler(BaseHTTPRequestHandler):
         })
 
     def _handle_sync_event_revoke(self, run_id: str, event_id: str) -> None:
+        # v0.10-P0-2 — also unadvertise from mDNS so the toast on
+        # other peers' LAN goes quiet immediately.
+        try:
+            from pixcull.sync import unadvertise_event
+            handle = _MDNS_ADVERTS.pop(event_id, None)
+            if handle is not None:
+                unadvertise_event(handle)
+        except Exception:
+            pass
         run = _get_run(run_id) or _reload_run_from_disk(run_id)
         if run is None:
             self.send_error(404, "no such run")
@@ -5466,6 +5505,69 @@ class _Handler(BaseHTTPRequestHandler):
             "you":        you,
             "peer_count": peer_count,
         })
+        return True
+
+    def _serve_sync_discover(self) -> bool:
+        """v0.10-P0-2 — GET /api/v1/sync/discover
+
+        Returns the active mDNS PixCull sync sessions visible on
+        this LAN.  Query params:
+          timeout: float seconds (default 2.0, capped at 5.0 so a
+                   slow LAN can't hang the response forever).
+
+        Response shape:
+          {schema, available: bool, sessions: [...]}
+
+        available=False means zeroconf isn't installed — the JS
+        side hides the auto-detect toast in that case.
+        """
+        from urllib.parse import parse_qs, urlparse as _up
+        try:
+            from pixcull.sync import (
+                ZEROCONF_AVAILABLE, discover_events,
+            )
+        except Exception as exc:
+            _dbg("sync/import", exc, "discover")
+            self.send_error(500, "discovery import failed")
+            return True
+        if not ZEROCONF_AVAILABLE:
+            body = _safe_dumps({
+                "schema":    "pixcull.sync.discover/v1",
+                "available": False,
+                "sessions":  [],
+                "hint":      "install with: pip install -e '.[sync]'",
+            }).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type",
+                             "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return True
+        qs = parse_qs(_up(self.path).query)
+        try:
+            timeout = float((qs.get("timeout") or ["2.0"])[0])
+        except (TypeError, ValueError):
+            timeout = 2.0
+        timeout = max(0.2, min(5.0, timeout))
+        # Exclude our own advertisements — collaborators care about
+        # OTHER hosts, not the one they're already talking to.
+        own_eids = set(_MDNS_ADVERTS.keys())
+        sessions = discover_events(
+            timeout=timeout,
+            exclude_self_event_ids=own_eids,
+        )
+        body = _safe_dumps({
+            "schema":    "pixcull.sync.discover/v1",
+            "available": True,
+            "sessions":  sessions,
+        }).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
         return True
 
     def _handle_sync_event_push(self, token: str) -> bool:
