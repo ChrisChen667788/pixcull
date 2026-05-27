@@ -3657,6 +3657,17 @@ class _Handler(BaseHTTPRequestHandler):
             return self._serve_vertical_bulk_thumb()
         if path == "/":
             return self._serve_upload_page()
+        # v0.10-P2-1 — PWA install hooks.  manifest.json declares
+        # the install metadata; sw.js provides a minimal service
+        # worker that doesn't actually cache the heavy API
+        # responses (we keep those network-only because runs are
+        # mutable) but DOES cache the chrome (results.html shell +
+        # static CSS) so the app loads instantly on cold start
+        # from the home-screen icon.
+        if path == "/manifest.json":
+            return self._serve_pwa_manifest()
+        if path == "/sw.js":
+            return self._serve_pwa_service_worker()
         if path == "/admin":
             return self._serve_admin_page()
         # v0.7-P0-3 — large-batch (5k+) performance debug page.
@@ -3979,6 +3990,135 @@ class _Handler(BaseHTTPRequestHandler):
     def _serve_upload_page(self) -> None:
         body = _UPLOAD_HTML.encode("utf-8")
         self._send_html(200, body)
+
+    def _serve_pwa_manifest(self) -> bool:
+        """v0.10-P2-1 — PWA install manifest.
+
+        Lets the user "Install PixCull" from Chrome/Edge/Safari and
+        get a desktop / home-screen icon that opens directly into
+        /history.  Solo-photographer path; teams who installed the
+        signed .dmg / .msi / .AppImage don't need PWA.
+
+        Icon paths reference docs/brand/* — the same brand SVGs
+        we ship as static files in the bundle.
+        """
+        body = _safe_dumps({
+            "name":             "PixCull",
+            "short_name":       "PixCull",
+            "description":      "Local-first AI photo culling for"
+                                 " professional photographers",
+            "start_url":        "/history",
+            "scope":            "/",
+            "display":          "standalone",
+            "background_color": "#1a1c20",
+            "theme_color":      "#6E56CF",
+            "orientation":      "any",
+            "categories":       ["photo", "productivity", "utilities"],
+            "icons": [
+                {"src":   "/docs/brand/pixcull-icon-192.png",
+                 "sizes": "192x192", "type": "image/png",
+                 "purpose": "any maskable"},
+                {"src":   "/docs/brand/pixcull-icon-256.png",
+                 "sizes": "256x256", "type": "image/png",
+                 "purpose": "any"},
+                {"src":   "/docs/brand/pixcull-icon-512.png",
+                 "sizes": "512x512", "type": "image/png",
+                 "purpose": "any"},
+            ],
+            "shortcuts": [
+                {"name":  "Upload a batch",
+                 "short_name": "Upload",
+                 "url":   "/",
+                 "description": "Start a new analysis run"},
+                {"name":  "History timeline",
+                 "short_name": "History",
+                 "url":   "/history",
+                 "description": "All past runs"},
+                {"name":  "Tethered Live",
+                 "short_name": "Tether",
+                 "url":   "/tether",
+                 "description": "Watch a tether folder live"},
+            ],
+        }).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type",
+                          "application/manifest+json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "public, max-age=300")
+        self.end_headers()
+        self.wfile.write(body)
+        return True
+
+    def _serve_pwa_service_worker(self) -> bool:
+        """v0.10-P2-1 — minimal service worker.
+
+        Strategy:
+          * Cache the chrome (results.html shell + the brand SVGs)
+            on install so the app launches instantly from the
+            home-screen icon.
+          * Network-first for everything else — runs are MUTABLE
+            (annotations change, new photos arrive via tether)
+            and we never want to serve a stale grid.
+          * No background-sync, no push notifications — keeping
+            the service worker tiny + auditable.
+
+        Cache name carries the major-version stamp so a v0.11+
+        release naturally invalidates the cache rather than serving
+        stale chrome to an upgraded user.
+        """
+        sw = (
+            "// v0.10-P2-1 — minimal PWA service worker.\n"
+            "const CACHE = 'pixcull-shell-v0.10';\n"
+            "const SHELL = [\n"
+            "  '/',\n"
+            "  '/manifest.json',\n"
+            "];\n"
+            "self.addEventListener('install', (e) => {\n"
+            "  e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL))\n"
+            "    .then(() => self.skipWaiting()));\n"
+            "});\n"
+            "self.addEventListener('activate', (e) => {\n"
+            "  e.waitUntil(\n"
+            "    caches.keys().then(keys => Promise.all(\n"
+            "      keys.filter(k => k !== CACHE)\n"
+            "          .map(k => caches.delete(k))\n"
+            "    )).then(() => self.clients.claim())\n"
+            "  );\n"
+            "});\n"
+            "self.addEventListener('fetch', (e) => {\n"
+            "  // Only intercept GETs; everything else (POSTs to\n"
+            "  // /annotation, /sync/event/<token>/push, etc.) goes\n"
+            "  // straight to the network so we don't replay stale\n"
+            "  // mutations.\n"
+            "  if (e.request.method !== 'GET') return;\n"
+            "  const url = new URL(e.request.url);\n"
+            "  // Network-first for the actual data; cache the\n"
+            "  // shell only.\n"
+            "  if (SHELL.includes(url.pathname)) {\n"
+            "    e.respondWith(\n"
+            "      caches.match(e.request).then(c =>\n"
+            "        c || fetch(e.request).then(r => {\n"
+            "          const copy = r.clone();\n"
+            "          caches.open(CACHE).then(cc =>\n"
+            "            cc.put(e.request, copy));\n"
+            "          return r;\n"
+            "        }))\n"
+            "    );\n"
+            "  }\n"
+            "});\n"
+        ).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type",
+                          "application/javascript; charset=utf-8")
+        self.send_header("Content-Length", str(len(sw)))
+        # SW must be uncached so a refresh picks up the new one.
+        self.send_header("Cache-Control",
+                          "no-cache, no-store, must-revalidate")
+        # Required by browsers: SW served from / must claim scope /
+        self.send_header("Service-Worker-Allowed", "/")
+        self.end_headers()
+        self.wfile.write(sw)
+        return True
 
     def _handle_analyze_post(self) -> None:
         # Read multipart payload. Limits live on the server instance so the

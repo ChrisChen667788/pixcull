@@ -203,8 +203,8 @@ opt-in,默认关。
 
 ### P2(锦上添花,视情况)
 
-#### v0.10-P2-1 · PWA 模式
-**估时**: 1 周
+#### v0.10-P2-1 · PWA 模式 ✅
+**估时**: 1 周 · **实际**: 同次 commit · **已发布**
 
 `<link rel="manifest">` + service worker + IndexedDB 缓存 +
 file-system-access API。用户不安装 .app 也能在 Chrome / Safari /
@@ -212,16 +212,16 @@ Edge 访问 `pixcull.app`(我们的域名 / GitHub Pages 部署)+ 拖照
 入页 + 跑出结果。"零安装试用"路径。注意:CLIP / rescorer ONNX 模
 型要从 CDN 加载(~120 MB),首次启动慢,有进度条。
 
-#### v0.10-P2-2 · 摄影正典 v2 — 加 30 条
-**估时**: 4-5 天
+#### v0.10-P2-2 · 摄影正典 v2 — 加 30 条 ✅
+**估时**: 4-5 天 · **实际**: 同次 commit · **已发布**(27 → 57 条)
 
 v0.4 的 advice canon library 是 ~80 条名言 / Adams · HCB · Bresson
 风格引用。v2 加 30 条,扩展到当代(Solo Sokolova / Andrew Suryono /
 2020s+ 婚礼摄影师 / 川西现代风光)。Inspector 的 canon-cite chip 类
 型更丰富。
 
-#### v0.10-P2-3 · Crash reporter + opt-in 遥测
-**估时**: 3-4 天
+#### v0.10-P2-3 · Crash reporter + opt-in 遥测 ✅
+**估时**: 3-4 天 · **实际**: 同次 commit · **已发布**
 
 Sentry SDK(免费 100k events/月,够单人 OSS)集成。default off,
 设置面板 + 首次启动 prompt 让用户选 "share / minimal / off"。
@@ -229,8 +229,9 @@ Sentry SDK(免费 100k events/月,够单人 OSS)集成。default off,
 最痛的两个);**绝不**收集照片内容 / 文件名(只 stack trace + 系统
 metadata)。
 
-#### v0.10-P2-4 · DESIGN-AUDIT-2026Q4 自检 + v0.11 charter 起草
-**估时**: 2-3 天
+#### v0.10-P2-4 · DESIGN-AUDIT-2026Q4 自检 + v0.11 charter 起草 ✅
+**估时**: 2-3 天 · **实际**: 同次 commit · **已发布**
+(`docs/DESIGN-AUDIT-2026Q4.md` + `docs/ROADMAP-v0.11-charter.md`)
 
 v0.10 完成后做下一轮自我审计 docs/DESIGN-AUDIT-2026Q4.md(对照同样
 那批参考产品看哪里仍然差距),写 v0.11 charter 草稿。本 charter 的

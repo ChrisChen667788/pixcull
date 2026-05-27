@@ -7,6 +7,14 @@
   <meta name="color-scheme" content="dark">
   <meta name="theme-color" content="#1a1c20" media="(prefers-color-scheme: dark)">
   <meta name="theme-color" content="#f5f6f8" media="(prefers-color-scheme: light)">
+  <!-- v0.10-P2-1 — PWA install metadata.  manifest.json + service-worker
+       registration below.  When the user runs PixCull off a hosted URL
+       (pixcull.app eventually) Chrome / Edge / Safari offer "Install
+       PixCull"; the home-screen icon opens directly into /history. -->
+  <link rel="manifest" href="/manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="PixCull">
   <title>PixCull — 分析结果</title>
   <style>
     /* ============================================================
@@ -14586,6 +14594,20 @@
       setExportMenu(false);
     }
   });
+
+  // v0.10-P2-1 — register the PWA service worker once on page-ready.
+  // Best-effort: silent on browsers that don't support SW (Safari
+  // < 11.1, all IE) or HTTP-served origins (which lack the secure-
+  // context requirement).  Worth doing on every page load so a
+  // newly-installed v0.10 SW gets picked up without a full
+  // navigation; the SW's `skipWaiting` makes the activation
+  // immediate.
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("/sw.js", { scope: "/" })
+        .catch(() => { /* HTTP origin / private mode — silent fail */ });
+    });
+  }
 })();
 </script>
 </body>

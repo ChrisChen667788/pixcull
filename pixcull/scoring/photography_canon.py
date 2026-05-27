@@ -119,6 +119,127 @@ CANON_AXES_ZH: dict[str, list[tuple[str, str]]] = {
     ],
 }
 
+# v0.10-P2-2 — canon library v2.  Adds 30 contemporary entries
+# extending the v0.4 set (Adams / Cartier-Bresson / Wikipedia
+# composition) into modern editorial + wedding + commercial +
+# 中国风光 territory.  Each entry retains the (label, body)
+# tuple shape so RUBRIC_AXES.canon_cites can iterate uniformly.
+#
+# The new entries are appended (not interleaved) so an existing
+# call-site that pinned itself to `CANON_AXES_ZH["light"][0]`
+# (the v0.4 order) doesn't shift.  Consumers reading the full
+# axis list iterate +5 entries on each, no other change.
+_CANON_V2_ADDITIONS: dict[str, list[tuple[str, str]]] = {
+    "technical": [
+        ("感光元件原生 ISO 优先",
+         "现代 CMOS 的 native ISO(双原生:64/400 or 100/640)"
+         " 比拉伸 ISO 噪点低 1-1.5 档,Adams Zone System 在数码"
+         " 上等价于'尽量靠近原生 ISO 拍'"),
+        ("拍 RAW 才有 zone V 可拉",
+         "JPEG 直方图被 sRGB 8-bit 截断,Adams 的 zone II→IX 在"
+         " RAW 中才有完整重建空间;Lr 拉回 ±3EV 不掉调子"),
+        ("白平衡叙事而非'准'",
+         "Solo Sokolova 大量用'故意冷'记录冬季婚礼;白平衡是"
+         " 情绪决策,不是'正确性'"),
+        ("镜头特征显化",
+         "85mm f/1.2 的过渡 vs 24mm f/14 的全画面锐,选镜头"
+         " 等于选'画面边界质感'"),
+        ("分屏处理审查",
+         "黑场暗部 + 高光分别处理(Adams '分区显影' 数码版),"
+         " 后期 OR 前期两段曝光,任何整片 push 都掉立体感"),
+    ],
+    "subject": [
+        ("环境肖像 vs 特写",
+         "Annie Leibovitz:让环境替主体说一半;近景剪环境"
+         " = 只看脸,远景太琐碎 = 弱主体"),
+        ("自然光人物 = 简洁背景",
+         "Steve McCurry《阿富汗少女》:面孔占满,背景全模糊"
+         "/纯色"),
+        ("婚礼现场'第二动作'",
+         "Andrew Suryono:除了主角动作,捕捉旁观亲属的微反应"
+         " — 第二个视觉支点撑起整张照片"),
+        ("Z-gen 自拍审美",
+         "CapCut 时代,'故意失焦 + 强暖色 + 主体不在 1/3 而"
+         " 在画面贴边' 也是合格构图(打破规则的当代变体)"),
+        ("中国风光的'藏'与'露'",
+         "川西山水:大山藏雾、小屋藏树、人物藏在比例 1/40 以下"
+         " 的位置,留白比例 ≥ 60%"),
+    ],
+    "composition": [
+        ("当代极简",
+         "Solo Sokolova 婚礼组:单色背景 + 主体 1 人 + 留白 > 70%"
+         ",废掉传统三分法的'重元素填满'信条"),
+        ("环境为框",
+         "门窗 / 桥拱 / 树梢自然形成的内框,把主体放在框内一次"
+         " 完成'引导'"),
+        ("反向 lead room",
+         "传统:人物视线方向留空。现代实验:视线撞墙的封闭感"
+         " 表达'压抑/思考' — Wim Wenders《柏林苍穹下》"),
+        ("竖向构图的当代复兴",
+         "TikTok / Reels 9:16 倒推回选片:重要 keep 同时按"
+         " 竖向裁切检查,不能裁掉的才是 5★"),
+        ("纹理叠加",
+         "前景实焦的栏杆 + 中景虚焦的主体 + 远景实焦的山,3 层"
+         "锐度差形成深度暗示"),
+    ],
+    "light": [
+        ("Blue Hour 后 10 分钟",
+         "天空仍有 -2EV 残蓝 + 室内灯已开 = 双光源叙事窗口"
+         ",仅持续 ~10 分钟"),
+        ("反射光做主光",
+         "Andrew Suryono 中印婚礼:用走廊瓷砖把窗光反射上来,"
+         "比直射柔 2 档但保留方向感"),
+        ("OCF(off-camera flash)叙事",
+         "Joe McNally:闪光不是补光,是写'第二个太阳';光位 ≠"
+         " 主光源位"),
+        ("色温撞击",
+         "5500K 日光 + 3200K 钨丝灯同时入画,色温差 2300K → 强"
+         "戏剧 ='婚礼现场 vs 婚礼餐厅' 切换"),
+        ("'反向高光' 趋势",
+         "传统:保护高光不剪。Z-gen:故意让窗光 100% 死白,"
+         "主体在中景 zone V → 制造'梦境'感"),
+    ],
+    "moment": [
+        ("情绪余波 vs 峰值",
+         "Magnum 教学:笑声峰值后 0.5 秒的'松气' 比笑声峰值"
+         "本身更打动人"),
+        ("Z-gen '反高潮'",
+         "B-roll 美学:不拍亲吻瞬间,拍亲吻后两人对视的 0.8 秒"),
+        ("非语言对话",
+         "Garry Winogrand:两人不看彼此但身体姿势在'回话',"
+         "三人以上场景的核心"),
+        ("微表情捕捉",
+         "Paul Ekman FACS:嘴角 ±2px、眉峰 ±1mm 决定'真"
+         "笑/客套笑' — 5★ 笑容应该是 Duchenne 笑(眼角)"),
+        ("环境时钟",
+         "钟表 / 日历 / 街灯 / 季节叶 — 给画面打时间戳的"
+         "二级元素"),
+    ],
+    "aesthetic": [
+        ("Wes Anderson 对称美学",
+         "正面 1 点透视 + 调色板 ≤ 3 色 + 主体居中 → 故意"
+         "反三分法,但需要严格执行"),
+        ("Roger Deakins 单一光源",
+         "《1917》摄影:即便复杂场景,光也只有 1 个主源 +"
+         " 1 个反射 + 0 个补光 → 极简但戏剧"),
+        ("Pixelmator-级 polish",
+         "5★ 照片应该在 100% 缩放下经得起 30 秒检查 — 边缘"
+         "无 fringe、暗部无色噪、肤色不偏品红"),
+        ("色彩心理学",
+         "红/橙 = 警觉 + 食欲;蓝/绿 = 静止 + 时间感;紫 ="
+         "尊贵 + 距离 — 婚礼商业题主色要明确"),
+        ("当代'2020s+' 调色趋势",
+         "高光带浅蓝 + 阴影带橙红(orange-teal 的变体);"
+         "高对比但低 saturation;胶片颗粒 + 现代锐度"),
+    ],
+}
+
+# Merge v2 additions into the canonical CANON_AXES_ZH so every
+# downstream consumer (rubric, VLM prompt, meta-judge, /share
+# canon-cite chip) sees them on the next import.
+for _ax, _entries in _CANON_V2_ADDITIONS.items():
+    CANON_AXES_ZH.setdefault(_ax, []).extend(_entries)
+
 
 # ---------------------------------------------------------------------------
 # 2. Canon-cited star descriptors (replace generic 1-5★ wording)
@@ -217,10 +338,18 @@ def get_axis_descriptors(axis_name: str) -> tuple[str, str, str, str, str]:
 
 
 # Short attribution string the UI can show as a tooltip / about page.
+# v0.10-P2-2 — expanded with the contemporary additions.
 CANON_SOURCES_ZH = (
     "评分标准源自:\n"
     "• Henri Cartier-Bresson《决定性瞬间》(1952)\n"
     "• Ansel Adams Zone System +《The Negative》(1948)\n"
     "• Composition (Visual Arts) — Wikipedia 摘要\n"
-    "• Photographic Lighting — 4 种经典光位 + 光质理论"
+    "• Photographic Lighting — 4 种经典光位 + 光质理论\n"
+    "• Annie Leibovitz · Steve McCurry · Andrew Suryono ——\n"
+    "  当代环境肖像 + 婚礼现场二级动作\n"
+    "• Wes Anderson · Roger Deakins ·《1917》——\n"
+    "  对称构图 + 单一光源戏剧光\n"
+    "• Paul Ekman FACS —— Duchenne smile 微表情判读\n"
+    "• Solo Sokolova · 2020s wedding —— 当代极简 + 反规则\n"
+    "• CapCut / Reels —— Z-gen 9:16 + 反高潮 + 反向高光"
 )
