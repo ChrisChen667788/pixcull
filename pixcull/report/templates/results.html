@@ -2427,6 +2427,66 @@
          the user has to deliberately click the red one to confirm */
     }
 
+    /* v0.10-P0-1 — conflict resolution modal.  Uses the existing
+       .modal-destructive border-top + reverse-pair button styling so
+       the user reads "this is a deliberate choice" not "casual
+       acknowledge".  Each row offers three picks: local / remote /
+       keep both, laid out as a three-up grid so visual weight = "you
+       are equally entitled to either"; we don't preselect a default. */
+    .cflx-list {
+      display: flex; flex-direction: column;
+      gap: 12px;
+    }
+    .cflx-row {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md, 8px);
+      padding: 10px 12px;
+    }
+    .cflx-fn {
+      font-size: 11.5px; color: var(--muted);
+      margin-bottom: 8px;
+    }
+    .cflx-options {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+    }
+    .cflx-options .btn {
+      display: flex; flex-direction: column;
+      align-items: flex-start; gap: 2px;
+      padding: 10px 12px;
+      text-align: left;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: border-color var(--duration-fast) var(--ease-out),
+                  background var(--duration-fast) var(--ease-out);
+    }
+    .cflx-options .btn:hover {
+      border-color: var(--accent);
+      background: var(--surface-3);
+    }
+    .cflx-keep-local:hover  { border-color: var(--keep, #10b981); }
+    .cflx-keep-remote:hover { border-color: var(--accent); }
+    .cflx-keep-both:hover   { border-color: var(--maybe, #d97706); }
+    .cflx-side {
+      font-size: 9.5px; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.06em;
+    }
+    .cflx-dec {
+      font-size: 14px; font-weight: 700;
+      letter-spacing: -0.01em;
+      color: var(--fg);
+    }
+    .cflx-by {
+      font-size: 10.5px; color: var(--muted-soft, var(--muted));
+    }
+    /* On narrow viewports, stack the three options vertically. */
+    @media (max-width: 600px) {
+      .cflx-options { grid-template-columns: 1fr; }
+    }
+
     /* V16.2 — manual rotate button on each card. Mirrors annotate-btn
        but lives on the LEFT so it doesn't collide with 标注 / ✓ 已标.
        Hidden until card hover (same affordance pattern). */
@@ -9699,6 +9759,13 @@
     // edit of the same photo.  v0.9-P1-2 — pass the action verb
     // (keep/maybe/cull) so peers see "✅ 二摄 标 keep · IMG_001".
     if (typeof _markLocalEdit === "function") _markLocalEdit(focusedFn, label);
+    // v0.10-P0-1 — push the edit to peers via two-way sync.  No-op
+    // when not in an event session (the function early-returns).
+    // Fire-and-forget — if the network is down, the offline queue
+    // catches it.
+    if (typeof _pushEdits === "function") {
+      _pushEdits([{ filename: focusedFn, decision: label }]);
+    }
     const wasFn = focusedFn;
     try {
       await fetch(`/annotation/${run_id}/${encodeURIComponent(focusedFn)}`, {
@@ -11314,6 +11381,11 @@
   let _syncLastTs = 0;
   let _syncRowMtimes = {};  // filename → last local-edit mtime_ms
   let _syncConflictFns = new Set();
+  // v0.10-P0-1 — richer per-conflict state: filename → {local, remote}
+  // so the conflict-resolution modal can show both versions side-by-side
+  // without re-fetching.  Populated by _syncPollOnce when it would
+  // otherwise just have flagged the filename via _syncConflictFns.
+  const _syncConflictMap = new Map();
   let _syncPeers = 0;       // bookkeeping for the live badge
 
   function _markLocalEdit(filename, action) {
@@ -11376,6 +11448,14 @@
         const decsDiffer = row && row.decision !== remote.decision;
         if (decsDiffer && localMs > remoteMs) {
           _syncConflictFns.add(remote.filename);
+          // v0.10-P0-1 — also stash the snapshot pair so the modal
+          // can render both versions without re-fetching.  We take
+          // a defensive copy of the local row because subsequent
+          // _applyRemoteAnnotation calls would otherwise mutate it.
+          _syncConflictMap.set(remote.filename, {
+            local:  row ? Object.assign({}, row) : null,
+            remote: remote,
+          });
           continue;
         }
         const updated = _applyRemoteAnnotation(remote);
@@ -11383,6 +11463,7 @@
           applied += 1;
           // Remote application clears any prior conflict on this row.
           _syncConflictFns.delete(remote.filename);
+          _syncConflictMap.delete(remote.filename);
         }
       }
       if (applied > 0 || _syncConflictFns.size > 0) {
@@ -11400,10 +11481,20 @@
     if (!badge) return;
     const conflicts = _syncConflictFns.size;
     badge.style.display = "";
-    badge.textContent = conflicts > 0
-      ? `📡 协作中 · ${conflicts} 处冲突`
+    // v0.10-P0-1 — conflict badge is now clickable to open the
+    // resolution modal.  Also surface the offline-queue depth when
+    // > 0 so the user knows their edits are pending.
+    const offline = (typeof _SYNC_OFFLINE !== "undefined")
+                  ? _SYNC_OFFLINE.queue.length : 0;
+    const parts = [];
+    if (conflicts > 0) parts.push(`${conflicts} 处冲突`);
+    if (offline > 0)   parts.push(`${offline} 待同步`);
+    badge.textContent = parts.length
+      ? `📡 协作中 · ${parts.join(" · ")}`
       : "📡 协作中 · 同步";
     badge.classList.toggle("conflict", conflicts > 0);
+    badge.style.cursor = conflicts > 0 ? "pointer" : "default";
+    badge.title = conflicts > 0 ? "点击解决冲突" : "";
   }
   // Inject a sync-badge into the workspace bar once on boot if we're
   // a guest (joined via ?event=). Hosts get the badge too — they see
@@ -11416,6 +11507,10 @@
     b.id = "syncBadge";
     b.className = "sync-badge";
     b.textContent = "📡 协作中 · 连接中…";
+    // v0.10-P0-1 — click → conflict modal (no-op when 0 conflicts)
+    b.addEventListener("click", () => {
+      if (_syncConflictFns.size > 0) _openConflictModal();
+    });
     bar.insertBefore(b,
       document.getElementById("langSwitcher") || bar.lastElementChild);
   }
@@ -11424,6 +11519,306 @@
     // First poll immediate, then every _SYNC_POLL_MS
     _syncPollOnce().then(() => _refreshSyncBadge());
     setInterval(_syncPollOnce, _SYNC_POLL_MS);
+  }
+
+  // ==================================================================
+  // v0.10-P0-1 — Two-way sync push + offline queue + conflict modal.
+  //
+  // Three pieces:
+  //
+  //   1. _pushEdits([{filename, decision, ...}, ...])
+  //      Sends a batch of edits to the host via POST /sync/event/
+  //      <token>/push.  Other peers see them on their next /changes
+  //      poll cycle — no extra fan-out logic needed because the
+  //      server appends to the same annotations.jsonl that
+  //      compute_changes_since reads.
+  //
+  //   2. Offline queue (IndexedDB-backed when available, in-mem
+  //      otherwise).  When the push fetch fails (network out,
+  //      host machine asleep, ...), the edits land in
+  //      _SYNC_OFFLINE.queue and a watcher tries to flush on
+  //      visibilitychange + every 30s.
+  //
+  //   3. Conflict resolution modal.  Renders the local + remote
+  //      versions side-by-side, lets the user pick winner or "keep
+  //      both" (which produces a new audit row with the user as
+  //      edited_by).  Reuses the v0.9-P1-1 .modal-action chrome.
+  //
+  // All three layers are inert when ?event= isn't in the URL — the
+  // existing solo-photographer flow stays untouched.
+  // ==================================================================
+  const _SYNC_OFFLINE = {
+    queue:    [],       // pending pushes; flushed when network OK
+    flushing: false,
+    lastFlushAt: 0,
+  };
+
+  // Try to use IndexedDB so a tab refresh / browser quit doesn't
+  // lose edits.  Falls back to in-memory when IDB is unavailable
+  // (private mode / older browsers).
+  const _SYNC_IDB_NAME = "pixcull_sync_offline_v1";
+  function _idbOpen() {
+    return new Promise((resolve, reject) => {
+      if (!window.indexedDB) { reject(new Error("no idb")); return; }
+      const req = indexedDB.open(_SYNC_IDB_NAME, 1);
+      req.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains("queue")) {
+          db.createObjectStore("queue", { keyPath: "id", autoIncrement: true });
+        }
+      };
+      req.onsuccess = (e) => resolve(e.target.result);
+      req.onerror   = () => reject(req.error);
+    });
+  }
+  async function _idbAdd(edit) {
+    try {
+      const db = await _idbOpen();
+      return await new Promise((resolve, reject) => {
+        const tx = db.transaction("queue", "readwrite");
+        tx.objectStore("queue").add(edit);
+        tx.oncomplete = () => resolve(true);
+        tx.onerror    = () => reject(tx.error);
+      });
+    } catch (_e) { return false; }
+  }
+  async function _idbAll() {
+    try {
+      const db = await _idbOpen();
+      return await new Promise((resolve, reject) => {
+        const tx = db.transaction("queue", "readonly");
+        const req = tx.objectStore("queue").getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror   = () => reject(req.error);
+      });
+    } catch (_e) { return []; }
+  }
+  async function _idbClearKeys(keys) {
+    try {
+      const db = await _idbOpen();
+      return await new Promise((resolve, reject) => {
+        const tx = db.transaction("queue", "readwrite");
+        const store = tx.objectStore("queue");
+        for (const k of keys) store.delete(k);
+        tx.oncomplete = () => resolve(true);
+        tx.onerror    = () => reject(tx.error);
+      });
+    } catch (_e) { return false; }
+  }
+
+  // Boot — drain any pre-existing IDB queue into our in-mem mirror
+  // so _refreshSyncBadge can show the depth + the flusher can act
+  // on it immediately.
+  (async () => {
+    if (!_SYNC_EVENT_TOKEN) return;
+    const stale = await _idbAll();
+    if (stale.length) {
+      _SYNC_OFFLINE.queue.push(...stale);
+      _refreshSyncBadge();
+    }
+  })();
+
+  async function _pushEdits(edits, opts) {
+    if (!_SYNC_EVENT_TOKEN) return { ok: false, reason: "no-event" };
+    if (!Array.isArray(edits) || edits.length === 0)
+      return { ok: false, reason: "empty" };
+    // Stamp every edit with the local client_id + display name from
+    // the v0.9-P1-2 presence layer so the host's audit trail says
+    // "二摄-小陈 标 keep on IMG_001 @ 12:34:56".
+    const cid  = (typeof _presenceClientId !== "undefined")
+               ? _presenceClientId : "web-anon";
+    const name = (typeof _presenceDisplay !== "undefined")
+               ? _presenceDisplay  : "anon";
+    const stamped = edits.map(e => Object.assign({
+      client_id:    cid,
+      client_ts_ms: Date.now(),
+      edited_by:    name,
+    }, e));
+    try {
+      const r = await fetch(
+        `/sync/event/${encodeURIComponent(_SYNC_EVENT_TOKEN)}/push`,
+        {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ edits: stamped }),
+        }
+      );
+      if (r.status === 404 || r.status === 410) {
+        return { ok: false, reason: "event-revoked" };
+      }
+      if (!r.ok) return { ok: false, reason: "http-" + r.status };
+      const d = await r.json();
+      return { ok: true, accepted: d.accepted, rejected: d.rejected };
+    } catch (_e) {
+      // Network out — queue offline.  Throttle re-tries via the
+      // visibilitychange + 30s interval flusher below.
+      if (!(opts && opts.noQueue)) {
+        for (const e of stamped) {
+          _SYNC_OFFLINE.queue.push(e);
+          _idbAdd(e);
+        }
+        _refreshSyncBadge();
+      }
+      return { ok: false, reason: "network", queued: stamped.length };
+    }
+  }
+
+  async function _flushOfflineQueue() {
+    if (_SYNC_OFFLINE.flushing) return;
+    if (_SYNC_OFFLINE.queue.length === 0) return;
+    _SYNC_OFFLINE.flushing = true;
+    try {
+      // Snapshot + remove.  If the push fails we re-queue.
+      const batch = _SYNC_OFFLINE.queue.splice(0, _SYNC_OFFLINE.queue.length);
+      const keys = batch.map(e => e.id).filter(k => k != null);
+      const res = await _pushEdits(batch, { noQueue: true });
+      if (res.ok) {
+        // Persist the dequeue.
+        if (keys.length) await _idbClearKeys(keys);
+        _SYNC_OFFLINE.lastFlushAt = Date.now();
+        showToast(`已同步 ${batch.length} 条离线编辑`, "success");
+      } else {
+        // Put them back at the head — order preserved.
+        _SYNC_OFFLINE.queue.unshift(...batch);
+      }
+    } finally {
+      _SYNC_OFFLINE.flushing = false;
+      _refreshSyncBadge();
+    }
+  }
+
+  if (_SYNC_EVENT_TOKEN) {
+    // Try to flush whenever the tab becomes visible (often after a
+    // network reconnect) and every 30s as a safety net.
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") _flushOfflineQueue();
+    });
+    setInterval(_flushOfflineQueue, 30_000);
+    // Also flush on the standard online event.
+    window.addEventListener("online", _flushOfflineQueue);
+  }
+
+  // ----------- Conflict resolution modal -----------
+  function _openConflictModal() {
+    if (_syncConflictMap.size === 0) return;
+    let m = document.getElementById("conflictModal");
+    if (!m) {
+      m = document.createElement("div");
+      m.id = "conflictModal";
+      m.className = "modal";
+      m.setAttribute("role", "dialog");
+      m.setAttribute("aria-modal", "true");
+      document.body.appendChild(m);
+      m.addEventListener("click", (e) => {
+        if (e.target === m) m.classList.remove("show");
+      });
+    }
+    const entries = Array.from(_syncConflictMap.entries());
+    const rows = entries.map(([fn, pair]) => {
+      const localDec  = (pair.local  && pair.local.decision)  || "—";
+      const remoteDec = (pair.remote && pair.remote.decision) || "—";
+      const remoteBy  = (pair.remote && (pair.remote.edited_by
+                         || pair.remote.client_id)) || "远程";
+      return `
+        <div class="cflx-row" data-fn="${esc(fn)}">
+          <div class="cflx-fn"><span class="mono">${esc(fn)}</span></div>
+          <div class="cflx-options">
+            <button class="btn cflx-keep-local" data-fn="${esc(fn)}">
+              <span class="cflx-side">本地</span>
+              <span class="cflx-dec">${esc(localDec)}</span>
+              <span class="cflx-by">你的版本</span>
+            </button>
+            <button class="btn cflx-keep-remote" data-fn="${esc(fn)}">
+              <span class="cflx-side">远程</span>
+              <span class="cflx-dec">${esc(remoteDec)}</span>
+              <span class="cflx-by">${esc(remoteBy)}</span>
+            </button>
+            <button class="btn cflx-keep-both" data-fn="${esc(fn)}"
+                    title="保留两边历史 — 写一行新的 audit + 选远程值生效">
+              保留两边
+            </button>
+          </div>
+        </div>`;
+    }).join("");
+    m.innerHTML = `
+      <div class="modal-card modal-destructive" role="document">
+        <div class="modal-header">
+          <h3 class="modal-title">解决协作冲突 · ${entries.length} 处</h3>
+          <button class="close" id="cflxClose" aria-label="关闭">✕</button>
+        </div>
+        <div class="modal-body" style="max-height:60vh;overflow:auto">
+          <p style="color:var(--muted);font-size:12px;margin:0 0 12px">
+            这些照片你和其他协作者都改过,但决定不同。挑一边赢家 —
+            "保留两边" 会保留本地决定 + 在 audit 历史中记录远程版本。
+          </p>
+          <div class="cflx-list">${rows}</div>
+        </div>
+      </div>`;
+    m.classList.add("show");
+    m.querySelector("#cflxClose").addEventListener("click",
+      () => m.classList.remove("show"));
+    m.querySelectorAll(".cflx-keep-local").forEach(b => {
+      b.addEventListener("click", () => _resolveConflict(b.dataset.fn, "local"));
+    });
+    m.querySelectorAll(".cflx-keep-remote").forEach(b => {
+      b.addEventListener("click", () => _resolveConflict(b.dataset.fn, "remote"));
+    });
+    m.querySelectorAll(".cflx-keep-both").forEach(b => {
+      b.addEventListener("click", () => _resolveConflict(b.dataset.fn, "both"));
+    });
+  }
+
+  function _resolveConflict(filename, winner) {
+    const pair = _syncConflictMap.get(filename);
+    if (!pair) return;
+    const row = rows.find(r => r.filename === filename);
+    if (!row) return;
+    if (winner === "remote") {
+      // Apply the remote version + push it back so other peers'
+      // conflict markers clear on their next poll.
+      Object.assign(row, {
+        decision:             pair.remote.decision,
+        rubric_stars:         pair.remote.rubric_stars,
+        rubric_human_labeled: pair.remote.rubric_human_labeled,
+        cull_reason:          pair.remote.cull_reason,
+        advice:               pair.remote.advice,
+      });
+      _pushEdits([{
+        filename,
+        decision:    pair.remote.decision,
+        cull_reason: pair.remote.cull_reason,
+      }]);
+    } else if (winner === "local") {
+      // Re-push our local version so the host's audit trail has the
+      // most recent decision (and other peers re-pull it).
+      _pushEdits([{
+        filename,
+        decision:    row.decision,
+        cull_reason: row.cull_reason,
+      }]);
+    } else if (winner === "both") {
+      // "Keep both" = audit-trail-only.  Push an explicit "audit"
+      // edit annotating the remote version, then keep local as
+      // current.  Future readers will see two JSONL lines:
+      // remote (overwritten) + local (current).
+      _pushEdits([{
+        filename,
+        decision: row.decision,
+        cull_reason: row.cull_reason,
+        advice: "kept both — remote version recorded in audit",
+      }]);
+    }
+    _syncConflictMap.delete(filename);
+    _syncConflictFns.delete(filename);
+    _refreshSyncBadge();
+    // If the modal is still open + there are more rows, re-render
+    // it; if 0 left, close.
+    const m = document.getElementById("conflictModal");
+    if (m && m.classList.contains("show")) {
+      if (_syncConflictMap.size === 0) m.classList.remove("show");
+      else _openConflictModal();
+    }
+    render();
   }
 
   // ==================================================================

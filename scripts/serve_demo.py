@@ -3678,6 +3678,18 @@ class _Handler(BaseHTTPRequestHandler):
                 and path.count("/") == 4):
             token = path[len("/sync/event/"):-len("/presence")]
             return self._handle_sync_event_presence(token)
+        # v0.10-P0-1 — two-way sync push.  Collaborators send their
+        # batched annotation edits here; we append to the host's
+        # annotations.jsonl + the existing /changes polling fanouts
+        # to all other peers.
+        # POST /sync/event/<token>/push
+        #   body: {edits: [{filename, decision?, rubric_stars?, ...}, ...]}
+        #   → {ok, accepted, rejected, server_ts, rows}
+        if (path.startswith("/sync/event/")
+                and path.endswith("/push")
+                and path.count("/") == 4):
+            token = path[len("/sync/event/"):-len("/push")]
+            return self._handle_sync_event_push(token)
         # v0.7-P2-2 — tethered live scoring (top-level shortcut routes
         # that call into the canonical P2.2 handlers defined further
         # down in this class).
@@ -5454,6 +5466,59 @@ class _Handler(BaseHTTPRequestHandler):
             "you":        you,
             "peer_count": peer_count,
         })
+        return True
+
+    def _handle_sync_event_push(self, token: str) -> bool:
+        """v0.10-P0-1 — POST /sync/event/<token>/push.
+
+        Body shape:
+          {edits: [
+             {filename, decision?, rubric_stars?, cull_reason?,
+              client_id?, client_ts_ms?, edited_by?},
+             ...
+          ]}
+
+        Append each edit to the host's annotations.jsonl.  Other
+        peers see the writes via the next /changes poll cycle —
+        no extra fan-out needed because the same JSONL is the
+        single source of truth.
+        """
+        try:
+            from pixcull.sync import push_edits
+        except Exception as exc:
+            _dbg("sync/import", exc, "push")
+            self.send_error(500, "push import failed")
+            return True
+        sess, out_dir = self._find_event_and_dir(token)
+        if sess is None or out_dir is None:
+            self.send_error(404, "no such event")
+            return True
+        if not sess.is_active():
+            self.send_error(410, "event revoked or expired")
+            return True
+        body = self._read_json_body()
+        edits = body.get("edits")
+        if not isinstance(edits, list):
+            self.send_error(400, "missing or non-list 'edits'")
+            return True
+        # Defensive cap so a single push can't blast the host's
+        # disk.  500 edits per request is plenty (a fast-typing
+        # photographer hits maybe 60-80 edits per minute).
+        if len(edits) > 500:
+            self.send_error(413, "too many edits per push (max 500)")
+            return True
+        try:
+            summary = push_edits(
+                out_dir, edits, event_id=sess.event_id,
+            )
+        except ValueError as exc:
+            self.send_error(400, str(exc))
+            return True
+        except Exception as exc:
+            _dbg("sync/push", exc, sess.event_id)
+            self.send_error(500, "push failed")
+            return True
+        self._json_ok(summary)
         return True
 
     # ============================================================

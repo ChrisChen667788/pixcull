@@ -43,6 +43,12 @@ from pixcull.sync.presence import (
     read_presence,
     update_presence,
 )
+# v0.10-P0-1 — two-way push protocol (collaborators → host)
+from pixcull.sync.push import (
+    append_edits_jsonl,
+    normalize_edit,
+    push_edits,
+)
 
 __all__ = [
     "EventSession",
@@ -57,4 +63,8 @@ __all__ = [
     "presence_path",
     "read_presence",
     "update_presence",
+    # v0.10-P0-1
+    "append_edits_jsonl",
+    "normalize_edit",
+    "push_edits",
 ]
