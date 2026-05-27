@@ -63,6 +63,58 @@ def test_supported_locales_includes_three():
     assert "ja_JP" in SUPPORTED_LOCALES
 
 
+# v0.10-P1-5 additions ---------------------------------------------------
+
+
+def test_ko_loads_and_matches_zh_keyset():
+    """KO must have EXACTLY the same keys as zh_CN (drift rule)."""
+    zh = set(all_keys("zh_CN"))
+    ko = set(all_keys("ko_KR"))
+    missing = zh - ko
+    extra   = ko - zh
+    assert not missing, f"KO missing keys: {sorted(missing)}"
+    assert not extra,   f"KO has extra keys: {sorted(extra)}"
+
+
+def test_es_loads_and_matches_zh_keyset():
+    zh = set(all_keys("zh_CN"))
+    es = set(all_keys("es_ES"))
+    missing = zh - es
+    extra   = es - zh
+    assert not missing, f"ES missing keys: {sorted(missing)}"
+    assert not extra,   f"ES has extra keys: {sorted(extra)}"
+
+
+def test_ko_normalisation():
+    """Korean Accept-Language fragments all route to ko_KR."""
+    assert t("workspace.crumb.results", "ko") == "분석 결과"
+    assert t("workspace.crumb.results", "ko-KR") == "분석 결과"
+    assert t("workspace.crumb.results", "ko_KR") == "분석 결과"
+
+
+def test_es_normalisation_covers_latam():
+    """es-MX / es-AR / es-CL all collapse onto es_ES (one neutral
+    locale serves the whole Spanish-speaking market)."""
+    expected = "Resultados del análisis"
+    assert t("workspace.crumb.results", "es")    == expected
+    assert t("workspace.crumb.results", "es-ES") == expected
+    assert t("workspace.crumb.results", "es-MX") == expected
+    assert t("workspace.crumb.results", "es-AR") == expected
+    assert t("workspace.crumb.results", "es-CL") == expected
+
+
+def test_supported_locales_includes_five():
+    # v0.10-P1-5: zh + en + ja + ko + es must all be supported
+    for lang in ("zh_CN", "en_US", "ja_JP", "ko_KR", "es_ES"):
+        assert lang in SUPPORTED_LOCALES
+
+
+def test_ko_es_lang_name_strings_are_native():
+    """The switcher displays the language name in its OWN script."""
+    assert "한국어" in t("lang.name", "ko_KR")
+    assert "Español" in t("lang.name", "es_ES")
+
+
 def test_t_returns_translation():
     assert t("workspace.crumb.results", "zh_CN") == "分析结果"
     assert t("workspace.crumb.results", "en_US") == "Analysis results"
@@ -88,10 +140,11 @@ def test_accept_language_normalization():
 
 
 def test_unknown_lang_falls_back_to_default():
-    # Korean / French / etc. not supported; should fall back to zh_CN.
-    # (Japanese IS supported as of v0.8-P2-1 — see test_ja_normalisation.)
-    assert t("workspace.crumb.results", "ko-KR") == "分析结果"
+    # French / Polish / etc. not supported; should fall back to zh_CN.
+    # (Japanese added v0.8-P2-1, Korean + Spanish added v0.10-P1-5;
+    # see the dedicated normalisation tests above.)
     assert t("workspace.crumb.results", "fr") == "分析结果"
+    assert t("workspace.crumb.results", "pl") == "分析结果"
     assert t("workspace.crumb.results", "") == "分析结果"
     assert t("workspace.crumb.results", None) == "分析结果"  # type: ignore[arg-type]
 

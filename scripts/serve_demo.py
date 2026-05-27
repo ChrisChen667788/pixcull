@@ -2191,6 +2191,11 @@ class _Handler(BaseHTTPRequestHandler):
             # its existing API-key channel).
             if rest == "portfolio":
                 return self._serve_run_portfolio_json(run_id)
+            # v0.10-P1-4 — audio-photo sync POST handler dispatch is
+            # in the POST table; here we only register the GET so
+            # clients can ping the endpoint for its enabled-state.
+            if rest == "audio_sync":
+                return self._serve_audio_sync_status()
         return False
 
     def _dispatch_api_v1_post(self, path: str) -> bool:
@@ -3272,6 +3277,107 @@ class _Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
         return True
 
+    def _serve_audio_sync_status(self) -> bool:
+        """v0.10-P1-4 — GET /api/v1/runs/<run_id>/audio_sync
+
+        Returns the enabled state + the supported keyword
+        vocabulary so the iOS / external client can decide
+        whether to even start streaming transcripts.  Safe to
+        call without PIXCULL_AUDIO_SYNC enabled; the response
+        clearly signals "feature is off".
+        """
+        try:
+            from pixcull.audio_sync import (
+                CEREMONY_KEYWORDS, DEFAULT_WINDOW_S, is_enabled,
+            )
+        except Exception as exc:
+            _dbg("audio_sync/import", exc, "status")
+            self.send_error(500, "audio_sync import failed")
+            return True
+        body = _safe_dumps({
+            "schema":          "pixcull.api.v1.audio_sync.status/v1",
+            "enabled":         is_enabled(),
+            "default_window_s": DEFAULT_WINDOW_S,
+            "vocab_size":      len(CEREMONY_KEYWORDS),
+            "moments":         sorted(set(CEREMONY_KEYWORDS.values())),
+            "hint":            ("set PIXCULL_AUDIO_SYNC=1 in the server"
+                                 " env to enable POST"),
+        }).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+        return True
+
+    def _handle_audio_sync_post(self, run_id: str) -> bool:
+        """v0.10-P1-4 — POST /api/v1/runs/<run_id>/audio_sync
+
+        Body:
+          {
+            "transcripts": [
+              {"ts_ms": int, "text": str, "confidence": float},
+              ...
+            ],
+            "window_s": optional float
+          }
+        Returns:
+          {n_matched, suggestions: {filename: moment}, matches: [...]}
+        """
+        try:
+            from pixcull.audio_sync import (
+                DEFAULT_WINDOW_S, apply_audio_sync, is_enabled,
+            )
+        except Exception as exc:
+            _dbg("audio_sync/import", exc, "post")
+            self.send_error(500, "audio_sync import failed")
+            return True
+        if not is_enabled():
+            self.send_error(
+                403, "audio_sync not enabled (set PIXCULL_AUDIO_SYNC=1)")
+            return True
+        run = _get_run(run_id) or _reload_run_from_disk(run_id)
+        if run is None:
+            self.send_error(404, "no such run")
+            return True
+        body = self._read_json_body()
+        transcripts = body.get("transcripts")
+        if not isinstance(transcripts, list):
+            self.send_error(400, "missing or non-list 'transcripts'")
+            return True
+        # Defensive cap.  500 transcripts ≈ 25 min of typical
+        # ceremony speech at one phrase per 3s.
+        if len(transcripts) > 500:
+            self.send_error(413, "too many transcripts per call (max 500)")
+            return True
+        try:
+            window_s = float(body.get("window_s") or DEFAULT_WINDOW_S)
+        except (TypeError, ValueError):
+            window_s = DEFAULT_WINDOW_S
+        # Pull the run's scores.csv as the row set for correlation.
+        out_dir = Path(run["output_dir"])
+        scores_csv = out_dir / "scores.csv"
+        rows: list[dict] = []
+        if scores_csv.exists():
+            try:
+                import csv
+                with scores_csv.open("r", encoding="utf-8", newline="") as f:
+                    rows = list(csv.DictReader(f))
+            except OSError as exc:
+                _dbg("audio_sync/read_csv", exc, run_id)
+                rows = []
+        try:
+            summary = apply_audio_sync(
+                transcripts, rows, window_s=window_s,
+            )
+        except Exception as exc:
+            _dbg("audio_sync/apply", exc, run_id)
+            self.send_error(500, "audio_sync apply failed")
+            return True
+        self._json_ok(summary)
+        return True
+
     def _serve_run_portfolio_json(self, run_id: str) -> bool:
         """v0.10-P0-4 — GET /api/v1/runs/<run_id>/portfolio
 
@@ -3759,6 +3865,16 @@ class _Handler(BaseHTTPRequestHandler):
                 and path.count("/") == 4):
             token = path[len("/sync/event/"):-len("/push")]
             return self._handle_sync_event_push(token)
+        # v0.10-P1-4 — audio-photo sync (opt-in, gated on
+        # PIXCULL_AUDIO_SYNC=1).  Client posts transcript chunks +
+        # we suggest wedding_moment overrides via keyword matching.
+        # POST /api/v1/runs/<run_id>/audio_sync
+        #   body: {transcripts: [...], window_s?: float}
+        #   → {n_matched, suggestions: {filename: moment}, ...}
+        if (path.startswith("/api/v1/runs/")
+                and path.endswith("/audio_sync")):
+            rid = path[len("/api/v1/runs/"):-len("/audio_sync")]
+            return self._handle_audio_sync_post(rid)
         # v0.7-P2-2 — tethered live scoring (top-level shortcut routes
         # that call into the canonical P2.2 handlers defined further
         # down in this class).

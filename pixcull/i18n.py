@@ -36,7 +36,11 @@ _LOCALE_DIR = Path(__file__).resolve().parent / "locale"
 # client's preferred lang isn't explicitly in the list — we use
 # zh_CN as the default because the original product UI is zh.
 # v0.8-P2-1 — added ja_JP.
-SUPPORTED_LOCALES: tuple[str, ...] = ("zh_CN", "en_US", "ja_JP")
+# v0.10-P1-5 — added ko_KR (Korean photographer community on
+# 小红书 / Naver) + es_ES (Latam + Spain wedding photographers).
+SUPPORTED_LOCALES: tuple[str, ...] = (
+    "zh_CN", "en_US", "ja_JP", "ko_KR", "es_ES",
+)
 DEFAULT_LOCALE: str = "zh_CN"
 
 
@@ -86,6 +90,9 @@ def _normalize_lang(lang: str | None) -> str:
     Accepts:
       "zh", "zh-CN", "zh_CN", "zh-Hans-CN"     → "zh_CN"
       "en", "en-US", "en_US", "en-GB"          → "en_US"
+      "ja", "ja-JP", "ja_JP"                   → "ja_JP"
+      "ko", "ko-KR", "ko_KR"                   → "ko_KR"
+      "es", "es-ES", "es-MX", "es-AR"          → "es_ES"
       anything else                            → DEFAULT_LOCALE
     """
     if not lang:
@@ -97,6 +104,14 @@ def _normalize_lang(lang: str | None) -> str:
         return "en_US"
     if s.startswith("ja"):
         return "ja_JP"
+    # v0.10-P1-5 — collapse any es-* variant onto es_ES.  Latam
+    # Spanish is regionally distinct but the translation strings
+    # are deliberately neutral (no vosotros / vos splits) so one
+    # locale serves the whole Spanish-speaking market.
+    if s.startswith("ko"):
+        return "ko_KR"
+    if s.startswith("es"):
+        return "es_ES"
     return DEFAULT_LOCALE
 
 

@@ -184,8 +184,9 @@ Cmd+K 已经覆盖了 grid + lightbox 的全局命令。P1-3 加 inspector pane
 options(/rubric refresh、/explain 重新拉 DeepSeek、/cite [canon-id]
 插入正典引用、/note 加私 note)。继续 keyboard-first 路线。
 
-#### v0.10-P1-4 · Audio-photo sync(婚礼现场 mic input → ceremony moment)
-**估时**: 1.5 周
+#### v0.10-P1-4 · Audio-photo sync(婚礼现场 mic input → ceremony moment) ✅
+**估时**: 1.5 周 · **实际**: 同次 commit · **已发布**(opt-in via
+`PIXCULL_AUDIO_SYNC=1`)
 
 实验性 feature:婚礼现场 iPhone / Apple Watch mic 录环境音,通过
 v0.8 P0-2 LAN event token 流到 PixCull;PixCull 端通过 WhisperKit
@@ -193,8 +194,8 @@ v0.8 P0-2 LAN event token 流到 PixCull;PixCull 端通过 WhisperKit
 kiss"短语,把对应时间戳的照片自动 boost 进 `ceremony` 章节。
 opt-in,默认关。
 
-#### v0.10-P1-5 · KO + ES 翻译
-**估时**: 1 周
+#### v0.10-P1-5 · KO + ES 翻译 ✅
+**估时**: 1 周 · **实际**: 同次 commit · **已发布**
 
 继续 v0.8-P0-1 / P1-4 i18n。KO(韩国摄影师社区在小红书有显著占比)
 + ES(拉美 + 西班牙婚礼摄影师)。POEditor / Crowdin 流程,共建翻译
