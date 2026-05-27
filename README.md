@@ -344,6 +344,67 @@ Sparkle-update pipeline.
 | DeepSeek API key (optional) | `DEEPSEEK_API_KEY` env / `config.json` in app data | unset |
 | Sync target (optional) | `pixcull/sync.py` `configure_sync_for_user(path)` | none |
 
+## Architecture at a glance
+
+For the full engineering-grade architecture (C4 system context +
+container diagram + photo-pipeline sequence + LAN sync sequence +
+**16-row ML model card** + storage layout + tech-decision table),
+see **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — all
+diagrams are Mermaid, rendered inline on GitHub + ModelScope.
+
+The 10-second version, showing how PixCull is positioned in the
+team workflow:
+
+```mermaid
+%%{init: {'theme':'base','themeVariables':{'primaryColor':'#6E56CF','primaryTextColor':'#fff','lineColor':'#A855F7','primaryBorderColor':'#EC4899','tertiaryColor':'#1a1d24'}}}%%
+flowchart LR
+    P[("📷 Head shooter")]
+    S[("📷 Second shooter")]
+    E[("✎ Editor")]
+    C[("👤 Client")]
+    PIX{{"<b>PixCull</b><br/>local-first<br/>AI photo culling"}}
+    DS["DeepSeek API<br/>(opt-in)"]
+
+    P -->|"upload RAW/JPEG"| PIX
+    S -->|"join LAN event"| PIX
+    E -->|"label + push edits"| PIX
+    PIX -->|"portfolio share link<br/>/share/&lt;token&gt;"| C
+    PIX -.->|"opt-in · text only"| DS
+
+    style PIX fill:#6E56CF,color:#fff,stroke:#A855F7
+    style DS  fill:#2a2e35,stroke:#6E56CF
+```
+
+The architecture has a few non-obvious commitments worth calling
+out:
+
+- **Zero external web framework** — Python's built-in `http.server`,
+  15k LOC in `scripts/serve_demo.py`, deliberately flat for easy
+  audit. No Flask / Django / FastAPI.
+- **No database** — `scores.csv` + append-only `annotations.jsonl`
+  + per-event JSON files. Recovery is `cat | tail`; cross-machine
+  migration is `rsync`.
+- **Multi-model fusion** — 8 ONNX models (U²-Net / ArcFace /
+  scene CNN / wedding-moment CNN / CLIP ViT-L/14 / rubric V2 / …)
+  pulled together by a fusion layer + an optional VLM and DeepSeek
+  meta-judge. Any external source missing → pipeline gracefully
+  degrades. See [the model card](docs/ARCHITECTURE.md#4--ml-model-card--大模型设计表)
+  for per-model latency + size.
+- **Local-first sync over LAN** — token + 5 s HTTP polling +
+  mDNS auto-discovery. No WebSocket, no cloud signalling server,
+  no NAT traversal — runs entirely inside the same WiFi.
+
+> **Design quality, honest:** the engineering layer is mature
+> (614 tests passing, 7 charters shipped, 57 slices); the visual
+> design layer is still "developer + AI" rather than
+> "designer-curated".  We name this gap openly and have drafted a
+> concrete uplift plan in
+> **[docs/DESIGN-SYSTEM-ROADMAP.md](docs/DESIGN-SYSTEM-ROADMAP.md)**
+> covering tool selection (Figma + Penpot + Tokens Studio + Rive),
+> commissioned-illustration brief, and three phases over the next
+> six months — the goal is to move from "iconic functionality" to
+> "iconic-craft visual product" before v1.0.
+
 ## Repository structure
 
 ```
@@ -599,6 +660,58 @@ Developer ID)。`app/RELEASE.md` 里有完整的构建 / 公证 / Sparkle 更
 | App 数据目录 | `~/Library/Application Support/PixCull` (macOS) | 因平台而异 |
 | DeepSeek API key (可选) | `DEEPSEEK_API_KEY` env / app-data 下 `config.json` | 未设置 |
 | 同步目标 (可选) | `pixcull/sync.py::configure_sync_for_user(path)` | 无 |
+
+## 架构速览
+
+完整工程架构(C4 系统上下文 + 容器图 + 拍摄 pipeline 时序 + LAN 同步
+时序 + **16 行 ML 模型表** + 存储布局 + 技术决策表)见
+**[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** —— 全部用 Mermaid
+绘制,GitHub + ModelScope 均原生渲染。
+
+10 秒版,PixCull 在团队工作流中的位置:
+
+```mermaid
+%%{init: {'theme':'base','themeVariables':{'primaryColor':'#6E56CF','primaryTextColor':'#fff','lineColor':'#A855F7','primaryBorderColor':'#EC4899','tertiaryColor':'#1a1d24'}}}%%
+flowchart LR
+    P[("📷 主摄")]
+    S[("📷 二摄")]
+    E[("✎ 编辑")]
+    C[("👤 客户")]
+    PIX{{"<b>PixCull</b><br/>本地优先<br/>AI 选片"}}
+    DS["DeepSeek API<br/>(可选)"]
+
+    P -->|"上传 RAW/JPEG"| PIX
+    S -->|"加入 LAN event"| PIX
+    E -->|"标注 + 推决定"| PIX
+    PIX -->|"作品集分享链接<br/>/share/&lt;token&gt;"| C
+    PIX -.->|"opt-in · 仅文本"| DS
+
+    style PIX fill:#6E56CF,color:#fff,stroke:#A855F7
+    style DS  fill:#2a2e35,stroke:#6E56CF
+```
+
+几个不太显眼但值得点出的工程承诺:
+
+- **无 Web 框架依赖** —— Python 内置 `http.server`,15k 行单文件
+  `scripts/serve_demo.py`,故意保持平铺以便审计。无 Flask / Django /
+  FastAPI
+- **无数据库** —— `scores.csv` + append-only `annotations.jsonl` +
+  按事件的 JSON 文件。崩溃恢复就是 `cat | tail`;跨机迁移就是 `rsync`
+- **多模型融合** —— 8 个 ONNX 模型(U²-Net / ArcFace / scene CNN /
+  wedding-moment CNN / CLIP ViT-L/14 / 评分 V2 / …)由 fusion 层
+  + 可选 VLM + DeepSeek 元判断综合;任一外部源缺失时 pipeline
+  **降级跑通**。每模型推理延迟 + 大小见
+  [模型表](docs/ARCHITECTURE.md#4--ml-model-card--大模型设计表)
+- **LAN 同步本地优先** —— token + 5 秒 HTTP polling + mDNS 自动发现。
+  无 WebSocket,无云端 signalling,无 NAT 穿透 —— 全在同一个 WiFi 内
+
+> **设计质感坦白:** 工程层已经成熟(614 个测试通过、7 个 charter
+> 落地、57 个 slice),但**视觉设计层仍是"开发者 + AI"而非"设计师
+> 介入"**。这是我们公开承认的差距。详见
+> **[docs/DESIGN-SYSTEM-ROADMAP.md](docs/DESIGN-SYSTEM-ROADMAP.md)** ——
+> 包含工具链选型(Figma + Penpot + Tokens Studio + Rive)、自定义插
+> 画委托清单、未来 6 个月分三阶段的升级计划。目标:**v1.0 前从
+> "功能 iconic"升级到"工艺 iconic"**。
 
 ## 仓库结构
 
