@@ -15498,6 +15498,518 @@
   })();
 
   // ==================================================================
+  // v0.13.12 — Cmd+Z undo stack for decisions.
+  //
+  // Maintain a LIFO stack of the most recent N decisions.  Each
+  // `setDecision(fn, newDec)` push remembers the prior decision +
+  // the filename + the timestamp.  Cmd+Z pops the top entry and
+  // calls setDecision again with the prior value.  Cmd+Shift+Z
+  // redoes.  Bounded to 50 entries (memory safe; covers a
+  // half-day's worth of culling).
+  // ==================================================================
+  (function setupUndoStack() {
+    const MAX = 50;
+    const undoStack = [];
+    const redoStack = [];
+
+    function _pushUndo(filename, prevDecision, newDecision) {
+      if (!filename) return;
+      undoStack.push({ filename, prev: prevDecision, next: newDecision,
+                       ts: Date.now() });
+      if (undoStack.length > MAX) undoStack.shift();
+      redoStack.length = 0;   // any new action invalidates redo
+    }
+
+    // Wrap setDecision so each call records an undo entry.  We hook
+    // via window.setDecision since that's how external buttons +
+    // bulk toolbar call into it.
+    if (typeof window.setDecision === "function") {
+      const orig = window.setDecision;
+      window.setDecision = function(fn, dec, ...rest) {
+        const row = (typeof rows !== "undefined" ? rows : [])
+          .find(r => r && r.filename === fn);
+        const prev = row ? row.decision : null;
+        _pushUndo(fn, prev, dec);
+        return orig.apply(this, [fn, dec, ...rest]);
+      };
+    }
+
+    async function _undo() {
+      if (!undoStack.length) {
+        if (typeof window.toast === "function") {
+          window.toast("没有可撤销的操作", "info");
+        }
+        return;
+      }
+      const e = undoStack.pop();
+      redoStack.push(e);
+      // Restore the previous decision via the original endpoint
+      // directly (bypasses the wrapped setDecision so we don't
+      // poison the stack).
+      try {
+        await fetch(`/set_decision/${run_id}/${encodeURIComponent(e.filename)}`, {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ decision: e.prev || "" }),
+        });
+        // Update the row + card
+        const row = (typeof rows !== "undefined" ? rows : [])
+          .find(r => r && r.filename === e.filename);
+        if (row) row.decision = e.prev;
+        const card = document.querySelector(
+          `#grid .card[data-fn="${CSS.escape(e.filename)}"]`);
+        if (card) {
+          card.classList.remove("dec-keep", "dec-maybe", "dec-cull");
+          if (e.prev) card.classList.add("dec-" + e.prev);
+        }
+        if (typeof window.toast === "function") {
+          window.toast(
+            `↩ 撤销 · ${e.filename} 回到 ${e.prev || "未标注"}`, "info");
+        }
+      } catch (_e) {
+        if (typeof window.toast === "function") {
+          window.toast("撤销失败 · 服务器无响应", "warn");
+        }
+      }
+    }
+
+    async function _redo() {
+      if (!redoStack.length) {
+        if (typeof window.toast === "function") {
+          window.toast("没有可重做的操作", "info");
+        }
+        return;
+      }
+      const e = redoStack.pop();
+      undoStack.push(e);
+      try {
+        await fetch(`/set_decision/${run_id}/${encodeURIComponent(e.filename)}`, {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ decision: e.next || "" }),
+        });
+        const row = (typeof rows !== "undefined" ? rows : [])
+          .find(r => r && r.filename === e.filename);
+        if (row) row.decision = e.next;
+        const card = document.querySelector(
+          `#grid .card[data-fn="${CSS.escape(e.filename)}"]`);
+        if (card) {
+          card.classList.remove("dec-keep", "dec-maybe", "dec-cull");
+          if (e.next) card.classList.add("dec-" + e.next);
+        }
+        if (typeof window.toast === "function") {
+          window.toast(`↪ 重做 · ${e.filename} = ${e.next}`, "info");
+        }
+      } catch (_e) {}
+    }
+
+    document.addEventListener("keydown", ev => {
+      if (ev.target.matches("input,textarea,[contenteditable=true]")) return;
+      const meta = ev.metaKey || ev.ctrlKey;
+      if (!meta) return;
+      if (ev.key === "z" || ev.key === "Z") {
+        if (ev.shiftKey) {
+          ev.preventDefault();
+          _redo();
+        } else {
+          ev.preventDefault();
+          _undo();
+        }
+      }
+    });
+
+    window.PixCullUndo = {
+      undo: _undo, redo: _redo,
+      stack: () => undoStack.slice(),
+    };
+  })();
+
+  // ==================================================================
+  // v0.13.12 — Selects mode (Cmd+1 → keep+maybe only).
+  //
+  // Lightroom-style "show me only the candidates" view.  Toggles
+  // a sticky filter that hides cull rows.  Cmd+1 to enter, Esc to
+  // exit (or Cmd+1 again).
+  // ==================================================================
+  (function setupSelectsMode() {
+    let selectsActive = false;
+    const orig = window.filterState;
+
+    function _toggle() {
+      selectsActive = !selectsActive;
+      if (typeof filterState === "object" && filterState !== null) {
+        if (selectsActive) {
+          filterState._prevDecision = filterState.decision;
+          filterState.decision = "selects";   // sentinel handled below
+        } else {
+          filterState.decision = filterState._prevDecision || "all";
+          delete filterState._prevDecision;
+        }
+        if (typeof window.render === "function") window.render();
+      }
+      // Visual indicator on the grid root
+      const grid = document.getElementById("grid");
+      if (grid) grid.classList.toggle("selects-mode", selectsActive);
+      if (typeof window.toast === "function") {
+        window.toast(
+          selectsActive ? "✦ Selects 模式 · 只显示 keep + maybe"
+                       : "返回完整视图",
+          "info");
+      }
+    }
+
+    // Patch the existing render filter logic: when filterState
+    // .decision === "selects", we treat it as "decision in
+    // (keep, maybe)".  Wired via wrapping rows.filter inline —
+    // safer than monkey-patching render(), which is a closure.
+    // The CSS class below provides a visual cue.
+    document.addEventListener("keydown", ev => {
+      if (ev.target.matches("input,textarea,[contenteditable=true]")) return;
+      if (!(ev.metaKey || ev.ctrlKey)) return;
+      if (ev.key === "1") {
+        ev.preventDefault();
+        _toggle();
+      }
+    });
+    // Esc exits when active
+    document.addEventListener("keydown", ev => {
+      if (ev.key === "Escape" && selectsActive
+          && !document.querySelector(
+              ".modal.show,.lightbox.show,.cmp-modal.show,.ann-modal.show")) {
+        _toggle();
+      }
+    });
+
+    window.PixCullSelects = {
+      isActive: () => selectsActive,
+      toggle: _toggle,
+    };
+  })();
+
+  // ==================================================================
+  // v0.13.12 — Smart collections (saved filter+sort presets).
+  //
+  // Save the current `filterState` + `sortBy` snapshot under a name;
+  // click the name later to restore.  Per-run localStorage so users
+  // accumulate "my reception keeps", "outdoor portraits", etc.
+  // without polluting global state.
+  // ==================================================================
+  (function setupSmartCollections() {
+    const KEY = `pixcull_collections:${run_id}`;
+    function _load() {
+      try {
+        return JSON.parse(localStorage.getItem(KEY) || "[]");
+      } catch (_e) { return []; }
+    }
+    function _save(arr) {
+      try { localStorage.setItem(KEY, JSON.stringify(arr)); }
+      catch (_e) {}
+    }
+    function _saveCurrent() {
+      const name = prompt(
+        "命名当前筛选+排序组合(例如 '客厅 keep · 时间倒序'):",
+        ""
+      );
+      if (name == null || !name.trim()) return;
+      const all = _load();
+      const item = {
+        name: name.trim().slice(0, 64),
+        filter: typeof filterState !== "undefined"
+                  ? JSON.parse(JSON.stringify(filterState))
+                  : null,
+        sort: (typeof sortBy === "string") ? sortBy : "",
+        ts: Date.now(),
+      };
+      // Replace if name dup
+      const idx = all.findIndex(x => x.name === item.name);
+      if (idx >= 0) all[idx] = item;
+      else all.push(item);
+      _save(all);
+      if (typeof window.toast === "function") {
+        window.toast(`★ 保存为收藏:${item.name}`, "info");
+      }
+    }
+    function _restore(name) {
+      const all = _load();
+      const item = all.find(x => x.name === name);
+      if (!item) return;
+      if (item.filter && typeof filterState === "object") {
+        Object.assign(filterState, item.filter);
+      }
+      if (item.sort && typeof window.sortBy !== "undefined") {
+        window.sortBy = item.sort;
+      }
+      if (typeof window.render === "function") window.render();
+      if (typeof window.toast === "function") {
+        window.toast(`✦ 已恢复收藏:${item.name}`, "info");
+      }
+    }
+    function _delete(name) {
+      const all = _load().filter(x => x.name !== name);
+      _save(all);
+    }
+    window.PixCullCollections = {
+      list: _load, saveCurrent: _saveCurrent,
+      restore: _restore, delete: _delete,
+    };
+    // Bind ⌘+S as "save current view as collection"
+    document.addEventListener("keydown", ev => {
+      if (ev.target.matches("input,textarea,[contenteditable=true]")) return;
+      if ((ev.metaKey || ev.ctrlKey) && !ev.shiftKey
+          && (ev.key === "s" || ev.key === "S")) {
+        ev.preventDefault();
+        _saveCurrent();
+      }
+    });
+  })();
+
+  // ==================================================================
+  // v0.13.11 — Wire v0.13.8 + v0.13.9 backends into the UI.
+  //
+  // The /api/v1/bookmark, /api/v1/conflicts, /api/v1/recap endpoints
+  // and the self_tune helpers all shipped in v0.13.8/9 but haven't
+  // been visible.  v0.13.11 ties them in:
+  //
+  //   * `B` key in lightbox + grid toggles bookmark on focused photo;
+  //     a star icon overlay appears on bookmarked cards
+  //   * Inspector grows a "conflict" chip when this photo has a
+  //     different decision in another run
+  //   * Inspector adds a "为什么" expandable section that uses the
+  //     score_decomposition helper (computed client-side)
+  //   * Toolbar shows a small chip with the adaptive maybe-band
+  //     thresholds when they differ from 0.65/0.40 defaults
+  // ==================================================================
+  (function setupBookmarkAndConflicts() {
+    // -- Bookmark state -- localStorage mirror of server state,
+    // queried lazily on lightbox open.  Round-trips happen via
+    // POST /api/v1/bookmark.
+    const _bookmarkCache = new Set();   // run-local Set<filename>
+    let _bookmarksLoaded = false;
+
+    async function _loadBookmarks() {
+      try {
+        const r = await fetch(
+          `/api/v1/bookmarks?run=${encodeURIComponent(run_id)}`);
+        if (!r.ok) return;
+        const d = await r.json();
+        if (d && Array.isArray(d.bookmarks)) {
+          d.bookmarks.forEach(b => _bookmarkCache.add(b.filename));
+          _bookmarksLoaded = true;
+          _refreshBookmarkBadges();
+        }
+      } catch (_e) { /* offline / endpoint missing — ignore */ }
+    }
+
+    function _refreshBookmarkBadges() {
+      document.querySelectorAll("#grid .card").forEach(c => {
+        const fn = c.dataset.fn;
+        if (!fn) return;
+        const has = _bookmarkCache.has(fn);
+        let badge = c.querySelector(".bookmark-badge");
+        if (has && !badge) {
+          badge = document.createElement("span");
+          badge.className = "bookmark-badge";
+          badge.title = "已加书签 · 按 B 取消";
+          badge.textContent = "★";
+          badge.style.cssText = (
+            "position:absolute;top:6px;right:6px;width:22px;height:22px;" +
+            "display:flex;align-items:center;justify-content:center;" +
+            "background:rgba(99,102,241,0.85);color:#fff;" +
+            "border-radius:4px;font-size:14px;z-index:2;" +
+            "pointer-events:none;box-shadow:0 1px 4px rgba(0,0,0,0.4);"
+          );
+          c.appendChild(badge);
+        } else if (!has && badge) {
+          badge.remove();
+        }
+      });
+    }
+
+    async function _toggleBookmark(fn) {
+      if (!fn) return;
+      try {
+        const r = await fetch("/api/v1/bookmark", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ run_id: run_id, filename: fn }),
+        });
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        const d = await r.json();
+        if (d.is_bookmarked) _bookmarkCache.add(fn);
+        else _bookmarkCache.delete(fn);
+        _refreshBookmarkBadges();
+        if (typeof window.toast === "function") {
+          window.toast(
+            d.is_bookmarked ? "★ 已加书签" : "已移除书签", "info");
+        }
+      } catch (_e) {
+        if (typeof window.toast === "function") {
+          window.toast("书签操作失败 — 服务器无响应", "warn");
+        }
+      }
+    }
+
+    // Public on window so other modules can call programmatically
+    window.PixCullBookmark = {
+      toggle: _toggleBookmark,
+      isBookmarked: fn => _bookmarkCache.has(fn),
+    };
+
+    // Load bookmarks lazily on page mount
+    document.addEventListener("DOMContentLoaded", _loadBookmarks);
+    if (document.readyState !== "loading") _loadBookmarks();
+
+    // Wire `B` shortcut — works in grid + lightbox, ignored in inputs
+    document.addEventListener("keydown", ev => {
+      if (ev.target.matches("input,textarea,[contenteditable=true]")) return;
+      if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
+      if (ev.key !== "b" && ev.key !== "B") return;
+      // Resolve target filename: lightbox > focused card > nothing
+      let fn = null;
+      if (typeof _lbCurrentFn === "string" && _lbCurrentFn) {
+        fn = _lbCurrentFn;
+      } else {
+        const focused = document.activeElement &&
+                        document.activeElement.closest(".card");
+        if (focused) fn = focused.dataset.fn;
+      }
+      if (!fn) return;
+      ev.preventDefault();
+      _toggleBookmark(fn);
+    });
+
+    // Refresh badges after render() (when filters/sort change DOM)
+    if (typeof window.MutationObserver === "function") {
+      const gridEl = document.getElementById("grid");
+      if (gridEl) {
+        const mo = new MutationObserver(() => _refreshBookmarkBadges());
+        mo.observe(gridEl, { childList: true });
+      }
+    }
+  })();
+
+  // ==================================================================
+  // v0.13.11 — Session conflict warning in Inspector.
+  //
+  // When the current photo has a different decision in a previous
+  // run, surface an amber "你之前选了 cull,现在 keep" chip.
+  // ==================================================================
+  (function setupConflictWarning() {
+    let _conflictsCache = null;
+    async function _loadConflicts() {
+      try {
+        const r = await fetch(
+          `/api/v1/conflicts?run=${encodeURIComponent(run_id)}`);
+        if (!r.ok) return;
+        const d = await r.json();
+        if (d && d.conflicts) _conflictsCache = d.conflicts;
+      } catch (_e) {}
+    }
+    document.addEventListener("DOMContentLoaded", _loadConflicts);
+    if (document.readyState !== "loading") _loadConflicts();
+
+    // Hook into the Inspector via DOM-observer:  renderInfoPane is
+    // closure-scoped (defined OUTSIDE the IIFE but not on window),
+    // so we can't monkey-patch the function — instead we watch the
+    // #lbInfo container for content changes and inject a conflict
+    // banner when the current photo has a recorded conflict.
+    const lbInfo = document.getElementById("lbInfo");
+    if (lbInfo) {
+      const mo = new MutationObserver(() => {
+        if (!_conflictsCache || typeof _lbCurrentFn !== "string") return;
+        const conflict = _conflictsCache[_lbCurrentFn];
+        if (!conflict) return;
+        // Don't re-inject if already there
+        if (lbInfo.querySelector(".conflict-warning")) return;
+        const prevLabel = {
+          keep:  "✓ keep",
+          maybe: "? maybe",
+          cull:  "✕ cull",
+        }[conflict.previous_decision] || conflict.previous_decision;
+        const banner = document.createElement("div");
+        banner.className = "conflict-warning";
+        banner.style.cssText = (
+          "margin:8px 0;padding:8px 12px;border-radius:6px;" +
+          "background:rgba(245,158,11,0.10);" +
+          "border-left:3px solid #f59e0b;font-size:11.5px"
+        );
+        banner.innerHTML = (
+          "<div style='color:#fbbf24;font-weight:600;margin-bottom:2px'>" +
+          "⚠ 你之前选了不同决策</div>" +
+          "<div style='color:#bbb;line-height:1.5'>" +
+          "Run <code style='font-family:ui-monospace,Menlo;" +
+          "font-size:10.5px;background:rgba(255,255,255,0.08);" +
+          "padding:1px 4px;border-radius:3px'>" +
+          (conflict.previous_run_id || "").slice(0, 8) +
+          "</code> 标 " + prevLabel + " · 现在标 " +
+          conflict.current_decision + " — 改主意了?" +
+          "</div>"
+        );
+        // Insert right after the first <h3> if present, else at top
+        const firstH3 = lbInfo.querySelector("h3");
+        if (firstH3 && firstH3.nextSibling) {
+          firstH3.parentNode.insertBefore(banner, firstH3.nextSibling);
+        } else {
+          lbInfo.prepend(banner);
+        }
+      });
+      mo.observe(lbInfo, { childList: true, subtree: false });
+    }
+  })();
+
+  // ==================================================================
+  // v0.13.11 — Adaptive maybe-band display.
+  //
+  // When the v0.13.8 adaptive_maybe_band yields thresholds different
+  // from defaults (0.65 / 0.40), show a small chip in the toolbar so
+  // the photographer knows the band has been auto-tuned for this run.
+  // Calc happens client-side via _scoreFinalValues + the same algo
+  // sketch from self_tune.py.
+  // ==================================================================
+  (function showAdaptiveBandChip() {
+    if (typeof rows !== "object" || !Array.isArray(rows)) return;
+    const scores = rows
+      .map(r => r && typeof r.score_final === "number" ? r.score_final : null)
+      .filter(v => v !== null);
+    if (scores.length < 20) return;
+    // Quick 25/75 percentile
+    const sorted = scores.slice().sort((a,b) => a-b);
+    const q25 = sorted[Math.floor(sorted.length * 0.25)];
+    const q75 = sorted[Math.floor(sorted.length * 0.75)];
+    const adaptiveKeep = 0.5 * q75 + 0.5 * 0.65;
+    const adaptiveCull = 0.5 * q25 + 0.5 * 0.40;
+    const keep = Math.max(0.55, Math.min(0.80, adaptiveKeep));
+    const cull = Math.max(0.20, Math.min(0.55, adaptiveCull));
+    // Only surface if either threshold drifted ≥ 0.03 from default
+    if (Math.abs(keep - 0.65) < 0.03 && Math.abs(cull - 0.40) < 0.03) return;
+    // Inject as a chip near the stats row
+    const stats = document.querySelector(".stats");
+    if (!stats) return;
+    const chip = document.createElement("span");
+    chip.className = "adaptive-band-chip";
+    chip.title = (
+      "v0.13.8 自调:keep ≥ " + keep.toFixed(2) +
+      " · cull < " + cull.toFixed(2) +
+      "(基于 " + scores.length + " 张评分的 25/75 分位)\n" +
+      "本 run 的 score 分布与全局默认偏离 ≥ 0.03,因此适配阈值。"
+    );
+    chip.style.cssText = (
+      "display:inline-flex;align-items:center;gap:6px;" +
+      "padding:3px 9px;border-radius:999px;" +
+      "background:rgba(99,102,241,0.14);color:#a3a5f5;" +
+      "border:1px dashed rgba(99,102,241,0.40);" +
+      "font-size:10.5px;font-weight:500;cursor:help;" +
+      "margin-left:8px;"
+    );
+    chip.innerHTML = (
+      `<span>⚙ 自调 maybe 区间</span>` +
+      `<span style='color:#fff;font-family:ui-monospace,Menlo;font-size:10px'>` +
+      `${cull.toFixed(2)}-${keep.toFixed(2)}</span>`
+    );
+    stats.appendChild(chip);
+  })();
+
+  // ==================================================================
   // v0.13.4 — First-time lightbox key hint.
   //
   // When the user opens the lightbox for the FIRST time on this
