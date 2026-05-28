@@ -44,6 +44,29 @@ distinguish a 2-second highlight from a 2-second yawn.
 
 输出物:每个视频 = 一个 PixCull "run",视为高密度连拍组
 
+> **✅ 已实现(2028 Q1)** — `pixcull/io/video.py` + `pixcull video` CLI。
+> - `probe_video()`(ffprobe JSON)→ `fps / duration_s / codec / 宽高 /
+>   audio_track_count / container`;`extract_keyframes()` 支持 `interval`
+>   (每 N 秒,默认 1.0s,精确时间戳)与 `keyframe`(每 GOP / I 帧,时间戳
+>   来自 ffprobe I-frame 扫描)两种模式。
+> - 落盘 `<output>/video_frames/<video_id>/frame_000001.jpg …` +
+>   `manifest.json`(含 `schema_version`、逐帧 `{frame_id, timestamp_s,
+>   filename}`)。`video_id = <安全文件名>_<8位sha1(路径+大小+mtime)>`,
+>   幂等且不串号。
+> - `--max-frames`(默认 3000)安全阀:interval 估算超限时自动放宽间隔
+>   而非截断尾部。
+> - **CLI 默认抽帧后直接跑现有 pipeline**(`run_pipeline(frames_dir,
+>   output)`),所以视频天然成为一个 photo run、复用 `/thumb/` 缩略图与
+>   全部 6 轴评分 / burst-peak 聚类;`--extract-only` 可只抽帧。已用合成
+>   4 帧 h.264 端到端验证:scores.csv + rubric.jsonl 正常产出。
+> - 测试:`tests/test_video.py`(23 例)覆盖 **h.264 / h.265 / ProRes**
+>   probe+抽帧、interval/keyframe、manifest schema、video_id 稳定性、
+>   max_frames 放宽、重抽清理。ffmpeg/encoder 缺失自动 skip。
+> - **偏差**:`.braw`(Blackmagic RAW)/ `.crm`(Canon RAW-Light)在 CLI
+>   层接受但 `probe_video` 抛 `FFmpegError`(ffmpeg 无厂商 SDK 无法解码),
+>   真 RAW-video 解码推迟到 v2.1(见 P2-1)。多视频批量、`score_temporal`
+>   时间窗聚合归 **P0-2**。
+
 #### v2.0-P0-2 · 视频帧 rescorer + 时间窗聚合
 **估时**: 3 周
 

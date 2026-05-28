@@ -80,6 +80,96 @@ def bench(
     raise typer.Exit(code=1)  # TODO(V0.5)
 
 
+@app.command()
+def video(
+    path: Path = typer.Argument(
+        ..., exists=True, dir_okay=False,
+        help="Video file (.mp4 / .mov / .mkv / .m4v / …)",
+    ),
+    output: Path = typer.Option(
+        Path("./output"), "--output", "-o",
+        help="Run output folder (frames land in video_frames/<id>/)",
+    ),
+    mode: str = typer.Option(
+        "interval", "--mode",
+        help="interval (1 frame / interval-s) | keyframe (1 frame / GOP)",
+    ),
+    interval_s: float = typer.Option(
+        1.0, "--interval-s",
+        help="Seconds between frames in interval mode (auto-widened "
+             "if it would exceed --max-frames).",
+    ),
+    max_frames: int = typer.Option(
+        3000, "--max-frames",
+        help="Safety cap on extracted frames.",
+    ),
+    extract_only: bool = typer.Option(
+        False, "--extract-only",
+        help="Stop after frame extraction; skip the scoring pipeline.",
+    ),
+    scene: Optional[str] = typer.Option(
+        None, "--scene",
+        help="Force scene for the scoring pass (see `run`).",
+    ),
+    strictness: str = typer.Option("standard", "--strictness"),
+    rescorer_mode: Optional[str] = typer.Option(
+        None, "--rescorer-mode",
+        help="off | shadow | adjudicate (see `run`).",
+    ),
+) -> None:
+    """v2.0 — Import a video: extract keyframes, then score them.
+
+    The extracted ``video_frames/<id>/`` folder is scored by the same
+    pipeline as a photo shoot, so the video becomes one PixCull "run"
+    (a dense burst group).  Use ``--extract-only`` to stop after frame
+    extraction.
+    """
+    from pixcull.io.video import import_video, FFmpegError
+
+    try:
+        result = import_video(
+            path, output,
+            mode=mode, interval_s=interval_s, max_frames=max_frames,
+        )
+    except FFmpegError as exc:
+        console.print(f"[red]✗ {exc}[/red]")
+        raise typer.Exit(code=2)
+    except ValueError as exc:
+        console.print(f"[red]✗ {exc}[/red]")
+        raise typer.Exit(code=2)
+
+    m = result.meta
+    table = Table(title=f"Imported {m.source_name} → {result.frame_count} frames")
+    table.add_column("Field", style="cyan")
+    table.add_column("Value")
+    table.add_row("video_id", m.video_id)
+    table.add_row("codec", str(m.codec))
+    table.add_row("resolution", f"{m.width}×{m.height}")
+    table.add_row("fps", str(m.fps))
+    table.add_row("duration", f"{m.duration_s}s")
+    table.add_row("audio tracks", str(m.audio_track_count))
+    table.add_row("mode", result.mode + (
+        f" ({result.interval_s}s)" if result.interval_s else ""))
+    table.add_row("frames", str(result.frame_count))
+    table.add_row("frames dir", str(result.frames_dir))
+    console.print(table)
+
+    if extract_only:
+        console.print("[dim]--extract-only set; skipping scoring.[/dim]")
+        return
+
+    console.print("[bold]Scoring extracted frames…[/bold]")
+    from pixcull.pipeline.orchestrator import run_pipeline
+
+    run_pipeline(
+        result.frames_dir, output,
+        scene_override=scene,
+        strictness=strictness,
+        rescorer_mode=rescorer_mode,
+    )
+    console.print(f"[green]✓ Run complete → {output}[/green]")
+
+
 # v0.13.13 — plugin management.
 plugins_app = typer.Typer(help="Manage PixCull plugins (v0.13.13).",
                            no_args_is_help=True)
