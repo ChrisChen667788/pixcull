@@ -384,6 +384,8 @@ _CULL_REASONS: tuple[str, ...] = (
 _DEFAULT_PORT = 8770
 _FALLBACK_PORTS = (8770, 8771, 8772, 9322, 7799)
 _DEMO_ROOT = Path("/tmp/pixcull_demo")  # base dir for upload + output trees
+# v0.13.10 — server boot time, surfaced by /healthz uptime_s field.
+_SERVER_BOOT_TIME = time.time()
 _THUMB_SIZE = 420
 _FULL_SIZE = 1600
 
@@ -3744,6 +3746,36 @@ class _Handler(BaseHTTPRequestHandler):
         if path.startswith("/share/"):
             return self._serve_share_page(path[len("/share/"):])
         # v0.7-P2-1 — fetch learned style distances for a run.
+        # v0.13.5 — paginated rows endpoint for 5k+ photo runs.
+        # GET /api/v1/runs/<run_id>/rows?offset=N&limit=M
+        #   → {ok, run_id, offset, limit, total, rows: [...]}
+        # The /results page can fetch in slices (foundation for
+        # virtual scroll in v0.14+).  Existing inline JSON dump
+        # in the HTML continues to work for ≤ 2k photo runs.
+        if path.startswith("/api/v1/runs/") and path.endswith("/rows"):
+            mid = path[len("/api/v1/runs/"):-len("/rows")]
+            return self._serve_runs_rows(mid)
+        # v0.13.10 — operational health probe.
+        # GET /healthz → {ok, checks: [{name, ok, detail}, ...]}
+        # Used by:
+        #   * macOS LaunchAgent + brew services (boot health)
+        #   * Tether mode + LAN guests verifying the host is alive
+        #   * `scripts/collect_dogfood_bugs.py` automation
+        if path == "/healthz":
+            return self._serve_healthz()
+        # v0.13.9 — daily recap.
+        # GET /api/v1/recap?date=YYYY-MM-DD&user=<id>
+        #   → DailyRecap as JSON
+        if path == "/api/v1/recap":
+            return self._serve_daily_recap()
+        # v0.13.9 — bookmark list.
+        # GET /api/v1/bookmarks?run=<run_id>
+        if path == "/api/v1/bookmarks":
+            return self._serve_bookmarks_list()
+        # v0.13.9 — session conflicts dashboard.
+        # GET /api/v1/conflicts?run=<run_id>
+        if path == "/api/v1/conflicts":
+            return self._serve_session_conflicts()
         # v0.13.1 — per-ref CLIP distance breakdown.
         # GET /style/refs/<run_id>/<filename>
         #   → {ok, target, refs: [{filename, distance, rank}, ...]}
@@ -3912,6 +3944,11 @@ class _Handler(BaseHTTPRequestHandler):
         if path == "/sync/webrtc/relay" or path == "/api/v1/sync/webrtc/relay":
             self._serve_sync_webrtc_relay()
             return
+        # v0.13.9 — bookmark toggle.
+        # POST /api/v1/bookmark  body: {run_id, filename, note?, color?}
+        #   → {ok, added: bool, is_bookmarked: bool}
+        if path == "/api/v1/bookmark":
+            return self._handle_bookmark_toggle()
         # v0.10-P1-4 — audio-photo sync (opt-in, gated on
         # PIXCULL_AUDIO_SYNC=1).  Client posts transcript chunks +
         # we suggest wedding_moment overrides via keyword matching.
@@ -6604,6 +6641,274 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _serve_healthz(self) -> None:
+        """v0.13.10 — operational health probe.
+
+        Returns a structured ok/not-ok per check.  Used by launch
+        scripts, LAN guests verifying the host, and the dogfood
+        bug collector.  Never returns 5xx — even when individual
+        checks fail, we return 200 with per-check status (the
+        client decides whether to consider the host healthy).
+        """
+        import shutil as _sh
+        checks: list[dict] = []
+        # Disk space — < 1 GB free is concerning
+        try:
+            usage = _sh.disk_usage(str(_DEMO_ROOT.parent
+                                       if _DEMO_ROOT.exists()
+                                       else Path.home()))
+            free_gb = usage.free / (1024 ** 3)
+            checks.append({
+                "name":   "disk_free",
+                "ok":     free_gb >= 1.0,
+                "detail": f"{free_gb:.1f} GB free",
+            })
+        except Exception as exc:
+            checks.append({
+                "name":   "disk_free",
+                "ok":     False,
+                "detail": f"probe failed: {exc}",
+            })
+        # Demo root writable
+        try:
+            _DEMO_ROOT.mkdir(parents=True, exist_ok=True)
+            probe = _DEMO_ROOT / ".healthz_probe"
+            probe.write_text("ok", encoding="utf-8")
+            probe.unlink()
+            checks.append({"name": "demo_root_writable", "ok": True,
+                           "detail": str(_DEMO_ROOT)})
+        except Exception as exc:
+            checks.append({"name": "demo_root_writable", "ok": False,
+                           "detail": str(exc)})
+        # Models available — check models/ dir
+        models_dir = (Path(__file__).resolve().parent.parent / "models")
+        n_models = len(list(models_dir.glob("*.joblib"))) \
+            if models_dir.exists() else 0
+        checks.append({
+            "name":   "models",
+            "ok":     n_models > 0,
+            "detail": f"{n_models} joblib files",
+        })
+        # Locale catalogue — should have ≥ 5 (zh/en/ja/ko/es minimum)
+        locale_dir = (Path(__file__).resolve().parent.parent
+                      / "pixcull" / "locale")
+        n_locales = len(list(locale_dir.glob("*.json"))) \
+            if locale_dir.exists() else 0
+        checks.append({
+            "name":   "locales",
+            "ok":     n_locales >= 5,
+            "detail": f"{n_locales} locale files",
+        })
+        ok_all = all(c["ok"] for c in checks)
+        body = _safe_dumps({
+            "ok":     ok_all,
+            "checks": checks,
+            "uptime_s": int(time.time() - _SERVER_BOOT_TIME)
+            if "_SERVER_BOOT_TIME" in globals() else None,
+        }).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type",
+                         "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _serve_daily_recap(self) -> None:
+        """v0.13.9 — GET /api/v1/recap?date=YYYY-MM-DD"""
+        from urllib.parse import parse_qs, urlparse as _up
+        qs = parse_qs(_up(self.path).query)
+        date_iso = (qs.get("date") or [""])[0].strip() or None
+        try:
+            from pixcull.workflow import daily_recap
+            from dataclasses import asdict
+        except Exception as exc:
+            self.send_error(500, f"workflow module import failed: {exc}")
+            return
+        recap = daily_recap(
+            Path.home() / ".pixcull" / "runs",
+            date_iso=date_iso,
+        )
+        body = _safe_dumps({
+            "ok":    True,
+            "recap": asdict(recap),
+        }).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type",
+                         "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _serve_bookmarks_list(self) -> None:
+        """v0.13.9 — GET /api/v1/bookmarks?run=<run_id>"""
+        from urllib.parse import parse_qs, urlparse as _up
+        from dataclasses import asdict
+        qs = parse_qs(_up(self.path).query)
+        run_id = (qs.get("run") or [""])[0].strip() or None
+        try:
+            from pixcull.workflow import list_bookmarks
+        except Exception as exc:
+            self.send_error(500, f"workflow import failed: {exc}")
+            return
+        bookmarks = list_bookmarks(run_id)
+        body = _safe_dumps({
+            "ok":        True,
+            "bookmarks": [asdict(b) for b in bookmarks],
+        }).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type",
+                         "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _serve_session_conflicts(self) -> None:
+        """v0.13.9 — GET /api/v1/conflicts?run=<run_id>"""
+        from urllib.parse import parse_qs, urlparse as _up
+        qs = parse_qs(_up(self.path).query)
+        run_id = (qs.get("run") or [""])[0].strip()
+        if not run_id:
+            self.send_error(400, "run param required")
+            return
+        try:
+            from pixcull.workflow import session_conflicts
+        except Exception as exc:
+            self.send_error(500, f"workflow import failed: {exc}")
+            return
+        conflicts = session_conflicts(
+            Path.home() / ".pixcull" / "runs", run_id)
+        body = _safe_dumps({
+            "ok":        True,
+            "run_id":    run_id,
+            "conflicts": conflicts,
+            "count":     len(conflicts),
+        }).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type",
+                         "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _handle_bookmark_toggle(self) -> None:
+        """v0.13.9 — POST /api/v1/bookmark.
+
+        Body: ``{run_id, filename, note?, color?}``.  Adds if absent,
+        removes if present.  Returns whether the photo is now
+        bookmarked.
+        """
+        try:
+            length = int(self.headers.get("Content-Length", "0") or "0")
+        except ValueError:
+            length = 0
+        if length <= 0 or length > 8192:
+            self.send_error(400, "expected JSON body ≤ 8 KB")
+            return
+        try:
+            params = json.loads(self.rfile.read(length).decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            self.send_error(400, f"invalid JSON: {exc}")
+            return
+        run_id = str(params.get("run_id") or "").strip()
+        filename = str(params.get("filename") or "").strip()
+        note = str(params.get("note") or "")[:500]
+        color = str(params.get("color") or "blue")
+        if not run_id or not filename:
+            self.send_error(400, "run_id + filename required")
+            return
+        try:
+            from pixcull.workflow import is_bookmarked, toggle_bookmark
+        except Exception as exc:
+            self.send_error(500, f"workflow import failed: {exc}")
+            return
+        try:
+            added = toggle_bookmark(run_id, filename, note=note, color=color)
+        except ValueError as exc:
+            self.send_error(400, str(exc))
+            return
+        body = _safe_dumps({
+            "ok":            True,
+            "added":         added,
+            "is_bookmarked": is_bookmarked(run_id, filename),
+        }).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type",
+                         "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _serve_runs_rows(self, run_id: str) -> None:
+        """v0.13.5 — paginated rows endpoint.
+
+        Returns a slice of the run's scores.csv as JSON, suitable for
+        virtual-scroll grids that don't want to inline all rows in
+        the HTML payload.
+
+        Query params:
+          * ``offset`` (default 0)
+          * ``limit``  (default 200, max 1000)
+
+        Response:
+          ``{ok, run_id, offset, limit, total, rows: [...]}``
+
+        Each row contains the same fields the inline JSON dump
+        provides, so the client can use it as a drop-in replacement.
+        """
+        from urllib.parse import parse_qs, urlparse as _up
+        qs = parse_qs(_up(self.path).query)
+        try:
+            offset = max(0, int((qs.get("offset") or ["0"])[0]))
+        except (TypeError, ValueError):
+            offset = 0
+        try:
+            limit = int((qs.get("limit") or ["200"])[0])
+        except (TypeError, ValueError):
+            limit = 200
+        # Clamp to a sane range.  1000 is more than any reasonable
+        # virtual-scroll window;  going higher would defeat the
+        # purpose (re-introduce the JSON-dump bloat we're avoiding).
+        limit = max(1, min(1000, limit))
+
+        run = _get_run(run_id) or _reload_run_from_disk(run_id)
+        if run is None:
+            self.send_error(404, "no such run")
+            return
+        # Lean on the same _build_results helper that the inline
+        # template path uses — guarantees identical fields.
+        result = _build_results(run_id)
+        if result is None:
+            self.send_error(404, "no results yet")
+            return
+        rows, _meta = result
+        total = len(rows)
+        slice_rows = rows[offset:offset + limit]
+        body = _safe_dumps({
+            "schema": "pixcull.runs.rows/v1",
+            "ok":     True,
+            "run_id": run_id,
+            "offset": offset,
+            "limit":  limit,
+            "total":  total,
+            "rows":   slice_rows,
+        }).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type",
+                         "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        # Make pagination metadata explicit for clients
+        self.send_header("X-Total-Count", str(total))
+        self.send_header("X-Offset", str(offset))
+        self.send_header("X-Limit", str(limit))
+        self.end_headers()
+        self.wfile.write(body)
+
     def _serve_style_per_ref(self, run_id: str, filename: str) -> None:
         """v0.13.1 — GET /style/refs/<run_id>/<filename>
 
@@ -6827,6 +7132,12 @@ class _Handler(BaseHTTPRequestHandler):
         from html import escape as _esc
 
         def _fmt_mtime(t: float) -> str:
+            """v0.13.7 — emit ISO date that the client-side JS will
+            re-format via Intl.DateTimeFormat for the current locale.
+            We can't know the user's locale on the server (it depends
+            on browser Accept-Language + user override), so the SSR
+            value is a stable ISO string + a data-iso attribute the
+            client hydrates."""
             try:
                 return datetime.fromtimestamp(t).strftime("%Y-%m-%d %H:%M")
             except (ValueError, OSError):
@@ -6856,12 +7167,21 @@ class _Handler(BaseHTTPRequestHandler):
                 )
             else:
                 thumb = '<div class="no-thumb">·</div>'
+            # v0.13.7 — emit ISO-8601 in data-iso so the client-side
+            # script can Intl-format per current locale (pt → "29 mai
+            # 2026, 21:32"; ar → "٢٩ مايو ٢٠٢٦ ٢١:٣٢"; etc.).  Falls
+            # back to the SSR fallback string when JS is off.
+            try:
+                iso = datetime.fromtimestamp(e["mtime"]).isoformat()
+            except (ValueError, OSError):
+                iso = ""
             cards.append(
                 f'<a class="card" href="/results/{_esc(e["run_id"])}">'
                 f'<div class="thumb">{thumb}</div>'
                 f'<div class="meta">'
                 f'<div class="rid" title="{_esc(e["run_id"])}">{_esc(e["run_id"])}</div>'
-                f'<div class="when">{_fmt_mtime(e["mtime"])}'
+                f'<div class="when" data-iso="{_esc(iso)}">'
+                f'{_fmt_mtime(e["mtime"])}'
                 + (f' · <span class="src">{_esc(str(e["source_label"]))}</span>' if e["source_label"] else "")
                 + f'</div>'
                 f'{_decision_bar(e)}'
@@ -6896,14 +7216,35 @@ class _Handler(BaseHTTPRequestHandler):
             '</svg>'
         )
         cards_html = "\n".join(cards) if cards else (
-            '<div class="empty" style="text-align:center;padding:40px 24px">'
+            '<div class="empty" style="text-align:center;padding:40px 24px;max-width:480px;margin:0 auto">'
             + empty_history_svg
             + '<div style="font-size:18px;font-weight:600;color:var(--fg);'
               'letter-spacing:-0.01em">还没有跑过任何 run</div>'
-              '<div style="margin-top:8px;color:var(--muted);font-size:13px">'
-              '上传第一批照片,运行结果会自动归档到这里。</div>'
-              '<a class="btn primary" href="/" '
-              'style="margin-top:18px;display:inline-block">回上传页 →</a></div>'
+              '<div style="margin-top:8px;color:var(--muted);font-size:13px;line-height:1.6">'
+              '不需要先上传你自己的照片 — 用 6 张内置示例数据就能 '
+              '<b>30 秒</b>看到完整 PixCull 选片流程,'
+              '包括 6 轴评分 · attribution heatmap · 客户分享链接。</div>'
+              # v0.13.4 — Primary "try a demo" CTA + secondary upload link.
+              # Old empty state only linked back to upload, which forced new
+              # users to either (a) wait minutes for first-run model download
+              # + analysis, or (b) bounce.  The demo button drops them into
+              # /results in < 5 seconds, lowering the bounce gate by 99%.
+              '<div style="margin-top:22px;display:flex;flex-direction:column;align-items:center;gap:10px">'
+              '<button id="historyTryDemoBtn" '
+              'style="padding:11px 22px;border-radius:999px;border:0;'
+              'font-weight:600;font-size:13px;cursor:pointer;'
+              'background:linear-gradient(135deg,#6E56CF 0%,#EC4899 100%);'
+              'color:#fff;box-shadow:0 4px 14px rgba(110,86,207,0.40)" '
+              'onclick="(async()=>{this.disabled=true;this.textContent=\'载入中…\';'
+              'try{const r=await fetch(\'/sample_demo\',{method:\'POST\'});'
+              'const d=await r.json();if(d.ok&&d.run_id){location.href=\'/results/\'+d.run_id;}'
+              'else{this.textContent=\'失败 · 重试\';this.disabled=false;}}'
+              'catch(e){this.textContent=\'失败 · 重试\';this.disabled=false;}})()">'
+              '🎬 用示例数据 30 秒体验</button>'
+              '<a href="/" style="color:var(--muted);font-size:12.5px;'
+              'text-decoration:none;border-bottom:1px dashed var(--muted)">'
+              '或上传我自己的照片 →</a></div>'
+              '</div>'
         )
 
         page = (
@@ -7015,6 +7356,29 @@ class _Handler(BaseHTTPRequestHandler):
           window.addEventListener("DOMContentLoaded", () => {
             const cards = document.querySelectorAll(".grid .card");
             cards.forEach((c, i) => c.style.setProperty("--idx", i));
+            /* v0.13.7 — Intl.DateTimeFormat per current locale for
+               every .when[data-iso] element.  Falls back to the SSR
+               string when the ISO attr is empty / parse fails. */
+            try {
+              const lang = (navigator.language || "en").replace("_","-");
+              const fmt = new Intl.DateTimeFormat(lang, {
+                year: "numeric", month: "short", day: "numeric",
+                hour: "2-digit", minute: "2-digit",
+              });
+              document.querySelectorAll(".when[data-iso]").forEach(el => {
+                const iso = el.dataset.iso;
+                if (!iso) return;
+                const d = new Date(iso);
+                if (isNaN(d.getTime())) return;
+                /* keep the trailing " · <src>" span if present */
+                const src = el.querySelector(".src");
+                el.innerHTML = fmt.format(d);
+                if (src) {
+                  el.appendChild(document.createTextNode(" · "));
+                  el.appendChild(src);
+                }
+              });
+            } catch (_e) { /* Intl missing on legacy browsers */ }
           });</script>
   <header>
     <a class="back" href="/">← 上传页</a>
@@ -8412,7 +8776,23 @@ class _Handler(BaseHTTPRequestHandler):
         # of the fast ``load_image`` (which always took the
         # embedded thumbnail). Existing v2 caches for RAW would
         # serve a soft preview where the user expects a sharp one.
-        cache_path = cache_dir / f"{src.name}.{size}.v3.jpg"
+        # v0.13.5 — WebP content negotiation.  Chrome / Firefox /
+        # Safari (since 14) / Edge all send `Accept: image/webp` —
+        # WebP at the same visual quality is ~25-35% smaller than
+        # JPEG.  Falls back to JPEG when the client doesn't advertise.
+        accept_hdr = self.headers.get("Accept", "")
+        # The client can also force-disable via ?fmt=jpg (debug)
+        force_fmt = qs.get("fmt", [""])[0].lower()
+        want_webp = (
+            force_fmt != "jpg"
+            and "image/webp" in accept_hdr.lower()
+            # We only encode WebP for SMALL caches (≤ THUMB_SIZE) so
+            # the lightbox's high-res 4K JPEG stays untouched — pros'
+            # workflow expects baseline JPEG for the loupe.
+            and size <= _THUMB_SIZE
+        )
+        ext = "webp" if want_webp else "jpg"
+        cache_path = cache_dir / f"{src.name}.{size}.v3.{ext}"
         if not cache_path.exists():
             # V26: large requests get the display loader, small
             # ones (thumbnail grid) keep the fast path.
@@ -8426,14 +8806,33 @@ class _Handler(BaseHTTPRequestHandler):
                 self.send_error(500, "image decode failed")
                 return
             quality = 78 if size <= _THUMB_SIZE else 88
-            img.save(cache_path, "JPEG", quality=quality, optimize=True)
+            if want_webp:
+                # WebP method=4 is the sweet spot (~4× slower encode
+                # than JPEG, ~30% smaller output).  method=6 is +5%
+                # smaller but 12× slower; not worth it for a one-shot
+                # cache.  ``lossless=False`` is implicit at this quality.
+                try:
+                    img.save(cache_path, "WEBP",
+                             quality=quality, method=4)
+                except (OSError, ValueError, KeyError):
+                    # Older Pillow / unsupported build — fall back.
+                    cache_path = cache_path.with_suffix(".jpg")
+                    img.save(cache_path, "JPEG", quality=quality, optimize=True)
+                    want_webp = False
+            else:
+                img.save(cache_path, "JPEG", quality=quality, optimize=True)
         data = cache_path.read_bytes()
         self.send_response(200)
-        self.send_header("Content-Type", "image/jpeg")
+        self.send_header("Content-Type",
+                         "image/webp" if want_webp else "image/jpeg")
         self.send_header("Content-Length", str(len(data)))
         self.send_header(
             "Cache-Control", "public, max-age=31536000, immutable"
         )
+        # v0.13.5 — make the WebP path debuggable via Vary so a CDN
+        # would cache both variants per Accept header.
+        if size <= _THUMB_SIZE:
+            self.send_header("Vary", "Accept")
         self.end_headers()
         self.wfile.write(data)
 

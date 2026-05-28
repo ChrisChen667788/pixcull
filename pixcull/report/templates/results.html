@@ -4514,6 +4514,141 @@
     .lightbox.zoomed .lb-scrubber { display: none; }
 
     /* ============================================================
+       v0.13.7 — RTL audit for ar_SA and other right-to-left locales.
+
+       The lightbox modal uses absolute-positioned nav chevrons + a
+       scrubber + filmstrip — none of which auto-flip under just
+       `dir="rtl"`.  Mirror the chrome here.
+
+       Mirrored:
+         * `‹` / `›` nav chevrons (swap left ↔ right)
+         * Filmstrip scroll direction (browser handles auto for
+           text-flow, but our drag handlers need flipped sign)
+         * Scrubber `<` start (the playhead grows from right edge)
+       Kept:
+         * Photo itself (always natural orientation; user-supplied)
+         * Toolbar icons (visual, not text-flow)
+       ============================================================ */
+    [dir="rtl"] .lightbox .nav-prev { left: auto; right: 8px; }
+    [dir="rtl"] .lightbox .nav-next { right: auto; left: 8px; }
+    [dir="rtl"] .lightbox .nav-prev::before { content: "›"; }
+    [dir="rtl"] .lightbox .nav-next::before { content: "‹"; }
+    [dir="rtl"] .lightbox .nav-prev { transform: scaleX(-1); }
+    [dir="rtl"] .lightbox .nav-next { transform: scaleX(-1); }
+    [dir="rtl"] .lightbox .close-btn { left: 8px; right: auto; }
+    [dir="rtl"] .lightbox .rotate-grp { left: auto; right: 12px; }
+    [dir="rtl"] .lightbox .zoom-grp { right: auto; left: 12px; }
+    /* Scrubber: in RTL the playhead "0" is the right edge; we
+       mirror the fill via direction:rtl on the container. */
+    [dir="rtl"] .lightbox .lb-scrubber { direction: rtl; }
+
+    /* v0.13.7 — focus-visible consistency.  All previous outline
+       declarations used `2px solid var(--accent)` ad-hoc; harmonise
+       to one token so a future palette swap propagates.  Skip
+       buttons that already use `:focus-visible` correctly. */
+    *:focus-visible {
+      outline: 2px solid var(--focus-ring);
+      outline-offset: 2px;
+      border-radius: var(--radius-sm, 4px);
+    }
+    /* Override the legacy `:focus { outline:none }` reset for
+       interactive elements that need a ring under keyboard nav. */
+    .card:focus-visible,
+    .style-chip:focus-visible,
+    .badge:focus-visible {
+      outline: 2px solid var(--focus-ring);
+      outline-offset: 1px;
+    }
+
+    /* ============================================================
+       v0.13.6 — Inspector source-row 4-state mini stacked bar.
+       Replaces the legacy "5.0/4.2/4.5/3.9/--/3.0" slash text.
+       ============================================================ */
+    .info-pane .src-row {
+      display: flex; align-items: center; gap: 10px;
+      margin: 4px 0;
+    }
+    .info-pane .src-row .name {
+      flex: 0 0 84px; color: var(--muted);
+      font-size: 11.5px;
+      letter-spacing: 0.02em;
+    }
+    .info-pane .ax-bar {
+      display: flex; gap: 3px;
+      flex: 1;
+    }
+    .info-pane .ax-cell {
+      position: relative;
+      flex: 1; min-width: 14px;
+      height: 8px;
+      border-radius: 2px;
+      cursor: default;
+      transition: transform var(--duration-fast, 150ms) var(--ease-out),
+                  box-shadow var(--duration-fast, 150ms) var(--ease-out);
+    }
+    .info-pane .ax-cell.empty {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px dashed rgba(255, 255, 255, 0.08);
+    }
+    .info-pane .ax-cell:hover {
+      transform: scaleY(1.6);
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18);
+      z-index: 2;
+    }
+    .info-pane .ax-cell .ax-tip {
+      position: absolute; bottom: 100%;
+      left: 50%; transform: translateX(-50%);
+      background: rgba(20, 22, 28, 0.96);
+      color: #fff;
+      font: 500 10px/1 ui-monospace, SF Mono, Menlo, monospace;
+      padding: 3px 6px;
+      border-radius: 3px;
+      margin-bottom: 4px;
+      opacity: 0;
+      pointer-events: none;
+      white-space: nowrap;
+      transition: opacity var(--duration-fast, 150ms);
+    }
+    .info-pane .ax-cell:hover .ax-tip { opacity: 1; }
+
+    /* v0.13.6 — marquee cursor hint.  Hovering grid empty space
+       (anywhere that's not a .card) now shows a crosshair cursor
+       so users discover the drag-select affordance. */
+    .grid:not(:empty) { cursor: crosshair; }
+    .grid .card { cursor: pointer; }
+
+    /* v0.13.6 — bucket drag handle visibility.  Adds a ⋮⋮ chip on
+       hover of every bucket / portfolio item so users can see the
+       reorder affordance.  Previously you had to discover "press
+       and hold anywhere on the bucket" — total dark pattern. */
+    .buckets-list > *,
+    .share-portfolio-grid > * {
+      position: relative;
+    }
+    .buckets-list > *::before,
+    .share-portfolio-grid > *::before {
+      content: "⋮⋮";
+      position: absolute;
+      left: 4px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: rgba(255, 255, 255, 0.25);
+      font: bold 12px/1 system-ui;
+      letter-spacing: -2px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity var(--duration-fast, 150ms) var(--ease-out);
+    }
+    .buckets-list > *:hover::before,
+    .share-portfolio-grid > *:hover::before {
+      opacity: 1;
+    }
+    .buckets-list > *.dragging,
+    .share-portfolio-grid > *.dragging {
+      opacity: 0.6;
+    }
+
+    /* ============================================================
        v0.11-P1-2 — Marquee select + bulk toolbar.
        Press + drag in grid empty space to draw a selection rect;
        all .card elements intersected are added to the selection.
@@ -6056,6 +6191,19 @@
           <div class="shortcut-row"><span class="keys">点击图片</span><span class="desc">在该位置 1:1 放大 · 再点回适配</span></div>
           <div class="shortcut-row"><span class="keys">拖动图片</span><span class="desc">在 1:1 模式下平移</span></div>
           <div class="shortcut-row"><span class="keys">滚轮</span><span class="desc">以光标为中心放大/缩小</span></div>
+          <!-- v0.13.4 — surface v0.11-v0.13 new keys -->
+          <div class="shortcut-row"><span class="keys"><kbd>A</kbd></span><span class="desc"><span style="color:#a3a5f5">v0.13</span> · 6 轴 AI attribution heatmap</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>H</kbd></span><span class="desc"><span style="color:#a3a5f5">v0.12</span> · EXIF / 直方图 overlay</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>\</kbd></span><span class="desc"><span style="color:#a3a5f5">v0.12</span> · 一键打开同 burst 组 A/B 比较</span></div>
+          <div class="shortcut-row"><span class="keys">底部 1px 条</span><span class="desc"><span style="color:#a3a5f5">v0.11</span> · 拖动 scrub 所有可见照片(DaVinci-style)</span></div>
+        </div>
+        <!-- v0.13.4 — grid: marquee + v0.12 bulk -->
+        <div class="shortcut-section" data-ctx="grid">
+          <div class="shortcut-section-title">批量(v0.11+)</div>
+          <div class="shortcut-row"><span class="keys">网格空白处拖框</span><span class="desc"><span style="color:#a3a5f5">v0.11</span> · marquee 框选;底部弹出批量工具栏</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>⌘</kbd>+<kbd>A</kbd></span><span class="desc">全选当前可见</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>Esc</kbd></span><span class="desc">取消所有 marquee 选择</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>⌘</kbd>+<kbd>K</kbd></span><span class="desc">命令面板(模糊搜索动作)</span></div>
         </div>
         <div class="shortcut-section" data-ctx="universal">
           <div class="shortcut-section-title">通用</div>
@@ -7744,7 +7892,12 @@
         <div class="card ${cardCls}" data-fn="${fnEsc}">
           ${activeLearningBadge}
           <div class="thumb-wrap">
-            <img class="thumb" src="${thumb}" data-full="${full}" loading="lazy" alt="${fnEsc}" ${rotStyle}>
+            <!-- v0.13.5 — decoding="async" so the main thread isn't
+                 blocked decoding 200+ JPEGs simultaneously on initial
+                 render.  Native lazy-loading still throttles network
+                 requests.  fetchpriority=low so off-viewport thumbs
+                 don't crowd out CSS / fonts. -->
+            <img class="thumb" src="${thumb}" data-full="${full}" loading="lazy" decoding="async" fetchpriority="low" alt="${fnEsc}" ${rotStyle}>
             ${decisionGlyph}
             <div class="thumb-overlay">
               <span class="thumb-overlay-fn" title="${fnEsc}">${fnEsc}</span>
@@ -9144,9 +9297,31 @@
       ["meta",   r.rubric_meta_stars],
       ["human",  r.rubric_human_stars],
     ].filter(([_, m]) => m && Object.values(m).some(v => v != null));
+    // v0.13.6 — replace the slash-separated "5.0/4.2/4.5/3.9/--/3.0"
+    // with a 6-cell mini stacked bar.  Each cell is a 12×6px chip
+    // colored from low-saturation grey (1★) → indigo (3★) →
+    // brand-pink (5★).  Hovering a chip shows the exact value;
+    // the row label uses the i18n source name.
+    const _axisBarCell = (v) => {
+      if (v == null) {
+        return '<span class="ax-cell empty" title="缺失"></span>';
+      }
+      const t = Math.max(0, Math.min(1, (v - 1) / 4));
+      // 6E56CF (indigo) → EC4899 (pink), with a gray underlay for <2
+      const r = Math.round(0x6E + (0xEC - 0x6E) * t);
+      const g = Math.round(0x56 + (0x48 - 0x56) * t);
+      const b = Math.round(0xCF + (0x99 - 0xCF) * t);
+      const op = (0.30 + 0.60 * t).toFixed(2);
+      return `<span class="ax-cell" title="${v.toFixed(2)}" ` +
+             `style="background:rgba(${r},${g},${b},${op})">` +
+             `<span class="ax-tip">${v.toFixed(1)}</span></span>`;
+    };
     const detailHtml = sourceRows.map(([label, m]) => {
-      const vals = axisNames.map(n => m[n] == null ? '·' : m[n].toFixed(1)).join(' / ');
-      return `<div class="row"><span class="name">${trSource(label)}</span><span>${vals}</span></div>`;
+      const cells = axisNames.map(n => _axisBarCell(m[n])).join("");
+      return `<div class="row src-row">` +
+             `<span class="name">${trSource(label)}</span>` +
+             `<span class="ax-bar">${cells}</span>` +
+             `</div>`;
     }).join("");
 
     // Style chips + scene + decision header — V16.0 localized.
@@ -15320,6 +15495,85 @@
     document.addEventListener("keydown", ev => {
       if (ev.key === "Escape") _hide();
     });
+  })();
+
+  // ==================================================================
+  // v0.13.4 — First-time lightbox key hint.
+  //
+  // When the user opens the lightbox for the FIRST time on this
+  // browser, surface a brief toast at the bottom of the lightbox
+  // listing the three highest-value new keys (A / H / \) that
+  // didn't exist in v0.10 and aren't visible in the standard
+  // toolbar.  Auto-dismisses after 6s or on first keypress.
+  // Once seen, never again (localStorage).
+  // ==================================================================
+  (function setupLightboxKeyHint() {
+    const KEY = "pixcull_seen_lightbox_keys_v0_13";
+    let seen = false;
+    try { seen = localStorage.getItem(KEY) === "1"; } catch (_e) { seen = true; }
+    if (seen) return;
+    const lb = document.getElementById("lightbox");
+    if (!lb) return;
+    function _markSeen() {
+      try { localStorage.setItem(KEY, "1"); } catch (_e) {}
+      seen = true;
+    }
+    function _show() {
+      if (seen) return;
+      _markSeen();
+      const toast = document.createElement("div");
+      toast.style.cssText = (
+        "position:absolute;bottom:120px;left:50%;transform:translateX(-50%);" +
+        "background:rgba(20,22,28,0.96);color:#fff;" +
+        "padding:14px 22px;border-radius:12px;z-index:8;" +
+        "font:13px/1.6 system-ui;text-align:center;" +
+        "box-shadow:0 12px 32px rgba(0,0,0,0.45);" +
+        "border:1px solid rgba(99,102,241,0.30);" +
+        "max-width:min(560px,90vw);" +
+        "opacity:0;transition:opacity 320ms cubic-bezier(0.2,0.8,0.2,1)," +
+        "transform 320ms cubic-bezier(0.34,1.56,0.64,1);"
+      );
+      toast.innerHTML = (
+        "<div style='font-weight:600;color:#a3a5f5;margin-bottom:6px;" +
+        "font-size:11px;letter-spacing:0.04em;text-transform:uppercase'>" +
+        "✨ 这是你第一次打开 lightbox</div>" +
+        "<div>三个 PixCull 专属键位:</div>" +
+        "<div style='margin-top:8px;display:flex;justify-content:center;gap:18px;flex-wrap:wrap'>" +
+        "<span><kbd style='background:rgba(99,102,241,0.20);padding:3px 8px;" +
+        "border-radius:4px;font-family:ui-monospace,Menlo;color:#fff;" +
+        "border:1px solid rgba(99,102,241,0.40);font-size:11px'>A</kbd> " +
+        "<span style='color:#aaa;font-size:11.5px'>AI heatmap</span></span>" +
+        "<span><kbd style='background:rgba(99,102,241,0.20);padding:3px 8px;" +
+        "border-radius:4px;font-family:ui-monospace,Menlo;color:#fff;" +
+        "border:1px solid rgba(99,102,241,0.40);font-size:11px'>H</kbd> " +
+        "<span style='color:#aaa;font-size:11.5px'>EXIF + 直方图</span></span>" +
+        "<span><kbd style='background:rgba(99,102,241,0.20);padding:3px 8px;" +
+        "border-radius:4px;font-family:ui-monospace,Menlo;color:#fff;" +
+        "border:1px solid rgba(99,102,241,0.40);font-size:11px'>\\</kbd> " +
+        "<span style='color:#aaa;font-size:11.5px'>burst 比较</span></span>" +
+        "</div>" +
+        "<div style='margin-top:8px;color:#888;font-size:10.5px'>" +
+        "按任意键 / 6 秒后自动消失</div>"
+      );
+      lb.appendChild(toast);
+      requestAnimationFrame(() => {
+        toast.style.opacity = "1";
+      });
+      const fade = () => {
+        toast.style.opacity = "0";
+        setTimeout(() => { try { toast.remove(); } catch (_e) {} }, 320);
+      };
+      setTimeout(fade, 6000);
+      document.addEventListener("keydown", fade, { once: true });
+    }
+    // Watch lightbox for first .show via MutationObserver
+    const mo = new MutationObserver(() => {
+      if (lb.classList.contains("show") && !seen) {
+        // Defer 800ms so the user's eye lands on the image first
+        setTimeout(_show, 800);
+      }
+    });
+    mo.observe(lb, { attributes: true, attributeFilter: ["class"] });
   })();
 
   // ==================================================================
