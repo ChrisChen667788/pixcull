@@ -201,8 +201,15 @@ PixCull is the alternative that flips all three:
 
 ## Screenshots
 
-> Real product UI captured against 32 of my own landscape + wildlife
-> photos from a 2022 West-Sichuan trip — not a mockup.
+> **Real product UI captured against a 200-photo Canon EOS card from
+> 2022(`/100CANON/3J0A8133.JPG`–`3J0A8332.JPG`),mostly coastal /
+> landscape / architecture frames.** Pipeline ran end-to-end:
+> 200 张 → keep 104, maybe 1, cull 95, 178 burst clusters.  Every
+> screenshot below is the live page rendered from that real run
+> (`/tmp/pixcull_demo/realdemo01/`)—not a mockup or template-skeleton.
+>
+> **新手指南**: 完整的"从安装到选完 200 张照片"操作流程见
+> [`docs/USER-GUIDE.md`](docs/USER-GUIDE.md)。
 
 ### The culling surface
 
@@ -313,6 +320,44 @@ these with hand-drawn versions.
 
 390-wide viewport with the Inspector pulling up as a bottom-sheet,
 LR Mobile-Library style.
+
+### Marquee select + bulk toolbar (v0.11-P1-2)
+
+![Marquee select — 6 cards highlighted, bulk toolbar with Keep/Maybe/Cull/Bucket](docs/screenshots/14-marquee-select.png)
+
+Drag a rectangle in the grid's empty space → every intersected card
+is added to the selection.  Bottom toolbar surfaces keep/maybe/cull/
+bucket bulk actions.  `⌘A` selects all visible, `Esc` clears.
+Lightroom-Library parity.
+
+### Bias audit dashboard (v0.13-P0-4)
+
+![Bias audit — 偏差审计 page in no-findings state](docs/screenshots/15-bias-dashboard.png)
+
+`/admin/bias` aggregates every annotation across every run + buckets
+by scene / time-of-day / aperture.  Red callouts when a bucket
+deviates > 1.5σ from the family mean ("rescorer 在 *夜景人像* 上 cull
+rate 38% (全局 22%) — 模型可能过严").  24h cache; `?force=1` to rebuild;
+`/admin/bias.md` for markdown export.  Shown empty because the
+real demo run hasn't accumulated annotations yet.
+
+### Confidence-weighted modal (v0.13-P0-3)
+
+![Maybe-band card hover popover — model 不确定 with top reasons](docs/screenshots/16-confidence-modal.png)
+
+Cards in the maybe-band (`0.45 ≤ score_final ≤ 0.55`) hover-surface
+a small popover explaining "62% sure · top reason: 同组邻居高 0.04 ·
+最弱轴 · light 2.5★".  Dismissable per-run via "不再显示".
+
+### Per-axis attribution heatmap (v0.13-P0-1)
+
+![Lightbox with composition-axis attribution heatmap overlay + 6-axis chip strip](docs/screenshots/17-attribution-heatmap.png)
+
+Press `A` in the lightbox → 6-axis chip strip (技术/主体/构图/光线/
+时刻/美感) appears, click any axis → that axis's Integrated-Gradients
+heatmap (over the timm `mobilenetv3_small_100` backbone) overlays
+the photo at 0.5 alpha.  Indigo→pink colorize matches the brand
+gradient.  Per-axis cache at `output/attribution/<axis>/<sha>.png`.
 
 ### Every surface at a glance
 
@@ -680,8 +725,18 @@ UI 是一个零构建的 HTML 模板 (`pixcull/report/templates/results.html`)
 加一个 SwiftUI App (`mobile/PixCullCompanion/`)。两者都是黑色主题、
 键鼠优先、无 webpack / 无 Xcode workspace。
 
+**真机数据来源**:Canon EOS 卡 `100CANON/3J0A8133.JPG`–`3J0A8332.JPG`
+连续 200 张(海岸 / 风光 / 建筑 / 纪实混合)。完整 pipeline 跑完:
+keep 104 · maybe 1 · cull 95 · 178 个连拍组。所有截图都是这一个
+真机 run(`/tmp/pixcull_demo/realdemo01/`)的实时页面,不是 mockup。
+
+**新手 0→1 操作指南**: 见 [`docs/USER-GUIDE.md`](docs/USER-GUIDE.md)
+——20 分钟跟着步骤跑完第一批照片,每个功能都配真机截图。
+
 以下截图全部用 Playwright headless 抓取的真实运行界面(运行
-`bash scripts/brand/capture_screenshots.sh` 自动再生成):
+`bash scripts/brand/capture_real_screenshots.sh realdemo01` 自动
+再生成,前提是先 `pixcull/.venv/bin/python -m pixcull run <photos>
+-o /tmp/pixcull_demo/realdemo01/output` 跑出 run 数据):
 
 ### 选片主界面 · v0.9 reveal + brand gradient
 
@@ -734,6 +789,41 @@ UI 是一个零构建的 HTML 模板 (`pixcull/report/templates/results.html`)
 ### A/B 比较窗(v0.7-P0-1)
 
 ![A/B 比较 · 同步 1:1 缩放 + RGB readout](docs/screenshots/04-ab-compare.png)
+
+### Marquee 框选 + 批量工具栏(v0.11-P1-2)
+
+![Marquee select · 6 张已选 · 底部弹出 Keep/Maybe/Cull/入桶 toolbar](docs/screenshots/14-marquee-select.png)
+
+网格空白处按住鼠标拖矩形,松手所有框中的卡进入"已选"状态。
+底部出现 Keep/Maybe/Cull/入桶 工具栏。`⌘A` 全选当前可见,
+`Esc` 取消。Lightroom Library 标杆体验。
+
+### 偏差审计 dashboard(v0.13-P0-4)
+
+![/admin/bias · 偏差审计 · 无告警 empty-state](docs/screenshots/15-bias-dashboard.png)
+
+`/admin/bias` 汇总所有 run 的标注,按 scene / time-of-day /
+aperture 分桶,红色高亮偏离均值 > 1.5σ 的桶("rescorer 在 *夜景人像*
+上 cull rate 38% (全局 22%) — 模型可能过严")。24h 缓存;
+`?force=1` 强制刷新;`/admin/bias.md` 导出 markdown 给客户。
+真机 demo run 还没积累标注,因此显示 empty-state。
+
+### 置信度弹窗(v0.13-P0-3)
+
+![maybe 边缘卡 hover popover · 62% sure + top reasons](docs/screenshots/16-confidence-modal.png)
+
+`score_final ∈ [0.45, 0.55]` 的临界 maybe 卡,鼠标悬停弹出小 popover:
+"62% sure · 同组邻居高 0.04 · 最弱轴 · light 2.5★"。可"不再显示"
+per-run 关闭(v0.13-P0-3)。
+
+### 像素级 attribution heatmap(v0.13-P0-1)
+
+![Lightbox 内构图轴 attribution heatmap 叠加 + 6 轴选择条](docs/screenshots/17-attribution-heatmap.png)
+
+Lightbox 按 `A` 弹出 6 轴选择条(技术 / 主体 / 构图 / 光线 / 时刻
+/ 美感),点任意轴 → 该轴的 Integrated Gradients 显著度图叠加在
+原图上(0.5 alpha),indigo→pink 渐变配色。Heatmap 缓存到
+`output/attribution/<axis>/<sha>.png`,后续打开秒级出图。
 
 ## 快速开始
 

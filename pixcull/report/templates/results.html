@@ -7157,7 +7157,8 @@
       return;
     }
     if (lpGroup) lpGroup.style.display = "";
-    divider.style.display = "block";
+    if (divider) divider.style.display = "block";
+    if (!el) return;
     const totalBurstPhotos = _REAL_BURSTS.reduce((s, [_, n]) => s + n, 0);
     el.innerHTML =
       `<span class="pill burst-peak-toggle${filterState.burstPeakOnly ? ' active' : ''}" ` +
@@ -7620,6 +7621,13 @@
         ${dots}
       </svg>`;
     }
+    // v0.13 patch — expose the two pure helpers globally so that
+    // renderInfoPane() (declared OUTSIDE render()) can still call
+    // them.  Pre-v0.13 versions had renderInfoPane nested inside
+    // render(); somewhere along the way it got hoisted out and
+    // the closure dependency stopped working.  Cheapest fix.
+    window._aiRadialSvg    = _aiRadialSvg;
+    window._aiSparklineSvg = _aiSparklineSvg;
 
     // Card renderer (extracted)
     function renderCard(r) {
@@ -9294,7 +9302,12 @@
       r.rubric_stars && r.rubric_stars[n] != null
         ? r.rubric_stars[n] : null
     );
-    const sparklineSvg = _aiSparklineSvg(_sparkVals);
+    // v0.13 — use window-scoped helpers; renderInfoPane runs
+    // outside render()'s lexical scope (see render() exit at L8059).
+    const _sparkFn = (typeof _aiSparklineSvg === "function")
+      ? _aiSparklineSvg
+      : window._aiSparklineSvg;
+    const sparklineSvg = _sparkFn ? _sparkFn(_sparkVals) : "";
     const sparklineLab = `<div class="ai-sparkline-lab" aria-hidden="true">`
       + axisNames.map(n => `<span>${axisAbbr[n]}</span>`).join("")
       + `</div>`;
@@ -9379,7 +9392,7 @@
              at .lg size so it carries weight in the bigger inspector
              pane.  Falls back to "--" cleanly when score is missing. -->
         <span class="score-radial lg" title="score_final · 0..1">
-          ${_aiRadialSvg(r.score_final, {large:true})}
+          ${(typeof _aiRadialSvg === "function" ? _aiRadialSvg : window._aiRadialSvg)(r.score_final, {large:true})}
           <span>综合分 <span class="ai-num" style="font-size:1.1em">${scoreLine}</span></span>
         </span>
         ${styleChips}

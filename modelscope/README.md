@@ -66,10 +66,17 @@ tasks:
   · `/share/<run>/<token>` 客户分享页 · 风格 clone V1 · tethered live ·
   `/history` 时间线
 
-## 实机截图(2022 川西行拍摄数据)
+## 实机截图(2022 Canon EOS 卡 200 张连续帧)
 
-> 下面是用我 2022 年川西行的真实风光 + 野生动物原片(32 张)跑出的结果 ——
-> 不是 mockup,是 PixCull 当前版本的真实运行界面。
+> **真机数据**: `/Volumes/One Touch/100CANON/3J0A8133.JPG`–`3J0A8332.JPG`
+> 连续 200 张(海岸 / 风光 / 建筑 / 纪实混合)。完整 pipeline 跑完:
+> keep 104 · maybe 1 · cull 95 · 178 个连拍组。下面所有截图都是
+> 这一个真机 run(`/tmp/pixcull_demo/realdemo01/`)的实时页面,
+> 不是 mockup 或空模板。
+>
+> **新手 0→1 操作指南** (20 分钟跟着步骤跑完): 见 GitHub repo 下
+> [`docs/USER-GUIDE.md`](https://github.com/ChrisChen667788/pixcull/blob/main/docs/USER-GUIDE.md)
+> — 每个核心功能都配真机截图 + 键鼠快捷键。
 
 ### 主界面 · 选片网格
 
@@ -167,6 +174,40 @@ TouchEvent 实现,无第三方手势库。
 ### 响应式移动端(v0.6,P-UX-17)
 
 ![390 px 视宽 mobile grid](docs/screenshots/08-mobile-grid.png)
+
+### Marquee 框选 + 批量工具栏(v0.11-P1-2)
+
+![Marquee 框选 · 6 张已选 · 批量 keep/maybe/cull/入桶](docs/screenshots/14-marquee-select.png)
+
+网格空白处拖矩形 → 框选所有相交的卡;松手底部弹出
+Keep/Maybe/Cull/入桶/取消 工具栏。`⌘A` 全选,`Esc` 取消。
+Lightroom Library 标杆体验。
+
+### 偏差审计 dashboard(v0.13-P0-4)
+
+![/admin/bias · 偏差审计 · empty-state](docs/screenshots/15-bias-dashboard.png)
+
+`/admin/bias` 汇总所有 run 的标注,按 scene / time-of-day /
+aperture 分桶。红色高亮偏离均值 > 1.5σ 的桶,提示
+"rescorer 在 *XXX* 上 cull rate 过严"。24h 缓存;
+`/admin/bias.md` 导出 markdown 给客户做透明审计交付。
+真机 demo run 还没积累标注,故显示 empty-state。
+
+### 置信度弹窗(v0.13-P0-3)
+
+![maybe 临界卡 hover · 62% sure + top reasons](docs/screenshots/16-confidence-modal.png)
+
+`score_final ∈ [0.45, 0.55]` 临界卡,鼠标悬停弹出小 popover:
+"62% sure · 同组邻居高 0.04 · 最弱轴 · light 2.5★"。
+可"不再显示"per-run 关闭。
+
+### 像素级 attribution heatmap(v0.13-P0-1)
+
+![Lightbox 内构图轴 attribution 叠加 + 6 轴选择条](docs/screenshots/17-attribution-heatmap.png)
+
+Lightbox 按 `A` 弹 6 轴选择条 → 点轴名 → 该轴的 Integrated
+Gradients 显著度图叠在原图(0.5 alpha,indigo→pink 渐变)。
+Heatmap PNG 缓存到 `output/attribution/<axis>/<sha>.png`。
 
 ---
 
