@@ -2091,6 +2091,11 @@ class _Handler(BaseHTTPRequestHandler):
         #   → {schema, available, sessions: [...]}
         if sub == "/sync/discover":
             return self._serve_sync_discover()
+        # v0.11-P0-3 — WebRTC signaling inbox.
+        # GET /api/v1/sync/webrtc/inbox?peer=<id>&since=<ms>
+        #   → {ok, messages: [{kind, from, payload, ts_ms}]}
+        if sub == "/sync/webrtc/inbox":
+            return self._serve_sync_webrtc_inbox()
         # P-UX-9 — accumulated cull-reason counts so the picker can
         # sort by user frequency + admin can show "your cull habits".
         if sub == "/cull_reasons/stats":
@@ -3876,6 +3881,13 @@ class _Handler(BaseHTTPRequestHandler):
                 and path.count("/") == 4):
             token = path[len("/sync/event/"):-len("/push")]
             return self._handle_sync_event_push(token)
+        # v0.11-P0-3 — WebRTC signaling relay.
+        # POST /sync/webrtc/relay
+        #   body: {kind, from, to, payload}
+        #   → {ok, ts_ms}
+        if path == "/sync/webrtc/relay" or path == "/api/v1/sync/webrtc/relay":
+            self._serve_sync_webrtc_relay()
+            return
         # v0.10-P1-4 — audio-photo sync (opt-in, gated on
         # PIXCULL_AUDIO_SYNC=1).  Client posts transcript chunks +
         # we suggest wedding_moment overrides via keyword matching.
@@ -5884,6 +5896,73 @@ class _Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
         return True
 
+    def _serve_sync_webrtc_inbox(self) -> bool:
+        """v0.11-P0-3 — GET /api/v1/sync/webrtc/inbox?peer=<id>&since=<ms>.
+
+        Returns every signaling message addressed to this peer since
+        ``since_ms``.  Used by the browser-side RTCPeerConnection
+        negotiator during the brief SDP+ICE exchange window; polling
+        stops once the data-channel opens.
+        """
+        from urllib.parse import parse_qs, urlparse as _up
+        try:
+            from pixcull.sync.webrtc import default_relay, handle_get_inbox
+        except Exception as exc:
+            _dbg("webrtc/import", exc, "inbox")
+            self.send_error(500, "webrtc import failed")
+            return True
+        qs = parse_qs(_up(self.path).query)
+        peer = (qs.get("peer") or [""])[0]
+        try:
+            since_ms = int((qs.get("since") or ["0"])[0])
+        except (TypeError, ValueError):
+            since_ms = 0
+        status, payload = handle_get_inbox(default_relay(), peer, since_ms)
+        body = _safe_dumps(payload).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+        return True
+
+    def _serve_sync_webrtc_relay(self) -> bool:
+        """v0.11-P0-3 — POST /api/v1/sync/webrtc/relay.
+
+        Body schema:
+            {kind: "offer"|"answer"|"candidate"|"bye",
+             from: "<peer-id>", to: "<peer-id>",
+             payload: <SDP dict or ICE candidate dict>}
+
+        The server NEVER inspects ``payload`` — it just forwards it
+        intact to the recipient's inbox.  No image data, no
+        annotations, no identifiable photographer content ever
+        passes through here.
+        """
+        try:
+            from pixcull.sync.webrtc import default_relay, handle_post
+        except Exception as exc:
+            _dbg("webrtc/import", exc, "relay")
+            self.send_error(500, "webrtc import failed")
+            return True
+        length = int(self.headers.get("Content-Length", "0") or "0")
+        if length <= 0 or length > 64 * 1024:
+            # 64 KB is generous for SDP; an attacker-large body is
+            # almost certainly noise.
+            self.send_error(413, "body too large")
+            return True
+        body_in = self.rfile.read(length)
+        status, payload = handle_post(default_relay(), body_in)
+        body = _safe_dumps(payload).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+        return True
+
     def _handle_sync_event_push(self, token: str) -> bool:
         """v0.10-P0-1 — POST /sync/event/<token>/push.
 
@@ -6378,9 +6457,40 @@ class _Handler(BaseHTTPRequestHandler):
     main { padding: 16px 12px; }
     .grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
   }
+  /* v0.11-P1-5 — history page hero reveal.  Header staggers in
+     above the timeline grid; each card cascades up with a per-card
+     --idx delay so the cull rate "bars" land last (verdict feel). */
+  body.hero-revealing header { animation: histRevH 460ms cubic-bezier(0.2,0.8,0.2,1) both; }
+  body.hero-revealing .count { animation: histRevH 460ms cubic-bezier(0.2,0.8,0.2,1) both;
+                               animation-delay: 80ms; }
+  body.hero-revealing .grid .card {
+    animation: histCardUp 560ms cubic-bezier(0.2,0.8,0.2,1) both;
+    animation-delay: calc(180ms + min(var(--idx, 0), 48) * 28ms);
+  }
+  body.hero-revealing .grid .card .bar {
+    animation: histBarPop 520ms cubic-bezier(0.34,1.56,0.64,1) both;
+    animation-delay: calc(380ms + min(var(--idx, 0), 48) * 28ms);
+    transform-origin: 0 50%;
+  }
+  @keyframes histRevH    { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+  @keyframes histCardUp  { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+  @keyframes histBarPop  { from { opacity: 0; transform: scaleX(0); } 60% { opacity: 1; transform: scaleX(1.06); }
+                           to { opacity: 1; transform: scaleX(1); } }
+  @media (prefers-reduced-motion: reduce) {
+    body.hero-revealing header,
+    body.hero-revealing .count,
+    body.hero-revealing .grid .card,
+    body.hero-revealing .grid .card .bar { animation: none; }
+  }
 </style>
 </head>
-<body>
+<body class="hero-revealing">
+  <script>setTimeout(() => document.body.classList.remove("hero-revealing"), 1900);
+          /* per-card --idx so the cascade is real */
+          window.addEventListener("DOMContentLoaded", () => {
+            const cards = document.querySelectorAll(".grid .card");
+            cards.forEach((c, i) => c.style.setProperty("--idx", i));
+          });</script>
   <header>
     <a class="back" href="/">← 上传页</a>
     <h1>历史时间线</h1>
@@ -8502,6 +8612,16 @@ class _Handler(BaseHTTPRequestHandler):
             ).encode("utf-8"))
             return
 
+        # v0.11-P1-4 — hard-example mining.  Look across this user's
+        # past runs for "model was certain, user overrode" rows and
+        # boost current candidates that match the same scene / vertical.
+        try:
+            from pixcull.scoring.hard_examples import get_stats as _he_stats
+            from pathlib import Path as _Path
+            _hard_stats = _he_stats(_Path.home() / ".pixcull" / "runs")
+        except Exception:
+            _hard_stats = None
+
         def priority(r: dict) -> tuple:
             # Lower tuple = higher priority. -bool flips True→0 (top).
             rescorer_disagrees = (
@@ -8514,8 +8634,18 @@ class _Handler(BaseHTTPRequestHandler):
                 if prob is not None else 1.0
             )
             score = r.get("score_final") or 0.5
+            # v0.11-P1-4 — hard-example boost (0..1 — higher = more
+            # boost). We subtract from the sort tuple so larger boost
+            # → earlier in queue.
+            he_boost = 0.0
+            if _hard_stats is not None:
+                he_boost = _hard_stats.boost_for(
+                    scene=str(r.get("scene", "") or ""),
+                    vertical=str(r.get("vertical", "") or r.get("scene", "")),
+                )
             return (
                 -int(rescorer_disagrees),  # disagreement first
+                -round(he_boost, 2),        # v0.11-P1-4 hard-example
                 uncertainty,                # then most uncertain
                 abs(score - 0.5),           # then score near 0.5
             )
@@ -8543,6 +8673,16 @@ class _Handler(BaseHTTPRequestHandler):
             score = c.get("score_final")
             if score is not None and 0.35 <= score <= 0.65:
                 reasons.append(f"score_final={score:.2f} 临界")
+            # v0.11-P1-4 — hard-example surface
+            if _hard_stats is not None:
+                he_boost = _hard_stats.boost_for(
+                    scene=str(c.get("scene", "") or ""),
+                    vertical=str(c.get("vertical", "") or c.get("scene", "")),
+                )
+                if he_boost >= 0.5:
+                    reasons.append(
+                        f"hard-example 场景 (历史反转 boost={he_boost:.2f})"
+                    )
             if not reasons:
                 reasons.append("queue 中未标注的下一张")
             return reasons
@@ -13258,6 +13398,55 @@ _UPLOAD_HTML = (r"""<!DOCTYPE html>
       --btn-pad-m: 7px 14px;
       --btn-pad-l: 10px 22px;
     }
+
+    /* ===========================================================
+       v0.11-P1-5 — hero reveal on /upload (extends v0.9-P0-2).
+       Brand mark + title + subtitle + feature strip + dropzone
+       cascade in over ~1.4s; reduced-motion users get static.
+       =========================================================== */
+    body.hero-revealing .hero-brand {
+      animation: uploadReveal 460ms var(--ease-out, cubic-bezier(0.2,0.8,0.2,1)) both;
+    }
+    body.hero-revealing .hero-title {
+      animation: uploadReveal 520ms var(--ease-out, cubic-bezier(0.2,0.8,0.2,1)) both;
+      animation-delay: 80ms;
+    }
+    body.hero-revealing .subtitle,
+    body.hero-revealing .hero-subtitle {
+      animation: uploadReveal 500ms var(--ease-out, cubic-bezier(0.2,0.8,0.2,1)) both;
+      animation-delay: 160ms;
+    }
+    body.hero-revealing .feature-strip,
+    body.hero-revealing .feature-row {
+      animation: uploadReveal 540ms var(--ease-out, cubic-bezier(0.2,0.8,0.2,1)) both;
+      animation-delay: 240ms;
+    }
+    body.hero-revealing .dropzone,
+    body.hero-revealing .upload-card {
+      animation: uploadRevealZ 600ms var(--ease-out, cubic-bezier(0.2,0.8,0.2,1)) both;
+      animation-delay: 320ms;
+    }
+    @keyframes uploadReveal {
+      from { opacity: 0; transform: translateY(14px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes uploadRevealZ {
+      /* z-tilt evokes the v0.9 signature "card lands from above"
+         without depending on perspective on every parent — uses
+         a subtle scale + translateY so it falls back gracefully */
+      from { opacity: 0; transform: translateY(28px) scale(0.985); }
+      to   { opacity: 1; transform: translateY(0)    scale(1);     }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      body.hero-revealing .hero-brand,
+      body.hero-revealing .hero-title,
+      body.hero-revealing .subtitle,
+      body.hero-revealing .hero-subtitle,
+      body.hero-revealing .feature-strip,
+      body.hero-revealing .feature-row,
+      body.hero-revealing .dropzone,
+      body.hero-revealing .upload-card { animation: none; }
+    }
     * { box-sizing: border-box; }
     body {
       margin: 0; min-height: 100vh;
@@ -13762,7 +13951,12 @@ _UPLOAD_HTML = (r"""<!DOCTYPE html>
     .browser-footer button { padding: 6px 14px; }
   </style>
 </head>
-<body>
+<body class="hero-revealing">
+  <!-- v0.11-P1-5 — strip the hero-revealing class once the animation
+       completes so subsequent interactions don't re-trigger transitions.
+       1500ms covers the longest cascade (dropzone @ delay 320 + dur 600
+       = 920ms + slack). -->
+  <script>setTimeout(() => document.body.classList.remove("hero-revealing"), 1500);</script>
   <!-- V28.1 — active user pill in the top-right corner. Click to open
        the user-management modal. Updates from /api/v1/users/active on
        page load. Renders empty initially so the layout doesn't jump. -->

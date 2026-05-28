@@ -74,11 +74,28 @@ class License:
     expires_at: int | None = None        # unix seconds
     monthly_quota: int = 100             # -1 = unlimited
     issued_at: int = 0
+    # v0.11-P0-4 — paid-seat count for team-* tiers.  0 for solo tiers
+    # (free / pro / studio / lifetime); studio is the LAN multi-user
+    # tier but caps at "household" use, team-5 / team-20 are paid
+    # multi-seat plans.
+    team_seats: int = 0
     raw_token: str = ""
 
     @property
     def is_pro(self) -> bool:
-        return self.tier in ("pro", "studio", "lifetime")
+        # v0.11-P0-4: team-* tiers count as pro too (multi-seat plans
+        # are paid).  We keep the legacy single-seat tiers in front so
+        # downstream feature checks (cloud sync, auto-retrain) remain
+        # exactly the same.
+        return (
+            self.tier in ("pro", "studio", "lifetime")
+            or self.tier.startswith("team-")
+        )
+
+    @property
+    def is_studio(self) -> bool:
+        """Studio + team-* tiers unlock LAN multi-user collaboration."""
+        return self.tier == "studio" or self.tier.startswith("team-")
 
     @property
     def is_unlimited(self) -> bool:
@@ -141,6 +158,7 @@ def decode_license(token: str) -> License | None:
         expires_at=payload.get("expires_at"),
         monthly_quota=int(payload.get("monthly_quota", 100)),
         issued_at=int(payload.get("issued_at", 0)),
+        team_seats=int(payload.get("team_seats", 0)),
         raw_token=token,
     )
 

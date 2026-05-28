@@ -3,7 +3,8 @@
 # carries the tasks where typing the full python command is friction.
 
 .PHONY: tokens tokens-check lint-design tests serve clean help \
-        modelscope-dryrun modelscope-sync
+        modelscope-dryrun modelscope-sync \
+        goldenset goldenset-dryrun
 
 PYTHON ?= python
 
@@ -47,3 +48,13 @@ modelscope-dryrun:
 
 modelscope-sync:
 	pixcull/.venv/bin/python scripts/sync_modelscope_readme.py
+
+# v0.11-P0-1 — Goldenset builder.  Aggregates every human-labeled
+# source (out_wedding_eval/*/ground_truth.csv, ~/.pixcull/runs/*/
+# annotations.jsonl, in-app rubric_human_labeled corrections) into
+# goldenset/v0.11/ground_truth.csv ready for `train_rescorer.py`.
+goldenset:
+	$(PYTHON) scripts/build_goldenset.py
+
+goldenset-dryrun:
+	$(PYTHON) scripts/build_goldenset.py --dry-run

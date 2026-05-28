@@ -40,6 +40,8 @@ _LOCALE_DIR = Path(__file__).resolve().parent / "locale"
 # 小红书 / Naver) + es_ES (Latam + Spain wedding photographers).
 SUPPORTED_LOCALES: tuple[str, ...] = (
     "zh_CN", "en_US", "ja_JP", "ko_KR", "es_ES",
+    # v0.11-P2-2 — DACH + French + Italian (European wedding photo markets).
+    "de_DE", "fr_FR", "it_IT",
 )
 DEFAULT_LOCALE: str = "zh_CN"
 
@@ -112,6 +114,16 @@ def _normalize_lang(lang: str | None) -> str:
         return "ko_KR"
     if s.startswith("es"):
         return "es_ES"
+    # v0.11-P2-2 — DACH (de-DE, de-AT, de-CH all collapse to de_DE),
+    # French (fr-FR, fr-CA, fr-BE all → fr_FR — locale strings stay
+    # generic European French; quebec-specific switches are not worth
+    # a separate file), and Italian (it-IT, it-CH).
+    if s.startswith("de"):
+        return "de_DE"
+    if s.startswith("fr"):
+        return "fr_FR"
+    if s.startswith("it"):
+        return "it_IT"
     return DEFAULT_LOCALE
 
 

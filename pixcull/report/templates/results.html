@@ -4442,6 +4442,152 @@
       .lightbox.with-filmstrip .img-pane { bottom: 64px; }
     }
 
+    /* ============================================================
+       v0.11-P1-1 — Lightbox timeline scrubber.  DaVinci Resolve
+       inspiration: 1 px line at the very bottom that becomes a
+       full-width drag handle on press.  Browses every visible
+       (=filtered) photo in the current view, much faster than
+       click + click + click through the filmstrip.
+       ============================================================ */
+    .lightbox .lb-scrubber {
+      position: absolute; left: 0; right: 0; bottom: 0;
+      height: 4px;
+      background: rgba(255,255,255,0.10);
+      z-index: 5;          /* above filmstrip, below close-btn */
+      cursor: ew-resize;
+      transition: height var(--duration-fast) var(--ease-out),
+                  background-color var(--duration-fast) var(--ease-out);
+    }
+    .lightbox.with-filmstrip .lb-scrubber {
+      /* When the filmstrip is showing, the scrubber sits just above
+         it (so the filmstrip itself remains at the very bottom). */
+      bottom: 92px;
+    }
+    @media (max-width: 640px) {
+      .lightbox.with-filmstrip .lb-scrubber { bottom: 64px; }
+    }
+    .lightbox .lb-scrubber:hover,
+    .lightbox .lb-scrubber.active {
+      height: 12px;
+      background: rgba(255,255,255,0.18);
+    }
+    .lightbox .lb-scrubber-fill {
+      position: absolute; top: 0; left: 0; bottom: 0;
+      background: var(--accent, #6366f1);
+      width: 0%;
+      transition: width 60ms linear;
+      pointer-events: none;
+    }
+    .lightbox .lb-scrubber-thumb {
+      position: absolute; top: 50%;
+      width: 12px; height: 12px;
+      border-radius: 50%;
+      background: var(--accent, #6366f1);
+      box-shadow: 0 0 0 2px rgba(0,0,0,0.4),
+                  0 0 8px rgba(99,102,241,0.6);
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity var(--duration-fast) var(--ease-out);
+    }
+    .lightbox .lb-scrubber:hover .lb-scrubber-thumb,
+    .lightbox .lb-scrubber.active .lb-scrubber-thumb {
+      opacity: 1;
+    }
+    .lightbox .lb-scrubber-readout {
+      position: absolute; bottom: 24px;
+      background: rgba(20, 22, 28, 0.92);
+      color: #fff;
+      font: 500 11px/1 ui-monospace, SF Mono, Menlo, monospace;
+      padding: 4px 8px;
+      border-radius: 4px;
+      transform: translateX(-50%);
+      pointer-events: none;
+      opacity: 0;
+      white-space: nowrap;
+      transition: opacity var(--duration-fast) var(--ease-out);
+    }
+    .lightbox .lb-scrubber.active .lb-scrubber-readout { opacity: 1; }
+
+    /* Hide entirely in 1:1 zoom mode — focus check needs the full
+       viewport, no scrub bar in the way. */
+    .lightbox.zoomed .lb-scrubber { display: none; }
+
+    /* ============================================================
+       v0.11-P1-2 — Marquee select + bulk toolbar.
+       Press + drag in grid empty space to draw a selection rect;
+       all .card elements intersected are added to the selection.
+       Release → bulk toolbar appears.  Escape clears.
+       ============================================================ */
+    .grid { position: relative; }   /* anchor for absolute marquee */
+    .grid-marquee {
+      position: absolute;
+      pointer-events: none;
+      background: rgba(99, 102, 241, 0.16);
+      border: 1.5px dashed rgba(99, 102, 241, 0.95);
+      border-radius: 3px;
+      z-index: 4;
+      will-change: width, height, transform;
+    }
+    .card.marquee-selected {
+      outline: 2px solid var(--accent, #6366f1);
+      outline-offset: -2px;
+      box-shadow: 0 0 0 4px rgba(99,102,241,0.30);
+    }
+    .bulk-toolbar {
+      position: fixed; left: 50%; bottom: 20px;
+      transform: translate(-50%, 24px);
+      display: none;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 14px;
+      border-radius: 999px;
+      background: rgba(28, 30, 38, 0.96);
+      backdrop-filter: saturate(180%) blur(12px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.40),
+                  0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+      z-index: 50;
+      transition: transform var(--duration-md, 220ms) var(--ease-out,
+                    cubic-bezier(0.2, 0.8, 0.2, 1)),
+                  opacity var(--duration-md, 220ms);
+      opacity: 0;
+      color: #fff;
+    }
+    .bulk-toolbar.show {
+      display: flex;
+      opacity: 1;
+      transform: translate(-50%, 0);
+    }
+    .bulk-toolbar .bulk-count {
+      font: 600 13px/1 var(--font-sans, system-ui);
+      padding: 4px 8px;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.10);
+    }
+    .bulk-toolbar .bulk-btn {
+      background: transparent;
+      color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.10);
+      border-radius: 999px;
+      padding: 6px 12px;
+      font: 500 12px/1 var(--font-sans, system-ui);
+      cursor: pointer;
+      transition: background-color var(--duration-fast) var(--ease-out),
+                  border-color var(--duration-fast) var(--ease-out);
+    }
+    .bulk-toolbar .bulk-btn:hover {
+      background: rgba(255, 255, 255, 0.10);
+      border-color: rgba(255, 255, 255, 0.25);
+    }
+    .bulk-toolbar .bulk-btn.bulk-clear {
+      border: none;
+      padding: 4px 8px;
+      font-size: 16px;
+      opacity: 0.7;
+    }
+    .bulk-toolbar .bulk-btn.bulk-clear:hover { opacity: 1; }
+    .bulk-toolbar .bulk-spacer { flex: 1; min-width: 8px; }
+
     /* v0.7-P1-2 — Inspector mobile bottom-sheet.
        Replaces the ≤640px "info-pane stacks below image" layout
        with a LR Mobile-Library-style pull-up drawer. Image keeps
@@ -5492,6 +5638,25 @@
   <!-- V14.2 — toast container; populated by ``toast(msg, kind)`` in JS -->
   <div class="toast-stack" id="toastStack" aria-live="polite"></div>
 
+  <!-- v0.11-P1-2 — Marquee select bulk action bar.  Appears when ≥1
+       card is marquee-selected; floats at the bottom of the viewport.
+       Lightroom Library inspiration. -->
+  <div class="bulk-toolbar" id="bulkToolbar" role="toolbar"
+       aria-label="批量操作" aria-hidden="true">
+    <span class="bulk-count" id="bulkCount" aria-live="polite"></span>
+    <button type="button" class="bulk-btn" data-action="keep"
+            title="把全部选中标记为 Keep">✓ Keep</button>
+    <button type="button" class="bulk-btn" data-action="maybe"
+            title="把全部选中标记为 Maybe">? Maybe</button>
+    <button type="button" class="bulk-btn" data-action="cull"
+            title="把全部选中标记为 Cull">✗ Cull</button>
+    <button type="button" class="bulk-btn" data-action="bucket"
+            title="加入桶">📁 入桶…</button>
+    <span class="bulk-spacer"></span>
+    <button type="button" class="bulk-btn bulk-clear" data-action="clear"
+            title="取消选择 (Esc)">×</button>
+  </div>
+
   <!-- P-UX-3 — free-pick A/B compare hint tray. Hidden until the
        user pins a 1st photo for compare via the card ⇆ button or
        Shift+click. Tells them what's selected and how to cancel. -->
@@ -5606,6 +5771,18 @@
          centered as the user navigates ← / →. -->
     <div class="filmstrip" id="lbFilmstrip" role="list"
          aria-label="filmstrip — prev/next photos"></div>
+    <!-- v0.11-P1-1 — DaVinci Resolve-style timeline scrubber.  1 px
+         line at the very bottom of the lightbox; press + drag to
+         scrub through every visible photo, click to jump.  Preloads
+         ±5 photos around the playhead so scrubbing is buttery on
+         a fast SSD.  Hidden in 1:1 zoom mode (focus check). -->
+    <div class="lb-scrubber" id="lbScrubber" role="slider"
+         aria-label="timeline · drag to scrub"
+         aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+      <div class="lb-scrubber-fill" id="lbScrubberFill"></div>
+      <div class="lb-scrubber-thumb" id="lbScrubberThumb"></div>
+      <div class="lb-scrubber-readout" id="lbScrubberReadout"></div>
+    </div>
   </div>
 
   <!-- V9.2 cluster compare modal · P0.3 added next/prev burst nav -->
@@ -8236,6 +8413,9 @@
       // Pick the next value > cur, wrapping around
       let next = cycle.find(v => v > cur + 0.01);
       if (next === undefined) next = cycle[0];
+      // v0.11-P1-3 — clicking the chip is an explicit user choice;
+      // freeze the auto-vertical-pick from now on for this run.
+      _markLambdaManual();
       _rebleStyleDistances(next);
       // Re-open the lightbox info pane (render() rebuilt lbInfo)
       // — the existing flow expects the user is still inside it.
@@ -8366,6 +8546,114 @@
       cur.scrollIntoView({behavior: "smooth", block: "nearest",
                           inline: "center"});
     }
+    // v0.11-P1-1 — keep the timeline scrubber in sync too
+    _updateLbScrubber(visible, currentFn);
+  }
+
+  // v0.11-P1-1 — DaVinci-style timeline scrubber.  Drag the bar to
+  // scrub through every visible photo; click jumps directly; ±5
+  // photos around the playhead are pre-fetched so the experience
+  // feels instant on local-SSD setups.
+  const _lbScrubber       = document.getElementById("lbScrubber");
+  const _lbScrubberFill   = document.getElementById("lbScrubberFill");
+  const _lbScrubberThumb  = document.getElementById("lbScrubberThumb");
+  const _lbScrubberReadout = document.getElementById("lbScrubberReadout");
+  const _LB_SCRUB_PRELOAD_RADIUS = 5;
+  const _lbPreloadPool    = new Map();   // fn → <img> kept warm in cache
+
+  function _lbPreloadAround(fns, idx) {
+    if (!Array.isArray(fns) || idx < 0) return;
+    const wanted = new Set();
+    const lo = Math.max(0, idx - _LB_SCRUB_PRELOAD_RADIUS);
+    const hi = Math.min(fns.length - 1, idx + _LB_SCRUB_PRELOAD_RADIUS);
+    for (let i = lo; i <= hi; i++) wanted.add(fns[i]);
+    // Drop pool entries that fell out of range — they release memory
+    // when the <img> goes out of scope.
+    for (const fn of Array.from(_lbPreloadPool.keys())) {
+      if (!wanted.has(fn)) _lbPreloadPool.delete(fn);
+    }
+    // Add new ones
+    for (const fn of wanted) {
+      if (_lbPreloadPool.has(fn)) continue;
+      const im = new Image();
+      // Same w= sizing rule openLightbox uses; falls into the same
+      // viewport-bucketed cache so the actual nav is a cache hit.
+      const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
+      const w = Math.round(Math.min(window.innerWidth || 1280, 2400) * dpr);
+      im.src = `/full/${run_id}/${encodeURIComponent(fn)}?w=${w}`;
+      _lbPreloadPool.set(fn, im);
+    }
+  }
+
+  function _updateLbScrubber(fns, currentFn) {
+    if (!_lbScrubber || !Array.isArray(fns) || !fns.length) return;
+    const idx = Math.max(0, fns.indexOf(currentFn));
+    const pct = fns.length === 1 ? 0 : (idx / (fns.length - 1)) * 100;
+    _lbScrubberFill.style.width  = pct.toFixed(2) + "%";
+    _lbScrubberThumb.style.left  = pct.toFixed(2) + "%";
+    _lbScrubber.setAttribute("aria-valuenow", String(idx));
+    _lbScrubber.setAttribute("aria-valuemax", String(fns.length - 1));
+    _lbScrubberReadout.style.left = pct.toFixed(2) + "%";
+    _lbScrubberReadout.textContent = `${idx + 1} / ${fns.length}`;
+    _lbPreloadAround(fns, idx);
+  }
+
+  if (_lbScrubber) {
+    // Mouse + touch interaction.  We grab the current list of visible
+    // filenames at the start of each drag so filters that change
+    // mid-drag don't desync the playhead.
+    let _scrubbing = false;
+    let _scrubFns  = [];
+
+    function _scrubFromEvent(ev) {
+      if (!_scrubFns.length) return;
+      const rect = _lbScrubber.getBoundingClientRect();
+      const clientX = (ev.touches && ev.touches[0])
+                        ? ev.touches[0].clientX : ev.clientX;
+      const ratio = Math.min(1, Math.max(0,
+        (clientX - rect.left) / Math.max(1, rect.width)));
+      const idx = Math.round(ratio * (_scrubFns.length - 1));
+      const fn = _scrubFns[idx];
+      if (fn && fn !== _lbCurrentFn) {
+        if (typeof window.openLightbox === "function") {
+          window.openLightbox(fn);
+        }
+      }
+    }
+
+    _lbScrubber.addEventListener("mousedown", ev => {
+      ev.preventDefault();
+      _scrubFns = _lbVisibleFns();
+      _scrubbing = true;
+      _lbScrubber.classList.add("active");
+      _scrubFromEvent(ev);
+    });
+    window.addEventListener("mousemove", ev => {
+      if (_scrubbing) _scrubFromEvent(ev);
+    });
+    window.addEventListener("mouseup", () => {
+      if (_scrubbing) {
+        _scrubbing = false;
+        _lbScrubber.classList.remove("active");
+      }
+    });
+    // Touch parity for iPad
+    _lbScrubber.addEventListener("touchstart", ev => {
+      ev.preventDefault();
+      _scrubFns = _lbVisibleFns();
+      _scrubbing = true;
+      _lbScrubber.classList.add("active");
+      _scrubFromEvent(ev);
+    }, { passive: false });
+    _lbScrubber.addEventListener("touchmove", ev => {
+      if (_scrubbing) _scrubFromEvent(ev);
+    }, { passive: true });
+    _lbScrubber.addEventListener("touchend", () => {
+      if (_scrubbing) {
+        _scrubbing = false;
+        _lbScrubber.classList.remove("active");
+      }
+    });
   }
 
   // P-UX-5 — async lookup + render for the lightbox's similar-photos
@@ -8948,14 +9236,28 @@
         // v0.8-P1-1 — λ-cycling chip.  Click cycles 0.0 → 0.3 → 0.5
         // → 0.7 → 1.0 → 0.3 …; "0.0" means pure V2 (visual only),
         // "1.0" means pure V1 (axis-only).
+        // v0.11-P1-3 — surface the λ source ("manual" / "auto:wedding"
+        // / "default") so the photographer can see why a particular
+        // λ is in effect.
         const curLam = _getStyleLambda();
+        const lamSrc = _getStyleLambdaSource();
+        let srcLabel = "";
+        if (lamSrc.startsWith("auto:")) {
+          srcLabel = ` · ${lamSrc.slice(5)} 自动`;
+        } else if (lamSrc === "manual") {
+          srcLabel = " · 手动";
+        }
         parts.push(
           `<button class="badge style-lambda-chip" type="button"
-                   title="λ = V1 (axis) 权重 · 当前 ${curLam.toFixed(2)} → 点击循环"
+                   title="λ = V1 (axis) 权重 · 当前 ${curLam.toFixed(2)}${
+                     srcLabel} → 点击循环;${
+                     lamSrc.startsWith('auto:') ?
+                       '基于 docs/STYLE-V2-BENCHMARK.md 推荐表自动选择' :
+                       '可点击在 0.0 / 0.3 / 0.5 / 0.7 / 1.0 之间循环'}"
                    style="background:rgba(99,102,241,0.10);color:#a3a5f5;
                           border:1px dashed rgba(99,102,241,0.40);
                           font-size:9.5px;cursor:pointer;font-family:inherit">
-             λ ${curLam.toFixed(2)}
+             λ ${curLam.toFixed(2)}${srcLabel}
            </button>`);
       } else if (hasV1) {
         // V1 only — same one-chip render as v0.7-P2-1
@@ -11251,17 +11553,112 @@
   // v0.8-P1-1 — user-tunable blend ratio between V1 (axis-MAD)
   // and V2 (CLIP centroid).  Persisted per-run; default 0.3 matches
   // pixcull.style.DEFAULT_LAMBDA.
-  const _STYLE_LAMBDA_KEY = `pixcull_style_lambda:${run_id}`;
+  //
+  // v0.11-P1-3 — per-vertical recommendation auto-pick.
+  // ``docs/STYLE-V2-BENCHMARK.md`` ships a table of best-recall λ per
+  // vertical (wedding 0.5 / landscape 0.3 / wildlife 0.5 / portrait
+  // 0.5 / event 0.3).  When the user hasn't manually set λ for this
+  // run AND the visible keep-decisions are ≥ 60% from a single
+  // vertical, we silently auto-pick that vertical's λ.  The Inspector
+  // chip surfaces the source ("λ=0.5 · wedding auto").  Manually
+  // dragging the slider locks the override in localStorage and the
+  // auto-pick stops firing for this run.
+  // ==================================================================
+  const _STYLE_LAMBDA_KEY        = `pixcull_style_lambda:${run_id}`;
+  const _STYLE_LAMBDA_MANUAL_KEY = `pixcull_style_lambda_manual:${run_id}`;
+  const _STYLE_LAMBDA_SOURCE_KEY = `pixcull_style_lambda_source:${run_id}`;
+
+  // Per-vertical recommended λ — keep in sync with
+  // docs/STYLE-V2-BENCHMARK.md "Recommended λ per vertical".
+  const _STYLE_LAMBDA_PER_VERTICAL = Object.freeze({
+    wedding:     0.5,
+    landscape:   0.3,
+    wildlife:    0.5,
+    portrait:    0.5,
+    event:       0.3,
+    street:      0.3,
+    stilllife:   0.3,
+    // sport / macro / astro etc. → fall through to global default
+  });
+  const _STYLE_LAMBDA_GLOBAL_DEFAULT = 0.3;
+
   function _getStyleLambda() {
     try {
       const v = parseFloat(localStorage.getItem(_STYLE_LAMBDA_KEY));
       if (isFinite(v) && v >= 0 && v <= 1) return v;
     } catch (_e) {}
-    return 0.3;
+    return _STYLE_LAMBDA_GLOBAL_DEFAULT;
   }
-  function _setStyleLambda(v) {
-    try { localStorage.setItem(_STYLE_LAMBDA_KEY, String(v)); }
-    catch (_e) {}
+  function _getStyleLambdaSource() {
+    try {
+      return localStorage.getItem(_STYLE_LAMBDA_SOURCE_KEY) || "default";
+    } catch (_e) { return "default"; }
+  }
+  function _setStyleLambda(v, source) {
+    try {
+      localStorage.setItem(_STYLE_LAMBDA_KEY, String(v));
+      if (source) {
+        localStorage.setItem(_STYLE_LAMBDA_SOURCE_KEY, String(source));
+      }
+    } catch (_e) {}
+  }
+  function _isManualLambda() {
+    try { return localStorage.getItem(_STYLE_LAMBDA_MANUAL_KEY) === "1"; }
+    catch (_e) { return false; }
+  }
+  function _markLambdaManual() {
+    try {
+      localStorage.setItem(_STYLE_LAMBDA_MANUAL_KEY, "1");
+      localStorage.setItem(_STYLE_LAMBDA_SOURCE_KEY, "manual");
+    } catch (_e) {}
+  }
+
+  // v0.11-P1-3 — pick the dominant vertical among current visible
+  // keep rows; return [vertical, fraction] when dominance ≥ 0.6,
+  // else null.  Operates on the global `rows` array (defined further
+  // up in the template).
+  function _dominantKeepVertical() {
+    if (!Array.isArray(rows) || rows.length === 0) return null;
+    const counts = Object.create(null);
+    let total = 0;
+    for (const r of rows) {
+      const dec = (r && r.decision) || "";
+      if (dec !== "keep") continue;
+      const v = (r.vertical || r.scene || "").toString().toLowerCase();
+      if (!v) continue;
+      counts[v] = (counts[v] || 0) + 1;
+      total++;
+    }
+    if (total < 5) return null;   // too few keeps for a stable signal
+    let topV = null, topN = 0;
+    for (const v of Object.keys(counts)) {
+      if (counts[v] > topN) { topN = counts[v]; topV = v; }
+    }
+    const frac = topN / total;
+    return frac >= 0.60 ? [topV, frac] : null;
+  }
+
+  // Try to auto-pick λ once per page load.  Safe to call multiple
+  // times — it no-ops when the user has already touched the slider.
+  function _maybeAutoPickStyleLambda() {
+    if (_isManualLambda()) return;
+    const dom = _dominantKeepVertical();
+    if (!dom) return;
+    const [vert, frac] = dom;
+    const rec = _STYLE_LAMBDA_PER_VERTICAL[vert];
+    if (typeof rec !== "number") return;
+    if (Math.abs(rec - _getStyleLambda()) < 0.01) return;  // already there
+    _setStyleLambda(rec, `auto:${vert}`);
+    if (typeof _rebleStyleDistances === "function") {
+      _rebleStyleDistances(rec);
+    }
+    if (typeof window.toast === "function") {
+      window.toast(
+        `已自动切换为 ${vert} 推荐 λ=${rec.toFixed(1)} ` +
+        `(${(frac*100).toFixed(0)}% keep 在 ${vert})`,
+        "info"
+      );
+    }
   }
   function _styleBlend(v1, v2, lam) {
     if (typeof v1 !== "number" && typeof v2 !== "number") return null;
@@ -11311,6 +11708,10 @@
         _styleHasDistances = true;
         _styleHasV2 = anyV2;
         _refreshStyleSortOption();
+        // v0.11-P1-3 — auto-pick per-vertical λ now that we have V2
+        // distances (otherwise the chip would say "auto:wedding" with
+        // no effect because there's no V2 to blend).
+        if (anyV2) _maybeAutoPickStyleLambda();
         // Re-render so card chips appear
         render();
       }
@@ -14630,6 +15031,324 @@
         .catch(() => { /* HTTP origin / private mode — silent fail */ });
     });
   }
+
+  // ==================================================================
+  // v0.11-P1-2 — Marquee select + bulk operations.
+  //
+  // Mouse-down on grid empty space → start drag → marquee rect grows
+  // → release → all .card elements within the rect get
+  // .marquee-selected.  Bulk toolbar surfaces keep / maybe / cull
+  // / bucket / clear.  Shift-mouse-down extends, Cmd/Ctrl-mouse-down
+  // toggles individual cards on later passes.  Escape clears.
+  // ==================================================================
+  (function setupMarqueeSelect() {
+    const gridEl = document.getElementById("grid");
+    const bulkBar = document.getElementById("bulkToolbar");
+    const bulkCount = document.getElementById("bulkCount");
+    if (!gridEl || !bulkBar) return;
+
+    const selected = new Set();
+    let marquee = null;
+    let originX = 0, originY = 0;
+    let lastSelection = new Set();
+
+    function _updateBulkBar() {
+      const n = selected.size;
+      if (n === 0) {
+        bulkBar.classList.remove("show");
+        bulkBar.setAttribute("aria-hidden", "true");
+      } else {
+        bulkBar.classList.add("show");
+        bulkBar.setAttribute("aria-hidden", "false");
+        bulkCount.textContent = `${n} 张已选`;
+      }
+    }
+
+    function _clearSelection() {
+      selected.clear();
+      for (const c of gridEl.querySelectorAll(".card.marquee-selected")) {
+        c.classList.remove("marquee-selected");
+      }
+      _updateBulkBar();
+    }
+
+    function _applySelection(fns) {
+      // Reset all currently selected → apply only the new set
+      for (const c of gridEl.querySelectorAll(".card.marquee-selected")) {
+        c.classList.remove("marquee-selected");
+      }
+      selected.clear();
+      for (const fn of fns) {
+        selected.add(fn);
+        const c = gridEl.querySelector(
+          `.card[data-fn="${CSS.escape(fn)}"]`);
+        if (c) c.classList.add("marquee-selected");
+      }
+      _updateBulkBar();
+    }
+
+    function _rectFor(ev) {
+      const r = gridEl.getBoundingClientRect();
+      const x = ev.clientX - r.left + gridEl.scrollLeft;
+      const y = ev.clientY - r.top + gridEl.scrollTop;
+      const left   = Math.min(originX, x);
+      const top    = Math.min(originY, y);
+      const width  = Math.abs(x - originX);
+      const height = Math.abs(y - originY);
+      return { left, top, width, height };
+    }
+
+    function _intersectCards(rect) {
+      const out = [];
+      const gridRect = gridEl.getBoundingClientRect();
+      for (const card of gridEl.querySelectorAll(".card")) {
+        const c = card.getBoundingClientRect();
+        // Convert to grid-local coords (same basis as `rect`).
+        const cLeft = c.left - gridRect.left + gridEl.scrollLeft;
+        const cTop  = c.top  - gridRect.top  + gridEl.scrollTop;
+        const cR    = cLeft + c.width;
+        const cB    = cTop  + c.height;
+        const rR    = rect.left + rect.width;
+        const rB    = rect.top  + rect.height;
+        const intersects = !(cR < rect.left || cLeft > rR ||
+                             cB < rect.top  || cTop  > rB);
+        if (intersects && card.dataset.fn) out.push(card.dataset.fn);
+      }
+      return out;
+    }
+
+    gridEl.addEventListener("mousedown", ev => {
+      // Only fire on plain left-click in grid empty space (not on a card).
+      if (ev.button !== 0) return;
+      if (ev.target.closest(".card")) return;
+      // Cmd/Ctrl/Shift mouseDown extends — we capture the current
+      // selection so the marquee operates additively
+      const extend = ev.shiftKey || ev.metaKey || ev.ctrlKey;
+      lastSelection = extend ? new Set(selected) : new Set();
+      const r = gridEl.getBoundingClientRect();
+      originX = ev.clientX - r.left + gridEl.scrollLeft;
+      originY = ev.clientY - r.top + gridEl.scrollTop;
+      marquee = document.createElement("div");
+      marquee.className = "grid-marquee";
+      marquee.style.left = originX + "px";
+      marquee.style.top  = originY + "px";
+      marquee.style.width = "0px";
+      marquee.style.height = "0px";
+      gridEl.appendChild(marquee);
+      ev.preventDefault();
+    });
+
+    window.addEventListener("mousemove", ev => {
+      if (!marquee) return;
+      const rect = _rectFor(ev);
+      marquee.style.left = rect.left + "px";
+      marquee.style.top  = rect.top  + "px";
+      marquee.style.width = rect.width + "px";
+      marquee.style.height = rect.height + "px";
+      const hit = _intersectCards(rect);
+      const combined = new Set([...lastSelection, ...hit]);
+      _applySelection(combined);
+    });
+
+    window.addEventListener("mouseup", () => {
+      if (!marquee) return;
+      // Discard tiny drags (treat as click → clear) — saves us from
+      // accidental click-to-clear when the user double-clicks empty
+      // space.
+      const w = parseFloat(marquee.style.width || "0");
+      const h = parseFloat(marquee.style.height || "0");
+      if (w < 6 && h < 6) _clearSelection();
+      try { marquee.remove(); } catch (e) {}
+      marquee = null;
+    });
+
+    // Escape clears
+    document.addEventListener("keydown", ev => {
+      if (ev.key === "Escape" && selected.size > 0) {
+        _clearSelection();
+      }
+      // Cmd/Ctrl+A selects all visible (Lightroom parity)
+      if ((ev.metaKey || ev.ctrlKey) && ev.key.toLowerCase() === "a") {
+        // Don't fight with form inputs
+        if (ev.target.matches("input,textarea,[contenteditable=true]")) return;
+        ev.preventDefault();
+        const all = Array.from(gridEl.querySelectorAll(".card"))
+          .map(c => c.dataset.fn).filter(Boolean);
+        _applySelection(new Set(all));
+      }
+    });
+
+    // Bulk-bar button wiring.  We dispatch a CustomEvent on document
+    // so the page-level keep/cull/bucket handlers can react without
+    // this module needing to know their internals.
+    bulkBar.addEventListener("click", ev => {
+      const b = ev.target.closest(".bulk-btn");
+      if (!b) return;
+      const action = b.dataset.action;
+      if (action === "clear") { _clearSelection(); return; }
+      // Snapshot the selection — the action handler may mutate the
+      // DOM and re-render cards, clearing the Set we hold.
+      const fns = Array.from(selected);
+      const detail = { action, filenames: fns };
+      document.dispatchEvent(
+        new CustomEvent("pixcull:bulk-action", { detail }));
+      // For keep/maybe/cull we can apply optimistically by calling
+      // the per-card decision endpoint.  If the page already wires
+      // a custom listener (preferred), this is a no-op for it.
+      if (["keep", "maybe", "cull"].includes(action)) {
+        _bulkDecideFallback(fns, action);
+      }
+      _clearSelection();
+    });
+
+    // Fallback bulk decide — uses the same /set_decision endpoint
+    // that the per-card buttons use. If the page already wires a
+    // bulk-action handler, the dispatched event preceded this; we
+    // run anyway and the server is idempotent (last write wins).
+    async function _bulkDecideFallback(fns, action) {
+      if (typeof window.run_id !== "string") return;
+      const rid = window.run_id;
+      for (const fn of fns) {
+        try {
+          await fetch(`/set_decision/${rid}/` +
+                      encodeURIComponent(fn), {
+            method:  "POST",
+            headers: { "Content-Type": "application/json" },
+            body:    JSON.stringify({ decision: action }),
+          });
+          // Update the card's decision class so the user sees feedback
+          const card = gridEl.querySelector(
+            `.card[data-fn="${CSS.escape(fn)}"]`);
+          if (card) {
+            card.classList.remove("dec-keep", "dec-maybe", "dec-cull");
+            card.classList.add("dec-" + action);
+          }
+        } catch (e) { /* swallow — next attempt will see fresh state */ }
+      }
+      // Surface a toast — uses page-level toast() if present, else
+      // a one-liner alert (which we don't want, so swallow silently).
+      if (typeof window.toast === "function") {
+        window.toast(`已将 ${fns.length} 张标记为 ${action}`, "info");
+      }
+    }
+
+    // Expose API so other modules can opt into the same selection
+    window.PixCullMarquee = {
+      selected: () => new Set(selected),
+      clear: _clearSelection,
+      apply: fns => _applySelection(new Set(fns)),
+    };
+  })();
+
+  // ==================================================================
+  // v0.11-P0-3 — WebRTC peer-to-peer datachannel.
+  //
+  // Replaces the 5s HTTP polling once both peers can negotiate.
+  // Falls back to existing polling on:
+  //   * browser without RTCPeerConnection
+  //   * STUN/ICE failure (~20% of WAN sessions per Tailscale stats)
+  //   * datachannel doesn't open within 5s
+  //
+  // Privacy: only SDP + ICE candidates pass through our HTTP relay
+  // (/sync/webrtc/relay).  Image data + annotation deltas flow
+  // browser-to-browser via RTCDataChannel after the handshake.
+  //
+  // STUN: google.com's public STUN.  Only used for public-IP
+  // discovery during ICE.  No traffic / cookies / content leaves
+  // the box otherwise.
+  // ==================================================================
+  window.PixCullWebRTC = (function() {
+    const RELAY_POST = "/sync/webrtc/relay";
+    const RELAY_INBOX = "/api/v1/sync/webrtc/inbox";
+    const ICE_SERVERS = [{ urls: "stun:stun.l.google.com:19302" }];
+    const OPEN_TIMEOUT_MS = 5000;
+    const INBOX_POLL_MS = 500;
+
+    function _supported() {
+      return typeof RTCPeerConnection === "function";
+    }
+
+    async function _post(body) {
+      try {
+        const r = await fetch(RELAY_POST, {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify(body),
+        });
+        return r.ok ? await r.json() : null;
+      } catch (e) { return null; }
+    }
+
+    async function _pollInbox(peerId, sinceMs) {
+      const url = `${RELAY_INBOX}?peer=${encodeURIComponent(peerId)}` +
+                  `&since=${sinceMs|0}`;
+      try {
+        const r = await fetch(url, { headers: { "Accept": "application/json" }});
+        if (!r.ok) return [];
+        const d = await r.json();
+        return (d && d.messages) || [];
+      } catch (e) { return []; }
+    }
+
+    // Connect from `selfId` to `targetId`.  Resolves with an open
+    // RTCDataChannel or null on timeout / unsupported.
+    async function connect(selfId, targetId) {
+      if (!_supported() || !selfId || !targetId) return null;
+      const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+      const dc = pc.createDataChannel("pixcull-sync");
+      let lastSince = 0;
+      let polling = true;
+
+      pc.onicecandidate = ev => {
+        if (ev.candidate) {
+          _post({
+            kind: "candidate", from: selfId, to: targetId,
+            payload: ev.candidate.toJSON(),
+          });
+        }
+      };
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      _post({
+        kind: "offer", from: selfId, to: targetId,
+        payload: { sdp: offer.sdp, type: offer.type },
+      });
+
+      const open = new Promise(resolve => {
+        let resolved = false;
+        const settle = v => { if (!resolved) { resolved = true; resolve(v); } };
+        dc.onopen = () => settle(dc);
+        setTimeout(() => settle(null), OPEN_TIMEOUT_MS);
+
+        (async () => {
+          while (polling && !resolved) {
+            const msgs = await _pollInbox(selfId, lastSince);
+            for (const m of msgs) {
+              lastSince = Math.max(lastSince, m.ts_ms|0);
+              if (m.kind === "answer" && m.from === targetId
+                  && !pc.remoteDescription) {
+                try { await pc.setRemoteDescription(m.payload); }
+                catch (e) { settle(null); return; }
+              } else if (m.kind === "candidate" && m.from === targetId) {
+                try { await pc.addIceCandidate(m.payload); }
+                catch (e) { /* candidate gathering ongoing — ignore */ }
+              } else if (m.kind === "bye" && m.from === targetId) {
+                settle(null); return;
+              }
+            }
+            await new Promise(r => setTimeout(r, INBOX_POLL_MS));
+          }
+        })();
+      });
+      const ch = await open;
+      polling = false;
+      if (ch === null) { try { pc.close(); } catch(e){} }
+      return ch;
+    }
+
+    return { connect, supported: _supported };
+  })();
 })();
 </script>
 </body>

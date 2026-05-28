@@ -140,19 +140,32 @@ def test_accept_language_normalization():
 
 
 def test_unknown_lang_falls_back_to_default():
-    # French / Polish / etc. not supported; should fall back to zh_CN.
-    # (Japanese added v0.8-P2-1, Korean + Spanish added v0.10-P1-5;
-    # see the dedicated normalisation tests above.)
-    assert t("workspace.crumb.results", "fr") == "分析结果"
+    # Polish / Hindi / etc. not supported; should fall back to zh_CN.
+    # (Japanese added v0.8-P2-1, Korean + Spanish added v0.10-P1-5,
+    # German + French + Italian added v0.11-P2-2; see the dedicated
+    # normalisation tests above.)
     assert t("workspace.crumb.results", "pl") == "分析结果"
+    assert t("workspace.crumb.results", "hi") == "分析结果"
     assert t("workspace.crumb.results", "") == "分析结果"
     assert t("workspace.crumb.results", None) == "分析结果"  # type: ignore[arg-type]
+
+
+def test_de_fr_it_supported():
+    """v0.11-P2-2 — DACH + French + Italian map to their own files."""
+    assert t("workspace.crumb.results", "de") == "Analyseergebnisse"
+    assert t("workspace.crumb.results", "de-AT") == "Analyseergebnisse"
+    assert t("workspace.crumb.results", "fr") == "Résultats d'analyse"
+    assert t("workspace.crumb.results", "fr-CA") == "Résultats d'analyse"
+    assert t("workspace.crumb.results", "it") == "Risultati dell'analisi"
 
 
 def test_default_locale_constant():
     assert DEFAULT_LOCALE == "zh_CN"
     assert "zh_CN" in SUPPORTED_LOCALES
     assert "en_US" in SUPPORTED_LOCALES
+    assert "de_DE" in SUPPORTED_LOCALES
+    assert "fr_FR" in SUPPORTED_LOCALES
+    assert "it_IT" in SUPPORTED_LOCALES
 
 
 def test_lru_cache_returns_stable_dict():
