@@ -62,7 +62,9 @@ def _demo_svg() -> str:
     cards = "".join(cards_xml)
 
     return f'''<?xml version="1.0" encoding="utf-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {_W} {_H}"
+<svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:xlink="http://www.w3.org/1999/xlink"
+     viewBox="0 0 {_W} {_H}"
      width="{_W}" height="{_H}" role="img"
      aria-label="PixCull demo — hero reveal of analyzed photo grid">
   <title>PixCull · hero reveal</title>

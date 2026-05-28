@@ -7010,8 +7010,15 @@
   function buildActiveLearningFilter() {
     const divider = document.getElementById("activeLearningDivider");
     const el = document.getElementById("activeLearningFilter");
+    // Image-failure investigation 2026-Q4: `activeLearningDivider` was
+    // removed in an earlier refactor; the bare access threw TypeError
+    // which aborted the rest of the IIFE — rows[] never populated and
+    // the grid stayed empty (which is what made the README hero
+    // screenshot capture render a blank page).  Guard cleanly; the
+    // filter itself still works because `el` is still in the DOM.
+    if (!el) return;
+    if (divider) divider.style.display = "block";
     const active = filterState.activeLearningQueue != null;
-    divider.style.display = "block";
     const sizeNote = active
       ? ` <span style="opacity:0.5">${filterState.activeLearningQueue.size}</span>`
       : "";
@@ -7494,11 +7501,21 @@
         const fill = Math.max(0, Math.min(1, (stars - 1) / 4));
         return `<div class="ax ${cls}" style="--axis-fill:${fill.toFixed(3)}" title="${name}: ${stars.toFixed(1)}★${r.rubric_human_labeled?' (human)':''}"><span class="k">${axisAbbr[name]}</span><span class="v">${stars.toFixed(1)}</span></div>`;
       };
+      // Image-failure investigation 2026-Q4: _syncConflictFns is
+      // declared with `let` below (search "v0.10-P0-1"), so even
+      // `typeof X` throws ReferenceError when this function is
+      // called inside the TDZ window — which can happen during
+      // initial render() if the IIFE's top-down execution order
+      // shifts.  Replace with a window-attached lookup so the
+      // check is safe regardless of declaration order.
+      const _conflictSet = (typeof window !== "undefined"
+                             && window._syncConflictFns)
+                             || null;
       const cardCls = r.decision
         + (r.rubric_human_labeled ? " has-human" : "")
         + (r.needs_review ? " needs-review" : "")
-        + (typeof _syncConflictFns !== "undefined"
-            && _syncConflictFns.has(r.filename) ? " sync-conflict" : "");
+        + (_conflictSet && _conflictSet.has(r.filename)
+            ? " sync-conflict" : "");
       // V9.0 style chip — V16.0 localized to Chinese label, raw token
       // still in tooltip so users can map to the wire format.
       const styleChips = (r.style_modes || []).map(
@@ -11389,6 +11406,11 @@
   let _syncLastTs = 0;
   let _syncRowMtimes = {};  // filename → last local-edit mtime_ms
   let _syncConflictFns = new Set();
+  // Image-failure investigation 2026-Q4: also publish on window so
+  // renderCard()'s window-attached lookup (see the TDZ fix above)
+  // resolves to the live Set rather than to `null`.  This keeps
+  // sync-conflict styling working after renderCard fires.
+  window._syncConflictFns = _syncConflictFns;
   // v0.10-P0-1 — richer per-conflict state: filename → {local, remote}
   // so the conflict-resolution modal can show both versions side-by-side
   // without re-fetching.  Populated by _syncPollOnce when it would

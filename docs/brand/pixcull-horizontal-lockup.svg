@@ -25,21 +25,21 @@
           stroke="url(#brandGrad)" stroke-width="0.6" opacity="0.5"/>
 </g>
   <!-- Wordmark + subtitle + tagline column, right two-thirds -->
-  <text x="600" y="330" font-family=""Charter","Iowan Old Style","PT Serif","Source Serif Pro","Cambria",Georgia,"Songti SC","STZhongsong",serif"
+  <text x="600" y="330" font-family="'Charter','Iowan Old Style','PT Serif','Source Serif Pro','Cambria',Georgia,'Songti SC','STZhongsong',serif"
         font-size="120" font-weight="700" letter-spacing="-2"
         fill="#ffffff">
     Pix<tspan fill="url(#brandGrad)">Cull</tspan>
   </text>
-  <text x="600" y="380" font-family="-apple-system,"Inter","Segoe UI Variable","Segoe UI","PingFang SC","Microsoft Yahei UI",system-ui,sans-serif"
+  <text x="600" y="380" font-family="-apple-system,'Inter','Segoe UI Variable','Segoe UI','PingFang SC','Microsoft Yahei UI',system-ui,sans-serif"
         font-size="22" font-weight="600" letter-spacing="3"
         fill="#aab3c1">
     LOCAL-FIRST AI PHOTO CULLING
   </text>
-  <text x="600" y="440" font-family="-apple-system,"Inter","Segoe UI Variable","Segoe UI","PingFang SC","Microsoft Yahei UI",system-ui,sans-serif"
+  <text x="600" y="440" font-family="-apple-system,'Inter','Segoe UI Variable','Segoe UI','PingFang SC','Microsoft Yahei UI',system-ui,sans-serif"
         font-size="24" font-weight="400" fill="#dbdfe7" opacity="0.92">
     本地 AI 帮你 6 秒挑出一晚要拍的全部精选。
   </text>
-  <text x="600" y="640" font-family="-apple-system,"Inter","Segoe UI Variable","Segoe UI","PingFang SC","Microsoft Yahei UI",system-ui,sans-serif"
+  <text x="600" y="640" font-family="-apple-system,'Inter','Segoe UI Variable','Segoe UI','PingFang SC','Microsoft Yahei UI',system-ui,sans-serif"
         font-size="14" font-weight="500" fill="#7b8597"
         letter-spacing="1.5">
     github.com/ChrisChen667788/pixcull

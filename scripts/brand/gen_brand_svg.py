@@ -104,13 +104,18 @@ def _logo_group(cx: float, cy: float, scale: float,
 </g>'''
 
 
+# BUGFIX (image-failure): SVG `font-family="{_SERIF_STACK}"` substitutes
+# the stack inside double-quoted attribute, so any inner " terminates
+# the attribute early and breaks parsing (GitHub renderer rejects with
+# a broken-image icon).  Use single-quotes for inner family names —
+# valid in CSS / SVG font-family lists and avoids the nesting issue.
 _SERIF_STACK = (
-    '"Charter","Iowan Old Style","PT Serif","Source Serif Pro",'
-    '"Cambria",Georgia,"Songti SC","STZhongsong",serif'
+    "'Charter','Iowan Old Style','PT Serif','Source Serif Pro',"
+    "'Cambria',Georgia,'Songti SC','STZhongsong',serif"
 )
 _SANS_STACK = (
-    '-apple-system,"Inter","Segoe UI Variable","Segoe UI",'
-    '"PingFang SC","Microsoft Yahei UI",system-ui,sans-serif'
+    "-apple-system,'Inter','Segoe UI Variable','Segoe UI',"
+    "'PingFang SC','Microsoft Yahei UI',system-ui,sans-serif"
 )
 
 

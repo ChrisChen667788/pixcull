@@ -241,6 +241,79 @@ Built for "which one of these two near-dupes do I keep?".
 Two modes: drop a copy into `/tmp` (default, non-destructive) or scan
 an existing folder in place (zero-copy, RAW + DNG friendly).
 
+### Cmd+K command palette (v0.9-P0-4)
+
+![Cmd+K palette — fuzzy-matched action list with 27 commands across 7 groups](docs/screenshots/02-cmdk-palette.png)
+
+Linear/Raycast pattern.  ⌘K opens the palette anywhere; fuzzy match
+across 27 actions surfaced in < 50 ms.  Recent-used at top.
+
+### Client-facing portfolio share (v0.9-P0-5)
+
+![Share portfolio page — serif gradient hero, 3 keynum tiles, chapter-grouped grid](docs/screenshots/06-share-portfolio.png)
+
+`/share/<run>/<token>` reads as the photographer's portfolio, not a
+software dashboard.  Brand-mark bar + serif gradient hero title +
+3 keynum tiles (n_total / n_keeps / ratio%) + chapter-grouped grid
+of cards.  Adaptive layout from iPhone portrait to iPad landscape.
+
+### History timeline (v0.7-P2-4)
+
+![History page — date-sorted timeline cards, decision distribution chips](docs/screenshots/07-history.png)
+
+Every past run is one card.  Decision distribution bar + thumbnail
+of the highest-scoring keep.  Click → back into the grid where you
+left off.
+
+### Tethered live (v0.7-P2-2)
+
+![Tether control panel — folder watcher with live status cards](docs/screenshots/09-tether.png)
+
+Watch a Lightroom / Capture One tether folder; new RAW lands on disk
+→ analysed within ~2 s → result card appears.  Wedding shoot
+in-camera workflow.
+
+### Admin perf data table (v0.9-P2-2)
+
+![Admin perf — sortable + draggable + hideable column data table](docs/screenshots/10-admin-perf.png)
+
+`/admin/perf` is a first-class data table (clickable sort, draggable
+columns, toggle visibility, sticky header, zebra rows, size-class
+chips on the cache column).  Layout preferences persist in
+localStorage.
+
+### Light theme V2 (v0.9-P2-1)
+
+![Light theme — warm sand-cream palette, burnt-sienna shadows, type-weight bumps](docs/screenshots/12-light-theme.png)
+
+Sand-cream palette + warm burnt-sienna shadows + display-weight
+bumps (700/600/450).  Light isn't an "invert the dark theme"
+afterthought — it's editorial-paper feel.
+
+### iPad lightbox + gestures (v0.9-P1-5)
+
+![iPad lightbox — Apple Photos-style swipe + pinch + tap-zoom](docs/screenshots/13-lightbox-ipad.png)
+
+Apple Photos-style gesture suite: horizontal swipe for prev/next,
+vertical swipe-down to dismiss, two-finger pinch to zoom, tap to
+toggle fit ↔ 1:1.  Vanilla TouchEvent, no third-party gesture lib.
+
+### Empty-state illustrations (v0.9-P2-3)
+
+![Buckets panel before any bucket created — illustrated empty state with brand-gradient accents](docs/screenshots/11-buckets-empty.png)
+
+10 illustrations across the v0.4 + v0.9 + v0.10 empty surfaces.
+Consistent editorial-line treatment with one brand-gradient
+accent area per illustration.  Phase B Brief 02 will replace
+these with hand-drawn versions.
+
+### Mobile grid (v0.6, P-UX-17 responsive)
+
+![Mobile grid at 390 px — bottom-sheet inspector](docs/screenshots/08-mobile-grid.png)
+
+390-wide viewport with the Inspector pulling up as a bottom-sheet,
+LR Mobile-Library style.
+
 ### Every surface at a glance
 
 | Surface | What it does | Shipped |
@@ -607,8 +680,60 @@ UI 是一个零构建的 HTML 模板 (`pixcull/report/templates/results.html`)
 加一个 SwiftUI App (`mobile/PixCullCompanion/`)。两者都是黑色主题、
 键鼠优先、无 webpack / 无 Xcode workspace。
 
-> **提示** —— 首次 push 时只放占位图。等 PixCull 真上过一场拍摄,
-> 欢迎 PR 一张真实截图替换。
+以下截图全部用 Playwright headless 抓取的真实运行界面(运行
+`bash scripts/brand/capture_screenshots.sh` 自动再生成):
+
+### 选片主界面 · v0.9 reveal + brand gradient
+
+![结果网格视图 · 实机截图](docs/screenshots/01-results-grid.png)
+
+### 大图窗 · V20 advice + AI 视觉化(v0.9-P1-4)
+
+![大图窗 · sparkline + 6 维评分 + 决策工具栏](docs/screenshots/03-lightbox.png)
+
+### Cmd+K 命令面板(v0.9-P0-4)
+
+![Cmd+K · 27 个 action 跨 7 个 group · fuzzy match](docs/screenshots/02-cmdk-palette.png)
+
+### 客户分享作品集(v0.9-P0-5)
+
+![/share/<token> · serif gradient 标题 + 3 keynum tiles + 章节网格](docs/screenshots/06-share-portfolio.png)
+
+### 历史时间线(v0.7-P2-4)
+
+![/history · 日期排序的所有 run + 决策分布条](docs/screenshots/07-history.png)
+
+### Tethered Live(v0.7-P2-2)
+
+![/tether · 监控 Lr/C1 tether 目录,新 RAW 落盘即分析](docs/screenshots/09-tether.png)
+
+### 管理 perf 数据表(v0.9-P2-2)
+
+![/admin/perf · 列可点排序 / 拖拽重排 / 隐藏 / size chip 颜色编码](docs/screenshots/10-admin-perf.png)
+
+### Light theme V2 · 暖色 sand-cream 调色板(v0.9-P2-1)
+
+![Light theme V2 · 暖 burnt-sienna 阴影 + 加重字体](docs/screenshots/12-light-theme.png)
+
+### iPad 大图窗 · Apple Photos 手势(v0.9-P1-5)
+
+![iPad lightbox · swipe + pinch + tap-zoom · vanilla TouchEvent](docs/screenshots/13-lightbox-ipad.png)
+
+### 10 个 empty-state SVG(v0.9-P2-3,Phase B brief 02 将由真人插画师重画)
+
+![/buckets 空状态 · brand-gradient 强调区](docs/screenshots/11-buckets-empty.png)
+
+### 响应式移动端(v0.6,P-UX-17)
+
+![390 px 视宽 · bottom-sheet Inspector](docs/screenshots/08-mobile-grid.png)
+
+### 上传页 · brand gradient hero
+
+![/(upload page) · 拖文件夹 + 实时进度](docs/screenshots/05-upload-page.png)
+
+### A/B 比较窗(v0.7-P0-1)
+
+![A/B 比较 · 同步 1:1 缩放 + RGB readout](docs/screenshots/04-ab-compare.png)
 
 ## 快速开始
 
