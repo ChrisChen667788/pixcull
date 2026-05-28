@@ -15114,6 +15114,9 @@
       _bar("V1 · axis-MAD", v1, maxD, "#6E56CF") +
       _bar("V2 · CLIP cosine", v2, maxD, "#EC4899") +
       _bar("综合 blend", blend, maxD, "#a3a5f5") +
+      "<div id='styleRefBreakdown' style='margin-top:10px'>" +
+      "<div style='color:#888;font-size:10.5px;margin-bottom:6px'>" +
+      "<span class='dots-load'>↻ 加载逐张参考贡献…</span></div></div>" +
       "<div style='color:#888;font-size:10.5px;margin-top:8px;line-height:1.4'>" +
       "V1 看 rubric 星 + scene 相似;V2 看视觉 embedding。" +
       "<br>距离越小 = 越像你的参考集。" +
@@ -15123,6 +15126,59 @@
     const r = anchor.getBoundingClientRect();
     pop.style.left = Math.min(window.innerWidth - 360, r.left) + "px";
     pop.style.top  = (r.bottom + 6) + "px";
+    // v0.13.1 — async fetch the per-ref breakdown so the popover
+    // shows WHICH references drive the aggregate distance.
+    (async () => {
+      try {
+        const u = `/style/refs/${run_id}/${encodeURIComponent(row.filename)}`;
+        const resp = await fetch(u);
+        if (!resp.ok) throw new Error("HTTP " + resp.status);
+        const d = await resp.json();
+        const slot = document.getElementById("styleRefBreakdown");
+        if (!slot || !d || !Array.isArray(d.refs)) return;
+        if (d.refs.length === 0) {
+          slot.innerHTML =
+            "<div style='color:#888;font-size:10.5px'>" +
+            "尚未训练个性化 style profile —— 点工具栏 " +
+            "<b>🎨 训练风格模型</b> 把当前 keep 设为参考。</div>";
+          return;
+        }
+        // Render top 8 refs with mini thumbnails
+        const top = d.refs.slice(0, 8);
+        const maxRefD = Math.max(...top.map(r => r.distance), 0.01);
+        const html = (
+          "<div style='font-size:10.5px;color:#a3a5f5;margin-bottom:6px;" +
+          "letter-spacing:0.02em;text-transform:uppercase'>" +
+          `Top ${top.length} ref by similarity</div>` +
+          top.map(r => {
+            const pct = (r.distance / maxRefD) * 100;
+            return (
+              "<div style='display:flex;align-items:center;gap:6px;" +
+              "margin:3px 0;font-size:10.5px'>" +
+              `<img src='/thumb/${run_id}/${encodeURIComponent(r.filename)}?w=40' ` +
+              `style='width:24px;height:18px;object-fit:cover;border-radius:2px;` +
+              `border:1px solid rgba(255,255,255,0.08)'>` +
+              "<div style='flex:1;min-width:0'>" +
+              `<div style='color:#cfd5e0;overflow:hidden;text-overflow:ellipsis;` +
+              `white-space:nowrap;font-family:ui-monospace,SF Mono,Menlo,monospace;` +
+              `font-size:9.5px'>${r.filename.slice(0, 22)}</div>` +
+              "<div style='height:3px;background:rgba(255,255,255,0.08);" +
+              "border-radius:2px;margin-top:2px'>" +
+              `<div style='height:100%;width:${pct.toFixed(0)}%;` +
+              `background:#EC4899;border-radius:2px'></div></div></div>` +
+              `<span style='color:#fff;font-family:ui-monospace;font-size:9.5px'>` +
+              `${r.distance.toFixed(3)}</span></div>`
+            );
+          }).join("")
+        );
+        slot.innerHTML = html;
+      } catch (_e) {
+        const slot = document.getElementById("styleRefBreakdown");
+        if (slot) slot.innerHTML =
+          "<div style='color:#888;font-size:10.5px'>" +
+          "无法加载 ref 细分(可能没装 CLIP 缓存)</div>";
+      }
+    })();
     function _dismiss() { try { pop.remove(); } catch(e){} }
     setTimeout(() => {
       document.addEventListener("click", _dismiss, { once: true });

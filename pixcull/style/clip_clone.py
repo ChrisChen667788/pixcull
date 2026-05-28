@@ -168,9 +168,61 @@ def blend(v1: Optional[float], v2: Optional[float],
     return round(lam * v1 + (1.0 - lam) * v2, 3)
 
 
+def compute_per_ref_distances(
+    target_filename: str,
+    ref_filenames: Iterable[str],
+    cache_path: Path,
+) -> list[dict]:
+    """v0.13.1 — return per-ref CLIP cosine distance for ``target``.
+
+    For each reference in ``ref_filenames`` that's present in the
+    embeddings cache, compute ``1 - cosine(target_emb, ref_emb)``
+    clamped to ``[0, 1]``.  Surfaces in the Inspector's "🔭 视觉"
+    chip popover so the photographer can see WHICH references drive
+    the aggregate distance — not just the V2 centroid total.
+
+    Returns a list of ``{filename, distance, rank}`` dicts sorted
+    by distance (closest first).  ``rank`` is 1-based.
+
+    Empty when:
+      * The target isn't in the cache
+      * No refs are in the cache
+      * numpy / cache unavailable
+    """
+    import numpy as np
+
+    cache = _load_cache(cache_path)
+    if not cache:
+        return []
+    fn_to_idx = _filename_to_index(cache)
+    if target_filename not in fn_to_idx:
+        return []
+    vectors = cache.get("vectors")
+    if vectors is None or len(vectors) == 0:
+        return []
+    target_vec = vectors[fn_to_idx[target_filename]]
+    out: list[tuple[str, float]] = []
+    for ref in ref_filenames:
+        if ref == target_filename:
+            continue   # don't include the photo as its own ref
+        if ref not in fn_to_idx:
+            continue
+        ref_vec = vectors[fn_to_idx[ref]]
+        cosine = float(target_vec @ ref_vec)
+        dist = float(np.clip(1.0 - cosine, 0.0, 1.0))
+        out.append((ref, dist))
+    # Sort closest first
+    out.sort(key=lambda t: t[1])
+    return [
+        {"filename": fn, "distance": round(d, 3), "rank": i + 1}
+        for i, (fn, d) in enumerate(out)
+    ]
+
+
 __all__ = [
     "DEFAULT_LAMBDA",
     "blend",
+    "compute_per_ref_distances",
     "compute_visual_distances",
     "learn_visual_profile",
 ]

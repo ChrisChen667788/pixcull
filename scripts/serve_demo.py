@@ -3744,6 +3744,14 @@ class _Handler(BaseHTTPRequestHandler):
         if path.startswith("/share/"):
             return self._serve_share_page(path[len("/share/"):])
         # v0.7-P2-1 — fetch learned style distances for a run.
+        # v0.13.1 — per-ref CLIP distance breakdown.
+        # GET /style/refs/<run_id>/<filename>
+        #   → {ok, target, refs: [{filename, distance, rank}, ...]}
+        if path.startswith("/style/refs/"):
+            tail = path[len("/style/refs/"):]
+            if "/" in tail:
+                rid, fn = tail.split("/", 1)
+                return self._serve_style_per_ref(rid, unquote(fn))
         # GET /style/distances/<run_id>  → {filename: distance}
         if path.startswith("/style/distances/"):
             return self._serve_style_distances(
@@ -4026,13 +4034,22 @@ class _Handler(BaseHTTPRequestHandler):
         ``pixcull.scoring.bias_audit`` and emits a self-contained
         HTML page.  Findings (z > 1.5σ from family mean) surface as
         red callouts at the top; bucket tables below for inspection.
+
+        v0.13.2: accepts ?user=<id> to slice the audit to one
+        annotator.  Empty → global audit (legacy behaviour).
         """
         from urllib.parse import parse_qs, urlparse as _up
         from html import escape as _esc
-        from pixcull.scoring.bias_audit import get_report
+        from pixcull.scoring.bias_audit import get_report, list_annotators
         qs = parse_qs(_up(self.path).query)
         force = (qs.get("force") or ["0"])[0] == "1"
-        report = get_report(Path.home() / ".pixcull" / "runs", force=force)
+        user_filter = (qs.get("user") or [""])[0].strip()
+        annotators = list_annotators(Path.home() / ".pixcull" / "runs")
+        report = get_report(
+            Path.home() / ".pixcull" / "runs",
+            force=force,
+            user_filter=user_filter or None,
+        )
         # Group buckets by family for table rendering
         by_family: dict[str, list] = {}
         for b in report.buckets:
@@ -4120,10 +4137,33 @@ class _Handler(BaseHTTPRequestHandler):
             ".family h2{font-size:14px;color:#a3a5f5;"
             "letter-spacing:0.02em;text-transform:uppercase;}"
             "</style></head><body>"
-            "<h1>偏差审计</h1>"
+            "<h1>偏差审计"
+            + (f" · <span style='color:#a3a5f5;font-size:18px'>"
+               f"@{_esc(user_filter)}</span>"
+               if user_filter else "")
+            + "</h1>"
             f"<div class='meta'>{report.n_total_rows:,} 条记录 · "
             f"{report.n_total_runs} 个 run · 缓存于 {ts}"
-            "<a href='/admin/bias?force=1'>↻ 刷新</a></div>"
+            # v0.13.2 — annotator switcher chips
+            + (
+                "&nbsp;&nbsp;|&nbsp;&nbsp;<span style='color:#888'>"
+                + "切片:</span> "
+                + ("<a href='/admin/bias' style='" +
+                   (("color:#a3a5f5" if user_filter else
+                     "color:#fff;text-decoration:underline"))
+                   + "'>全部</a>"
+                   + "".join(
+                       f" · <a href='/admin/bias?user={_esc(u)}' style='"
+                       + (("color:#fff;text-decoration:underline" if u == user_filter
+                           else "color:#a3a5f5"))
+                       + f"'>{_esc(u)}</a>"
+                       for u in annotators[:10]))
+                if annotators else ""
+            )
+            + " &nbsp;&nbsp;<a href='/admin/bias"
+            + (f"?user={_esc(user_filter)}&force=1" if user_filter
+               else "?force=1")
+            + "'>↻ 刷新</a></div>"
             + findings_html
             + tables_html
             + "</body></html>"
@@ -5854,6 +5894,19 @@ class _Handler(BaseHTTPRequestHandler):
             self.send_error(409, "none of the refs matched a scores.csv row")
             return
         profile = learn_style_profile(ref_rows)
+        # v0.13.1 — persist the matched ref filename list so the
+        # /style/refs/<run>/<filename> endpoint can compute per-ref
+        # distances without rebuilding the profile.
+        try:
+            (Path(run["output_dir"]) / "style_refs.json").write_text(
+                json.dumps(
+                    [r["filename"] for r in ref_rows],
+                    ensure_ascii=False, indent=2,
+                ),
+                encoding="utf-8",
+            )
+        except OSError as exc:
+            _dbg("style/train/write_refs", exc, run_id)
         # Persist the profile JSON
         try:
             self._style_profile_path(run).write_text(
@@ -6550,6 +6603,75 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "public, max-age=3600")
         self.end_headers()
         self.wfile.write(body)
+
+    def _serve_style_per_ref(self, run_id: str, filename: str) -> None:
+        """v0.13.1 — GET /style/refs/<run_id>/<filename>
+
+        Returns ``{ok, target, refs: [{filename, distance, rank}, ...]}``
+        — the per-reference CLIP cosine distance breakdown for the
+        target photo, so the Inspector's "🔭 视觉" chip popover can
+        show WHICH references drive the aggregate distance.
+
+        Reads:
+          * ``output/style_profile_v2.json`` for the ref list (the same
+            file ``_handle_style_train`` writes)
+          * ``output/embeddings.npz`` for the CLIP vector cache
+
+        Returns 200 with empty refs list when no profile has been
+        trained yet — caller renders "train a style profile first"
+        in the UI rather than failing.
+        """
+        run = _get_run(run_id) or _reload_run_from_disk(run_id)
+        if run is None:
+            self.send_error(404, "no such run")
+            return
+        # Resolve the ref list — the profile's ``n_refs`` is the
+        # count, but we need the actual filenames.  Best path:
+        # the profile dict carries them when learn_visual_profile
+        # was called.  In v0.13.1 we extend learn_visual_profile
+        # to persist the ref list.  For backward compatibility we
+        # also accept a sibling ``style_refs.json`` written by the
+        # train handler.
+        out_dir = Path(run["output_dir"])
+        refs_path = out_dir / "style_refs.json"
+        refs: list[str] = []
+        if refs_path.exists():
+            try:
+                refs = json.loads(refs_path.read_text(encoding="utf-8"))
+                if not isinstance(refs, list):
+                    refs = []
+            except (OSError, json.JSONDecodeError):
+                refs = []
+        if not refs:
+            # No profile trained yet (or stale schema) — return empty
+            self._json_ok({
+                "ok":     True,
+                "target": filename,
+                "refs":   [],
+                "hint":   "no style profile yet — POST /style/train/"
+                          + run_id + " with {refs:[...]}",
+            })
+            return
+        try:
+            from pixcull.style import compute_per_ref_distances
+        except Exception as exc:
+            _dbg("style/refs/import", exc, run_id)
+            self.send_error(500, "style module import failed")
+            return
+        cache_path = out_dir / "embeddings.npz"
+        try:
+            per_ref = compute_per_ref_distances(
+                filename, refs, cache_path,
+            )
+        except Exception as exc:
+            _dbg("style/refs/compute", exc, run_id)
+            per_ref = []
+        self._json_ok({
+            "ok":     True,
+            "target": filename,
+            "refs":   per_ref,
+            "n_refs": len(refs),
+        })
 
     def _serve_style_distances(self, run_id: str) -> None:
         """GET /style/distances/<run_id> → {filename: distance, ...}

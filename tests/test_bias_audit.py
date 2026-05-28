@@ -241,3 +241,101 @@ def test_report_to_dict_round_trip(tmp_path):
     assert "buckets" in d
     assert "findings" in d
     assert d["n_total_rows"] == 1
+
+
+# ---------------------------------------------------------------------------
+# v0.13.2 — per-user slicing
+# ---------------------------------------------------------------------------
+
+
+def test_build_report_user_filter_includes_only_matching(tmp_path):
+    """user_filter='alice' should drop rows by other annotators."""
+    _write_run(tmp_path, "r1", [
+        {"filename": "a.jpg", "decision": "keep", "scene": "wedding",
+         "edited_by": "alice"},
+        {"filename": "b.jpg", "decision": "cull", "scene": "wedding",
+         "edited_by": "bob"},
+        {"filename": "c.jpg", "decision": "keep", "scene": "portrait",
+         "edited_by": "alice"},
+    ])
+    r = build_report(tmp_path, user_filter="alice")
+    assert r.n_total_rows == 2   # bob's row dropped
+    by_v = {(b.family, b.value): b for b in r.buckets}
+    assert by_v[("scene", "wedding")].n == 1   # only alice's wedding
+    assert by_v[("scene", "portrait")].n == 1
+
+
+def test_build_report_user_filter_matches_user_id_too(tmp_path):
+    """Both `edited_by` and `user_id` should match."""
+    _write_run(tmp_path, "r1", [
+        {"filename": "a.jpg", "decision": "keep", "scene": "wedding",
+         "user_id": "alice"},
+        {"filename": "b.jpg", "decision": "cull", "scene": "wedding",
+         "user_id": "bob"},
+    ])
+    r = build_report(tmp_path, user_filter="alice")
+    assert r.n_total_rows == 1
+
+
+def test_build_report_user_filter_no_match_empty(tmp_path):
+    _write_run(tmp_path, "r1", [
+        {"filename": "a.jpg", "decision": "keep", "scene": "wedding",
+         "edited_by": "alice"},
+    ])
+    r = build_report(tmp_path, user_filter="charlie")
+    assert r.n_total_rows == 0
+
+
+def test_build_report_no_user_filter_aggregates_all(tmp_path):
+    _write_run(tmp_path, "r1", [
+        {"filename": "a.jpg", "decision": "keep", "scene": "wedding",
+         "edited_by": "alice"},
+        {"filename": "b.jpg", "decision": "cull", "scene": "wedding",
+         "edited_by": "bob"},
+    ])
+    r = build_report(tmp_path)
+    assert r.n_total_rows == 2
+
+
+def test_list_annotators(tmp_path):
+    from pixcull.scoring.bias_audit import list_annotators
+    _write_run(tmp_path, "r1", [
+        {"filename": "a.jpg", "decision": "keep", "edited_by": "alice"},
+        {"filename": "b.jpg", "decision": "keep", "edited_by": "alice"},
+        {"filename": "c.jpg", "decision": "keep", "edited_by": "alice"},
+        {"filename": "d.jpg", "decision": "cull", "edited_by": "bob"},
+        {"filename": "e.jpg", "decision": "keep"},  # no editor — ignored
+    ])
+    out = list_annotators(tmp_path)
+    assert out == ["alice", "bob"]   # alice has 3, bob has 1
+
+
+def test_list_annotators_empty(tmp_path):
+    from pixcull.scoring.bias_audit import list_annotators
+    assert list_annotators(tmp_path / "absent") == []
+
+
+def test_get_report_separate_caches_per_user(tmp_path, monkeypatch):
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    runs = tmp_path / "runs"
+    _write_run(runs, "r1", [
+        {"filename": "a.jpg", "decision": "keep", "scene": "wedding",
+         "edited_by": "alice"},
+        {"filename": "b.jpg", "decision": "cull", "scene": "wedding",
+         "edited_by": "bob"},
+    ])
+    from pixcull.scoring.bias_audit import _cache_path
+    p_global = _cache_path()
+    p_alice = _cache_path("alice")
+    p_bob = _cache_path("bob")
+    assert p_global != p_alice
+    assert p_alice != p_bob
+    assert "alice" in str(p_alice)
+    assert "bob" in str(p_bob)
+    # And the reports are different
+    r_all = get_report(runs)
+    r_alice = get_report(runs, user_filter="alice")
+    r_bob = get_report(runs, user_filter="bob")
+    assert r_all.n_total_rows == 2
+    assert r_alice.n_total_rows == 1
+    assert r_bob.n_total_rows == 1

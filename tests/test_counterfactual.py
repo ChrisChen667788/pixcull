@@ -84,7 +84,10 @@ def test_best_counterfactual_picks_highest_delta(fake_jpg):
         # Variants run in dict-insertion order (Python 3.7+).  Diagonal
         # is at index 3 → 4th call (counts: 0 orig, then 1,2,3,4)
         return 0.60 if rule_seen["count"] == 4 else 0.50
-    cf = best_counterfactual(fake_jpg, mock_score)
+    # v0.13.3 added auto_detect_rule which would skip whatever rule
+    # the fake purple test image classifies as; disable for this
+    # pre-v0.13.3 expectation that all 4 variants are scored.
+    cf = best_counterfactual(fake_jpg, mock_score, auto_detect_rule=False)
     assert cf is not None
     assert cf.rule == "diagonal"
     assert abs(cf.delta - 0.10) < 1e-6
@@ -105,7 +108,9 @@ def test_best_counterfactual_skips_current_rule(fake_jpg):
         return 0.50  # always flat → returns None, but check we
                     # only got called for 4 cases (1 orig + 3 variants
                     # since centered is skipped)
-    best_counterfactual(fake_jpg, mock_score, skip_current_rule="centered")
+    best_counterfactual(fake_jpg, mock_score,
+                        skip_current_rule="centered",
+                        auto_detect_rule=False)
     # 1 original + 3 variants (centered skipped)
     assert len(calls) == 4
 
@@ -115,7 +120,7 @@ def test_best_counterfactual_picks_higher_when_tied(fake_jpg):
     seq = iter([0.50, 0.60, 0.60, 0.60, 0.60])
     def mock_score(arr):
         return next(seq)
-    cf = best_counterfactual(fake_jpg, mock_score)
+    cf = best_counterfactual(fake_jpg, mock_score, auto_detect_rule=False)
     # All 4 variants tie at 0.60 - the first one encountered (rule_of_thirds)
     # wins via "delta > best.delta" being False for ties.
     assert cf is not None

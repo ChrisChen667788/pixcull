@@ -168,7 +168,8 @@ def _iter_annotation_rows(runs_root: Path) -> Iterable[tuple[str, dict]]:
             continue
 
 
-def build_report(runs_root: Path) -> BiasReport:
+def build_report(runs_root: Path,
+                 user_filter: str | None = None) -> BiasReport:
     """Walk every annotation + bucket-aggregate.
 
     For each row we read:
@@ -177,6 +178,13 @@ def build_report(runs_root: Path) -> BiasReport:
       * `scene` / `vertical` — scene bucket
       * `capture_time` / `capture_hour` — time-of-day bucket
       * `aperture` — aperture bracket
+      * `edited_by` / `user_id` — annotator attribution (v0.13.2)
+
+    ``user_filter`` (v0.13.2):
+      * None — aggregate across every annotator (default)
+      * <user_id> — include only rows where ``edited_by`` /
+        ``user_id`` matches.  Use to surface per-photographer
+        bias (Studio plan multi-shooter scenarios).
 
     Missing fields silently skip the row from that bucket family
     (but it still contributes to other families it has data for).
@@ -192,6 +200,14 @@ def build_report(runs_root: Path) -> BiasReport:
         return buckets[key]
 
     for run_name, row in _iter_annotation_rows(runs_root):
+        # v0.13.2 — per-user filter.  Match against either
+        # `edited_by` (presence-derived display name) or `user_id`
+        # (system-canonical id).  Skip the row when filter is set
+        # and neither matches.
+        if user_filter:
+            attrib = (row.get("edited_by") or row.get("user_id") or "")
+            if str(attrib) != user_filter:
+                continue
         n_rows += 1
         runs_seen.add(run_name)
         user_dec = (row.get("decision")
@@ -318,15 +334,31 @@ def _compute_findings(buckets: list[BucketStats]) -> list[BiasFinding]:
 _CACHE_TTL_SEC = 24 * 3600
 
 
-def _cache_path() -> Path:
-    p = Path.home() / ".pixcull" / "cache" / "bias_audit.json"
+def _cache_path(user_filter: str | None = None) -> Path:
+    """v0.13.2 — per-user-filter cache files so switching annotators
+    in the UI doesn't recompute global data every time."""
+    name = "bias_audit.json"
+    if user_filter:
+        # Slugify to keep the filename filesystem-safe
+        slug = "".join(c if c.isalnum() else "_"
+                       for c in str(user_filter))[:64]
+        name = f"bias_audit__{slug}.json"
+    p = Path.home() / ".pixcull" / "cache" / name
     p.parent.mkdir(parents=True, exist_ok=True)
     return p
 
 
-def get_report(runs_root: Path, *, force: bool = False) -> BiasReport:
-    """Cached entry point.  Use ``force=True`` from the admin panel."""
-    cache = _cache_path()
+def get_report(runs_root: Path, *,
+               force: bool = False,
+               user_filter: str | None = None) -> BiasReport:
+    """Cached entry point.  Use ``force=True`` from the admin panel.
+
+    v0.13.2: ``user_filter`` slices the audit to one annotator's rows.
+    Each user_filter gets its own cache file (per-user cache file
+    name) so switching between editors doesn't thrash the global
+    cache.
+    """
+    cache = _cache_path(user_filter)
     if not force and cache.exists():
         try:
             data = json.loads(cache.read_text(encoding="utf-8"))
@@ -334,7 +366,7 @@ def get_report(runs_root: Path, *, force: bool = False) -> BiasReport:
                 return _report_from_dict(data)
         except (OSError, json.JSONDecodeError):
             pass
-    report = build_report(runs_root)
+    report = build_report(runs_root, user_filter=user_filter)
     try:
         cache.write_text(
             json.dumps(report.to_dict(), ensure_ascii=False, indent=2),
@@ -342,6 +374,21 @@ def get_report(runs_root: Path, *, force: bool = False) -> BiasReport:
     except OSError:
         pass
     return report
+
+
+def list_annotators(runs_root: Path) -> list[str]:
+    """v0.13.2 — return the set of annotator IDs seen across all
+    annotations.jsonl files.  Sorted by frequency (most-active first).
+    """
+    counts: dict[str, int] = {}
+    for _run_name, row in _iter_annotation_rows(runs_root):
+        attrib = row.get("edited_by") or row.get("user_id")
+        if not attrib:
+            continue
+        key = str(attrib)
+        counts[key] = counts.get(key, 0) + 1
+    return [k for k, _ in sorted(
+        counts.items(), key=lambda kv: -kv[1])]
 
 
 def _report_from_dict(d: dict) -> BiasReport:

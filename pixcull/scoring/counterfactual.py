@@ -153,6 +153,7 @@ def best_counterfactual(
     score_fn: Callable[["object"], float],
     *,
     skip_current_rule: str | None = None,
+    auto_detect_rule: bool = True,
 ) -> Counterfactual | None:
     """Score the original + every variant + return the highest-delta one.
 
@@ -164,9 +165,23 @@ def best_counterfactual(
     follows one of the rules (e.g. detected via composition
     classifier), pass its name to skip it from candidate variants.
 
+    ``auto_detect_rule`` (v0.13.3, default True): when
+    ``skip_current_rule`` is None, call
+    ``pixcull.scoring.composition_classifier.detect_rule`` to figure
+    out which rule the photo already follows and skip it.  Suppresses
+    nonsense chips like "+0.04 if rule-of-thirds" on a photo that
+    already follows rule-of-thirds.  Pass False to disable.
+
     Returns None when no variant improves the score by ≥ 0.01
     (the chip only surfaces actionable suggestions).
     """
+    # v0.13.3 — auto-detect the photo's current rule + skip it.
+    if skip_current_rule is None and auto_detect_rule:
+        try:
+            from pixcull.scoring.composition_classifier import detect_rule
+            skip_current_rule = detect_rule(image_path)
+        except Exception:
+            skip_current_rule = None
     arr = _load_rgb(image_path)
     original_score = float(score_fn(arr))
     best: Counterfactual | None = None

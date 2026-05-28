@@ -27,9 +27,11 @@ from pixcull.style.clone import (
     AXIS_NAMES,
 )
 # v0.8-P1-1 — V2 (CLIP embedding centroid) layered on top of V1.
+# v0.13.1 — compute_per_ref_distances added.
 from pixcull.style.clip_clone import (
     DEFAULT_LAMBDA,
     blend,
+    compute_per_ref_distances,
     compute_visual_distances,
     learn_visual_profile,
 )
@@ -43,6 +45,7 @@ __all__ = [
     # V2 (CLIP)
     "learn_visual_profile",
     "compute_visual_distances",
+    "compute_per_ref_distances",
     "blend",
     "DEFAULT_LAMBDA",
 ]
