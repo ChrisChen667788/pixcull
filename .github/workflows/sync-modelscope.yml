@@ -1,0 +1,64 @@
+# Auto-sync ModelScope README when the source file changes.
+#
+# Triggers when modelscope/README.md is touched on main; uploads the
+# rewritten copy to https://www.modelscope.cn/models/haozi667788/pixcull
+# via the official Python SDK.  Idempotent — re-running on identical
+# content is a no-op commit on ModelScope's end.
+#
+# One-time setup
+# ==============
+# 1. Generate a ModelScope SDK token at
+#    https://modelscope.cn/my/myaccesstoken (type: SDK 访问令牌,
+#    must be read+write — read-only won't allow upload)
+# 2. Add it as a repo secret:
+#    Settings → Secrets and variables → Actions → New repo secret
+#       Name:  MODELSCOPE_TOKEN
+#       Value: ms-xxxxxxxxxxxx
+# 3. Workflow auto-runs on next push to main that touches
+#    modelscope/README.md
+#
+# Manual run: GitHub UI → Actions → "Sync ModelScope README" → Run workflow
+
+name: Sync ModelScope README
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'modelscope/README.md'
+      - 'scripts/sync_modelscope_readme.py'
+  workflow_dispatch:  # manual trigger
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    # Don't run on forks — the secret won't be available there
+    # and the job would fail with an opaque error
+    if: github.repository == 'ChrisChen667788/pixcull'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install ModelScope SDK
+        # Install ONLY the hub bits we need — full modelscope[all]
+        # pulls torch + transformers + 200 MB of irrelevance.  The
+        # base package is enough for HubApi.
+        run: |
+          pip install --upgrade pip
+          pip install modelscope
+
+      - name: Sync README
+        env:
+          MODELSCOPE_API_TOKEN: ${{ secrets.MODELSCOPE_TOKEN }}
+        run: |
+          if [ -z "$MODELSCOPE_API_TOKEN" ]; then
+            echo "::error::MODELSCOPE_TOKEN secret not configured"
+            echo "::error::See modelscope/UPLOAD.md § 路径 0 for setup"
+            exit 1
+          fi
+          python scripts/sync_modelscope_readme.py \
+            --commit-message "chore(docs): mirror from GitHub ${{ github.sha }}"

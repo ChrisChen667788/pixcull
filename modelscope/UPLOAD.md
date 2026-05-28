@@ -1,9 +1,68 @@
 # 上传到 ModelScope · 操作指南
 
-GitHub 仓库已就绪。ModelScope 没有提供可编程上传通道(官方推荐
-路径是 web 界面 + Git LFS),下面是 5 分钟把 PixCull 发布到你
-ModelScope 账号 [@haozi667788](https://www.modelscope.cn/profile/haozi667788)
-的步骤。
+> **2026-Q4 更新:** ModelScope 实际**有官方 Python SDK**,
+> 可以全自动 push README + 任意文件。原先认为只能手动 web UI 的
+> 说法是过时的。新自动化路径见 **§ 路径 0(推荐)**;
+> 历史 web UI 路径作为 fallback 保留在 § 路径 A。
+
+## 路径 0(2026 推荐)· 一行命令同步 README
+
+```bash
+# 一次性:把 SDK token 放进环境(用完即丢)
+export MODELSCOPE_API_TOKEN=ms-xxxxxxxxxxxx
+# 同步本地的 modelscope/README.md 到 ModelScope 仓库
+make modelscope-sync
+```
+
+幕后做的事(`scripts/sync_modelscope_readme.py`):
+
+1. 读 `modelscope/README.md`
+2. 把所有 `docs/screenshots/*.png` / `docs/brand/*.svg` 相对路径重写为
+   绝对 `https://raw.githubusercontent.com/.../main/...` URL —— 这样
+   ModelScope 页面加载图片直接从 GitHub CDN 拉,不用额外上传二进制
+3. `HubApi.login()` (token 持久化到 `~/.modelscope/credentials`,30 天有效)
+4. `HubApi.upload_file()` 把 README.md push 到 `haozi667788/pixcull`
+5. 返回 ModelScope 上的 commit URL,可直接打开验证
+
+不想 push,只想看 rewrite 结果:`make modelscope-dryrun`
+
+### Token 来源
+
+[modelscope.cn/my/myaccesstoken](https://modelscope.cn/my/myaccesstoken)
+→ 创建 "SDK 访问令牌"。**只读 token 不够,要可写权限。**
+用完后建议立刻在同一页面 revoke,下次 sync 时重新生成。
+
+### CI 集成(可选)
+
+把同样的脚本接进 GitHub Actions:
+
+```yaml
+# .github/workflows/sync-modelscope.yml
+on:
+  push:
+    branches: [main]
+    paths: ['modelscope/README.md']
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install modelscope
+      - env:
+          MODELSCOPE_API_TOKEN: ${{ secrets.MODELSCOPE_TOKEN }}
+        run: python scripts/sync_modelscope_readme.py
+```
+
+修改本地 `modelscope/README.md` → push 到 main →
+GitHub Actions 自动镜像到 ModelScope。
+
+---
+
+## 路径 A(传统 fallback)· 手动 web UI
+
+只在 SDK 不可用 / token 没法生成时用这个路径。
 
 ## 路径 A:作为「模型库 / Model」发布(推荐先做)
 

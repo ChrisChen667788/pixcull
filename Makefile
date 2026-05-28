@@ -2,7 +2,8 @@
 # Most engineering work runs through pip + pytest directly; this Makefile
 # carries the tasks where typing the full python command is friction.
 
-.PHONY: tokens tokens-check lint-design tests serve clean help
+.PHONY: tokens tokens-check lint-design tests serve clean help \
+        modelscope-dryrun modelscope-sync
 
 PYTHON ?= python
 
@@ -15,6 +16,9 @@ help:
 	@echo "  make tests          Full pytest sweep (except known-broken test_v1_1_scripts)"
 	@echo "  make serve          Boot scripts/serve_demo.py on :8770"
 	@echo "  make clean          Drop derived artefacts (__pycache__, .pytest_cache)"
+	@echo
+	@echo "  make modelscope-dryrun   Preview the rewritten README (no upload)"
+	@echo "  make modelscope-sync     Push README to ModelScope (needs MODELSCOPE_API_TOKEN)"
 
 tokens:
 	$(PYTHON) scripts/build_design_tokens.py
@@ -34,3 +38,12 @@ serve:
 clean:
 	find . -type d -name __pycache__ -prune -exec rm -rf {} +
 	rm -rf .pytest_cache
+
+# ModelScope README sync.  Use the venv that actually has the
+# modelscope SDK installed (pixcull/.venv, ~3.7 GB with torch etc.;
+# the lighter top-level .venv does not include it).
+modelscope-dryrun:
+	pixcull/.venv/bin/python scripts/sync_modelscope_readme.py --dry-run
+
+modelscope-sync:
+	pixcull/.venv/bin/python scripts/sync_modelscope_readme.py
