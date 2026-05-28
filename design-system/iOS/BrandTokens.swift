@@ -69,12 +69,23 @@ public enum BrandTokens {
   public static let font_lineHeight_loose: String = "1.7"
   public static let font_lineHeight_normal: String = "1.55"
   public static let font_lineHeight_tight: String = "1.25"
+  public static let font_size_2xl: Double = 18.0
+  public static let font_size_3xl: Double = 22.0
+  public static let font_size_4xl: Double = 28.0
+  public static let font_size_5xl: Double = 36.0
+  public static let font_size_6xl: Double = 48.0
+  public static let font_size_base: Double = 12.5
   public static let font_size_body: Double = 13.0
   public static let font_size_h2: Double = 18.0
   public static let font_size_h3: Double = 14.0
   public static let font_size_hero: Double = 28.0
+  public static let font_size_lg: Double = 14.0
+  public static let font_size_md: Double = 13.0
+  public static let font_size_sm: Double = 11.5
   public static let font_size_small: Double = 11.5
   public static let font_size_tiny: Double = 10.5
+  public static let font_size_xl: Double = 16.0
+  public static let font_size_xs: Double = 10.5
 
   // MARK: motion
   public static let motion_duration_fast: String = "120ms"

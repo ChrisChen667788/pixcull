@@ -3675,6 +3675,14 @@ class _Handler(BaseHTTPRequestHandler):
             return self._serve_pwa_manifest()
         if path == "/sw.js":
             return self._serve_pwa_service_worker()
+        # v0.13.14 — static assets under docs/illustrations/ +
+        # docs/brand/.  These are referenced from results.html
+        # (empty-state PNGs) and the PWA manifest (app icons).
+        # Read-only, long Cache-Control.  Path traversal protected
+        # via resolve() relative to REPO_ROOT.
+        if path.startswith("/docs/illustrations/") or \
+                path.startswith("/docs/brand/"):
+            return self._serve_static_doc_asset(path)
         if path == "/admin":
             return self._serve_admin_page()
         # v0.7-P0-3 — large-batch (5k+) performance debug page.
@@ -6641,6 +6649,47 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _serve_static_doc_asset(self, path: str) -> None:
+        """v0.13.14 — serve images / SVGs under docs/illustrations/
+        and docs/brand/.  Path-traversal-safe, immutable cache.
+        """
+        repo_root = Path(__file__).resolve().parent.parent
+        # Strip leading slash + resolve under repo root
+        rel = path.lstrip("/")
+        target = (repo_root / rel).resolve()
+        # Reject anything that resolves outside the repo
+        try:
+            target.relative_to(repo_root)
+        except ValueError:
+            self.send_error(403, "path traversal")
+            return
+        if not target.exists() or not target.is_file():
+            self.send_error(404, "not found")
+            return
+        # Content-type detection by extension
+        suffix = target.suffix.lower()
+        ctype = {
+            ".png":  "image/png",
+            ".jpg":  "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".webp": "image/webp",
+            ".svg":  "image/svg+xml",
+            ".gif":  "image/gif",
+            ".ico":  "image/x-icon",
+        }.get(suffix, "application/octet-stream")
+        try:
+            data = target.read_bytes()
+        except OSError as exc:
+            self.send_error(500, f"read failed: {exc}")
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control",
+                         "public, max-age=31536000, immutable")
+        self.end_headers()
+        self.wfile.write(data)
+
     def _serve_healthz(self) -> None:
         """v0.13.10 — operational health probe.
 
@@ -7192,28 +7241,19 @@ class _Handler(BaseHTTPRequestHandler):
                 f'</div>'
                 f'</a>'
             )
-        # v0.9-P2-3 — illustrated empty state.  /history is a
-        # self-contained page (no shared sprite from results.html),
-        # so we inline the same art-empty-history SVG path data
-        # rather than reference an external symbol.  Keep the
-        # vector in sync with the symbol in
-        # pixcull/report/templates/results.html (line ~4994).
+        # v0.13.14 — painter-quality empty state via MiniMax-generated
+        # illustration.  Replaces the v0.9-P2-3 line-art SVG with a
+        # 1024×768 watercolor PNG matching the brand's indigo+pink
+        # editorial palette.  Falls back to the SVG sprite from
+        # results.html (#art-empty-history) when the PNG 404s — keeps
+        # offline / first-run rendering safe.
         empty_history_svg = (
-            '<svg viewBox="0 0 160 120" fill="none" '
-            'stroke-linecap="round" stroke-linejoin="round" '
-            'style="width:160px;height:120px;margin-bottom:14px;'
-            'filter:drop-shadow(0 8px 24px var(--accent-glow))">'
-            '<ellipse cx="80" cy="103" rx="50" ry="5" fill="rgba(99,102,241,0.10)"/>'
-            '<circle cx="80" cy="58" r="32" fill="var(--surface-2)" '
-            'stroke="var(--muted)" stroke-width="2"/>'
-            '<path d="M80 58v-22" stroke="var(--accent)" stroke-width="2.6"/>'
-            '<path d="M80 58l14 6" stroke="var(--accent)" stroke-width="2" opacity="0.6"/>'
-            '<circle cx="80" cy="58" r="3" fill="var(--accent)"/>'
-            '<path d="M80 30v4" stroke="var(--accent)" stroke-width="2.4"/>'
-            '<circle cx="36" cy="40" r="1.4" fill="var(--accent)" opacity="0.55"/>'
-            '<circle cx="124" cy="36" r="1.2" fill="var(--accent)" opacity="0.45"/>'
-            '<circle cx="48" cy="22" r="1.6" fill="var(--accent)" opacity="0.65"/>'
-            '</svg>'
+            '<img src="/docs/illustrations/art-empty-history.png" '
+            'alt="" style="width:300px;max-width:80vw;height:auto;'
+            'border-radius:16px;margin-bottom:18px;'
+            'box-shadow:0 16px 48px rgba(0,0,0,0.4),'
+            '0 0 0 1px rgba(99,102,241,0.18) inset;"'
+            ' onerror="this.style.display=\'none\'">'
         )
         cards_html = "\n".join(cards) if cards else (
             '<div class="empty" style="text-align:center;padding:40px 24px;max-width:480px;margin:0 auto">'
