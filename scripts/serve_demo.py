@@ -3752,6 +3752,22 @@ class _Handler(BaseHTTPRequestHandler):
         # v0.7-P2-4 — history timeline page (all past runs)
         if path == "/history":
             return self._serve_history_page()
+        # v0.12-P0-2 — second-monitor companion lightbox.
+        if path == "/companion":
+            return self._serve_companion_page()
+        # v0.13-P0-4 — bias audit dashboard.
+        if path == "/admin/bias":
+            return self._serve_bias_audit_page()
+        # v0.13-P1-3 — conflict-resolution dashboard.  Same data
+        # source as bias audit but filtered to high-reversal buckets
+        # + adds a per-run trend chart.
+        if path == "/admin/disagreement":
+            return self._serve_disagreement_page()
+        # v0.13-P2-2 — Bias audit markdown export.  Downloadable
+        # markdown that any tool (pandoc, browser print, Typora) can
+        # convert to PDF for client deliverables.
+        if path == "/admin/bias.md":
+            return self._serve_bias_audit_markdown()
         # v0.8-P1-3 — short link resolver + QR SVG.
         # GET /s/<code>      → 302 redirect to long URL (or 404/410)
         # GET /s/<code>.svg  → inline QR SVG for the long URL
@@ -4002,6 +4018,393 @@ class _Handler(BaseHTTPRequestHandler):
     def _serve_upload_page(self) -> None:
         body = _UPLOAD_HTML.encode("utf-8")
         self._send_html(200, body)
+
+    def _serve_bias_audit_page(self) -> None:
+        """v0.13-P0-4 — render the bias audit dashboard.
+
+        Pulls cached bias report (24h TTL) from
+        ``pixcull.scoring.bias_audit`` and emits a self-contained
+        HTML page.  Findings (z > 1.5σ from family mean) surface as
+        red callouts at the top; bucket tables below for inspection.
+        """
+        from urllib.parse import parse_qs, urlparse as _up
+        from html import escape as _esc
+        from pixcull.scoring.bias_audit import get_report
+        qs = parse_qs(_up(self.path).query)
+        force = (qs.get("force") or ["0"])[0] == "1"
+        report = get_report(Path.home() / ".pixcull" / "runs", force=force)
+        # Group buckets by family for table rendering
+        by_family: dict[str, list] = {}
+        for b in report.buckets:
+            by_family.setdefault(b.family, []).append(b)
+
+        # ---- findings block ----
+        findings_html = ""
+        if report.findings:
+            rows_html = "\n".join(
+                f"<div class='finding {('over' if f.z_score > 0 else 'under')}'>"
+                f"<div class='badge'>{_esc(f.family)} · {_esc(f.value)}</div>"
+                f"<div class='metric'>{_esc(f.metric.replace('_', ' '))}: "
+                f"<b>{f.bucket_value*100:.1f}%</b> "
+                f"(均值 {f.global_mean*100:.1f}% · z={f.z_score:+.2f})</div>"
+                f"<div class='suggest'>{_esc(f.suggestion)}</div>"
+                f"</div>"
+                for f in report.findings
+            )
+            findings_html = (
+                "<section class='findings'>"
+                "<h2>🚩 偏差检测 — 高于 1.5σ 阈值的桶</h2>"
+                + rows_html +
+                "</section>"
+            )
+        else:
+            findings_html = (
+                "<section class='findings'><h2>✓ 无偏差告警</h2>"
+                "<p>所有桶都在均值 ±1.5σ 内 — rescorer 表现均衡。</p>"
+                "</section>"
+            )
+
+        # ---- per-family bucket tables ----
+        tables_html = ""
+        for family in sorted(by_family.keys()):
+            tables_html += (
+                f"<section class='family'><h2>{_esc(family)}</h2>"
+                "<table><thead><tr>"
+                "<th>值</th><th>n</th><th>keep%</th><th>cull%</th>"
+                "<th>model cull%</th><th>reversal%</th></tr></thead><tbody>"
+            )
+            buckets_sorted = sorted(by_family[family],
+                                     key=lambda b: -b.n)
+            for b in buckets_sorted:
+                tables_html += (
+                    f"<tr class='{'under' if b.under_sampled else ''}'>"
+                    f"<td>{_esc(b.value)}</td>"
+                    f"<td>{b.n}</td>"
+                    f"<td>{b.keep_rate*100:.1f}%</td>"
+                    f"<td>{b.cull_rate*100:.1f}%</td>"
+                    f"<td>{b.model_cull_rate*100:.1f}%</td>"
+                    f"<td>{b.reversal_rate*100:.1f}%</td>"
+                    "</tr>"
+                )
+            tables_html += "</tbody></table></section>"
+
+        from datetime import datetime as _dt
+        ts = _dt.fromtimestamp(
+            report.timestamp_built).strftime("%Y-%m-%d %H:%M") \
+            if report.timestamp_built else "—"
+        html_body = (
+            "<!DOCTYPE html><html lang='zh'><head><meta charset='utf-8'>"
+            "<title>PixCull · 偏差审计</title>"
+            "<style>"
+            "body{margin:0;background:#0a0b0d;color:#fff;"
+            "font:13px/1.55 system-ui,-apple-system;padding:32px;}"
+            "h1{margin:0 0 4px;letter-spacing:-0.02em;}"
+            ".meta{color:#888;font-size:11.5px;margin-bottom:32px;}"
+            ".meta a{color:#a3a5f5;text-decoration:none;margin-left:14px;}"
+            "section{margin:24px 0;}"
+            ".findings .finding{padding:14px;border-radius:8px;margin:10px 0;"
+            "background:rgba(220,38,38,0.10);"
+            "border-left:4px solid #dc2626;}"
+            ".findings .finding.under{background:rgba(245,158,11,0.10);"
+            "border-left-color:#f59e0b;}"
+            ".findings .badge{font-weight:600;letter-spacing:0.02em;"
+            "font-size:11.5px;text-transform:uppercase;color:#fda4af;"
+            "margin-bottom:4px;}"
+            ".findings .metric{color:#fff;}"
+            ".findings .suggest{color:#aaa;font-size:11.5px;margin-top:4px;}"
+            "table{border-collapse:collapse;width:100%;font-size:12px;}"
+            "th,td{padding:6px 10px;text-align:left;"
+            "border-bottom:1px solid rgba(255,255,255,0.10);}"
+            "th{color:#a0a4b0;font-weight:600;}"
+            "tr.under{opacity:0.45;}"
+            ".family h2{font-size:14px;color:#a3a5f5;"
+            "letter-spacing:0.02em;text-transform:uppercase;}"
+            "</style></head><body>"
+            "<h1>偏差审计</h1>"
+            f"<div class='meta'>{report.n_total_rows:,} 条记录 · "
+            f"{report.n_total_runs} 个 run · 缓存于 {ts}"
+            "<a href='/admin/bias?force=1'>↻ 刷新</a></div>"
+            + findings_html
+            + tables_html
+            + "</body></html>"
+        )
+        self._send_html(200, html_body.encode("utf-8"))
+
+    def _serve_bias_audit_markdown(self) -> None:
+        """v0.13-P2-2 — Markdown export of the bias audit dashboard.
+
+        Studios use this as a client-facing transparency artefact:
+        "We audited our AI culling for bias; here's the report."
+        The markdown is converter-agnostic — pandoc, Typora, or
+        browser print-to-PDF all produce reasonable output.
+        """
+        from datetime import datetime as _dt
+        from pixcull.scoring.bias_audit import get_report
+        report = get_report(Path.home() / ".pixcull" / "runs")
+        ts = (_dt.fromtimestamp(report.timestamp_built).
+              strftime("%Y-%m-%d %H:%M")
+              if report.timestamp_built else "—")
+        lines: list[str] = []
+        lines.append("# PixCull · Bias Audit Report")
+        lines.append("")
+        lines.append(f"_{report.n_total_rows:,} annotations across "
+                     f"{report.n_total_runs} runs · cached at {ts}_")
+        lines.append("")
+        lines.append("## Summary")
+        lines.append("")
+        n_warn = len(report.findings)
+        if n_warn == 0:
+            lines.append(
+                "**✓ No bias findings.** Every bucket sits within "
+                "±1.5σ of its family mean; the rescorer's decisions "
+                "are statistically balanced across the data we've seen."
+            )
+        else:
+            lines.append(
+                f"**⚠ {n_warn} bias findings.** The rescorer's "
+                f"behaviour deviates by > 1.5σ from the family mean "
+                f"in the buckets below.  Each finding includes a "
+                f"suggested action."
+            )
+        lines.append("")
+        if report.findings:
+            lines.append("## Findings")
+            lines.append("")
+            lines.append("| Family | Bucket | Metric | Value | Mean | z-score | Suggestion |")
+            lines.append("|---|---|---|---|---|---|---|")
+            for f in report.findings:
+                lines.append(
+                    f"| {f.family} | {f.value} | "
+                    f"{f.metric.replace('_', ' ')} | "
+                    f"{f.bucket_value*100:.1f}% | "
+                    f"{f.global_mean*100:.1f}% | "
+                    f"{f.z_score:+.2f} | {f.suggestion} |"
+                )
+            lines.append("")
+        # Per-family detail tables
+        by_family: dict[str, list] = {}
+        for b in report.buckets:
+            by_family.setdefault(b.family, []).append(b)
+        for family in sorted(by_family.keys()):
+            lines.append(f"## {family.title()} buckets")
+            lines.append("")
+            lines.append("| Bucket | n | keep% | cull% | model cull% | reversal% |")
+            lines.append("|---|---|---|---|---|---|")
+            for b in sorted(by_family[family], key=lambda x: -x.n):
+                tag = " ⚠" if b.under_sampled else ""
+                lines.append(
+                    f"| {b.value}{tag} | {b.n} | "
+                    f"{b.keep_rate*100:.1f}% | "
+                    f"{b.cull_rate*100:.1f}% | "
+                    f"{b.model_cull_rate*100:.1f}% | "
+                    f"{b.reversal_rate*100:.1f}% |"
+                )
+            lines.append("")
+            lines.append("_Rows tagged with ⚠ have fewer than 10 "
+                         "samples and are excluded from outlier detection._")
+            lines.append("")
+        lines.append("---")
+        lines.append("")
+        lines.append("Generated by PixCull v0.13-P0-4 · "
+                     "[Bias audit dashboard](/admin/bias) · "
+                     "[Conflict resolution](/admin/disagreement)")
+        body = "\n".join(lines).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/markdown; charset=utf-8")
+        self.send_header("Content-Disposition",
+                         "attachment; filename=pixcull-bias-audit.md")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _serve_disagreement_page(self) -> None:
+        """v0.13-P1-3 — conflict-resolution dashboard.
+
+        Builds on ``bias_audit.get_report`` to surface only the
+        high-reversal buckets and emits a per-run trend chart based
+        on the same annotations.jsonl scan.  Read-only — no actions
+        beyond linking to the bias audit + history page.
+        """
+        from html import escape as _esc
+        from pixcull.scoring.bias_audit import get_report
+        report = get_report(Path.home() / ".pixcull" / "runs")
+        # Sort buckets by reversal rate descending
+        high_rev = [
+            b for b in report.buckets
+            if not b.under_sampled and b.reversal_rate > 0.10
+        ]
+        high_rev.sort(key=lambda b: -b.reversal_rate)
+        # ---- top reversal buckets ----
+        rows_html = "\n".join(
+            "<tr>"
+            f"<td>{_esc(b.family)}</td>"
+            f"<td>{_esc(b.value)}</td>"
+            f"<td>{b.n}</td>"
+            f"<td><b>{b.reversal_rate*100:.1f}%</b></td>"
+            f"<td>{b.n_reversals}</td>"
+            "</tr>"
+            for b in high_rev[:20]
+        )
+        if not rows_html:
+            rows_html = ("<tr><td colspan='5' style='color:#888;"
+                         "text-align:center'>无超过 10% 反转率的桶</td></tr>")
+        # ---- per-run reversal count ----
+        per_run: dict[str, int] = {}
+        from pixcull.scoring.bias_audit import _iter_annotation_rows
+        for run_name, row in _iter_annotation_rows(
+                Path.home() / ".pixcull" / "runs"):
+            user = (row.get("decision")
+                    or row.get("overall_label") or "").strip().lower()
+            model = (row.get("model_decision")
+                     or row.get("rescorer_pred") or "").strip().lower()
+            if user and model and user != model:
+                per_run[run_name] = per_run.get(run_name, 0) + 1
+        top_runs = sorted(per_run.items(), key=lambda kv: -kv[1])[:15]
+        per_run_html = "\n".join(
+            f"<tr><td><a href='/results/{_esc(rn)}'>"
+            f"{_esc(rn)}</a></td><td>{cnt}</td></tr>"
+            for rn, cnt in top_runs
+        )
+        if not per_run_html:
+            per_run_html = ("<tr><td colspan='2' style='color:#888;"
+                            "text-align:center'>无反转记录</td></tr>")
+        html_body = (
+            "<!DOCTYPE html><html lang='zh'><head><meta charset='utf-8'>"
+            "<title>PixCull · 分歧解析</title>"
+            "<style>"
+            "body{margin:0;background:#0a0b0d;color:#fff;"
+            "font:13px/1.55 system-ui,-apple-system;padding:32px;}"
+            "h1{margin:0 0 4px;letter-spacing:-0.02em;}"
+            ".meta{color:#888;font-size:11.5px;margin-bottom:24px;}"
+            ".meta a{color:#a3a5f5;text-decoration:none;margin-left:14px;}"
+            "section{margin:24px 0;}"
+            "table{border-collapse:collapse;width:100%;font-size:12px;}"
+            "th,td{padding:6px 10px;text-align:left;"
+            "border-bottom:1px solid rgba(255,255,255,0.10);}"
+            "th{color:#a0a4b0;font-weight:600;}"
+            "a{color:#a3a5f5;text-decoration:none;}"
+            "a:hover{text-decoration:underline;}"
+            "h2{font-size:14px;color:#a3a5f5;"
+            "letter-spacing:0.02em;text-transform:uppercase;}"
+            "</style></head><body>"
+            "<h1>分歧解析</h1>"
+            "<div class='meta'>"
+            f"{report.n_total_rows:,} 条记录 · "
+            "前 20 个反转率最高的桶 · "
+            f"<a href='/admin/bias'>↪ 完整偏差审计</a> · "
+            f"<a href='/admin/disagreement?force=1'>↻ 刷新</a></div>"
+            "<section>"
+            "<h2>反转最严重的桶</h2>"
+            "<table><thead><tr><th>family</th><th>value</th><th>n</th>"
+            "<th>反转率</th><th>反转条数</th></tr></thead><tbody>"
+            + rows_html +
+            "</tbody></table></section>"
+            "<section>"
+            "<h2>反转最多的 run(前 15)</h2>"
+            "<table><thead><tr><th>run</th><th>反转条数</th>"
+            "</tr></thead><tbody>"
+            + per_run_html +
+            "</tbody></table></section>"
+            "</body></html>"
+        )
+        self._send_html(200, html_body.encode("utf-8"))
+
+    def _serve_companion_page(self) -> None:
+        """v0.12-P0-2 — second-monitor companion window.
+
+        Renders a stripped-down lightbox that joins the same
+        ``pixcull-companion:<run_id>`` BroadcastChannel as the
+        primary results page.  Initial photo comes from ?fn=<name>;
+        every subsequent nav message from the primary drives the
+        <img src> swap.  Closing the companion doesn't break the
+        primary's state (channel is best-effort).
+        """
+        from urllib.parse import parse_qs, urlparse as _up
+        qs = parse_qs(_up(self.path).query)
+        rid = (qs.get("run_id") or [""])[0]
+        fn0 = (qs.get("fn") or [""])[0]
+        if not rid:
+            self.send_error(400, "run_id required")
+            return
+        # Resolve initial image URL or empty placeholder.  Match the
+        # same /full/<rid>/<fn>?w=... contract the primary uses.
+        from html import escape as _esc
+        initial_src = (
+            f"/full/{_esc(rid)}/{_esc(fn0)}?w=2400" if fn0 else ""
+        )
+        # Minimalist HTML — no grid, no inspector, just the image.
+        # The primary owns all interaction; the companion is read-
+        # only mirror.  ESC closes the window.
+        html_body = (
+            "<!DOCTYPE html>"
+            "<html lang='zh'><head><meta charset='utf-8'>"
+            "<title>PixCull · 副屏</title>"
+            "<style>"
+            "html,body{margin:0;background:#0a0b0d;color:#fff;"
+            "font:13px/1.4 system-ui,-apple-system;height:100%;}"
+            "body{display:flex;flex-direction:column;}"
+            ".bar{display:flex;align-items:center;gap:10px;"
+            "padding:8px 14px;background:rgba(28,30,38,0.85);"
+            "backdrop-filter:saturate(180%) blur(12px);}"
+            ".bar .badge{background:rgba(99,102,241,0.18);"
+            "color:#a3a5f5;padding:2px 10px;border-radius:999px;"
+            "font-size:11px;font-weight:600;}"
+            ".bar .fn{color:#aaa;font-family:ui-monospace,SF Mono,"
+            "Menlo,monospace;font-size:11.5px;flex:1;overflow:hidden;"
+            "text-overflow:ellipsis;white-space:nowrap;}"
+            ".stage{flex:1;display:flex;align-items:center;"
+            "justify-content:center;padding:14px;}"
+            "img{max-width:100%;max-height:100%;object-fit:contain;"
+            "box-shadow:0 10px 36px rgba(0,0,0,0.6);}"
+            ".empty{color:#666;font-size:15px;text-align:center;"
+            "max-width:420px;line-height:1.6;}"
+            "</style></head><body>"
+            "<div class='bar'>"
+            "<span class='badge'>🪟 副屏</span>"
+            "<span class='fn' id='fnLabel'></span>"
+            "<span style='color:#888;font-size:11px'>Esc 关闭</span>"
+            "</div>"
+            "<div class='stage'>"
+            f"  <img id='lbImg' src='{initial_src}' alt='' "
+            f"       style='{'display:none' if not initial_src else ''}'>"
+            "  <div id='emptyState' class='empty' "
+            f"       style='{'display:none' if initial_src else ''}'>"
+            "    等候主窗口选定一张照片…<br><span style='color:#444'>"
+            "    (副屏会同步翻页 + 缩放)</span></div>"
+            "</div>"
+            "<script>(function(){"
+            f"const rid='{_esc(rid)}';"
+            "const ch=(typeof BroadcastChannel==='function')?"
+            "new BroadcastChannel('pixcull-companion:'+rid):null;"
+            "const img=document.getElementById('lbImg');"
+            "const label=document.getElementById('fnLabel');"
+            "const empty=document.getElementById('emptyState');"
+            "function nav(fn){"
+            "  if(!fn){return;}"
+            "  const w=Math.round(Math.min(window.innerWidth,2400)*"
+            "    Math.max(1,Math.min(window.devicePixelRatio||1,2)));"
+            "  img.src='/full/'+encodeURIComponent(rid)+"
+            "    '/'+encodeURIComponent(fn)+'?w='+w;"
+            "  img.style.display='';"
+            "  empty.style.display='none';"
+            "  label.textContent=fn;"
+            "}"
+            "if(ch){"
+            "  ch.addEventListener('message',ev=>{"
+            "    const d=ev.data||{};"
+            "    if(d.kind==='nav') nav(d.payload);"
+            "  });"
+            "  /* ping the primary so it sends us the current state */"
+            "  ch.postMessage({kind:'request-state'});"
+            "}"
+            "document.addEventListener('keydown',ev=>{"
+            "  if(ev.key==='Escape') window.close();"
+            "});"
+            f"if({'true' if fn0 else 'false'}) label.textContent='{_esc(fn0)}';"
+            "})();</script>"
+            "</body></html>"
+        )
+        self._send_html(200, html_body.encode("utf-8"))
 
     def _serve_pwa_manifest(self) -> bool:
         """v0.10-P2-1 — PWA install manifest.
@@ -8522,10 +8925,63 @@ class _Handler(BaseHTTPRequestHandler):
             "source": "human",
             "timestamp": time.time(),
         }
+        # v0.12-P0-3 — capture the model's decision BEFORE this human
+        # override.  Two purposes:
+        #   1. Hard-example mining (v0.11-P1-4) keys on this — when
+        #      the model was certain + the user overrode, that pair is
+        #      the highest-info row in the next training cycle.
+        #   2. /admin/bias (v0.13-P0-4) computes reversal rates per
+        #      scene off these pairs.
+        # Read from the current scores.csv if the row exists; missing
+        # is fine (silently omit fields).
+        try:
+            from pixcull.io import scores as _sc  # lazy — only on save
+        except Exception:
+            _sc = None
+        if _sc is not None:
+            try:
+                csv_path = Path(run["output_dir"]) / "scores.csv"
+                if csv_path.exists():
+                    # Skim only — we don't need the full DataFrame here
+                    import csv as _csv
+                    with csv_path.open("r", encoding="utf-8-sig") as fh:
+                        rdr = _csv.DictReader(fh)
+                        for r in rdr:
+                            if r.get("filename") == fn:
+                                if r.get("decision"):
+                                    record["model_decision"] = r["decision"]
+                                if r.get("rescorer_pred"):
+                                    record["rescorer_pred"] = r["rescorer_pred"]
+                                if r.get("rescorer_prob_keep"):
+                                    try:
+                                        record["rescorer_prob_keep"] = float(
+                                            r["rescorer_prob_keep"])
+                                    except (TypeError, ValueError):
+                                        pass
+                                if r.get("scene"):
+                                    record["scene"] = r["scene"]
+                                if r.get("vertical"):
+                                    record["vertical"] = r["vertical"]
+                                break
+            except Exception:
+                # Best-effort — never break a save on capture failure
+                pass
         ann_path = Path(run["output_dir"]) / "annotations.jsonl"
         ann_path.parent.mkdir(parents=True, exist_ok=True)
         with open(ann_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+        # v0.12-P0-3 — invalidate hard-example cache when the user
+        # just produced a reversal.  Next next_to_label call will see
+        # the fresh evidence.
+        if (record.get("model_decision")
+                and overall_label_clean
+                and record["model_decision"] != overall_label_clean):
+            try:
+                from pixcull.scoring.hard_examples import clear_cache
+                clear_cache()
+            except Exception:
+                pass
 
         # V11.2 — auto-retrain trigger. Each annotation increments a
         # global counter; once the threshold is crossed AND no retrain

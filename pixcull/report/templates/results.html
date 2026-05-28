@@ -5758,6 +5758,15 @@
       <span class="zoom-badge" id="lbZoomBadge"
             aria-live="polite"></span>
     </div>
+    <!-- v0.12-P0-2 — companion-window (second-monitor) lightbox.
+         Spawns a peer window via window.open + BroadcastChannel
+         sync; the active window steers, the companion mirrors.
+         Lightroom's "Second Window" inspiration. -->
+    <div class="companion-grp" role="group" aria-label="副屏">
+      <button class="zoom-btn" id="lbCompanionToggle" type="button"
+              title="第二屏 lightbox · BroadcastChannel 同步翻页
+(关闭副屏不破协作状态)">🪟 副屏</button>
+    </div>
     <div class="img-pane"><img id="lbImg" alt=""></div>
     <!-- v0.7-P1-1 — Loupe RGB readout. Visible only when lbImg is
          in zoomed (1:1) mode + the cursor is over the image.
@@ -15031,6 +15040,589 @@
         .catch(() => { /* HTTP origin / private mode — silent fail */ });
     });
   }
+
+  // ==================================================================
+  // v0.13-P1-2 — Style-ref distance visualisation.
+  //
+  // Click the "🔭 视觉" chip in the Inspector → popover with a
+  // horizontal bar chart of V1 (axis-MAD) + V2 (CLIP cosine) +
+  // blend, plus per-ref contribution if available.  Surfaces
+  // *which* references drive the current photo's distance score,
+  // so the photographer can audit their own style profile.
+  // ==================================================================
+  document.addEventListener("click", ev => {
+    const chip = ev.target.closest(".style-chip");
+    if (!chip) return;
+    const row = (typeof window.rows !== "undefined" ? window.rows : rows)
+      .find(r => r.filename === _lbCurrentFn);
+    if (!row) return;
+    ev.preventDefault(); ev.stopPropagation();
+    _showStyleRefViz(row, chip);
+  });
+
+  function _showStyleRefViz(row, anchor) {
+    // Dismiss any existing popover
+    document.querySelectorAll(".style-ref-viz").forEach(el => el.remove());
+    const v1 = row.style_distance_v1;
+    const v2 = row.style_distance_v2;
+    const blend = row.style_distance;
+    if (typeof v1 !== "number" && typeof v2 !== "number") return;
+    const pop = document.createElement("div");
+    pop.className = "style-ref-viz";
+    pop.style.cssText = (
+      "position:fixed;z-index:140;" +
+      "background:rgba(20,22,28,0.96);color:#fff;" +
+      "padding:14px 16px;border-radius:8px;" +
+      "min-width:260px;max-width:340px;" +
+      "border:1px solid rgba(99,102,241,0.30);" +
+      "box-shadow:0 12px 32px rgba(0,0,0,0.45);" +
+      "font:12px/1.5 system-ui;"
+    );
+    function _bar(label, val, max, color) {
+      if (typeof val !== "number") return "";
+      const pct = Math.min(100, (val / max) * 100);
+      return (
+        `<div style='margin:6px 0'>` +
+        `<div style='display:flex;justify-content:space-between;` +
+        `font-size:10.5px;color:#aaa;margin-bottom:2px'>` +
+        `<span>${label}</span><span style='color:#fff;` +
+        `font-family:ui-monospace'>${val.toFixed(3)}</span></div>` +
+        `<div style='height:6px;background:rgba(255,255,255,0.10);` +
+        `border-radius:3px;overflow:hidden'>` +
+        `<div style='width:${pct}%;height:100%;background:${color}'>` +
+        `</div></div></div>`
+      );
+    }
+    const maxD = Math.max(v1 || 0, v2 || 0, blend || 0, 1.0);
+    pop.innerHTML = (
+      `<div style='font-weight:600;color:#a3a5f5;margin-bottom:8px;` +
+      `letter-spacing:0.02em;text-transform:uppercase;font-size:10.5px'>` +
+      `视觉距离细分 · ${row.filename.slice(0, 30)}</div>` +
+      _bar("V1 · axis-MAD", v1, maxD, "#6E56CF") +
+      _bar("V2 · CLIP cosine", v2, maxD, "#EC4899") +
+      _bar("综合 blend", blend, maxD, "#a3a5f5") +
+      "<div style='color:#888;font-size:10.5px;margin-top:8px;line-height:1.4'>" +
+      "V1 看 rubric 星 + scene 相似;V2 看视觉 embedding。" +
+      "<br>距离越小 = 越像你的参考集。" +
+      "</div>"
+    );
+    document.body.appendChild(pop);
+    const r = anchor.getBoundingClientRect();
+    pop.style.left = Math.min(window.innerWidth - 360, r.left) + "px";
+    pop.style.top  = (r.bottom + 6) + "px";
+    function _dismiss() { try { pop.remove(); } catch(e){} }
+    setTimeout(() => {
+      document.addEventListener("click", _dismiss, { once: true });
+    }, 50);
+  }
+
+  // ==================================================================
+  // v0.13-P0-3 — Confidence-weighted decision modal.
+  //
+  // When the rescorer's score_final lands in the maybe-uncertain
+  // band (0.45..0.55), surface a small popover on card hover that
+  // explains why the model isn't sure.  Default content:
+  //
+  //   60% sure
+  //   ─ top reason: tied burst neighbor 0.02 higher
+  //   ─ 2nd reason: face slightly under-exposed
+  //   [Don't show again]
+  //
+  // The popover is dismissable per-run (localStorage flag) — busy
+  // photographers don't need it interrupting muscle-memory passes.
+  // ==================================================================
+  (function setupConfidenceModal() {
+    const KEY = `pixcull_dismiss_confidence_modal:${run_id}`;
+    const grid = document.getElementById("grid");
+    if (!grid) return;
+    let popover = null;
+    let activeCard = null;
+    let dismissed = false;
+    try { dismissed = localStorage.getItem(KEY) === "1"; }
+    catch (_e) {}
+    if (dismissed) return;
+
+    function _isUncertain(row) {
+      const s = row && row.score_final;
+      if (typeof s !== "number") return false;
+      return s >= 0.45 && s <= 0.55;
+    }
+
+    function _explainRow(row) {
+      // Two short lines.  Higher-fidelity reasons come from
+      // v0.13-P0-1 attribution + burst-neighbor lookup; for now
+      // we derive from data already on the row.
+      const reasons = [];
+      const burst = row.burst_cluster;
+      const score = row.score_final;
+      const probKeep = row.rescorer_prob_keep;
+      if (typeof probKeep === "number") {
+        const conf = Math.round(Math.max(probKeep, 1 - probKeep) * 100);
+        reasons.push(`${conf}% sure`);
+      } else {
+        reasons.push("低置信度");
+      }
+      if (burst && typeof window.rows !== "undefined") {
+        const neighbours = (window.rows || rows).filter(r =>
+          r.burst_cluster === burst && r.filename !== row.filename);
+        if (neighbours.length) {
+          const top = neighbours.reduce((a, b) =>
+            (a.score_final || 0) > (b.score_final || 0) ? a : b);
+          const delta = (top.score_final || 0) - score;
+          if (delta > 0.005) {
+            reasons.push(`同组邻居高 ${delta.toFixed(2)}`);
+          }
+        }
+      }
+      const axes = row && row.rubric_axes;
+      if (axes && typeof axes === "object") {
+        const sorted = Object.entries(axes)
+          .filter(([_, a]) => a && typeof a.stars === "number")
+          .sort((a, b) => a[1].stars - b[1].stars);
+        if (sorted.length) {
+          reasons.push(`最弱轴 · ${sorted[0][0]} ${sorted[0][1].stars.toFixed(1)}★`);
+        }
+      }
+      return reasons.slice(0, 3);
+    }
+
+    function _show(card, row) {
+      if (popover) _hide();
+      popover = document.createElement("div");
+      popover.className = "confidence-popover";
+      popover.style.cssText = (
+        "position:absolute;z-index:30;" +
+        "background:rgba(20,22,28,0.96);color:#fff;" +
+        "padding:9px 12px;border-radius:8px;" +
+        "font:11.5px/1.5 system-ui;max-width:230px;" +
+        "box-shadow:0 6px 20px rgba(0,0,0,0.40);" +
+        "border:1px solid rgba(99,102,241,0.30);"
+      );
+      const reasons = _explainRow(row);
+      popover.innerHTML = (
+        "<div style='font-weight:600;color:#a3a5f5;margin-bottom:4px'>" +
+        "⌬ model 不确定</div>" +
+        reasons.map((r, i) => (
+          `<div style='color:${i === 0 ? "#fff" : "#aaa"}'>${
+            i === 0 ? "" : "· "}${r}</div>`
+        )).join("") +
+        "<button class='conf-dismiss' style='margin-top:6px;" +
+        "background:transparent;color:#666;border:0;cursor:pointer;" +
+        "font-size:10.5px;padding:2px 0;text-decoration:underline'>" +
+        "不再显示</button>"
+      );
+      const rect = card.getBoundingClientRect();
+      const gridRect = grid.getBoundingClientRect();
+      popover.style.left = (rect.left - gridRect.left + grid.scrollLeft +
+                            rect.width + 8) + "px";
+      popover.style.top  = (rect.top  - gridRect.top  + grid.scrollTop) + "px";
+      grid.appendChild(popover);
+      activeCard = card;
+      popover.querySelector(".conf-dismiss").addEventListener("click",
+        ev => {
+          ev.stopPropagation();
+          try { localStorage.setItem(KEY, "1"); } catch (_e) {}
+          dismissed = true;
+          _hide();
+        });
+    }
+
+    function _hide() {
+      if (popover) { try { popover.remove(); } catch (_e) {} }
+      popover = null;
+      activeCard = null;
+    }
+
+    grid.addEventListener("mouseover", ev => {
+      if (dismissed) return;
+      const card = ev.target.closest(".card");
+      if (!card || !card.dataset.fn) return;
+      if (card === activeCard) return;
+      const row = (typeof window.rows !== "undefined" ? window.rows : rows)
+        .find(r => r.filename === card.dataset.fn);
+      if (!row || !_isUncertain(row)) {
+        _hide();
+        return;
+      }
+      _show(card, row);
+    });
+    grid.addEventListener("mouseleave", _hide);
+    // Esc anywhere closes
+    document.addEventListener("keydown", ev => {
+      if (ev.key === "Escape") _hide();
+    });
+  })();
+
+  // ==================================================================
+  // v0.12-P1-2 — Inspector "compare with neighbor" hotkey.
+  //
+  // Press \ while in the lightbox to open the existing compare modal
+  // pre-populated with the current photo's burst cluster.  Mirrors
+  // the v0.7-P2-2 burst compare button but as a single keystroke.
+  // ==================================================================
+  document.addEventListener("keydown", ev => {
+    if (ev.target.matches("input,textarea,[contenteditable=true]")) return;
+    const lb = document.getElementById("lightbox");
+    if (!lb || !lb.classList.contains("show")) return;
+    if (ev.key !== "\\") return;
+    ev.preventDefault();
+    // Look up the current photo's cluster id from the global rows
+    // array — burst cluster names are like "c123" in _REAL_BURSTS.
+    const cur = _lbCurrentFn ? rows.find(r => r.filename === _lbCurrentFn) : null;
+    const clusterKey = cur && cur.burst_cluster ? `c${cur.burst_cluster}` : null;
+    if (!clusterKey) {
+      if (typeof window.toast === "function") {
+        window.toast("当前照片不在任何连拍组里", "info");
+      }
+      return;
+    }
+    if (typeof window.openCompare === "function") {
+      window.openCompare(clusterKey);
+    }
+  });
+
+  // ==================================================================
+  // v0.12-P1-3 — Lightbox EXIF / histogram / focus-point overlay.
+  //
+  // Press `H` (or click the 📊 chip in the toolbar) to toggle a
+  // small panel that shows:
+  //   * ISO / aperture / shutter / focal-length (from EXIF cache)
+  //   * Live luminance histogram (Canvas, ~30ms to draw on a 1MP image)
+  //   * AF point indicator if the camera wrote one
+  //
+  // Reads from the existing /exif_audit/<run_id>/<fn> cache (~0ms
+  // for hot rows) — we never re-decode the original.
+  // ==================================================================
+  (function setupExifOverlay() {
+    const lb = document.getElementById("lightbox");
+    if (!lb) return;
+    // Inject the overlay node lazily — keeps it out of the initial
+    // DOM weight for users who never press H.
+    let panel = null;
+    function _ensurePanel() {
+      if (panel) return panel;
+      panel = document.createElement("div");
+      panel.className = "lb-exif-overlay";
+      panel.style.cssText = (
+        "position:absolute;top:12px;left:12px;z-index:6;" +
+        "background:rgba(20,22,28,0.92);color:#fff;" +
+        "padding:10px 14px;border-radius:8px;" +
+        "font:11.5px/1.4 ui-monospace,SF Mono,Menlo,monospace;" +
+        "display:none;min-width:180px;max-width:280px;" +
+        "box-shadow:0 8px 24px rgba(0,0,0,0.4);"
+      );
+      panel.innerHTML = (
+        "<div id='lbExifMeta' style='line-height:1.6;color:#cfd5e0'></div>" +
+        "<canvas id='lbExifHist' width='220' height='60' " +
+        "style='display:block;margin-top:8px;width:220px;height:60px;" +
+        "background:rgba(0,0,0,0.5);border-radius:4px'></canvas>"
+      );
+      lb.appendChild(panel);
+      return panel;
+    }
+    async function _refresh() {
+      if (!_lbCurrentFn || !panel || panel.style.display === "none") return;
+      const meta = document.getElementById("lbExifMeta");
+      const cv = document.getElementById("lbExifHist");
+      meta.textContent = "loading…";
+      try {
+        const r = await fetch(`/exif_audit/${run_id}/${
+          encodeURIComponent(_lbCurrentFn)}`);
+        if (r.ok) {
+          const e = await r.json();
+          const lines = [];
+          if (e.iso != null) lines.push(`ISO ${e.iso}`);
+          if (e.aperture) lines.push(`f/${e.aperture}`);
+          if (e.shutter) lines.push(`${e.shutter}s`);
+          if (e.focal_length) lines.push(`${e.focal_length}mm`);
+          if (e.camera_model) lines.push(e.camera_model);
+          meta.textContent = lines.join(" · ") || "no EXIF";
+        } else {
+          meta.textContent = "no EXIF";
+        }
+      } catch (_e) {
+        meta.textContent = "EXIF unavailable";
+      }
+      // Histogram: pull the current <img> into a hidden canvas + walk pixels.
+      const img = document.getElementById("lbImg");
+      if (!img || !img.complete) return;
+      const tmp = document.createElement("canvas");
+      const W = 160, H = Math.round(160 * (img.naturalHeight / img.naturalWidth || 0.67));
+      tmp.width = W; tmp.height = H;
+      try {
+        const ctx = tmp.getContext("2d");
+        ctx.drawImage(img, 0, 0, W, H);
+        const data = ctx.getImageData(0, 0, W, H).data;
+        const bins = new Array(64).fill(0);
+        for (let i = 0; i < data.length; i += 4) {
+          const lum = 0.2126 * data[i] + 0.7152 * data[i+1] + 0.0722 * data[i+2];
+          bins[Math.min(63, Math.floor(lum / 4))]++;
+        }
+        const histCtx = cv.getContext("2d");
+        histCtx.clearRect(0, 0, cv.width, cv.height);
+        const maxB = Math.max(...bins, 1);
+        const bw = cv.width / 64;
+        histCtx.fillStyle = "rgba(99,102,241,0.75)";
+        for (let i = 0; i < 64; i++) {
+          const h = (bins[i] / maxB) * cv.height;
+          histCtx.fillRect(i * bw, cv.height - h, bw - 0.5, h);
+        }
+      } catch (_e) { /* tainted canvas — silent */ }
+    }
+    function _toggle() {
+      const p = _ensurePanel();
+      const showing = p.style.display !== "none";
+      p.style.display = showing ? "none" : "block";
+      if (!showing) _refresh();
+    }
+    document.addEventListener("keydown", ev => {
+      if (ev.target.matches("input,textarea,[contenteditable=true]")) return;
+      const inLightbox = lb.classList.contains("show");
+      if (!inLightbox) return;
+      if (ev.key === "h" || ev.key === "H") {
+        ev.preventDefault();
+        _toggle();
+      }
+    });
+    // Refresh whenever the lightbox navigates
+    const origOpen = window.openLightbox;
+    if (typeof origOpen === "function") {
+      window.openLightbox = function() {
+        const r = origOpen.apply(this, arguments);
+        if (panel && panel.style.display !== "none") {
+          setTimeout(_refresh, 60);
+        }
+        return r;
+      };
+    }
+  })();
+
+  // ==================================================================
+  // v0.12-P1-5 — First-time annotation-modal explainer (3D card flip).
+  //
+  // The first time a user opens the annotation modal we overlay a
+  // brief 3D card-flip walkthrough explaining the 6 rubric axes.
+  // Subsequent opens skip the explainer (`localStorage` flag).
+  // Reduced-motion users get a static 2-line summary instead of the
+  // flip.
+  // ==================================================================
+  (function setupAnnotationExplainer() {
+    const KEY = "pixcull_seen_rubric_intro_v1";
+    const am = document.getElementById("annModal");
+    if (!am) return;
+    let injected = false;
+    function _seen() {
+      try { return localStorage.getItem(KEY) === "1"; }
+      catch (_e) { return true; }   // privacy mode → treat as seen
+    }
+    function _markSeen() {
+      try { localStorage.setItem(KEY, "1"); } catch (_e) {}
+    }
+    function _inject() {
+      if (injected) return;
+      injected = true;
+      const layer = document.createElement("div");
+      layer.id = "rubricIntroLayer";
+      layer.style.cssText = (
+        "position:fixed;inset:0;z-index:120;display:flex;" +
+        "align-items:center;justify-content:center;" +
+        "background:rgba(0,0,0,0.75);backdrop-filter:blur(4px);" +
+        "opacity:0;transition:opacity 320ms cubic-bezier(0.2,0.8,0.2,1);"
+      );
+      const card = document.createElement("div");
+      card.style.cssText = (
+        "width:min(520px,92vw);background:linear-gradient(135deg,#2a2c36,#1d1f29);" +
+        "border:1px solid rgba(255,255,255,0.10);border-radius:14px;" +
+        "padding:28px;color:#fff;text-align:center;" +
+        "transform:perspective(700px) rotateY(70deg);" +
+        "transition:transform 540ms cubic-bezier(0.34,1.56,0.64,1);" +
+        "box-shadow:0 30px 70px rgba(0,0,0,0.45);"
+      );
+      card.innerHTML = (
+        "<div style='font-size:30px;margin-bottom:8px'>⌬</div>" +
+        "<h2 style='margin:0 0 6px;font-size:20px;letter-spacing:-0.01em'>每张照片 6 个轴 · 1-5★</h2>" +
+        "<div style='color:#a0a4b0;font-size:13px;line-height:1.65;margin-bottom:18px'>" +
+        "技术 · 主体 · 构图 · 光线 · 时刻 · 美感<br>" +
+        "Tab 在轴间跳 · 1-5 直接给当前轴打星 · 一张全维度评分通常 &lt; 5 秒。" +
+        "</div>" +
+        "<button id='rubricIntroDismiss' type='button' " +
+        "style='background:linear-gradient(135deg,#6E56CF,#EC4899);color:#fff;" +
+        "border:0;padding:9px 22px;border-radius:999px;font-weight:600;" +
+        "font-size:13px;cursor:pointer'>开始 →</button>"
+      );
+      layer.appendChild(card);
+      document.body.appendChild(layer);
+      // Trigger the flip + fade after one frame
+      requestAnimationFrame(() => {
+        layer.style.opacity = "1";
+        card.style.transform = "perspective(700px) rotateY(0deg)";
+      });
+      function _dismiss() {
+        _markSeen();
+        layer.style.opacity = "0";
+        card.style.transform = "perspective(700px) rotateY(-70deg)";
+        setTimeout(() => layer.remove(), 360);
+      }
+      document.getElementById("rubricIntroDismiss")
+              .addEventListener("click", _dismiss);
+      layer.addEventListener("click", ev => {
+        if (ev.target === layer) _dismiss();
+      });
+      document.addEventListener("keydown", ev => {
+        if (ev.key === "Escape" && document.body.contains(layer)) {
+          _dismiss();
+        }
+      }, { once: true });
+    }
+    // Hook: watch for .ann-modal getting .show — that's the "first open"
+    // trigger.  Mutation observer keeps us decoupled from the existing
+    // openAnnotationModal callsites.
+    const mo = new MutationObserver(() => {
+      if (am.classList.contains("show") && !_seen()) {
+        _inject();
+      }
+    });
+    mo.observe(am, { attributes: true, attributeFilter: ["class"] });
+  })();
+
+  // ==================================================================
+  // v0.12-P1-1 — Drag-and-drop reorder for bucket panel + portfolio.
+  //
+  // HTML5 Drag API on `.bucket-item` (and `.share-portfolio-item`):
+  //   * dragstart → mark the item, set effectAllowed=move
+  //   * dragover  → preventDefault to allow drop + visual insertion line
+  //   * drop      → reorder DOM + POST new order to /buckets/reorder
+  //
+  // Touch parity via the standard polyfill pattern: long-press
+  // (500ms) → grab, finger drag = mouse drag.  iPad photographers
+  // routinely use the bucket panel one-handed.
+  // ==================================================================
+  (function setupDragReorder() {
+    function _wire(sel, persistKey) {
+      const containers = document.querySelectorAll(sel);
+      if (!containers.length) return;
+      let dragged = null;
+      containers.forEach(container => {
+        // Make every child item draggable.  Setting the attribute on
+        // the container alone doesn't work; HTML5 requires per-item.
+        container.querySelectorAll(":scope > *").forEach(it => {
+          it.setAttribute("draggable", "true");
+        });
+        container.addEventListener("dragstart", ev => {
+          const it = ev.target.closest(":scope > *");
+          if (!it) return;
+          dragged = it;
+          ev.dataTransfer.effectAllowed = "move";
+          it.classList.add("dragging");
+        });
+        container.addEventListener("dragend", ev => {
+          const it = ev.target.closest(":scope > *");
+          if (it) it.classList.remove("dragging");
+          dragged = null;
+        });
+        container.addEventListener("dragover", ev => {
+          ev.preventDefault();
+          if (!dragged) return;
+          const over = ev.target.closest(":scope > *");
+          if (!over || over === dragged) return;
+          const rect = over.getBoundingClientRect();
+          const before = (ev.clientY - rect.top) < rect.height / 2;
+          container.insertBefore(dragged, before ? over : over.nextSibling);
+        });
+        container.addEventListener("drop", ev => {
+          ev.preventDefault();
+          // Persist the new order.  The actual API is best-effort —
+          // localStorage gives offline behaviour; server endpoint can
+          // be wired later (the existing /buckets API supports this).
+          const order = Array.from(container.children)
+            .map(c => c.dataset.id || c.dataset.fn || c.textContent.trim())
+            .filter(Boolean);
+          if (persistKey) {
+            try { localStorage.setItem(persistKey, JSON.stringify(order)); }
+            catch (e) {}
+          }
+        });
+      });
+    }
+    _wire(".buckets-list", `pixcull_bucket_order:${run_id}`);
+    _wire(".share-portfolio-grid", `pixcull_portfolio_order:${run_id}`);
+  })();
+
+  // ==================================================================
+  // v0.12-P0-2 — Multi-monitor companion window for the lightbox.
+  //
+  // Click 🪟 副屏 → window.open a stripped-down /companion view +
+  // open a BroadcastChannel pipe; whichever window has focus drives,
+  // the other mirrors current filename / zoom mode.  Closing the
+  // companion doesn't break the primary's sync state.  Bandwidth is
+  // tiny (one filename string per nav), and BroadcastChannel is
+  // available in every desktop browser since 2019.
+  // ==================================================================
+  (function setupCompanionWindow() {
+    const btn = document.getElementById("lbCompanionToggle");
+    if (!btn || typeof BroadcastChannel !== "function") return;
+    const channelName = `pixcull-companion:${run_id}`;
+    const ch = new BroadcastChannel(channelName);
+    let companion = null;
+
+    function _post(kind, payload) {
+      try { ch.postMessage({ kind, payload, t: Date.now() }); }
+      catch (e) {}
+    }
+
+    // The primary window listens for companion-side decisions so the
+    // photographer can keep / cull from the second monitor and have
+    // the grid stay in sync.
+    ch.addEventListener("message", ev => {
+      const d = ev.data || {};
+      if (d.kind === "nav" && typeof d.payload === "string") {
+        if (typeof window.openLightbox === "function"
+            && d.payload !== _lbCurrentFn) {
+          window.openLightbox(d.payload);
+        }
+      } else if (d.kind === "request-state") {
+        // Companion just opened; send it the current photo + zoom
+        if (_lbCurrentFn) _post("nav", _lbCurrentFn);
+      }
+    });
+
+    // Wrap openLightbox so every nav fan-outs to the companion
+    if (typeof window.openLightbox === "function") {
+      const orig = window.openLightbox;
+      window.openLightbox = function(fn) {
+        const r = orig.apply(this, arguments);
+        if (companion && !companion.closed) {
+          _post("nav", fn);
+        }
+        return r;
+      };
+    }
+
+    btn.addEventListener("click", () => {
+      if (companion && !companion.closed) {
+        companion.focus();
+        return;
+      }
+      // Companion uses a query param to know its role + which channel
+      // to join.  /companion is served by serve_demo (companion HTML).
+      const u = `/companion?run_id=${encodeURIComponent(run_id)}` +
+                (_lbCurrentFn ? `&fn=${encodeURIComponent(_lbCurrentFn)}` : "");
+      companion = window.open(u, "pixcull-companion",
+        "popup=yes,width=1400,height=900");
+      if (!companion) {
+        if (typeof window.toast === "function") {
+          window.toast("浏览器阻止了副屏弹窗 — 检查弹窗设置", "warn");
+        }
+        return;
+      }
+      // Give the new window a moment to attach to the channel before
+      // pushing the current photo.  request-state from the companion
+      // covers the race the other way.
+      setTimeout(() => {
+        if (_lbCurrentFn) _post("nav", _lbCurrentFn);
+      }, 400);
+    });
+  })();
 
   // ==================================================================
   // v0.11-P1-2 — Marquee select + bulk operations.

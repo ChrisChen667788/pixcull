@@ -159,6 +159,18 @@ def test_de_fr_it_supported():
     assert t("workspace.crumb.results", "it") == "Risultati dell'analisi"
 
 
+def test_pt_nl_tr_ru_ar_supported():
+    """v0.12-P2-2 — Portuguese / Dutch / Turkish / Russian / Arabic."""
+    assert t("workspace.crumb.results", "pt") == "Resultados da análise"
+    assert t("workspace.crumb.results", "pt-PT") == "Resultados da análise"
+    assert t("workspace.crumb.results", "nl") == "Analyseresultaten"
+    assert t("workspace.crumb.results", "nl-BE") == "Analyseresultaten"
+    assert t("workspace.crumb.results", "tr") == "Analiz sonuçları"
+    assert t("workspace.crumb.results", "ru") == "Результаты анализа"
+    assert t("workspace.crumb.results", "ar") == "نتائج التحليل"
+    assert t("workspace.crumb.results", "ar-EG") == "نتائج التحليل"
+
+
 def test_default_locale_constant():
     assert DEFAULT_LOCALE == "zh_CN"
     assert "zh_CN" in SUPPORTED_LOCALES
@@ -166,6 +178,14 @@ def test_default_locale_constant():
     assert "de_DE" in SUPPORTED_LOCALES
     assert "fr_FR" in SUPPORTED_LOCALES
     assert "it_IT" in SUPPORTED_LOCALES
+    # v0.12-P2-2 — second batch of European + global locales
+    assert "pt_BR" in SUPPORTED_LOCALES
+    assert "nl_NL" in SUPPORTED_LOCALES
+    assert "tr_TR" in SUPPORTED_LOCALES
+    assert "ru_RU" in SUPPORTED_LOCALES
+    assert "ar_SA" in SUPPORTED_LOCALES
+    # 13 locales total after v0.12-P2-2
+    assert len(SUPPORTED_LOCALES) == 13
 
 
 def test_lru_cache_returns_stable_dict():

@@ -42,6 +42,11 @@ SUPPORTED_LOCALES: tuple[str, ...] = (
     "zh_CN", "en_US", "ja_JP", "ko_KR", "es_ES",
     # v0.11-P2-2 — DACH + French + Italian (European wedding photo markets).
     "de_DE", "fr_FR", "it_IT",
+    # v0.12-P2-2 — Portuguese (BR + PT), Dutch, Turkish, Russian, Arabic.
+    # Brings us to 13 locales total.  AR is RTL — CSS already handles
+    # `[dir="rtl"]` for the components that needed it (lightbox toolbar
+    # mirror, scrubber direction).
+    "pt_BR", "nl_NL", "tr_TR", "ru_RU", "ar_SA",
 )
 DEFAULT_LOCALE: str = "zh_CN"
 
@@ -124,6 +129,19 @@ def _normalize_lang(lang: str | None) -> str:
         return "fr_FR"
     if s.startswith("it"):
         return "it_IT"
+    # v0.12-P2-2 — Portuguese (pt-BR + pt-PT both collapse to pt_BR; the
+    # locale strings are written in Brazilian Portuguese which is the
+    # larger market; pt-PT speakers see ~95% identical phrasing).
+    if s.startswith("pt"):
+        return "pt_BR"
+    if s.startswith("nl"):
+        return "nl_NL"
+    if s.startswith("tr"):
+        return "tr_TR"
+    if s.startswith("ru"):
+        return "ru_RU"
+    if s.startswith("ar"):
+        return "ar_SA"
     return DEFAULT_LOCALE
 
 

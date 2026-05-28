@@ -7,10 +7,18 @@
 //   * 2-finger pinch → zoom around midpoint
 //   * tap < 8 px in < 220 ms → toggle fit ↔ 1:1
 //
-// Exposed as a view modifier so the detail view doesn't have to
-// know the gesture internals.
+// v0.12-P1-4 — haptic feedback on every coarse-grained interaction:
+//   * swipe-nav (prev/next) → light impact
+//   * dismiss via swipe-down → medium impact
+//   * zoom toggle (fit → 1:1) → soft impact (selection-level)
+//   * decision keep/maybe/cull → tier-graded (Views.swift line 793, pre-existing)
+//
+// Apple HIG: UIImpactFeedbackGenerator on iPad gives the same tactile
+// signature on iOS 17+ — keyboard / hover / direct-touch all share
+// the same haptic API in this scope.
 
 import SwiftUI
+import UIKit   // UIImpactFeedbackGenerator
 
 public struct PhotoGestureModifier: ViewModifier {
     @State private var scale: CGFloat = 1.0
@@ -93,9 +101,13 @@ public struct PhotoGestureModifier: ViewModifier {
                 }
                 // fit mode — classify gesture
                 if absX > swipeNav && absX > absY {
+                    // v0.12-P1-4 — light haptic on swipe-nav
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
                     if dx < 0 { onNext() } else { onPrev() }
                     offset = .zero
                 } else if dy > swipeClose && absY > absX {
+                    // v0.12-P1-4 — medium haptic on dismiss (heavier event)
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                     onDismiss()
                     offset = .zero
                 } else {
@@ -106,6 +118,10 @@ public struct PhotoGestureModifier: ViewModifier {
     }
 
     private func toggleZoom() {
+        // v0.12-P1-4 — selection-style haptic on zoom-mode change.
+        // Selection feedback is the quietest variant — fits the
+        // "view-mode switch" semantics better than impact.
+        UISelectionFeedbackGenerator().selectionChanged()
         if scale > 1.001 {
             scale = 1.0
             lastScale = 1.0
