@@ -235,6 +235,54 @@ def video(
         console.print(rtab)
 
 
+@app.command()
+def reel(
+    run_dir: Path = typer.Argument(
+        ..., exists=True, file_okay=False,
+        help="A video run dir (with reel_candidates.json + manifest).",
+    ),
+    ranks: Optional[str] = typer.Option(
+        None, "--ranks",
+        help="Comma-separated candidate ranks to assemble (default: "
+             "top-scoring up to --target-s).",
+    ),
+    target_s: float = typer.Option(
+        60.0, "--target-s", help="Target reel length when auto-selecting."),
+    crossfade_s: float = typer.Option(
+        0.5, "--crossfade", help="Cross-fade seconds (0 = hard cuts)."),
+    reel_id: str = typer.Option("reel", "--id", help="Output reel id."),
+    edl_only: bool = typer.Option(
+        False, "--edl-only", help="Write the EDL only; skip ffmpeg render."),
+) -> None:
+    """v2.0 — Auto-assemble selected reel candidates into one cut + EDL."""
+    from pixcull.io.reel_assembly import assemble_from_run
+    from pixcull.io.video import FFmpegError
+
+    rank_list = None
+    if ranks:
+        try:
+            rank_list = [int(x) for x in ranks.split(",") if x.strip()]
+        except ValueError:
+            console.print("[red]✗ --ranks must be comma-separated ints[/red]")
+            raise typer.Exit(code=2)
+    try:
+        result = assemble_from_run(
+            run_dir, ranks=rank_list, target_s=target_s,
+            crossfade_s=crossfade_s, reel_id=reel_id, edl_only=edl_only)
+    except (FFmpegError, FileNotFoundError, ValueError) as exc:
+        console.print(f"[red]✗ {exc}[/red]")
+        raise typer.Exit(code=2)
+
+    console.print(
+        f"[green]✓ Reel assembled[/green] — {len(result.clips)} clips, "
+        f"{result.duration_s}s")
+    console.print(f"  EDL: {result.edl_path}")
+    if result.mp4_path:
+        console.print(f"  MP4: {result.mp4_path}")
+    else:
+        console.print("  [dim](--edl-only; no MP4 rendered)[/dim]")
+
+
 # v0.13.13 — plugin management.
 plugins_app = typer.Typer(help="Manage PixCull plugins (v0.13.13).",
                            no_args_is_help=True)
