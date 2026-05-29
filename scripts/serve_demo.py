@@ -7983,11 +7983,14 @@ class _Handler(BaseHTTPRequestHandler):
                 iso = datetime.fromtimestamp(e["mtime"]).isoformat()
             except (ValueError, OSError):
                 iso = ""
+            # v2.1-P0-2 — flag video runs in history with a 🎬 marker so
+            # they're discoverable as a "video review" entry point.
+            _vid_mark = ("🎬 " if is_video_run(e["run_id"]) else "")
             cards.append(
                 f'<a class="card" href="/results/{_esc(e["run_id"])}">'
                 f'<div class="thumb">{thumb}</div>'
                 f'<div class="meta">'
-                f'<div class="rid" title="{_esc(e["run_id"])}">{_esc(e["run_id"])}</div>'
+                f'<div class="rid" title="{_esc(e["run_id"])}">{_vid_mark}{_esc(e["run_id"])}</div>'
                 f'<div class="when" data-iso="{_esc(iso)}">'
                 f'{_fmt_mtime(e["mtime"])}'
                 + (f' · <span class="src">{_esc(str(e["source_label"]))}</span>' if e["source_label"] else "")
@@ -8820,6 +8823,25 @@ class _Handler(BaseHTTPRequestHandler):
             "__PAYLOAD__",
             _safe_dumps(payload).replace("</", "<\\/"),
         )
+        # v2.1-P0-2 — discoverability: a video run gets a floating
+        # "🎬 视频审片" button into the P0-4 review surface (and the
+        # joint photo+video timeline).  Pure additive inject before
+        # </body>; photo runs are untouched.
+        rid_safe = _safe_run_id(run_id)
+        if rid_safe and is_video_run(rid_safe):
+            badge = (
+                '<div id="videoReviewCta" style="position:fixed;right:18px;'
+                'bottom:18px;z-index:9999;display:flex;gap:8px;align-items:center">'
+                f'<a href="/timeline/{rid_safe}" title="照片+视频联合时间线" '
+                'style="background:#14161b;color:#8b74e8;border:1px solid #6E56CF;'
+                'text-decoration:none;padding:9px 13px;border-radius:22px;'
+                'font:12px system-ui">🗓 联合时间线</a>'
+                f'<a href="/video/{rid_safe}" title="视频原生审片 · 时间线 scrubber" '
+                'style="background:#6E56CF;color:#fff;text-decoration:none;'
+                'padding:10px 16px;border-radius:22px;font:13px system-ui;'
+                'box-shadow:0 4px 16px rgba(110,86,207,.5)">🎬 视频审片 →</a></div>'
+            )
+            html = html.replace("</body>", badge + "</body>", 1)
         self._send_html(200, html.encode("utf-8"))
 
     def _serve_decisions(self, run_id: str) -> None:
