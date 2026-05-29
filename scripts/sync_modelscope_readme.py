@@ -136,40 +136,77 @@ def _resolve_token(arg_token: str | None) -> str | None:
     return None
 
 
-def _fix_gitattributes(api, repo_id: str, branch: str) -> None:
-    """Ensure README/docs render as TEXT (not LFS pointers) and images
-    are LFS.  ModelScope's ``upload_file`` auto-adds a per-file
-    ``<path> filter=lfs`` rule, which turns README.md into an LFS object
-    the model-card viewer can't render — strip those and pin text/LFS
-    rules instead."""
-    import urllib.request
-    base = (f"https://www.modelscope.cn/models/{repo_id}"
-            f"/resolve/{branch}/.gitattributes")
+# Known-good .gitattributes: standard binary formats + images via LFS,
+# but README / *.md / *.svg as TEXT.  Critically does NOT LFS-track
+# README.md or .gitattributes itself.
+_GITATTRIBUTES_TEXT = "\n".join([
+    *(f"*.{ext} filter=lfs diff=lfs merge=lfs -text" for ext in (
+        "7z arrow bin bz2 gz h5 joblib onnx parquet pb pt pth rar tar "
+        "tflite tgz xz zip safetensors ckpt npy npz pkl pickle model "
+        "msgpack".split())),
+    "# pixcull: render docs as text; host images via LFS",
+    "*.md text", "README.md text", "*.svg text",
+    "*.png filter=lfs diff=lfs merge=lfs -text",
+    "*.jpg filter=lfs diff=lfs merge=lfs -text",
+    "*.jpeg filter=lfs diff=lfs merge=lfs -text",
+    "*.webp filter=lfs diff=lfs merge=lfs -text",
+]) + "\n"
+
+
+def _git_push_readme(repo_id: str, branch: str, readme_text: str) -> bool:
+    """Commit README.md + a correct .gitattributes via **git** (not
+    HubApi.upload_file).
+
+    Why git: ModelScope's ``upload_file`` auto-adds ``<path> filter=lfs``
+    for every file, so README.md becomes an LFS object the model-card
+    viewer renders as a raw ``version https://git-lfs.github.com/…``
+    pointer.  A git commit honours our .gitattributes (README → text),
+    so the card renders.  The SDK ``Repository`` clones with the cached
+    session auth — no separate git token needed.  We touch only the two
+    text files, so the push needs no git-lfs (images stay as they were
+    uploaded via HubApi)."""
+    import subprocess
+    import tempfile
     try:
-        cur = urllib.request.urlopen(base, timeout=30).read().decode("utf-8")
-    except Exception:
-        cur = ""
-    keep = [ln for ln in cur.splitlines()
-            if ln.strip()
-            and not ln.startswith("README.md ")
-            and not ln.startswith("*.md ")
-            and not ln.startswith("docs/")]
-    keep += [
-        "# pixcull — docs render as text; images hosted via LFS",
-        "*.md text",
-        "README.md text",
-        "*.png filter=lfs diff=lfs merge=lfs -text",
-        "*.jpg filter=lfs diff=lfs merge=lfs -text",
-        "*.jpeg filter=lfs diff=lfs merge=lfs -text",
-        "*.webp filter=lfs diff=lfs merge=lfs -text",
-    ]
-    api.upload_file(
-        path_or_fileobj=("\n".join(keep) + "\n").encode("utf-8"),
-        path_in_repo=".gitattributes", repo_id=repo_id, repo_type="model",
-        commit_message="chore: README/docs as text, images via LFS",
-        revision=branch, disable_tqdm=True)
-    print("[modelscope-sync] ✓ .gitattributes fixed (README → text)",
+        from modelscope.hub.repository import Repository
+    except Exception as exc:  # noqa: BLE001
+        print(f"[modelscope-sync] Repository unavailable: {exc}",
+              file=sys.stderr)
+        return False
+    tmp = Path(tempfile.mkdtemp(prefix="ms_sync_")) / "repo"
+    try:
+        Repository(model_dir=str(tmp), clone_from=repo_id)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[modelscope-sync] git clone failed: {exc}", file=sys.stderr)
+        return False
+    cfg = [("filter.lfs.required", "false"), ("filter.lfs.smudge", "cat"),
+           ("filter.lfs.clean", "cat"), ("user.email", "noreply@anthropic.com"),
+           ("user.name", "pixcull-sync")]
+    for k, v in cfg:
+        subprocess.run(["git", "-C", str(tmp), "config", k, v], check=False)
+    (tmp / "README.md").write_text(readme_text, encoding="utf-8")
+    (tmp / ".gitattributes").write_text(_GITATTRIBUTES_TEXT, encoding="utf-8")
+    subprocess.run(["git", "-C", str(tmp), "add", ".gitattributes",
+                    "README.md"], check=True)
+    c = subprocess.run(["git", "-C", str(tmp), "commit", "-m",
+                        "sync: README + .gitattributes as text (de-LFS card)"],
+                       capture_output=True, text=True)
+    if c.returncode != 0:
+        if "nothing to commit" in (c.stdout + c.stderr):
+            print("[modelscope-sync] README already current", file=sys.stderr)
+            return True
+        print(f"[modelscope-sync] commit failed: {c.stderr[:200]}",
+              file=sys.stderr)
+        return False
+    pr = subprocess.run(["git", "-C", str(tmp), "push", "origin",
+                         f"HEAD:{branch}"], capture_output=True, text=True)
+    if pr.returncode != 0:
+        print(f"[modelscope-sync] git push failed: {pr.stderr[:200]}",
+              file=sys.stderr)
+        return False
+    print("[modelscope-sync] ✓ README pushed as text via git (renders)",
           file=sys.stderr)
+    return True
 
 
 def _upload_referenced_assets(api, repo_id: str, branch: str,
@@ -307,37 +344,39 @@ def main(argv: list[str] | None = None) -> int:
     # `upload_file` accepts bytes via `path_or_fileobj` (avoids the
     # local-file roundtrip; we want to upload the REWRITTEN content,
     # not the source).
-    #
-    # Self-contained mode (default): fix .gitattributes FIRST so the
-    # README commits as text rather than an LFS pointer, then upload the
-    # README, then host the referenced assets.
-    if not args.github_links:
-        _fix_gitattributes(api, args.repo_id, args.branch)
-    try:
-        commit = api.upload_file(
-            path_or_fileobj=rewritten.encode("utf-8"),
-            path_in_repo="README.md",
-            repo_id=args.repo_id,
-            repo_type="model",
-            commit_message=args.commit_message,
-            revision=args.branch,
-            disable_tqdm=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        print(f"[modelscope-sync] upload failed: "
-              f"{type(exc).__name__}: {exc}",
-              file=sys.stderr)
+    if args.github_links:
+        # Legacy path — single README with raw.githubusercontent image
+        # links, pushed via upload_file (renders as an LFS pointer on
+        # ModelScope; kept only for explicit opt-in).
+        try:
+            commit = api.upload_file(
+                path_or_fileobj=rewritten.encode("utf-8"),
+                path_in_repo="README.md", repo_id=args.repo_id,
+                repo_type="model", commit_message=args.commit_message,
+                revision=args.branch, disable_tqdm=True)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[modelscope-sync] upload failed: "
+                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
+            return 1
+        print(f"[modelscope-sync] ✓ uploaded README (github-links mode) to "
+              f"{args.repo_id}#{args.branch}", file=sys.stderr)
+        if hasattr(commit, "commit_url") and commit.commit_url:
+            print(f"[modelscope-sync] view at: {commit.commit_url}",
+                  file=sys.stderr)
+        return 0
+
+    # Self-contained (default):
+    #   1. host the referenced docs/** assets via HubApi (images → LFS,
+    #      which upload_file handles correctly), then
+    #   2. push README.md + a correct .gitattributes via GIT so the
+    #      model card renders as text (upload_file would re-LFS it).
+    _upload_referenced_assets(api, args.repo_id, args.branch, rewritten)
+    if not _git_push_readme(args.repo_id, args.branch, rewritten):
+        print("[modelscope-sync] ✗ README git push failed — card may show "
+              "an LFS pointer; check git/Repository auth", file=sys.stderr)
         return 1
-
-    # `commit` is a CommitInfo with .commit_url / .commit_message
-    print(f"[modelscope-sync] ✓ uploaded README to {args.repo_id}#{args.branch}",
-          file=sys.stderr)
-    if hasattr(commit, "commit_url") and commit.commit_url:
-        print(f"[modelscope-sync] view at: {commit.commit_url}",
-              file=sys.stderr)
-
-    if not args.github_links:
-        _upload_referenced_assets(api, args.repo_id, args.branch, rewritten)
+    print(f"[modelscope-sync] ✓ synced {args.repo_id}#{args.branch} "
+          f"(README renders as text; assets hosted)", file=sys.stderr)
     return 0
 
 
