@@ -104,3 +104,74 @@ def test_grade_bytes_thumb_plus_grade():
     from PIL import Image
     with Image.open(io.BytesIO(out)) as im:
         assert im.width == 32
+
+
+# --------------------------------------------------------------------------
+# v2.1-P1-1 — .cube 3D LUT engine
+# --------------------------------------------------------------------------
+
+def _write_cube(path, n=2, *, invert=False, title="Test"):
+    lines = [f'TITLE "{title}"', f"LUT_3D_SIZE {n}",
+             "DOMAIN_MIN 0 0 0", "DOMAIN_MAX 1 1 1"]
+    for b in range(n):              # red varies fastest
+        for g in range(n):
+            for r in range(n):
+                rv, gv, bv = r / (n - 1), g / (n - 1), b / (n - 1)
+                if invert:
+                    rv, gv, bv = 1 - rv, 1 - gv, 1 - bv
+                lines.append(f"{rv:.6f} {gv:.6f} {bv:.6f}")
+    path.write_text("\n".join(lines) + "\n")
+    return path
+
+
+def test_load_cube_parses(tmp_path):
+    cube = C.load_cube(_write_cube(tmp_path / "id.cube", n=2, title="Hello"))
+    assert cube.size == 2
+    assert cube.title == "Hello"
+    assert cube.table.shape == (2, 2, 2, 3)
+    assert cube.domain_max == (1.0, 1.0, 1.0)
+
+
+def test_apply_identity_cube_is_noop(tmp_path):
+    cube = C.load_cube(_write_cube(tmp_path / "id.cube", n=2))
+    img = (np.random.default_rng(0).random((12, 10, 3)) * 255).astype("uint8")
+    out = C.apply_cube(img, cube)
+    assert np.abs(out.astype(int) - img.astype(int)).max() <= 2  # ~identity
+
+
+def test_apply_invert_cube(tmp_path):
+    cube = C.load_cube(_write_cube(tmp_path / "inv.cube", n=2, invert=True))
+    img = np.full((6, 6, 3), 200, dtype="uint8")
+    out = C.apply_cube(img, cube)
+    assert np.abs(out.astype(int) - (255 - 200)).max() <= 3
+
+
+def test_load_cube_errors(tmp_path):
+    bad = tmp_path / "nosize.cube"
+    bad.write_text("0 0 0\n1 1 1\n")
+    with pytest.raises(ValueError, match="LUT_3D_SIZE"):
+        C.load_cube(bad)
+    wrong = tmp_path / "wrong.cube"
+    wrong.write_text("LUT_3D_SIZE 2\n0 0 0\n1 1 1\n")  # needs 8 entries
+    with pytest.raises(ValueError, match="expected"):
+        C.load_cube(wrong)
+
+
+def test_list_cubes(tmp_path):
+    _write_cube(tmp_path / "Kodak2383.cube")
+    _write_cube(tmp_path / "Fuji3513.cube")
+    ids = {c["id"] for c in C.list_cubes(tmp_path)}
+    assert ids == {"cube:Kodak2383", "cube:Fuji3513"}
+    assert C.list_cubes(tmp_path / "nope") == []
+
+
+def test_grade_bytes_with_cube(tmp_path, monkeypatch):
+    monkeypatch.setattr(C, "LUTS_DIR", tmp_path)
+    C._CUBE_CACHE.clear()
+    _write_cube(tmp_path / "inv.cube", n=2, invert=True)
+    jb = _jpeg(v=200, size=(20, 20))
+    out = C.grade_image_bytes(jb, "cube:inv")
+    from PIL import Image
+    with Image.open(io.BytesIO(out)) as im:
+        arr = np.asarray(im)
+    assert abs(int(arr.mean()) - 55) <= 6        # inverted 200 → ~55

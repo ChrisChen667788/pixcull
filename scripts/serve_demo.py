@@ -7339,8 +7339,8 @@ class _Handler(BaseHTTPRequestHandler):
             except (OSError, ValueError):
                 reel = []
         try:
-            from pixcull.scoring.color_grade import list_presets
-            grades = list_presets()
+            from pixcull.scoring.color_grade import list_presets, list_cubes
+            grades = list_presets() + list_cubes()   # + v2.1 user .cube LUTs
         except Exception:
             grades = [{"id": "none", "label": "Original"}]
         body = json.dumps({
