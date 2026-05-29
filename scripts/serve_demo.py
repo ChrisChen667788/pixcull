@@ -657,6 +657,366 @@ def _run_dir(run_id: str) -> Path:
     return _DEMO_ROOT / run_id
 
 
+# v2.0-P0-4 — video-run helpers.
+import re as _re_video  # noqa: E402
+
+
+def _safe_run_id(run_id: str) -> str | None:
+    """Validate a run_id used in a filesystem path.  Returns the id or
+    None if it contains path-traversal / separator characters."""
+    run_id = (run_id or "").strip().strip("/")
+    if not run_id or not _re_video.fullmatch(r"[A-Za-z0-9_.\-]+", run_id):
+        return None
+    if run_id in (".", ".."):
+        return None
+    return run_id
+
+
+def _video_frames_dir(run_dir: Path) -> Path | None:
+    """Return the single ``video_frames/<video_id>/`` subdir of a run,
+    or None when the run isn't a video run (or is ambiguous)."""
+    root = run_dir / "video_frames"
+    if not root.is_dir():
+        return None
+    subs = [p for p in root.iterdir()
+            if p.is_dir() and (p / "manifest.json").exists()]
+    return subs[0] if len(subs) == 1 else None
+
+
+def is_video_run(run_id: str) -> bool:
+    """True when the run has the v2.0 video artifacts on disk."""
+    rid = _safe_run_id(run_id)
+    if rid is None:
+        return False
+    run_dir = _run_dir(rid)
+    return (run_dir / "temporal.json").exists() \
+        and _video_frames_dir(run_dir) is not None
+
+
+def _render_video_review_html(rid: str) -> str:
+    """v2.0-P0-4 — self-contained video-native lightbox + timeline scrubber.
+
+    Reads its data from ``/video/data/<rid>`` and frames from
+    ``/video/frame/<rid>/<frame_id>``.  Timeline shows the per-frame
+    ``score_temporal`` peaks + reel-candidate bands; dragging the
+    playhead switches frames in real time; J/K/L shuttle like DaVinci.
+    ``rid`` is pre-validated to ``[A-Za-z0-9_.-]+`` so it is safe to
+    embed in a JS string literal.
+    """
+    return _VIDEO_REVIEW_HTML.replace("__RUN_ID__", rid)
+
+
+_VIDEO_REVIEW_HTML = r"""<!DOCTYPE html>
+<html lang="zh"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PixCull · 视频审片</title>
+<style>
+:root{--bg:#0a0b0d;--panel:#14161b;--line:#23262e;--ink:#e8e8ea;
+--dim:#9aa0aa;--indigo:#6E56CF;--indigo2:#8b74e8;--pink:#EC4899;
+--keep:#34d399;--cull:#f87171;}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
+font:13px/1.5 system-ui,-apple-system,"Helvetica Neue",sans-serif}
+body{display:flex;flex-direction:column}
+header{display:flex;align-items:center;gap:12px;padding:10px 16px;
+border-bottom:1px solid var(--line);background:var(--panel)}
+header h1{font-size:14px;margin:0;font-weight:600;letter-spacing:.2px}
+header .meta{color:var(--dim);font-size:12px}
+header a{color:var(--indigo2);text-decoration:none;margin-left:auto;
+font-size:12px;border:1px solid var(--line);padding:5px 10px;border-radius:7px}
+header a:hover{border-color:var(--indigo)}
+main{flex:1;display:flex;min-height:0}
+.stage{flex:1;display:flex;flex-direction:column;min-width:0}
+.viewer-wrap{flex:1;position:relative;display:flex;align-items:center;
+justify-content:center;background:#000;overflow:hidden}
+.viewer-wrap img{max-width:100%;max-height:100%;object-fit:contain}
+.hud{position:absolute;left:14px;top:12px;background:rgba(10,11,13,.7);
+backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:10px;
+padding:10px 12px;font-variant-numeric:tabular-nums;min-width:188px}
+.hud .t{font-size:18px;font-weight:600}
+.hud .fid{color:var(--dim);font-size:11px;margin-bottom:8px}
+.bar{display:flex;align-items:center;gap:6px;margin-top:4px;font-size:11px}
+.bar .lbl{width:64px;color:var(--dim)}
+.bar .track{flex:1;height:6px;background:#1c1f27;border-radius:4px;overflow:hidden}
+.bar .fill{height:100%;border-radius:4px;background:linear-gradient(90deg,var(--indigo),var(--indigo2))}
+.bar .val{width:34px;text-align:right;color:var(--ink)}
+.badge{position:absolute;right:14px;top:12px;background:rgba(110,86,207,.16);
+border:1px solid var(--indigo);color:var(--indigo2);padding:5px 10px;
+border-radius:20px;font-size:11px;display:none}
+.transport{display:flex;align-items:center;gap:8px;padding:8px 14px;
+border-top:1px solid var(--line);background:var(--panel)}
+.transport button{background:#1b1e26;border:1px solid var(--line);color:var(--ink);
+border-radius:8px;padding:7px 12px;font-size:13px;cursor:pointer;min-width:40px}
+.transport button:hover{border-color:var(--indigo)}
+.transport button.on{background:var(--indigo);border-color:var(--indigo);color:#fff}
+.transport .spacer{flex:1}
+.transport .count{color:var(--dim);font-variant-numeric:tabular-nums}
+.scrub{padding:6px 14px 12px;background:var(--panel);border-top:1px solid var(--line)}
+.scrub svg{width:100%;height:96px;display:block;cursor:pointer;touch-action:none}
+.reel{width:320px;border-left:1px solid var(--line);background:var(--panel);
+display:flex;flex-direction:column;min-height:0}
+.reel h2{font-size:12px;text-transform:uppercase;letter-spacing:.6px;
+color:var(--dim);margin:0;padding:12px 14px;border-bottom:1px solid var(--line)}
+.reel .list{overflow:auto;flex:1}
+.cand{padding:10px 14px;border-bottom:1px solid var(--line);cursor:pointer}
+.cand:hover{background:#1a1d24}
+.cand.active{background:#1d2030;box-shadow:inset 3px 0 0 var(--indigo)}
+.cand .row1{display:flex;align-items:center;gap:8px}
+.cand .rank{background:var(--indigo);color:#fff;border-radius:6px;
+padding:1px 7px;font-size:11px;font-weight:600}
+.cand .span{color:var(--dim);font-variant-numeric:tabular-nums;font-size:12px}
+.cand .sc{margin-left:auto;font-weight:600;font-variant-numeric:tabular-nums}
+.cand .why{margin-top:5px;color:var(--ink);font-size:12px}
+.cand .acts{margin-top:7px;display:flex;gap:6px}
+.cand .acts button{flex:1;border:1px solid var(--line);background:#15171d;
+color:var(--dim);border-radius:7px;padding:4px 0;font-size:11px;cursor:pointer}
+.cand .acts button.keep.on{background:rgba(52,211,153,.18);
+border-color:var(--keep);color:var(--keep)}
+.cand .acts button.cull.on{background:rgba(248,113,113,.16);
+border-color:var(--cull);color:var(--cull)}
+.cand.culled{opacity:.5}
+footer{padding:7px 14px;border-top:1px solid var(--line);color:var(--dim);
+font-size:11px;background:var(--panel)}
+kbd{background:#1b1e26;border:1px solid var(--line);border-radius:5px;
+padding:1px 6px;font-size:11px;color:var(--ink)}
+.err{padding:48px;text-align:center;color:var(--dim)}
+</style></head>
+<body>
+<header>
+  <h1>🎬 PixCull 视频审片</h1>
+  <span class="meta" id="meta">加载中…</span>
+  <a id="backlink" href="#">← 返回照片视图</a>
+</header>
+<main id="main">
+  <div class="stage">
+    <div class="viewer-wrap">
+      <img id="viewer" alt="frame" decoding="async">
+      <div class="hud">
+        <div class="t" id="hudT">0.0s</div>
+        <div class="fid" id="hudF">—</div>
+        <div class="bar"><span class="lbl">temporal</span><span class="track"><span class="fill" id="bT"></span></span><span class="val" id="vT">—</span></div>
+        <div class="bar"><span class="lbl">motion</span><span class="track"><span class="fill" id="bM"></span></span><span class="val" id="vM">—</span></div>
+        <div class="bar"><span class="lbl">stable</span><span class="track"><span class="fill" id="bS"></span></span><span class="val" id="vS">—</span></div>
+        <div class="bar"><span class="lbl">burst</span><span class="track"><span class="fill" id="bB"></span></span><span class="val" id="vB">—</span></div>
+        <div class="bar"><span class="lbl">quality</span><span class="track"><span class="fill" id="bQ"></span></span><span class="val" id="vQ">—</span></div>
+      </div>
+      <div class="badge" id="badge">★ reel 候选</div>
+    </div>
+    <div class="transport">
+      <button id="bJ" title="后退播放 (J)">◀◀ J</button>
+      <button id="bK" title="暂停 (K)">❚❚ K</button>
+      <button id="bL" title="前进播放 (L)">L ▶▶</button>
+      <button id="bPrev" title="上一帧 (←)">◀</button>
+      <button id="bNext" title="下一帧 (→)">▶</button>
+      <span class="spacer"></span>
+      <span class="count" id="count">— / —</span>
+    </div>
+    <div class="scrub"><svg id="tl" viewBox="0 0 1000 96" preserveAspectRatio="none"></svg></div>
+  </div>
+  <aside class="reel">
+    <h2 id="reelHead">Reel 候选</h2>
+    <div class="list" id="reelList"></div>
+  </aside>
+</main>
+<footer>
+  <kbd>J</kbd> 后退 · <kbd>K</kbd> 暂停 · <kbd>L</kbd> 前进(再按加速) ·
+  <kbd>←</kbd>/<kbd>→</kbd> 单帧 · <kbd>Space</kbd> 播放/暂停 ·
+  <kbd>[</kbd>/<kbd>]</kbd> 上/下个候选 · <kbd>Home</kbd>/<kbd>End</kbd> 首/尾帧
+</footer>
+<script>
+"use strict";
+const RUN_ID = "__RUN_ID__";
+const $ = (id)=>document.getElementById(id);
+let DATA=null, FRAMES=[], REEL=[], cur=0, playing=0, speed=1, timer=null;
+let t0=0, tEnd=1, dragging=false;
+
+document.getElementById('backlink').href = '/results/'+RUN_ID;
+
+fetch('/video/data/'+encodeURIComponent(RUN_ID))
+  .then(r=>r.json()).then(init)
+  .catch(e=>{ $('main').innerHTML='<div class="err">加载失败:'+e+'</div>'; });
+
+function init(d){
+  if(!d || !d.ok){ $('main').innerHTML='<div class="err">'+((d&&d.error)||'无数据')+'</div>'; return; }
+  DATA=d;
+  const tf=(d.temporal&&d.temporal.frames)||[];
+  const mf=(d.manifest&&d.manifest.frames)||[];
+  if(tf.length){
+    FRAMES = tf.map(f=>({frame_id:f.frame_id, t:+f.timestamp_s||0,
+      sT:+f.score_temporal||0, sF:f.score_final==null?null:+f.score_final,
+      mC:+f.motion_continuity||0, tS:+f.temporal_stability||0, bE:+f.burst_event||0}));
+  } else {
+    FRAMES = mf.map(f=>({frame_id:f.frame_id, t:+f.timestamp_s||0,
+      sT:0, sF:null, mC:0, tS:0, bE:0}));
+  }
+  REEL = (d.reel||[]).slice().sort((a,b)=>(a.rank||0)-(b.rank||0));
+  if(!FRAMES.length){ $('main').innerHTML='<div class="err">该视频没有帧。</div>'; return; }
+  t0=FRAMES[0].t; tEnd=FRAMES[FRAMES.length-1].t || (t0+1);
+  const m=d.manifest||{};
+  $('meta').textContent = (m.source_name?m.source_name+' · ':'') +
+    FRAMES.length+' 帧 · '+ (m.duration_s||tEnd).toFixed(1)+'s' +
+    (m.codec?(' · '+m.codec):'') + (m.fps?(' · '+m.fps+'fps'):'');
+  $('reelHead').textContent = 'Reel 候选 ('+REEL.length+')';
+  drawTimeline(); renderReel(); show(0); bindControls();
+}
+
+function frameURL(f){ return DATA.frame_base + encodeURIComponent(f.frame_id) + '.jpg'; }
+function tx(t){ return (tEnd>t0)?(t-t0)/(tEnd-t0)*1000:0; }
+function pct(v){ return Math.round((v||0)*100); }
+
+function show(i){
+  cur=Math.max(0,Math.min(FRAMES.length-1,i));
+  const f=FRAMES[cur];
+  $('viewer').src=frameURL(f);
+  $('hudT').textContent=f.t.toFixed(2)+'s';
+  $('hudF').textContent=f.frame_id+'  ('+(cur+1)+'/'+FRAMES.length+')';
+  $('bT').style.width=pct(f.sT)+'%'; $('vT').textContent=f.sT.toFixed(2);
+  $('bM').style.width=pct(f.mC)+'%'; $('vM').textContent=f.mC.toFixed(2);
+  $('bS').style.width=pct(f.tS)+'%'; $('vS').textContent=f.tS.toFixed(2);
+  $('bB').style.width=pct(f.bE)+'%'; $('vB').textContent=f.bE.toFixed(2);
+  $('bQ').style.width=pct(f.sF)+'%'; $('vQ').textContent=(f.sF==null?'—':f.sF.toFixed(2));
+  $('count').textContent=(cur+1)+' / '+FRAMES.length;
+  updatePlayhead(); markActiveCandidate(f.t);
+  // preload neighbour
+  const nx=cur+(playing<0?-1:1);
+  if(nx>=0&&nx<FRAMES.length){ const im=new Image(); im.src=frameURL(FRAMES[nx]); }
+}
+
+function nearestFrame(t){
+  let lo=0,hi=FRAMES.length-1;
+  while(lo<hi){ const mid=(lo+hi)>>1; if(FRAMES[mid].t<t) lo=mid+1; else hi=mid; }
+  if(lo>0 && Math.abs(FRAMES[lo-1].t-t)<=Math.abs(FRAMES[lo].t-t)) return lo-1;
+  return lo;
+}
+function frameByID(id){ for(let i=0;i<FRAMES.length;i++) if(FRAMES[i].frame_id===id) return i; return -1; }
+
+/* ---- timeline ---- */
+function drawTimeline(){
+  const svg=$('tl'); const H=96; let s='';
+  // reel candidate bands (behind)
+  REEL.forEach(c=>{
+    const x1=tx(+c.start_s), x2=tx(+c.end_s);
+    const op=0.10+0.22*Math.min(1,(+c.score||0));
+    s+='<rect x="'+x1.toFixed(1)+'" y="0" width="'+Math.max(2,(x2-x1)).toFixed(1)+'" height="'+H+'" fill="#6E56CF" opacity="'+op.toFixed(2)+'"/>';
+    s+='<text x="'+(x1+3).toFixed(1)+'" y="13" fill="#b9aef2" font-size="10">#'+c.rank+'</text>';
+  });
+  // baseline grid
+  for(let g=0;g<=4;g++){ const y=H-g/4*H; s+='<line x1="0" y1="'+y+'" x2="1000" y2="'+y+'" stroke="#23262e" stroke-width="0.5"/>'; }
+  // score_temporal area
+  let area='0,'+H; let line='';
+  FRAMES.forEach((f,i)=>{ const x=tx(f.t).toFixed(1), y=(H-(f.sT||0)*H).toFixed(1);
+    area+=' '+x+','+y; line+=(i?' L':'M')+x+' '+y; });
+  area+=' 1000,'+H;
+  s+='<polygon points="'+area+'" fill="rgba(110,86,207,0.22)"/>';
+  s+='<path d="'+line+'" fill="none" stroke="#8b74e8" stroke-width="1.6"/>';
+  // score_final faint line
+  let lf=''; let any=false;
+  FRAMES.forEach((f,i)=>{ if(f.sF==null) return; any=true; const x=tx(f.t).toFixed(1), y=(H-f.sF*H).toFixed(1); lf+=(lf?' L':'M')+x+' '+y; });
+  if(any) s+='<path d="'+lf+'" fill="none" stroke="#3f4658" stroke-width="1" stroke-dasharray="3 3"/>';
+  // playhead
+  s+='<line id="ph" x1="0" y1="0" x2="0" y2="'+H+'" stroke="#EC4899" stroke-width="2"/>';
+  s+='<circle id="phd" cx="0" cy="6" r="5" fill="#EC4899"/>';
+  svg.innerHTML=s;
+  svg.addEventListener('pointerdown',seekEvt);
+  svg.addEventListener('pointermove',e=>{ if(dragging) seekEvt(e); });
+  window.addEventListener('pointerup',()=>{dragging=false;});
+}
+function seekEvt(e){
+  dragging=true;
+  const svg=$('tl'); const r=svg.getBoundingClientRect();
+  const x=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width));
+  const t=t0+x*(tEnd-t0); pause(); show(nearestFrame(t));
+}
+function updatePlayhead(){
+  const x=tx(FRAMES[cur].t);
+  const ph=$('ph'), phd=$('phd');
+  if(ph){ ph.setAttribute('x1',x); ph.setAttribute('x2',x); }
+  if(phd){ phd.setAttribute('cx',x); }
+}
+
+/* ---- reel panel ---- */
+function decKey(rank){ return 'pixcull_reel_'+RUN_ID+'_'+rank; }
+function getDec(rank){ try{return localStorage.getItem(decKey(rank))||'';}catch(e){return '';} }
+function setDec(rank,d){ try{ const cur=getDec(rank); localStorage.setItem(decKey(rank), cur===d?'':d);}catch(e){} renderReel(); }
+function renderReel(){
+  const box=$('reelList'); if(!REEL.length){ box.innerHTML='<div class="err">无候选片段</div>'; return; }
+  box.innerHTML = REEL.map(c=>{
+    const d=getDec(c.rank);
+    return '<div class="cand'+(d==='cull'?' culled':'')+'" data-rank="'+c.rank+'" data-frame="'+(c.best_frame_id||'')+'" data-start="'+c.start_s+'">'+
+      '<div class="row1"><span class="rank">#'+c.rank+'</span>'+
+      '<span class="span">'+(+c.start_s).toFixed(1)+'–'+(+c.end_s).toFixed(1)+'s</span>'+
+      '<span class="sc">'+(+c.score).toFixed(2)+'</span></div>'+
+      '<div class="why">'+(c.why||'')+'</div>'+
+      '<div class="acts"><button class="keep'+(d==='keep'?' on':'')+'" data-act="keep" data-rank="'+c.rank+'">✓ Keep</button>'+
+      '<button class="cull'+(d==='cull'?' on':'')+'" data-act="cull" data-rank="'+c.rank+'">✕ Cull</button></div></div>';
+  }).join('');
+  box.querySelectorAll('.cand').forEach(el=>{
+    el.addEventListener('click',ev=>{
+      if(ev.target.dataset.act){ setDec(+ev.target.dataset.rank, ev.target.dataset.act); ev.stopPropagation(); return; }
+      const fid=el.dataset.frame; const i=fid?frameByID(fid):-1;
+      pause(); show(i>=0?i:nearestFrame(+el.dataset.start));
+    });
+  });
+}
+function markActiveCandidate(t){
+  let active=null;
+  REEL.forEach(c=>{ if(t>=+c.start_s && t<=+c.end_s) active=c.rank; });
+  let inReel=false;
+  document.querySelectorAll('.cand').forEach(el=>{
+    const on=(+el.dataset.rank===active); el.classList.toggle('active',on); if(on) inReel=true;
+  });
+  $('badge').style.display = inReel?'block':'none';
+}
+
+/* ---- transport ---- */
+function play(dir){
+  if(playing===dir){ speed=Math.min(8,speed*2); }
+  else { playing=dir; speed=1; }
+  if(timer) clearInterval(timer);
+  if(playing!==0){
+    timer=setInterval(()=>{ const nx=cur+playing; if(nx<0||nx>=FRAMES.length){ pause(); return; } show(nx); },
+      Math.max(45, 220/speed));
+  }
+  updateTransport();
+}
+function pause(){ playing=0; speed=1; if(timer) clearInterval(timer); timer=null; updateTransport(); }
+function updateTransport(){
+  $('bJ').classList.toggle('on',playing<0); $('bL').classList.toggle('on',playing>0);
+  $('bK').classList.toggle('on',playing===0);
+  $('bJ').textContent=(playing<0?('◀◀ '+speed+'×'):'◀◀ J');
+  $('bL').textContent=(playing>0?(speed+'× ▶▶'):'L ▶▶');
+}
+function jumpCandidate(dir){
+  if(!REEL.length) return;
+  const t=FRAMES[cur].t;
+  const sorted=REEL.slice().sort((a,b)=>a.start_s-b.start_s);
+  let target=null;
+  if(dir>0){ for(const c of sorted){ if(+c.start_s>t+0.001){ target=c; break; } } if(!target) target=sorted[0]; }
+  else { for(let i=sorted.length-1;i>=0;i--){ if(+sorted[i].start_s<t-0.001){ target=sorted[i]; break; } } if(!target) target=sorted[sorted.length-1]; }
+  const i=target.best_frame_id?frameByID(target.best_frame_id):-1;
+  pause(); show(i>=0?i:nearestFrame(+target.start_s));
+}
+function bindControls(){
+  $('bJ').onclick=()=>play(-1); $('bK').onclick=pause; $('bL').onclick=()=>play(1);
+  $('bPrev').onclick=()=>{pause();show(cur-1);}; $('bNext').onclick=()=>{pause();show(cur+1);};
+  window.addEventListener('keydown',e=>{
+    if(e.metaKey||e.ctrlKey||e.altKey) return;
+    const k=e.key.toLowerCase();
+    if(k==='j'){play(-1);} else if(k==='k'){pause();} else if(k==='l'){play(1);}
+    else if(e.key==='ArrowLeft'){pause();show(cur-1);}
+    else if(e.key==='ArrowRight'){pause();show(cur+1);}
+    else if(e.key===' '){e.preventDefault(); playing?pause():play(1);}
+    else if(e.key==='Home'){pause();show(0);}
+    else if(e.key==='End'){pause();show(FRAMES.length-1);}
+    else if(e.key==='['){jumpCandidate(-1);}
+    else if(e.key===']'){jumpCandidate(1);}
+    else return;
+    e.preventDefault();
+  });
+}
+</script></body></html>"""
+
+
 def _set_run(run_id: str, **fields: object) -> None:
     """Thread-safe partial update of a run's state dict."""
     with _RUNS_LOCK:
@@ -3747,6 +4107,17 @@ class _Handler(BaseHTTPRequestHandler):
             return self._serve_image(
                 self.path[len("/full/"):], _FULL_SIZE
             )
+        # v2.0-P0-4 — video review surface.  Non-/api/v1 paths so the
+        # same-origin review page can fetch without the API-key gate.
+        #   GET /video/data/<run_id>             → {manifest, temporal, reel}
+        #   GET /video/frame/<run_id>/<frame_id> → frame JPEG
+        #   GET /video/<run_id>                  → review HTML page
+        if path.startswith("/video/data/"):
+            return self._serve_video_data(path[len("/video/data/"):])
+        if path.startswith("/video/frame/"):
+            return self._serve_video_frame(path[len("/video/frame/"):])
+        if path.startswith("/video/"):
+            return self._serve_video_review(path[len("/video/"):])
         if path.startswith("/xmp_zip/"):
             return self._serve_xmp_zip(path[len("/xmp_zip/"):])
         # v0.7-P1-4 — token-gated client delivery share page.
@@ -6689,6 +7060,107 @@ class _Handler(BaseHTTPRequestHandler):
                          "public, max-age=31536000, immutable")
         self.end_headers()
         self.wfile.write(data)
+
+    # ------------------------------------------------------------------
+    # v2.0-P0-4 — video review surface.
+    # ------------------------------------------------------------------
+    def _serve_video_data(self, tail: str) -> None:
+        """GET /video/data/<run_id> — bundle manifest + temporal + reel."""
+        rid = _safe_run_id(tail)
+        if rid is None:
+            return self._send_json(
+                400, json.dumps({"ok": False, "error": "bad run_id"}).encode())
+        run_dir = _run_dir(rid)
+        temporal_path = run_dir / "temporal.json"
+        if not temporal_path.exists():
+            return self._send_json(404, json.dumps({
+                "ok": False,
+                "error": "not a video run (no temporal.json) — run "
+                         "`pixcull video <path>` first",
+            }, ensure_ascii=False).encode())
+        frames_dir = _video_frames_dir(run_dir)
+        manifest = {}
+        if frames_dir is not None:
+            try:
+                manifest = json.loads(
+                    (frames_dir / "manifest.json").read_text("utf-8"))
+            except (OSError, ValueError):
+                manifest = {}
+        try:
+            temporal = json.loads(temporal_path.read_text("utf-8"))
+        except (OSError, ValueError):
+            temporal = {}
+        reel = []
+        reel_path = run_dir / "reel_candidates.json"
+        if reel_path.exists():
+            try:
+                reel = json.loads(reel_path.read_text("utf-8"))
+            except (OSError, ValueError):
+                reel = []
+        body = json.dumps({
+            "ok": True,
+            "run_id": rid,
+            "frame_base": f"/video/frame/{rid}/",
+            "manifest": manifest,
+            "temporal": temporal,
+            "reel": reel,
+        }, ensure_ascii=False).encode("utf-8")
+        self._send_json(200, body)
+
+    def _serve_video_frame(self, tail: str) -> None:
+        """GET /video/frame/<run_id>/<frame_id> — serve one extracted frame."""
+        tail = unquote(tail)
+        if "/" not in tail:
+            return self.send_error(400, "expected run_id/frame_id")
+        rid_raw, frame_id = tail.split("/", 1)
+        rid = _safe_run_id(rid_raw)
+        if rid is None:
+            return self.send_error(400, "bad run_id")
+        frames_dir = _video_frames_dir(_run_dir(rid))
+        if frames_dir is None:
+            return self.send_error(404, "no such video run")
+        name = Path(frame_id).name
+        if not name.lower().endswith(".jpg"):
+            name += ".jpg"
+        target = (frames_dir / name).resolve()
+        try:
+            target.relative_to(frames_dir.resolve())
+        except ValueError:
+            return self.send_error(403, "path traversal")
+        if not target.is_file():
+            return self.send_error(404, f"no frame {name}")
+        try:
+            data = target.read_bytes()
+        except OSError as exc:
+            return self.send_error(500, f"read failed: {exc}")
+        self.send_response(200)
+        self.send_header("Content-Type", "image/jpeg")
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control",
+                         "public, max-age=31536000, immutable")
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _serve_video_review(self, tail: str) -> None:
+        """GET /video/<run_id> — the video-native lightbox review page."""
+        rid = _safe_run_id(tail)
+        if rid is None:
+            return self.send_error(400, "bad run_id")
+        if not (_run_dir(rid) / "temporal.json").exists():
+            body = (
+                "<!DOCTYPE html><meta charset='utf-8'>"
+                "<title>PixCull · 视频审片</title>"
+                "<body style='background:#0a0b0d;color:#e6e6e6;"
+                "font:14px/1.6 system-ui;padding:48px;text-align:center'>"
+                "<h2>这不是一个视频 run</h2>"
+                "<p>该 run 缺少 <code>temporal.json</code>。请先运行 "
+                "<code>pixcull video &lt;path&gt;</code> 生成关键帧 + 时间评分 "
+                "+ reel 候选,再来这里审片。</p>"
+                "</body>"
+            ).encode("utf-8")
+            return self._send_html(404, body)
+        body = _render_video_review_html(rid).encode("utf-8")
+        self._send_html(200, body)
 
     def _serve_healthz(self) -> None:
         """v0.13.10 — operational health probe.

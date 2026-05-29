@@ -156,6 +156,30 @@ distinguish a 2-second highlight from a 2-second yawn.
 - 空格暂停 / 播放
 - `I/O` 标记 in / out 点 → 导出该片段
 
+> **✅ 已实现(2028 Q1)** — `scripts/serve_demo.py` 新增视频审片 surface +
+> 3 个端点。
+> - **`GET /video/<run_id>`** — 视频原生 lightbox 审片页(自包含 HTML,
+>   品牌深色 + 靛蓝)。**时间轴 scrubber V2**:SVG 画 per-frame
+>   `score_temporal` 山峰面积图 + `score_final` 虚线 + reel 候选靛蓝色带(按
+>   分数透明度,标 #rank);拖动/点击 playhead 实时切帧;HUD 显示
+>   time / frame_id + temporal/motion/stable/burst/quality 五条 mini bar。
+> - **`J/K/L` shuttle**(DaVinci 式:再按同向加速 1→8×)、`←/→` 单帧、
+>   `Space` 播放/暂停、`Home/End` 首尾帧、`[`/`]` 跳上/下个候选。
+> - **Reel 候选面板**:列出 candidates,点击跳到 best_frame,每项
+>   **Keep / Cull**(localStorage 持久化,像照片一样筛),播放到候选区间时
+>   高亮 + 角标。
+> - **`GET /video/data/<run_id>`** → `{manifest, temporal, reel, frame_base}`
+>   (非 /api/v1,避开 API-key gate,同源 fetch);**`GET /video/frame/
+>   <run_id>/<frame_id>`** → 帧 JPEG(path-traversal-safe + immutable 缓存)。
+>   run_id 经 `_safe_run_id` 校验。
+> - 测试:`tests/test_video_review.py`(13 例)— 真起 `ThreadingHTTPServer`
+>   打 3 个端点(data/frame/page)+ helpers + 路径穿越拦截 + 非视频 run 友好
+>   404。
+> - **偏差**:为零风险,采用**独立审片页**而非外科手术式改 15k 行
+>   `results.html` 照片 lightbox(两者共用视觉语言);合并进统一 lightbox 留
+>   作后续打磨。`I/O` in/out 标记 + 片段导出依赖 P1-1 auto-assembly,本期
+>   先给 Keep/Cull;从 /results 的发现入口(badge)同属后续小改。
+
 ### P1(应该做)
 
 #### v2.0-P1-1 · Reel auto-assembly(自动剪片)
