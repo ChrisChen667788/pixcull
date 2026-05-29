@@ -1,9 +1,29 @@
 # v2.1 charter — Video intelligence: learned signals + unified surface
 
-> **Status:** scoping charter, drafted 2028-Q2 right after the v2.0
-> video line shipped (P0 + P1 + P2 all landed).  Expected start: 2028
-> Q3.  Source of every item below: the honest deviations recorded in
-> the v2.0 charter + `docs/DESIGN-AUDIT-2028Q2.md`.
+> **Status: ✅ SHIPPED (2028 Q4).** All P0 + P1 + P2 landed.
+> - **P0-1** learned audio tagging — `scoring/audio_tagger.py` (ONNX
+>   backend + DSP fallback).
+> - **P0-2** discoverability — `/results` 🎬 badge + `/history` marker →
+>   `/video` + `/timeline`.
+> - **P0-3** semantic reel captions — `scoring/reel_caption.py` (optional
+>   GGUF LLM + always-on template; `why_semantic` in reel JSON).
+> - **P1-1** real `.cube` 3D LUTs — `scoring/color_grade.py`
+>   (load_cube + numpy trilinear; `luts/` drop-in).
+> - **P1-2** in/out trim + multi-video shoot reels — `io/reel_assembly.py`
+>   (`pixcull reel --add`).
+> - **P1-3** DJI SRT GPS + GPMF IMU shake — `io/gpmf.py` + blended into
+>   `video_quality.analyze_quality(imu_shake=…)`.
+> - **P2-1** RAW proxy bridge — `io/raw_proxy.py` + `pixcull proxy`.
+> - **P2-2** self-audit + next charter — `docs/DESIGN-AUDIT-2028Q4.md`
+>   (4.1/5) + `docs/ROADMAP-v2.2-charter.md`.
+>
+> Honest deviations (→ v2.2): optional ONNX/LLM/VLM backends ship no
+> bundled model (architectures + fallbacks); captions are signal-rewrite
+> not vision; the video scrubber isn't yet merged into the unified
+> results lightbox; RAW is bridge-only.
+>
+> Original scoping note: drafted 2028-Q2 after v2.0; source = the v2.0
+> honest deviations + `docs/DESIGN-AUDIT-2028Q2.md`.
 
 ## 主题
 

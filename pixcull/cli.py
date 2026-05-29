@@ -318,6 +318,32 @@ def reel(
         console.print("  [dim](--edl-only; no MP4 rendered)[/dim]")
 
 
+@app.command()
+def proxy(
+    path: Path = typer.Argument(..., exists=True, dir_okay=False,
+                                help="A RAW or video file."),
+    output: Path = typer.Option(Path("./output"), "--output", "-o",
+                                help="Where the ProRes proxy is written."),
+    transcoder: Optional[str] = typer.Option(
+        None, "--transcoder",
+        help="Vendor RAW transcoder, called as `<tool> <in> <out>` "
+             "(else PIXCULL_RAW_TRANSCODER)."),
+) -> None:
+    """v2.1 — Make a ProRes proxy (RAW → guided transcode bridge)."""
+    from pixcull.io.raw_proxy import make_proxy, raw_proxy_recipe, needs_proxy
+    from pixcull.io.video import FFmpegError
+
+    if needs_proxy(path):
+        console.print(f"[yellow]{path.name} is RAW video.[/yellow] "
+                      f"{raw_proxy_recipe(path).advice}")
+    try:
+        out = make_proxy(path, output, transcoder=transcoder)
+    except FFmpegError as exc:
+        console.print(f"[red]✗ {exc}[/red]")
+        raise typer.Exit(code=2)
+    console.print(f"[green]✓ proxy → {out}[/green]  (then: pixcull video {out})")
+
+
 # v0.13.13 — plugin management.
 plugins_app = typer.Typer(help="Manage PixCull plugins (v0.13.13).",
                            no_args_is_help=True)
