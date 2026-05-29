@@ -116,13 +116,24 @@ def video(
         None, "--rescorer-mode",
         help="off | shadow | adjudicate (see `run`).",
     ),
+    no_temporal: bool = typer.Option(
+        False, "--no-temporal",
+        help="Skip the v2.0-P0-2 temporal pass (score_temporal + "
+             "per-window aggregation).",
+    ),
+    window_s: float = typer.Option(
+        1.0, "--window-s",
+        help="Time-window length (s) for temporal aggregation.",
+    ),
 ) -> None:
-    """v2.0 — Import a video: extract keyframes, then score them.
+    """v2.0 — Import a video: extract keyframes, score + temporal-rank.
 
     The extracted ``video_frames/<id>/`` folder is scored by the same
     pipeline as a photo shoot, so the video becomes one PixCull "run"
-    (a dense burst group).  Use ``--extract-only`` to stop after frame
-    extraction.
+    (a dense burst group).  After scoring, a temporal pass adds
+    ``score_temporal`` per frame and per-window scores (``temporal.json``).
+    Use ``--extract-only`` to stop after frame extraction, or
+    ``--no-temporal`` to skip just the temporal pass.
     """
     from pixcull.io.video import import_video, FFmpegError
 
@@ -168,6 +179,24 @@ def video(
         rescorer_mode=rescorer_mode,
     )
     console.print(f"[green]✓ Run complete → {output}[/green]")
+
+    if no_temporal:
+        console.print("[dim]--no-temporal set; skipping temporal pass.[/dim]")
+        return
+
+    console.print("[bold]Temporal pass (score_temporal + windows)…[/bold]")
+    from pixcull.scoring.temporal import run_temporal_analysis
+
+    temporal = run_temporal_analysis(
+        output, result.frames_dir, window_s=window_s)
+    best = max(temporal.windows, key=lambda w: w.window_score, default=None)
+    if best is not None:
+        console.print(
+            f"[green]✓ Temporal → temporal.json[/green]  "
+            f"({len(temporal.windows)} windows; best "
+            f"[{best.start_s:.1f}–{best.end_s:.1f}s] "
+            f"score={best.window_score:.2f}, peak {best.peak_frame_id})"
+        )
 
 
 # v0.13.13 — plugin management.

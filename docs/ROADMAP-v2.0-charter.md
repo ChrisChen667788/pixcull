@@ -79,6 +79,31 @@ distinguish a 2-second highlight from a 2-second yawn.
 - 时间窗聚合:对每个 1-second window 取 `mean(score_final per frame)
   + max(score_temporal)`,产生 **per-window 总分**
 
+> **✅ 已实现(2028 Q1)** — `pixcull/scoring/temporal.py`,接到
+> `pixcull video`(scoring 后自动跑,`--no-temporal` / `--window-s` 可控)。
+> - **帧 rescorer**:P0-1 已把每帧喂现有 6 轴 pipeline;P0-2 在其
+>   `scores.csv` 之上加时间维度。
+> - **`score_temporal` = 三信号加权**(默认 motion .35 / stability .25 /
+>   burst .40,可调且归一):
+>   - **motion_continuity** — 相邻帧全局位移(numpy 相位相关)的方向相干
+>     度 `||Σv||/Σ||v||`,顺滑 pan / 锁定静帧→1,手持抖动→~0;装了
+>     OpenCV 时再 50/50 融合 Farneback dense-flow 空间相干度(可选,非硬依赖)。
+>   - **temporal_stability** — luma / 锐度 / 主体占比 / scene 标签时间序列
+>     的平滑度(`exp(-|Δ|/scale)`),惩罚曝光闪烁 / 跑焦 / 主体进出 / 硬切。
+>   - **burst_event** — salience(moment 轴 + 外观变化 + 人脸活动)对局部
+>     邻域的正向 z-score,捕捉"峰值瞬间"(笑容 / 跳跃 apex / 接吻)。
+> - **时间窗聚合**:严格按 charter 公式 `mean(score_final)+max(score_temporal)`
+>   产出 per-window 总分 + 峰值帧 id,落盘 `<output>/temporal.json`
+>   (`schema_version` + 逐帧分量 + 逐窗分 + best_window)。**这是 P0-3
+>   reel 候选检测器的直接输入。**
+> - 数值核心(`*_series` / `analyze_temporal` / `aggregate_windows`)纯
+>   numpy、无 IO,合成时序即可单测。
+> - 测试:`tests/test_temporal.py`(31 例)覆盖相位相关复原位移、平滑/抖动
+>   /静止 continuity、闪烁/切场 stability、峰值 burst、窗口分箱与公式、
+>   合成帧位移复原、假 run 目录端到端 → temporal.json。
+> - **偏差**:笑容 / 跳跃用 motion+moment 的"峰值 z-score"近似(真表情
+>   blendshape / pose 峰值检测留待精修);多视频联合窗口归 P1-2。
+
 #### v2.0-P0-3 · Reel candidate detector
 **估时**: 2 周
 
