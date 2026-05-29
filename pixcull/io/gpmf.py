@@ -26,6 +26,7 @@ is deferred (HiLight via HMMT still works where present).
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import struct
 import subprocess
@@ -139,6 +140,128 @@ def extract_gps(elements: Sequence[GpmfElement]) -> list[dict]:
                 _scan(el.children)
     _scan(elements)
     return out
+
+
+# --------------------------------------------------------------------------
+# v2.1-P1-3 — GPMF IMU (ACCL / GYRO) → shake signal
+# --------------------------------------------------------------------------
+
+def extract_imu(elements: Sequence[GpmfElement]) -> dict:
+    """Pull ACCL + GYRO 3-axis samples (SCAL-scaled) from the GPMF tree.
+
+    Returns ``{"accl": [[x,y,z],…], "gyro": [[x,y,z],…]}`` (empty lists
+    when absent)."""
+    out = {"accl": [], "gyro": []}
+
+    def _scan(els: Sequence[GpmfElement]):
+        scal: list[float] = []
+        for el in els:
+            if el.fourcc == "SCAL" and el.values:
+                scal = [float(v) if v else 1.0 for v in el.values]
+            elif el.fourcc in ("ACCL", "GYRO") and el.values:
+                key = el.fourcc.lower()
+                vals = el.values
+                div = scal[0] if len(scal) == 1 else 1.0
+                for k in range(0, len(vals) - 2, 3):
+                    g = vals[k:k + 3]
+                    if len(scal) == 3:
+                        out[key].append([g[0] / scal[0], g[1] / scal[1],
+                                         g[2] / scal[2]])
+                    else:
+                        out[key].append([g[0] / div, g[1] / div, g[2] / div])
+            if el.children:
+                _scan(el.children)
+    _scan(elements)
+    return out
+
+
+def imu_shake_series(gyro: Sequence[Sequence[float]]) -> np.ndarray:
+    """Per-sample shake proxy in ``[0,1]`` from gyro angular-velocity
+    magnitude (high, sustained rotation = handheld/airframe shake),
+    normalised by the 95th percentile."""
+    g = np.asarray(gyro, dtype=np.float64)
+    if g.ndim != 2 or g.shape[0] == 0:
+        return np.zeros(0)
+    mag = np.sqrt((g ** 2).sum(axis=1))
+    hi = float(np.percentile(mag, 95))
+    return np.clip(mag / hi, 0.0, 1.0) if hi > 0 else np.zeros_like(mag)
+
+
+# --------------------------------------------------------------------------
+# v2.1-P1-3 — DJI SRT telemetry (GPS lives in a subtitle track, not GPMF)
+# --------------------------------------------------------------------------
+
+_SRT_TIME = re.compile(r"(\d\d):(\d\d):(\d\d)[,.](\d+)\s*-->")
+
+
+def _srt_time_s(text: str) -> float | None:
+    m = _SRT_TIME.search(text)
+    if not m:
+        return None
+    h, mn, s, ms = m.groups()
+    return int(h) * 3600 + int(mn) * 60 + int(s) + int(ms) / (10 ** len(ms))
+
+
+def _num(pattern: str, body: str) -> float | None:
+    m = re.search(pattern, body, re.IGNORECASE)
+    try:
+        return float(m.group(1)) if m else None
+    except (TypeError, ValueError):
+        return None
+
+
+def parse_dji_srt(text: str) -> list[dict]:
+    """Parse a DJI telemetry ``.srt`` → ``[{t_s, lat, lon, alt_m}]``.
+
+    Handles the modern bracketed form (``[latitude: ..] [longitude: ..]
+    [rel_alt: .. abs_alt: ..]``) and the older ``GPS(lon,lat,alt)`` form.
+    """
+    out: list[dict] = []
+    blocks = re.split(r"\n\s*\n", (text or "").strip())
+    for blk in blocks:
+        lines = blk.splitlines()
+        t = next((tt for ln in lines if (tt := _srt_time_s(ln)) is not None),
+                 None)
+        body = " ".join(lines)
+        lat = _num(r"latitude\s*[:=]\s*([\-\d.]+)", body)
+        lon = _num(r"longitude\s*[:=]\s*([\-\d.]+)", body)
+        alt = (_num(r"rel_alt\s*[:=]\s*([\-\d.]+)", body)
+               or _num(r"abs_alt\s*[:=]\s*([\-\d.]+)", body))
+        if lat is None and lon is None:
+            # Older form: GPS(<lon>,<lat>,<alt>)
+            m = re.search(r"GPS\s*\(?\s*([\-\d.]+)[,\s]+([\-\d.]+)"
+                          r"(?:[,\s]+([\-\d.]+))?", body, re.IGNORECASE)
+            if m:
+                lon = float(m.group(1))
+                lat = float(m.group(2))
+                alt = float(m.group(3)) if m.group(3) else alt
+        if lat is not None and lon is not None:
+            out.append({"t_s": round(t, 3) if t is not None else None,
+                        "lat": lat, "lon": lon,
+                        "alt_m": alt if alt is not None else 0.0})
+    return out
+
+
+def extract_srt(path: Path, *, ffmpeg: str | None = None) -> str:
+    """Get a DJI clip's telemetry SRT: a sibling ``.SRT`` file if present,
+    else the first subtitle stream via ffmpeg.  ``""`` when none."""
+    path = Path(path)
+    for sib in (path.with_suffix(".srt"), path.with_suffix(".SRT")):
+        if sib.exists():
+            try:
+                return sib.read_text("utf-8", errors="replace")
+            except OSError:
+                pass
+    ff = shutil.which(ffmpeg or "ffmpeg") or ffmpeg
+    if not ff:
+        return ""
+    cmd = [ff, "-hide_banner", "-loglevel", "error", "-y", "-i", str(path),
+           "-map", "0:s:0", "-f", "srt", "pipe:1"]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, timeout=120)
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    return proc.stdout.decode("utf-8", "replace") if proc.returncode == 0 else ""
 
 
 # --------------------------------------------------------------------------
@@ -295,6 +418,58 @@ def parse_video_metadata(
     # GPMF may also carry device markers; HMMT remains the primary source.
     has_gpmf = bool(elements) or bool(highlights)
     return GpmfMeta(has_gpmf=has_gpmf, highlights_s=highlights, gps=gps)
+
+
+@dataclass
+class Telemetry:
+    """Unified action-cam telemetry: HiLight marks, GPS (GoPro GPMF *or*
+    DJI SRT), and an IMU-derived shake series."""
+    has_telemetry: bool
+    gps_source: str            # "gpmf" | "dji_srt" | ""
+    highlights_s: list[float]
+    gps: list[dict]
+    imu_shake: list[float]
+
+    def to_dict(self) -> dict:
+        return {
+            "has_telemetry": self.has_telemetry,
+            "gps_source": self.gps_source,
+            "highlights_s": self.highlights_s,
+            "gps_sample_count": len(self.gps),
+            "gps": self.gps[:1000],
+            "imu_shake_count": len(self.imu_shake),
+            "imu_shake_max": round(max(self.imu_shake), 4) if self.imu_shake else 0.0,
+        }
+
+
+def parse_telemetry(path: Path, *, ffmpeg: str | None = None) -> Telemetry:
+    """Read all available telemetry: GoPro GPMF (GPS5 + ACCL/GYRO IMU) +
+    HMMT highlights, falling back to DJI SRT for GPS when GPMF has none."""
+    path = Path(path)
+    try:
+        raw = (path.read_bytes() if path.stat().st_size < 256 * 1024 * 1024
+               else path.open("rb").read(64 * 1024 * 1024))
+    except OSError:
+        raw = b""
+    highlights = parse_hmmt_atom(raw) if raw else []
+
+    gpmd = _extract_gpmd_stream(path, ffmpeg)
+    els = parse_gpmf(gpmd) if gpmd else []
+    gps = extract_gps(els) if els else []
+    gps_source = "gpmf" if gps else ""
+    imu = extract_imu(els) if els else {"accl": [], "gyro": []}
+    imu_shake = (imu_shake_series(imu["gyro"]).tolist() if imu["gyro"] else [])
+
+    if not gps:
+        srt = extract_srt(path, ffmpeg=ffmpeg)
+        dji = parse_dji_srt(srt) if srt else []
+        if dji:
+            gps = [{"lat": d["lat"], "lon": d["lon"], "alt_m": d["alt_m"]}
+                   for d in dji]
+            gps_source = "dji_srt"
+
+    has = bool(highlights or gps or imu_shake or els)
+    return Telemetry(has, gps_source, highlights, gps, imu_shake)
 
 
 def run_gpmf_analysis(

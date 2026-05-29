@@ -138,6 +138,17 @@ def test_analyze_quality_missing_signals():
     assert r.frame_count == 3
 
 
+def test_analyze_quality_imu_shake_blend():
+    # v2.1-P1-3 — optical motion is calm, but the IMU reports rotation
+    # ⇒ the IMU shake forces a flagged shake segment.
+    ts = [0, 1, 2, 3, 4]
+    r = Q.analyze_quality(
+        ts, motion_mag=[1] * 5, motion_continuity=[1.0] * 5,
+        imu_shake=[0.0, 0.9, 0.9, 0.9, 0.0])
+    assert any(s.kind == "shake" for s in r.segments)
+    assert r.shake[1] >= 0.9
+
+
 # --------------------------------------------------------------------------
 # run_quality_analysis (real frames if present, else synthetic)
 # --------------------------------------------------------------------------

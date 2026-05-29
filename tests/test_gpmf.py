@@ -149,3 +149,105 @@ def test_parse_video_metadata_with_hmmt(tmp_path):
     meta = G.parse_video_metadata(f)
     assert meta.highlights_s == [1.0, 7.0]
     assert meta.has_gpmf is True
+
+
+# --------------------------------------------------------------------------
+# v2.1-P1-3 — GPMF IMU (ACCL / GYRO)
+# --------------------------------------------------------------------------
+
+def _imu_blob():
+    # SCAL (one divisor) + GYRO (2 samples × 3 axes int16).
+    scal = _klv("SCAL", "s", 2, 1, struct.pack(">h", 100))
+    gyro = _klv("GYRO", "s", 6, 2,
+                struct.pack(">6h", 0, 0, 0, 1000, 500, 200))
+    strm = _klv("STRM", "", 1, len(scal + gyro), scal + gyro)
+    return _klv("DEVC", "", 1, len(strm), strm)
+
+
+def test_extract_imu():
+    imu = G.extract_imu(G.parse_gpmf(_imu_blob()))
+    assert len(imu["gyro"]) == 2
+    assert imu["gyro"][0] == [0.0, 0.0, 0.0]
+    # scaled by 100: 1000/100=10, 500/100=5, 200/100=2
+    assert imu["gyro"][1] == pytest.approx([10.0, 5.0, 2.0])
+
+
+def test_imu_shake_series():
+    sh = G.imu_shake_series([[0, 0, 0], [0, 0, 0], [10, 10, 10]])
+    assert sh[0] == 0.0
+    assert sh[2] == pytest.approx(1.0)          # the high-rotation sample
+    assert G.imu_shake_series([]).size == 0
+
+
+# --------------------------------------------------------------------------
+# v2.1-P1-3 — DJI SRT telemetry
+# --------------------------------------------------------------------------
+
+_DJI_SRT_MODERN = """1
+00:00:00,000 --> 00:00:00,033
+<font size="28">FrameCnt: 1
+2024-01-01 12:00:00
+[iso : 100] [latitude: 30.123456] [longitude: 120.654321] [rel_alt: 50.0 abs_alt: 100.0] </font>
+
+2
+00:00:01,000 --> 00:00:01,033
+[latitude: 30.123500] [longitude: 120.654400] [rel_alt: 51.0] </font>
+"""
+
+_DJI_SRT_OLD = """1
+00:00:02,000 --> 00:00:02,500
+GPS(120.6,30.1,48) BAROMETER:47.8
+"""
+
+
+def test_parse_dji_srt_modern():
+    pts = G.parse_dji_srt(_DJI_SRT_MODERN)
+    assert len(pts) == 2
+    assert pts[0]["lat"] == pytest.approx(30.123456)
+    assert pts[0]["lon"] == pytest.approx(120.654321)
+    assert pts[0]["alt_m"] == pytest.approx(50.0)
+    assert pts[0]["t_s"] == pytest.approx(0.0)
+    assert pts[1]["t_s"] == pytest.approx(1.0)
+
+
+def test_parse_dji_srt_old_gps_form():
+    pts = G.parse_dji_srt(_DJI_SRT_OLD)
+    assert len(pts) == 1
+    assert pts[0]["lon"] == pytest.approx(120.6)   # GPS(lon,lat,alt)
+    assert pts[0]["lat"] == pytest.approx(30.1)
+    assert pts[0]["alt_m"] == pytest.approx(48.0)
+
+
+def test_parse_dji_srt_garbage_safe():
+    assert G.parse_dji_srt("not an srt") == []
+    assert G.parse_dji_srt("") == []
+
+
+def test_srt_time_parse():
+    assert G._srt_time_s("00:01:30,500 --> 00:01:31,000") == pytest.approx(90.5)
+    assert G._srt_time_s("no time here") is None
+
+
+# --------------------------------------------------------------------------
+# parse_telemetry (unified)
+# --------------------------------------------------------------------------
+
+def test_parse_telemetry_dji_srt(tmp_path):
+    # A non-GoPro mp4 + a sibling .SRT ⇒ GPS from DJI SRT.
+    f = tmp_path / "DJI_0001.mp4"
+    f.write_bytes(_atom("ftyp", b"isom" + b"\x00" * 8))
+    (tmp_path / "DJI_0001.srt").write_text(_DJI_SRT_MODERN, encoding="utf-8")
+    tel = G.parse_telemetry(f)
+    assert tel.gps_source == "dji_srt"
+    assert len(tel.gps) == 2
+    assert tel.has_telemetry is True
+    d = tel.to_dict()
+    assert d["gps_source"] == "dji_srt" and d["gps_sample_count"] == 2
+
+
+def test_parse_telemetry_none(tmp_path):
+    f = tmp_path / "plain.mp4"
+    f.write_bytes(_atom("ftyp", b"isom" + b"\x00" * 8))
+    tel = G.parse_telemetry(f)
+    assert tel.gps == [] and tel.gps_source == ""
+    assert tel.has_telemetry is False

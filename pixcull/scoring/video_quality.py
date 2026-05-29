@@ -236,13 +236,28 @@ def analyze_quality(
     sharpness: Sequence[float] | None = None,
     motion_mag: Sequence[float] | None = None,
     motion_continuity: Sequence[float] | None = None,
+    imu_shake: Sequence[float] | None = None,
     min_dur_s: float = DEFAULT_MIN_DUR_S,
 ) -> QualityResult:
-    """Compute per-frame shake/blur + flagged segments (pure; no IO)."""
+    """Compute per-frame shake/blur + flagged segments (pure; no IO).
+
+    ``imu_shake`` (v2.1-P1-3): an optional per-frame gyro-derived shake
+    signal (e.g. resampled from GoPro/DJI IMU) blended into the visual
+    shake via ``max`` — catches rotational shake an optical-flow estimate
+    on a low-texture frame can miss.
+    """
     n = len(timestamps)
     shake = (shake_series(motion_mag, motion_continuity)
              if motion_mag is not None and motion_continuity is not None
              else np.zeros(n))
+    if imu_shake is not None:
+        imu = np.asarray(list(imu_shake), dtype=np.float64)
+        if imu.shape[0] != n:                       # align to frame count
+            fixed = np.zeros(n)
+            fixed[:min(n, imu.shape[0])] = imu[:n]
+            imu = fixed
+        shake = np.maximum(np.asarray(shake, dtype=np.float64),
+                           np.clip(imu, 0.0, 1.0))
     blur = blur_series(sharpness) if sharpness is not None else np.zeros(n)
     segs = (detect_segments(shake, timestamps, kind="shake",
                             thresh=SHAKE_THRESH, min_dur_s=min_dur_s)
