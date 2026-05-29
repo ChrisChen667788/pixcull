@@ -426,10 +426,17 @@ def run_reel_detection(
         n_min=n_min, n_max=n_max,
     )
 
+    # v2.1-P0-3 — add a fluent `why_semantic` per candidate (optional LLM,
+    # deterministic template fallback — always succeeds).
+    dicts = [c.to_dict() for c in candidates]
+    try:
+        from pixcull.scoring.reel_caption import enrich
+        enrich(dicts)
+    except Exception:  # pragma: no cover - captioning is best-effort
+        pass
     if write:
         (output_dir / "reel_candidates.json").write_text(
-            json.dumps([c.to_dict() for c in candidates],
-                       indent=2, ensure_ascii=False),
+            json.dumps(dicts, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
     return candidates
