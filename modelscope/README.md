@@ -209,6 +209,16 @@ Lightbox 按 `A` 弹 6 轴选择条 → 点轴名 → 该轴的 Integrated
 Gradients 显著度图叠在原图(0.5 alpha,indigo→pink 渐变)。
 Heatmap PNG 缓存到 `output/attribution/<axis>/<sha>.png`。
 
+### 🎬 视频审片 · 时间线 scrubber V2(v2.0-P0-4)
+
+![视频审片 lightbox · score_temporal 山峰时间轴 + reel 候选带 + J/K/L shuttle](docs/screenshots/18-video-review.png)
+
+`pixcull video <片子.mp4>` 抽关键帧 → 跑 6 轴评分 → 加时间维评分
+(`score_temporal` = 动作连续性 + 时间稳定性 + 突发峰值)→ 找 reel
+候选,然后 `/video/<run_id>` 视频原生审片:时间轴画每帧
+`score_temporal` 山峰 + 候选靛蓝带,拖动播放头实时切帧,`J/K/L`
+倒退/暂停/前进(DaVinci 式),右栏候选像照片一样 Keep / Cull。
+
 ---
 
 ## 为什么是 PixCull
