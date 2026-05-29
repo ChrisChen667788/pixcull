@@ -23,20 +23,28 @@ this repo.  Read it before each session.
 
 The project is mirrored to ModelScope (`haozi667788/pixcull`).  **Every
 version that changes the README, docs, or screenshots must keep both in
-lockstep:**
+lockstep.**  The sync is now **self-contained** (assets hosted ON
+ModelScope, not github links):
 
 1. Update **both** `README.md` (full) and `modelscope/README.md`
-   (curated/condensed, same features + same screenshot set).  They need
-   not be byte-identical, but must cover the **same features and
-   reference the same `docs/screenshots/NN-*.png`**.
-2. Commit, then **`git -C <repo> push origin main`** — the ModelScope
-   README rewrites image paths to
-   `raw.githubusercontent.com/ChrisChen667788/pixcull/main/docs/...`, so
-   screenshots only render *after* the repo is pushed to GitHub `main`.
-3. **`make modelscope-sync`** (uses `pixcull/.venv`; creds in
-   `~/.modelscope/`).  Preview first with `make modelscope-dryrun`.
-4. Sanity-check a new screenshot URL returns HTTP 200 on
-   `raw.githubusercontent.com/.../main/docs/screenshots/<file>`.
+   (curated/condensed, same features + same `docs/screenshots/NN-*.png`).
+2. **`make modelscope-sync`** (uses `pixcull/.venv`; creds in
+   `~/.modelscope/`; preview with `make modelscope-dryrun`).  Default
+   self-contained mode: keeps relative `docs/...` paths, **fixes
+   `.gitattributes` (README→text, images→LFS), uploads the README, then
+   hosts every referenced asset on ModelScope.**
+3. Sanity-check the README renders as text (not an LFS pointer) and a
+   screenshot resolves:
+   `curl -sIL https://www.modelscope.cn/models/haozi667788/pixcull/resolve/master/README.md`
+   (must NOT be a `cdn-lfs` redirect).
+
+**LFS gotcha (why this matters):** ModelScope's `HubApi.upload_file`
+auto-adds a per-file `<path> filter=lfs` line to `.gitattributes`, which
+turned README.md into an LFS object the model-card viewer renders as a
+raw `version https://git-lfs.github.com/spec/v1 …` pointer.  The sync
+script now strips `README.md`/`*.md`/`docs/` LFS rules and pins
+`README.md text` before each upload.  Never use `--github-links` unless
+you specifically want CDN-linked images instead of ModelScope-hosted.
 
 New screenshots: next free number is **19** (01–18 used; 17 =
 attribution-heatmap, 18 = video-review).

@@ -63,11 +63,11 @@ for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
     sleep 0.5
 done
 
-# Issue a share token for the portfolio screenshot (real photographer
-# names mirror what the user actually had — keeps the screenshot
-# realistic without hard-coding fake content).
+# Issue a share token for the portfolio screenshot.  The real demo set
+# is a LANDSCAPE shoot (Xiapu / 霞浦 coastal mudflats), not a wedding —
+# label it as 风光摄影 so the client-facing page reads correctly.
 SHARE_TOKEN=$(curl -sS -X POST -H "Content-Type: application/json" \
-                -d '{"photographer":"ChrisChen Studio","client":"婚礼客户","event":"川西风光 · 真机 demo","event_date":"2026-06-15"}' \
+                -d '{"photographer":"ChrisChen Studio","client":"风光摄影","event":"霞浦风光 · 真机 demo","event_date":"2026-06-15"}' \
                 "http://127.0.0.1:$PORT/share/$RUN_ID/issue" \
               | "$PYTHON" -c "import json,sys; d=json.load(sys.stdin); print(d.get('token',''))" 2>/dev/null \
               || echo "")

@@ -136,6 +136,68 @@ def _resolve_token(arg_token: str | None) -> str | None:
     return None
 
 
+def _fix_gitattributes(api, repo_id: str, branch: str) -> None:
+    """Ensure README/docs render as TEXT (not LFS pointers) and images
+    are LFS.  ModelScope's ``upload_file`` auto-adds a per-file
+    ``<path> filter=lfs`` rule, which turns README.md into an LFS object
+    the model-card viewer can't render — strip those and pin text/LFS
+    rules instead."""
+    import urllib.request
+    base = (f"https://www.modelscope.cn/models/{repo_id}"
+            f"/resolve/{branch}/.gitattributes")
+    try:
+        cur = urllib.request.urlopen(base, timeout=30).read().decode("utf-8")
+    except Exception:
+        cur = ""
+    keep = [ln for ln in cur.splitlines()
+            if ln.strip()
+            and not ln.startswith("README.md ")
+            and not ln.startswith("*.md ")
+            and not ln.startswith("docs/")]
+    keep += [
+        "# pixcull — docs render as text; images hosted via LFS",
+        "*.md text",
+        "README.md text",
+        "*.png filter=lfs diff=lfs merge=lfs -text",
+        "*.jpg filter=lfs diff=lfs merge=lfs -text",
+        "*.jpeg filter=lfs diff=lfs merge=lfs -text",
+        "*.webp filter=lfs diff=lfs merge=lfs -text",
+    ]
+    api.upload_file(
+        path_or_fileobj=("\n".join(keep) + "\n").encode("utf-8"),
+        path_in_repo=".gitattributes", repo_id=repo_id, repo_type="model",
+        commit_message="chore: README/docs as text, images via LFS",
+        revision=branch, disable_tqdm=True)
+    print("[modelscope-sync] ✓ .gitattributes fixed (README → text)",
+          file=sys.stderr)
+
+
+def _upload_referenced_assets(api, repo_id: str, branch: str,
+                              readme_text: str) -> int:
+    """Upload every ``docs/...(png|svg|jpg|jpeg|webp)`` the README
+    references so the relative paths resolve on ModelScope itself."""
+    paths = sorted(set(re.findall(
+        r"docs/[A-Za-z0-9/_.-]+\.(?:png|svg|jpe?g|webp)", readme_text)))
+    n = 0
+    for rel in paths:
+        local = REPO_ROOT / rel
+        if not local.exists():
+            print(f"[modelscope-sync]   skip (missing): {rel}", file=sys.stderr)
+            continue
+        try:
+            api.upload_file(
+                path_or_fileobj=str(local), path_in_repo=rel,
+                repo_id=repo_id, repo_type="model", revision=branch,
+                commit_message=f"host {rel}", disable_tqdm=True)
+            n += 1
+        except Exception as exc:  # noqa: BLE001
+            print(f"[modelscope-sync]   asset upload failed {rel}: {exc}",
+                  file=sys.stderr)
+    print(f"[modelscope-sync] ✓ hosted {n}/{len(paths)} referenced assets",
+          file=sys.stderr)
+    return n
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         description="Sync modelscope/README.md → ModelScope repo."
@@ -168,8 +230,15 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.add_argument(
         "--no-rewrite", action="store_true",
-        help="Skip the docs/* → raw.githubusercontent.com URL rewrite "
-             "(use when you've already done the rewrite manually)"
+        help="(legacy alias; default is already self-contained)"
+    )
+    p.add_argument(
+        "--github-links", action="store_true",
+        help="Rewrite docs/* image paths to raw.githubusercontent.com "
+             "instead of hosting them on ModelScope.  Default (off) is "
+             "SELF-CONTAINED: keep relative paths + upload the referenced "
+             "assets to ModelScope + fix .gitattributes so README renders "
+             "as text (not an LFS pointer)."
     )
     args = p.parse_args(argv)
 
@@ -180,14 +249,18 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     original = args.readme_source.read_text(encoding="utf-8")
 
-    # Step 2 — rewrite relative image paths to absolute GitHub raw URLs.
-    if args.no_rewrite:
-        rewritten = original
-    else:
+    # Step 2 — image paths.  Default is SELF-CONTAINED: keep relative
+    # `docs/...` paths and host the assets on ModelScope (Step 6).  Only
+    # rewrite to GitHub raw URLs when --github-links is explicitly asked.
+    if args.github_links:
         rewritten = _rewrite_relative_paths(original, GH_RAW_BASE)
-    n_rewrites = rewritten.count(GH_RAW_BASE) - original.count(GH_RAW_BASE)
-    print(f"[modelscope-sync] {n_rewrites} relative image paths rewritten",
-          file=sys.stderr)
+        n_rewrites = rewritten.count(GH_RAW_BASE) - original.count(GH_RAW_BASE)
+        print(f"[modelscope-sync] {n_rewrites} paths → raw.githubusercontent",
+              file=sys.stderr)
+    else:
+        rewritten = original
+        print("[modelscope-sync] self-contained mode: relative paths kept, "
+              "assets hosted on ModelScope", file=sys.stderr)
 
     # Step 3 — dry-run path: write the rewritten README to /tmp + bail.
     if args.dry_run:
@@ -234,6 +307,12 @@ def main(argv: list[str] | None = None) -> int:
     # `upload_file` accepts bytes via `path_or_fileobj` (avoids the
     # local-file roundtrip; we want to upload the REWRITTEN content,
     # not the source).
+    #
+    # Self-contained mode (default): fix .gitattributes FIRST so the
+    # README commits as text rather than an LFS pointer, then upload the
+    # README, then host the referenced assets.
+    if not args.github_links:
+        _fix_gitattributes(api, args.repo_id, args.branch)
     try:
         commit = api.upload_file(
             path_or_fileobj=rewritten.encode("utf-8"),
@@ -251,11 +330,14 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     # `commit` is a CommitInfo with .commit_url / .commit_message
-    print(f"[modelscope-sync] ✓ uploaded to {args.repo_id}#{args.branch}",
+    print(f"[modelscope-sync] ✓ uploaded README to {args.repo_id}#{args.branch}",
           file=sys.stderr)
     if hasattr(commit, "commit_url") and commit.commit_url:
         print(f"[modelscope-sync] view at: {commit.commit_url}",
               file=sys.stderr)
+
+    if not args.github_links:
+        _upload_referenced_assets(api, args.repo_id, args.branch, rewritten)
     return 0
 
 
