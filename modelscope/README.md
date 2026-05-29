@@ -218,6 +218,11 @@ Heatmap PNG 缓存到 `output/attribution/<axis>/<sha>.png`。
 候选,然后 `/video/<run_id>` 视频原生审片:时间轴画每帧
 `score_temporal` 山峰 + 候选靛蓝带,拖动播放头实时切帧,`J/K/L`
 倒退/暂停/前进(DaVinci 式),右栏候选像照片一样 Keep / Cull。
+头部 🎨 调色下拉(v2.0-P2-2)一键套用胶片预置(Fuji Eterna / Kodak
+Vision3 / Arri 709A / Teal-Orange / B&W),主画面 + 每个候选缩略图实时
+参数化预览(仅预览,不改原片)。
+
+![视频审片 · 🎨 调色预览 + 每候选 LUT 缩略图](docs/screenshots/19-video-grade.png)
 
 ---
 

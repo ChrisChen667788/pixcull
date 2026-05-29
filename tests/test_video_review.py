@@ -190,6 +190,28 @@ def test_endpoint_frame_traversal_blocked(live_server):
     assert status in (403, 404)
 
 
+def test_endpoint_video_data_has_grades(live_server):
+    # v2.0-P2-2 — the data bundle advertises the colour-grade presets.
+    status, _, body = _get(live_server, "/video/data/vidrun")
+    data = json.loads(body)
+    ids = {g["id"] for g in data.get("grades", [])}
+    assert "none" in ids and "kodak_vision3" in ids
+
+
+def test_endpoint_frame_grade_applies(live_server):
+    # v2.0-P2-2 — ?grade=<preset> returns a different (still-JPEG) image.
+    _, _, plain = _get(live_server, "/video/frame/vidrun/frame_000001")
+    s, ctype, graded = _get(
+        live_server, "/video/frame/vidrun/frame_000001?grade=kodak_vision3")
+    assert s == 200 and ctype == "image/jpeg"
+    assert graded[:2] == b"\xff\xd8"
+    assert graded != plain
+    # ?w= thumb is smaller than the full graded frame.
+    _, _, thumb = _get(
+        live_server, "/video/frame/vidrun/frame_000001?grade=bw&w=64")
+    assert len(thumb) < len(plain)
+
+
 def test_endpoint_review_page(live_server):
     status, ctype, body = _get(live_server, "/video/vidrun")
     assert status == 200

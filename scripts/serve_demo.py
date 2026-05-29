@@ -722,9 +722,15 @@ header{display:flex;align-items:center;gap:12px;padding:10px 16px;
 border-bottom:1px solid var(--line);background:var(--panel)}
 header h1{font-size:14px;margin:0;font-weight:600;letter-spacing:.2px}
 header .meta{color:var(--dim);font-size:12px}
-header a{color:var(--indigo2);text-decoration:none;margin-left:auto;
+header a{color:var(--indigo2);text-decoration:none;margin-left:10px;
 font-size:12px;border:1px solid var(--line);padding:5px 10px;border-radius:7px}
 header a:hover{border-color:var(--indigo)}
+.gradewrap{margin-left:auto;color:var(--dim);font-size:12px;
+display:flex;align-items:center;gap:6px}
+.gradewrap select{background:#1b1e26;color:var(--ink);
+border:1px solid var(--line);border-radius:7px;padding:5px 8px;font-size:12px}
+.cand .thumb{width:100%;height:64px;object-fit:cover;border-radius:6px;
+margin-top:7px;background:#1b1e26;border:1px solid var(--line)}
 main{flex:1;display:flex;min-height:0}
 .stage{flex:1;display:flex;flex-direction:column;min-width:0}
 .viewer-wrap{flex:1;position:relative;display:flex;align-items:center;
@@ -785,6 +791,9 @@ padding:1px 6px;font-size:11px;color:var(--ink)}
 <header>
   <h1>🎬 PixCull 视频审片</h1>
   <span class="meta" id="meta">加载中…</span>
+  <label class="gradewrap" title="调色预览(仅预览,不改原片)">🎨
+    <select id="grade"><option value="none">Original</option></select>
+  </label>
   <a id="backlink" href="#">← 返回照片视图</a>
 </header>
 <main id="main">
@@ -827,7 +836,7 @@ padding:1px 6px;font-size:11px;color:var(--ink)}
 "use strict";
 const RUN_ID = "__RUN_ID__";
 const $ = (id)=>document.getElementById(id);
-let DATA=null, FRAMES=[], REEL=[], cur=0, playing=0, speed=1, timer=null;
+let DATA=null, FRAMES=[], REEL=[], cur=0, playing=0, speed=1, timer=null, GRADE='none';
 let t0=0, tEnd=1, dragging=false;
 
 document.getElementById('backlink').href = '/results/'+RUN_ID;
@@ -857,10 +866,15 @@ function init(d){
     FRAMES.length+' 帧 · '+ (m.duration_s||tEnd).toFixed(1)+'s' +
     (m.codec?(' · '+m.codec):'') + (m.fps?(' · '+m.fps+'fps'):'');
   $('reelHead').textContent = 'Reel 候选 ('+REEL.length+')';
+  // v2.0-P2-2 — populate the colour-grade dropdown.
+  const sel=$('grade'); const grades=d.grades||[{id:'none',label:'Original'}];
+  sel.innerHTML=grades.map(g=>'<option value="'+g.id+'">'+g.label+'</option>').join('');
+  sel.onchange=()=>{ GRADE=sel.value; show(cur); renderReel(); };
   drawTimeline(); renderReel(); show(0); bindControls();
 }
 
-function frameURL(f){ return DATA.frame_base + encodeURIComponent(f.frame_id) + '.jpg'; }
+function frameURL(f, w){ let u=DATA.frame_base+encodeURIComponent(f.frame_id)+'.jpg'; const q=[]; if(GRADE&&GRADE!=='none')q.push('grade='+encodeURIComponent(GRADE)); if(w)q.push('w='+w); return u+(q.length?('?'+q.join('&')):''); }
+function frameURLById(fid, w){ return frameURL({frame_id:fid}, w); }
 function tx(t){ return (tEnd>t0)?(t-t0)/(tEnd-t0)*1000:0; }
 function pct(v){ return Math.round((v||0)*100); }
 
@@ -947,6 +961,7 @@ function renderReel(){
       '<span class="span">'+(+c.start_s).toFixed(1)+'–'+(+c.end_s).toFixed(1)+'s</span>'+
       '<span class="sc">'+(+c.score).toFixed(2)+'</span></div>'+
       '<div class="why">'+(c.why||'')+'</div>'+
+      (c.best_frame_id?('<img class="thumb" loading="lazy" src="'+frameURLById(c.best_frame_id,240)+'" alt="preview">'):'')+
       '<div class="acts"><button class="keep'+(d==='keep'?' on':'')+'" data-act="keep" data-rank="'+c.rank+'">✓ Keep</button>'+
       '<button class="cull'+(d==='cull'?' on':'')+'" data-act="cull" data-rank="'+c.rank+'">✕ Cull</button></div></div>';
   }).join('');
@@ -7323,6 +7338,11 @@ class _Handler(BaseHTTPRequestHandler):
                 reel = json.loads(reel_path.read_text("utf-8"))
             except (OSError, ValueError):
                 reel = []
+        try:
+            from pixcull.scoring.color_grade import list_presets
+            grades = list_presets()
+        except Exception:
+            grades = [{"id": "none", "label": "Original"}]
         body = json.dumps({
             "ok": True,
             "run_id": rid,
@@ -7330,6 +7350,7 @@ class _Handler(BaseHTTPRequestHandler):
             "manifest": manifest,
             "temporal": temporal,
             "reel": reel,
+            "grades": grades,
         }, ensure_ascii=False).encode("utf-8")
         self._send_json(200, body)
 
@@ -7359,11 +7380,28 @@ class _Handler(BaseHTTPRequestHandler):
             data = target.read_bytes()
         except OSError as exc:
             return self.send_error(500, f"read failed: {exc}")
+        # v2.0-P2-2 — optional ?grade=<preset> film look + ?w=<px> proxy
+        # for the scrubber's per-candidate preview thumbnails.
+        from urllib.parse import parse_qs, urlsplit
+        qs = parse_qs(urlsplit(self.path).query)
+        grade = (qs.get("grade") or ["none"])[0]
+        try:
+            want_w = int((qs.get("w") or ["0"])[0])
+        except (TypeError, ValueError):
+            want_w = 0
+        if (grade and grade != "none") or want_w > 0:
+            try:
+                from pixcull.scoring.color_grade import grade_image_bytes
+                data = grade_image_bytes(
+                    data, grade, max_w=want_w or None)
+            except Exception:  # pragma: no cover - never fail the frame
+                pass
         self.send_response(200)
         self.send_header("Content-Type", "image/jpeg")
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control",
                          "public, max-age=31536000, immutable")
+        self.send_header("Vary", "Accept")
         self.end_headers()
         self.wfile.write(data)
 
