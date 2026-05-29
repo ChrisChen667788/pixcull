@@ -484,6 +484,65 @@ def assemble_shoot(
                           crossfade_s=crossfade_s, edl_only=edl_only)
 
 
+# --------------------------------------------------------------------------
+# v2.2-P1-3 — one-click delivery export presets
+# --------------------------------------------------------------------------
+
+# preset id → (width, height, label)
+EXPORT_PRESETS: dict[str, tuple[int, int, str]] = {
+    "reels":  (1080, 1920, "Reels / Shorts · 9:16"),
+    "square": (1080, 1080, "Square · 1:1"),
+    "wide":   (1920, 1080, "Wide · 16:9"),
+}
+
+
+def list_export_presets() -> list[dict]:
+    return [{"id": k, "label": v[2], "w": v[0], "h": v[1]}
+            for k, v in EXPORT_PRESETS.items()]
+
+
+def export_preset(
+    src_mp4: Path,
+    output_dir: Path,
+    preset: str,
+    *,
+    loudnorm: bool = True,
+    ffmpeg: str | None = None,
+    ffprobe: str | None = None,
+) -> Path:
+    """Re-frame a reel to a delivery aspect (scale-to-cover + centre-crop)
+    with EBU-R128 loudness-normalised audio.  ``preset`` ∈ EXPORT_PRESETS."""
+    if preset not in EXPORT_PRESETS:
+        raise ValueError(f"unknown preset {preset!r}; "
+                         f"choose from {sorted(EXPORT_PRESETS)}")
+    src_mp4 = Path(src_mp4)
+    w, h, _ = EXPORT_PRESETS[preset]
+    out_dir = Path(output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out = out_dir / f"{src_mp4.stem}.{preset}.mp4"
+    has_audio = (probe_video(src_mp4, ffprobe=ffprobe).audio_track_count or 0) > 0
+    ffmpeg_bin = shutil.which(ffmpeg or "ffmpeg") or ffmpeg
+    if not ffmpeg_bin:
+        raise FFmpegError("ffmpeg not found on PATH")
+    vf = (f"scale={w}:{h}:force_original_aspect_ratio=increase,"
+          f"crop={w}:{h},setsar=1")
+    cmd = [ffmpeg_bin, "-hide_banner", "-loglevel", "error", "-y",
+           "-i", str(src_mp4), "-vf", vf]
+    if has_audio and loudnorm:
+        cmd += ["-af", "loudnorm=I=-16:TP=-1.5:LRA=11"]
+    cmd += ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "veryfast"]
+    cmd += (["-c:a", "aac", "-b:a", "160k"] if has_audio else ["-an"])
+    cmd += [str(out)]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
+    except (OSError, subprocess.TimeoutExpired) as exc:  # pragma: no cover
+        raise FFmpegError(f"ffmpeg export failed: {exc}")
+    if proc.returncode != 0:
+        raise FFmpegError(
+            f"ffmpeg returned {proc.returncode}: {proc.stderr.strip()[:300]}")
+    return out
+
+
 def assemble_from_run(
     run_dir: Path,
     *,

@@ -268,3 +268,31 @@ def test_assemble_shoot_from_runs(tmp_path):
 def test_assemble_shoot_no_usable_runs(tmp_path):
     with pytest.raises(ValueError, match="no usable runs"):
         A.assemble_shoot([tmp_path / "empty"], tmp_path)
+
+
+# --------------------------------------------------------------------------
+# v2.2-P1-3 — delivery export presets
+# --------------------------------------------------------------------------
+
+def test_list_export_presets():
+    ids = {p["id"] for p in A.list_export_presets()}
+    assert {"reels", "square", "wide"} <= ids
+    reels = next(p for p in A.list_export_presets() if p["id"] == "reels")
+    assert (reels["w"], reels["h"]) == (1080, 1920)
+
+
+def test_export_preset_unknown_raises(tmp_path):
+    with pytest.raises(ValueError, match="unknown preset"):
+        A.export_preset(tmp_path / "x.mp4", tmp_path, "tiktok")
+
+
+@pytestmark_ff
+def test_export_preset_reframes_to_vertical(tmp_path):
+    src = _make_clip(tmp_path / "wide.mp4", duration=3)  # 320×240 landscape
+    out = A.export_preset(src, tmp_path / "exp", "reels")
+    assert out.exists() and out.name == "wide.reels.mp4"
+    probe = subprocess.run([
+        "ffprobe", "-v", "error", "-select_streams", "v:0",
+        "-show_entries", "stream=width,height", "-of", "csv=p=0:s=x",
+        str(out)], capture_output=True, text=True, timeout=30)
+    assert probe.stdout.strip() == "1080x1920"     # centre-cropped 9:16

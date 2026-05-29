@@ -266,14 +266,29 @@ def reel(
              "SHOOT reel (repeatable). Each run contributes its top "
              "candidates across --target-s.",
     ),
+    export: Optional[str] = typer.Option(
+        None, "--export",
+        help="v2.2 — also re-frame the reel to a delivery preset "
+             "(reels | square | wide) with loudness-normalised audio.",
+    ),
 ) -> None:
     """v2.0/v2.1 — Auto-assemble reel candidates into one cut + EDL.
 
     Single run by default; pass --add <run> (repeatable) to stitch a
     shoot-level reel across multiple clips.
     """
-    from pixcull.io.reel_assembly import assemble_from_run, assemble_shoot
+    from pixcull.io.reel_assembly import (
+        assemble_from_run, assemble_shoot, export_preset)
     from pixcull.io.video import FFmpegError
+
+    def _maybe_export(result) -> None:
+        if not export or not getattr(result, "mp4_path", None):
+            return
+        try:
+            ep = export_preset(result.mp4_path, result.mp4_path.parent, export)
+            console.print(f"  Export ({export}): {ep}")
+        except (FFmpegError, ValueError) as exc:
+            console.print(f"  [yellow]export skipped: {exc}[/yellow]")
 
     # v2.1-P1-2 — multi-run shoot reel.
     if add:
@@ -291,6 +306,7 @@ def reel(
         console.print(f"  EDL: {result.edl_path}")
         if result.mp4_path:
             console.print(f"  MP4: {result.mp4_path}")
+        _maybe_export(result)
         return
 
     rank_list = None
@@ -314,6 +330,7 @@ def reel(
     console.print(f"  EDL: {result.edl_path}")
     if result.mp4_path:
         console.print(f"  MP4: {result.mp4_path}")
+        _maybe_export(result)
     else:
         console.print("  [dim](--edl-only; no MP4 rendered)[/dim]")
 
