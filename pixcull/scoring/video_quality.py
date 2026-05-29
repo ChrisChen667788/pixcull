@@ -268,24 +268,50 @@ def analyze_quality(
                          blur=list(map(float, blur)), segments=segs)
 
 
+def _imu_shake_for_run(frames_dir: Path, timestamps: Sequence[float]):
+    """v2.2-P1-1 — best-effort: pull GoPro/DJI gyro shake from the run's
+    source video and resample it onto the frame timestamps.  Returns None
+    when there's no telemetry (the common case)."""
+    import json as _json
+    try:
+        manifest = _json.loads((frames_dir / "manifest.json").read_text("utf-8"))
+        source = manifest.get("source_path")
+        duration = float(manifest.get("duration_s") or 0.0)
+        if not source or not Path(source).exists() or duration <= 0:
+            return None
+        from pixcull.io.gpmf import parse_telemetry, resample_to_frames
+        tel = parse_telemetry(Path(source))
+        if not tel.imu_shake:
+            return None
+        return resample_to_frames(tel.imu_shake, duration, timestamps).tolist()
+    except Exception:        # telemetry is optional; never break the run
+        return None
+
+
 def run_quality_analysis(
     output_dir: Path,
     frames_dir: Path | None = None,
     *,
     write: bool = True,
+    read_imu: bool = True,
 ) -> QualityResult:
-    """Read a video run's frames, flag shake/blur, write ``quality_flags.json``."""
+    """Read a video run's frames, flag shake/blur, write ``quality_flags.json``.
+
+    v2.2-P1-1: when the source carries GoPro/DJI IMU, its gyro shake is
+    auto-resampled onto the frames and blended into the shake signal."""
     from pixcull.scoring.temporal import load_run_records, _resolve_frames_dir
     output_dir = Path(output_dir)
     frames_dir = _resolve_frames_dir(output_dir, frames_dir)
     records, paths = load_run_records(output_dir, frames_dir)
     timestamps = [r.get("timestamp_s", 0.0) for r in records]
     q = frame_quality_series(paths)
+    imu_shake = _imu_shake_for_run(frames_dir, timestamps) if read_imu else None
     result = analyze_quality(
         timestamps,
         sharpness=q["sharpness"],
         motion_mag=q["motion_mag"],
         motion_continuity=q["motion_continuity"],
+        imu_shake=imu_shake,
     )
     if write:
         (output_dir / "quality_flags.json").write_text(

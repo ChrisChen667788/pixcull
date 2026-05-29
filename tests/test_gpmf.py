@@ -179,6 +179,21 @@ def test_imu_shake_series():
     assert G.imu_shake_series([]).size == 0
 
 
+def test_resample_to_frames():
+    # 10 samples uniformly over 10s → frame times map linearly.
+    vals = list(range(10))                      # 0..9
+    out = G.resample_to_frames(vals, 10.0, [0.0, 5.0, 10.0])
+    assert out[0] == pytest.approx(0.0)
+    assert out[1] == pytest.approx(4.5, abs=0.2)
+    assert out[2] == pytest.approx(9.0)
+    assert len(out) == 3
+
+
+def test_resample_to_frames_edge():
+    assert G.resample_to_frames([], 10.0, [0, 1]).tolist() == [0.0, 0.0]
+    assert G.resample_to_frames([1, 2], 0.0, [0, 1]).tolist() == [0.0, 0.0]
+
+
 # --------------------------------------------------------------------------
 # v2.1-P1-3 — DJI SRT telemetry
 # --------------------------------------------------------------------------

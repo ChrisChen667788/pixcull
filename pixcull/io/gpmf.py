@@ -175,6 +175,24 @@ def extract_imu(elements: Sequence[GpmfElement]) -> dict:
     return out
 
 
+def resample_to_frames(
+    values: Sequence[float],
+    total_duration_s: float,
+    frame_times: Sequence[float],
+) -> np.ndarray:
+    """Resample a per-IMU-sample series (uniformly spanning ``[0,
+    total_duration_s]``) onto ``frame_times`` (v2.2-P1-1).
+
+    Linear-interpolated; out-of-range frame times clamp to the ends.
+    Empty input or non-positive duration → zeros."""
+    v = np.asarray(values, dtype=np.float64)
+    ft = np.asarray(frame_times, dtype=np.float64)
+    if v.size == 0 or ft.size == 0 or total_duration_s <= 0:
+        return np.zeros(ft.shape[0])
+    idx = np.clip(ft / float(total_duration_s) * (v.size - 1), 0, v.size - 1)
+    return np.interp(idx, np.arange(v.size), v)
+
+
 def imu_shake_series(gyro: Sequence[Sequence[float]]) -> np.ndarray:
     """Per-sample shake proxy in ``[0,1]`` from gyro angular-velocity
     magnitude (high, sustained rotation = handheld/airframe shake),
