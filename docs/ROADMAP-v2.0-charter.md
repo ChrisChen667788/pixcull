@@ -267,6 +267,21 @@ distinguish a 2-second highlight from a 2-second yawn.
 
 - v2.0 release 后做下一轮自审 + 起草 v2.1 charter
 
+> **✅ P2 全部已实现(2028 Q2)**
+> - **P2-1 4K/8K + codec workflow** — `pixcull video --max-dim N` 代理抽帧
+>   (ffmpeg scale 封顶长边,保宽高/偶数,interval+keyframe 双模式)+
+>   `docs/VIDEO-CODEC-WORKFLOW.md`(codec 矩阵 · 4K/8K 代理 · >50GB 流式
+>   说明)。RAW-native 解码 → v2.1 代理桥。(+4 tests)
+> - **P2-2 Color-graded preview overlay** — `pixcull/scoring/color_grade.py`
+>   参数化胶片预置(Fuji Eterna / Kodak Vision3 / Arri 709A / Teal-Orange /
+>   B&W,ASC-CDL + 饱和度)接到审片页:头部 🎨 下拉实时套用到主画面 + 每个
+>   reel 候选缩略图;`/video/frame/?grade=&w=` 端点。真 `.cube` LUT → v2.1。
+>   截图 `docs/screenshots/19-video-grade.png`。(11 + 2 tests)
+> - **P2-3 自审 + v2.1 charter** — `docs/DESIGN-AUDIT-2028Q2.md`(v2.0 全栈
+>   评分 4.4/5)+ `docs/ROADMAP-v2.1-charter.md`(把本期诚实偏差收敛为下一
+>   版:学习型音频标注 · 统一 lightbox+网格 Video tab · VLM 语义 why ·
+>   真 LUT · in/out 多片成片 · DJI SRT GPS)。
+
 ## 不做的事(scope discipline)
 
 - **不做 NLE(non-linear editor)**: PixCull is for cull,不是 cut.

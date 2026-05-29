@@ -83,8 +83,10 @@ Audit the diff before any push (`git -C <repo> diff origin/main..main`):
 
 ## Roadmap status
 
-v0.11 → v1.0 shipped; v0.13.1–.16 shipped; **v2.0 P0 (P0-1…P0-4) + P1
-(P1-1…P1-5) shipped.**  Remaining: v2.0 **P2** (4K/ProRes/RAW workflow ·
-color-graded preview overlay · DESIGN-AUDIT-2028Q2 + v2.1 charter).
-See `docs/ROADMAP-v2.0-charter.md` (each slice annotated with what
-landed + honest deviations).
+v0.11 → v1.0 shipped; v0.13.1–.16 shipped; **v2.0 fully shipped — P0
+(P0-1…P0-4) + P1 (P1-1…P1-5) + P2 (P2-1…P2-3).**  See
+`docs/ROADMAP-v2.0-charter.md` (every slice annotated with what landed +
+honest deviations) and `docs/DESIGN-AUDIT-2028Q2.md` (4.4/5).
+**Next: v2.1** — `docs/ROADMAP-v2.1-charter.md` (learned audio tagging ·
+unified lightbox + in-grid Video tab · VLM semantic captions · real
+.cube LUTs · in/out trim + multi-video reels · DJI SRT GPS).
