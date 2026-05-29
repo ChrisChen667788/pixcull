@@ -282,6 +282,44 @@ def test_import_video_writes_manifest(h264_clip, tmp_path):
 # codec coverage — h.264 / h.265 / ProRes
 # --------------------------------------------------------------------------
 
+# --------------------------------------------------------------------------
+# v2.0-P2-1 — proxy downscale (--max-dim)
+# --------------------------------------------------------------------------
+
+def _frame_size(path):
+    from PIL import Image
+    with Image.open(path) as im:
+        return im.size  # (w, h)
+
+
+def test_extract_max_dim_caps_long_edge(h264_clip, tmp_path):
+    # h264_clip is 320×240; cap the long edge to 160 → 160×120.
+    r = V.extract_keyframes(h264_clip, tmp_path, interval_s=1.0, max_dim=160)
+    w, h = _frame_size(r.frames_dir / r.frames[0].filename)
+    assert max(w, h) == 160
+    assert w % 2 == 0 and h % 2 == 0          # even dims for the encoder
+    assert abs((w / h) - (320 / 240)) < 0.02  # aspect preserved
+
+
+def test_extract_max_dim_none_is_full_res(h264_clip, tmp_path):
+    r = V.extract_keyframes(h264_clip, tmp_path, interval_s=1.0)
+    assert _frame_size(r.frames_dir / r.frames[0].filename) == (320, 240)
+
+
+def test_extract_max_dim_keyframe_mode(h264_clip, tmp_path):
+    r = V.extract_keyframes(h264_clip, tmp_path, mode="keyframe", max_dim=128)
+    w, h = _frame_size(r.frames_dir / r.frames[0].filename)
+    assert max(w, h) == 128
+
+
+def test_import_video_max_dim(h264_clip, tmp_path):
+    r = V.import_video(h264_clip, tmp_path, interval_s=1.0, max_dim=160)
+    w, h = _frame_size(r.frames_dir / r.frames[0].filename)
+    assert max(w, h) == 160
+    # manifest still written + frames recorded.
+    assert (r.frames_dir / "manifest.json").exists()
+
+
 @pytest.mark.parametrize("encoder,expected_codec", [
     ("libx264", "h264"),
     ("libx265", "hevc"),

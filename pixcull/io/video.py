@@ -313,6 +313,7 @@ def extract_keyframes(
     interval_s: float = 1.0,
     max_frames: int = DEFAULT_MAX_FRAMES,
     jpeg_quality: int = 2,
+    max_dim: int | None = None,
     ffmpeg: str | None = None,
     ffprobe: str | None = None,
     meta: VideoMeta | None = None,
@@ -329,6 +330,12 @@ def extract_keyframes(
             when the frame estimate would exceed ``max_frames``.
         max_frames: safety cap on number of extracted frames.
         jpeg_quality: ffmpeg ``-q:v`` (2 = high, 31 = low).
+        max_dim: v2.0-P2-1 — when set, downscale extracted frames so the
+            longer edge ≤ ``max_dim`` px (aspect preserved, even dims).
+            A *proxy* extraction for 4K/8K sources: scoring runs far
+            faster and uses a fraction of the RAM, with no loss to the
+            rubric (which already downsamples internally).  ``None`` =
+            full resolution.
         ffmpeg / ffprobe: binary path overrides.
         meta: a pre-computed :class:`VideoMeta` (skips a redundant probe).
 
@@ -360,9 +367,19 @@ def extract_keyframes(
             effective_interval = meta.duration_s / max_frames
 
     out_pattern = str(frames_dir / "frame_%06d.jpg")
+    # v2.0-P2-1 — proxy downscale: cap the longer edge to max_dim,
+    # preserve aspect, force even dimensions (-2) for the JPEG encoder.
+    scale_vf = None
+    if max_dim and max_dim > 0:
+        scale_vf = (
+            f"scale='if(gte(iw,ih),min(iw,{max_dim}),-2)'"
+            f":'if(gte(iw,ih),-2,min(ih,{max_dim}))'"
+        )
     if mode == "interval":
         rate = 1.0 / effective_interval
         vf = f"fps={rate:.6f}"
+        if scale_vf:
+            vf = f"{vf},{scale_vf}"
         cmd = [
             ffmpeg_bin, "-hide_banner", "-loglevel", "error", "-y",
             "-i", str(path),
@@ -376,6 +393,10 @@ def extract_keyframes(
             "-skip_frame", "nokey",
             "-i", str(path),
             "-vsync", "vfr",
+        ]
+        if scale_vf:
+            cmd += ["-vf", scale_vf]
+        cmd += [
             "-q:v", str(jpeg_quality),
             "-frames:v", str(max_frames),
             "-f", "image2", out_pattern,
@@ -452,6 +473,7 @@ def import_video(
     interval_s: float = 1.0,
     max_frames: int = DEFAULT_MAX_FRAMES,
     jpeg_quality: int = 2,
+    max_dim: int | None = None,
     ffmpeg: str | None = None,
     ffprobe: str | None = None,
 ) -> ExtractionResult:
@@ -459,14 +481,15 @@ def import_video(
 
     Convenience wrapper used by the ``pixcull video`` CLI command.
     Returns the :class:`ExtractionResult`; ``manifest.json`` is already
-    on disk when this returns.
+    on disk when this returns.  ``max_dim`` enables proxy downscaling
+    (v2.0-P2-1) for 4K/8K sources.
     """
     meta = probe_video(path, ffprobe=ffprobe)
     result = extract_keyframes(
         path, output_dir,
         mode=mode, interval_s=interval_s, max_frames=max_frames,
-        jpeg_quality=jpeg_quality, ffmpeg=ffmpeg, ffprobe=ffprobe,
-        meta=meta,
+        jpeg_quality=jpeg_quality, max_dim=max_dim,
+        ffmpeg=ffmpeg, ffprobe=ffprobe, meta=meta,
     )
     write_manifest(result)
     return result

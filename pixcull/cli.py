@@ -103,6 +103,12 @@ def video(
         3000, "--max-frames",
         help="Safety cap on extracted frames.",
     ),
+    max_dim: Optional[int] = typer.Option(
+        None, "--max-dim",
+        help="v2.0-P2-1 proxy: cap extracted-frame long edge to N px "
+             "(e.g. 1920 for 4K/8K). Faster + lighter scoring; full res "
+             "if unset.",
+    ),
     extract_only: bool = typer.Option(
         False, "--extract-only",
         help="Stop after frame extraction; skip the scoring pipeline.",
@@ -150,6 +156,7 @@ def video(
         result = import_video(
             path, output,
             mode=mode, interval_s=interval_s, max_frames=max_frames,
+            max_dim=max_dim,
         )
     except FFmpegError as exc:
         console.print(f"[red]✗ {exc}[/red]")
