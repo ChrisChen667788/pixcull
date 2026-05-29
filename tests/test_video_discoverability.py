@@ -78,8 +78,16 @@ def _build_servable_video_run(root: Path, rid: str, n=3):
                        "filename": fn})
     (fdir / "manifest.json").write_text(json.dumps(
         {"video_id": "clip", "frame_count": n, "frames": frames}))
+    # v2.2-P0-2 — temporal frames keyed by the same frame_ids so the
+    # results lightbox video payload (PAYLOAD.video) is populated.
+    tframes = [{"frame_id": f"frame_{i+1:06d}", "timestamp_s": float(i),
+                "score_temporal": 0.3 + 0.1 * i, "burst_event": 0.0,
+                "score_final": 0.6} for i in range(n)]
     (run / "temporal.json").write_text(json.dumps(
-        {"schema_version": 1, "frames": [], "windows": []}))
+        {"schema_version": 1, "frames": tframes, "windows": []}))
+    (run / "reel_candidates.json").write_text(json.dumps([
+        {"rank": 1, "start_s": 0.0, "end_s": 1.0, "score": 0.8,
+         "why": "精彩瞬间", "best_frame_id": "frame_000001"}]))
     return run
 
 
@@ -131,3 +139,23 @@ def test_history_marks_video_run(live):
     assert status == 200
     # The video run is flagged with 🎬; the photo run is not video-marked.
     assert "🎬" in html
+
+
+# --------------------------------------------------------------------------
+# v2.2-P0-2 — unified lightbox (video scrubber in results.html)
+# --------------------------------------------------------------------------
+
+def test_results_video_payload_populated(live):
+    status, html = _get(live, "/results/vidrun")
+    assert status == 200
+    assert '"video":' in html and '"score_temporal"' in html
+    assert "initVideoScrub" in html         # scrubber init present
+    assert "lbVideoBar" in html
+
+
+def test_results_photo_payload_video_null(live):
+    status, html = _get(live, "/results/photorun")
+    assert status == 200
+    # Photo run ⇒ PAYLOAD.video is null (scrubber init no-ops).
+    assert ('"video": null' in html) or ('"video":null' in html)
+    assert "🎬 视频审片" not in html

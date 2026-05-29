@@ -693,6 +693,52 @@ def is_video_run(run_id: str) -> bool:
         and _video_frames_dir(run_dir) is not None
 
 
+def _build_video_payload(run_id: str) -> dict | None:
+    """v2.2-P0-2 — per-frame temporal scores + reel candidates keyed by
+    *filename*, so the results.html lightbox can render a video-mode
+    scrubber (frames serve via the same /full/ path as the grid).
+    Returns None for photo runs."""
+    rid = _safe_run_id(run_id)
+    if rid is None or not is_video_run(rid):
+        return None
+    run_dir = _run_dir(rid)
+    frames_dir = _video_frames_dir(run_dir)
+    try:
+        manifest = json.loads((frames_dir / "manifest.json").read_text("utf-8"))
+        temporal = json.loads((run_dir / "temporal.json").read_text("utf-8"))
+    except (OSError, ValueError):
+        return None
+    id2fn = {f.get("frame_id"): f.get("filename")
+             for f in manifest.get("frames", [])}
+    frames = []
+    for f in temporal.get("frames", []):
+        fn = id2fn.get(f.get("frame_id"))
+        if fn:
+            frames.append({
+                "filename": fn,
+                "t": f.get("timestamp_s", 0.0),
+                "score_temporal": f.get("score_temporal", 0.0),
+                "burst_event": f.get("burst_event", 0.0),
+                "score_final": f.get("score_final"),
+            })
+    if not frames:
+        return None
+    reel = []
+    reel_path = run_dir / "reel_candidates.json"
+    if reel_path.exists():
+        try:
+            for c in json.loads(reel_path.read_text("utf-8")):
+                reel.append({
+                    "rank": c.get("rank"), "start_s": c.get("start_s"),
+                    "end_s": c.get("end_s"), "score": c.get("score"),
+                    "why": c.get("why_semantic") or c.get("why"),
+                    "best_filename": id2fn.get(c.get("best_frame_id")),
+                })
+        except (OSError, ValueError):
+            pass
+    return {"frames": frames, "reel": reel}
+
+
 def _render_video_review_html(rid: str) -> str:
     """v2.0-P0-4 — self-contained video-native lightbox + timeline scrubber.
 
@@ -8813,6 +8859,7 @@ class _Handler(BaseHTTPRequestHandler):
             "summary": summary,
             "face_clusters": face_clusters_info,
             "locations": locations_info,
+            "video": _build_video_payload(run_id),  # v2.2-P0-2; None=photo run
         }
         # _safe_dumps strips NaN/Infinity (V14.0) so JS JSON.parse never
         # blows up on a stray inf in score_final or a NaN in axis stars.
