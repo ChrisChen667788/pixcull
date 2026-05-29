@@ -222,6 +222,30 @@ distinguish a 2-second highlight from a 2-second yawn.
 - GPMF stream 解析(GPS + IMU + 拍摄者 highlight)
 - 加分:GoPro / DJI Pocket 用户在拍摄时按了 highlight 按钮的片段
 
+> **✅ P1 全部已实现(2028 Q1)**
+> - **P1-1 Reel auto-assembly** — `pixcull/io/reel_assembly.py` +
+>   `pixcull reel <run_dir>`:选中候选按时间序拼接(ffmpeg xfade +
+>   acrossfade + 整体 fade)→ `<reel_id>.mp4`(h264+aac)+ CMX-3600
+>   `.edl`。`--ranks` / `--target-s` / `--crossfade` / `--edl-only`。
+>   真机验证 4 段 → 7.5s 成片 + EDL。(18 tests)
+> - **P1-2 照片+视频联合视图** — `serve_demo.py`:`/timeline/<run_id>`
+>   按 capture_time 把本 run 照片(scores.csv)与所有视频 run 合并到一条
+>   时间轴,照片缩略图 ↔ `/results`、视频卡 ↔ `/video/<run>` 一键交叉跳转。
+>   `build_joint_timeline` 纯函数可测。(7 tests)
+>   *偏差*:做成独立低风险 surface,不外科改 15k 行 results.html 加 grid
+>   tab(共用视觉语言);in-grid 📹 tab 留后续。
+> - **P1-3 音频内容感知** — `pixcull/scoring/audio_events.py`:numpy-only
+>   DSP 检测笑声(3-8Hz 能量调制)/ 鼓掌(高谱平坦度噪声)/ 音乐(低平坦
+>   度 + 稳定 tempo)+ 节拍栅格(不可剪断点)+ moment 轴加分。(16 tests)
+>   *偏差*:稳健事件标注需 YAMNet/PANNs;本期是离线 DSP 基线。
+> - **P1-4 抖动/模糊批量剔除** — `pixcull/scoring/video_quality.py`:
+>   shake = 高位移 × 低运动相干度(平滑 pan / 静帧不误报);blur =
+>   相对中位锐度的 Laplacian 跌落;run-length 合并成 ≥min_dur 片段 +
+>   建议文案。(16 tests)
+> - **P1-5 GoPro/DJI GPMF** — `pixcull/io/gpmf.py`:纯 Python KLV 解析
+>   (GPS5 + SCAL 缩放)+ MP4 `udta/HMMT` HiLight 标签 + 三角衰减 boost。
+>   (15 tests)*偏差*:ACCL/GYRO 解析未计分;DJI GPS 在 SRT 字幕轨,推迟。
+
 ### P2(锦上添花)
 
 #### v2.0-P2-1 · 4K / 8K + ProRes / RAW workflow

@@ -74,7 +74,7 @@ from collections import Counter
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import quote, unquote, urlparse
 
 # ---------------------------------------------------------------------------
 # Module-level state. _RUNS is keyed by short hex IDs; each run tracks its
@@ -1013,6 +1013,227 @@ function bindControls(){
     else return;
     e.preventDefault();
   });
+}
+</script></body></html>"""
+
+
+# ==========================================================================
+# v2.0-P1-2 — photo + video joint timeline.
+# ==========================================================================
+
+def _parse_capture_dt(s: str) -> float | None:
+    """Parse an EXIF / ISO datetime string to an epoch float, or None."""
+    if not s:
+        return None
+    s = str(s).strip()
+    if not s or s.lower() == "nan":
+        return None
+    from datetime import datetime as _dt
+    for fmt in ("%Y:%m:%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S",
+                "%Y:%m:%d %H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S.%f"):
+        try:
+            return _dt.strptime(s[:len(fmt) + 6], fmt).timestamp()
+        except (ValueError, TypeError):
+            continue
+    try:
+        return _dt.fromisoformat(s).timestamp()
+    except (ValueError, TypeError):
+        return None
+
+
+def build_joint_timeline(photos: list[dict], videos: list[dict]) -> list[dict]:
+    """Merge photo + video items onto one capture-time-sorted timeline.
+
+    Items without a parseable time sort to the end (stable).  Pure —
+    unit-tested without IO.
+    """
+    items = list(photos) + list(videos)
+    with_t = [it for it in items if it.get("t") is not None]
+    without_t = [it for it in items if it.get("t") is None]
+    with_t.sort(key=lambda it: it["t"])
+    return with_t + without_t
+
+
+def _photo_timeline_items(run_id: str, *, limit: int = 800) -> list[dict]:
+    """Photo rows for a run from scores.csv → timeline items."""
+    import csv as _csv
+    run_dir = _run_dir(run_id)
+    scores = run_dir / "scores.csv"
+    if not scores.exists():
+        return []
+    out: list[dict] = []
+    try:
+        with open(scores, newline="") as fh:
+            for row in _csv.DictReader(fh):
+                fn = row.get("filename", "")
+                # Skip the synthetic video frames of a video run.
+                t = _parse_capture_dt(row.get("datetime", ""))
+                sf = row.get("score_final")
+                try:
+                    score = float(sf) if sf not in (None, "", "nan") else None
+                except ValueError:
+                    score = None
+                out.append({
+                    "kind": "photo", "run_id": run_id, "filename": fn,
+                    "t": t, "iso": (row.get("datetime") or "").strip(),
+                    "decision": row.get("decision", ""), "score": score,
+                    "thumb": f"/thumb/{quote(run_id)}/{quote(fn)}?w=200",
+                })
+                if len(out) >= limit:
+                    break
+    except OSError:
+        return []
+    return out
+
+
+def _video_timeline_items() -> list[dict]:
+    """All video runs under _DEMO_ROOT → timeline items (by source mtime)."""
+    out: list[dict] = []
+    if not _DEMO_ROOT.exists():
+        return out
+    for child in sorted(_DEMO_ROOT.iterdir()):
+        if not child.is_dir():
+            continue
+        rid = child.name
+        if not is_video_run(rid):
+            continue
+        frames_dir = _video_frames_dir(child)
+        manifest = {}
+        if frames_dir is not None:
+            try:
+                manifest = json.loads(
+                    (frames_dir / "manifest.json").read_text("utf-8"))
+            except (OSError, ValueError):
+                manifest = {}
+        # Capture time: source mtime, else run-dir mtime.
+        t = None
+        src = manifest.get("source_path")
+        try:
+            if src and Path(src).exists():
+                t = Path(src).stat().st_mtime
+            else:
+                t = child.stat().st_mtime
+        except OSError:
+            t = None
+        cand_count = 0
+        best_why = ""
+        reel_path = child / "reel_candidates.json"
+        if reel_path.exists():
+            try:
+                cands = json.loads(reel_path.read_text("utf-8"))
+                cand_count = len(cands)
+                if cands:
+                    best_why = cands[0].get("why", "")
+            except (OSError, ValueError):
+                pass
+        from datetime import datetime as _dt
+        out.append({
+            "kind": "video", "run_id": rid,
+            "source_name": manifest.get("source_name", rid),
+            "t": t,
+            "iso": (_dt.fromtimestamp(t).isoformat(timespec="seconds")
+                    if t else ""),
+            "duration_s": manifest.get("duration_s"),
+            "frame_count": manifest.get("frame_count"),
+            "candidate_count": cand_count, "best_why": best_why,
+        })
+    return out
+
+
+def _render_timeline_html(rid: str) -> str:
+    """v2.0-P1-2 — joint photo+video timeline page (data via fetch)."""
+    return _TIMELINE_HTML.replace("__RUN_ID__", rid)
+
+
+_TIMELINE_HTML = r"""<!DOCTYPE html>
+<html lang="zh"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PixCull · 照片 + 视频时间线</title>
+<style>
+:root{--bg:#0a0b0d;--panel:#14161b;--line:#23262e;--ink:#e8e8ea;
+--dim:#9aa0aa;--indigo:#6E56CF;--indigo2:#8b74e8;--pink:#EC4899;}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);
+font:13px/1.5 system-ui,-apple-system,sans-serif}
+header{display:flex;align-items:center;gap:12px;padding:12px 18px;
+border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0}
+header h1{font-size:15px;margin:0;font-weight:600}
+header .meta{color:var(--dim)}
+header a{color:var(--indigo2);text-decoration:none;margin-left:auto;
+border:1px solid var(--line);padding:5px 10px;border-radius:7px}
+.wrap{max-width:1100px;margin:0 auto;padding:18px}
+.row{display:flex;gap:14px;padding:10px 0;border-bottom:1px solid var(--line)}
+.time{width:150px;color:var(--dim);font-variant-numeric:tabular-nums;
+flex-shrink:0;font-size:12px;padding-top:4px}
+.body{flex:1;min-width:0}
+.photos{display:flex;flex-wrap:wrap;gap:5px}
+.photos img{width:78px;height:58px;object-fit:cover;border-radius:5px;
+background:#1b1e26;border:1px solid var(--line)}
+.photos img.keep{border-color:#34d399}.photos img.cull{opacity:.4}
+.vcard{display:flex;align-items:center;gap:14px;background:#161a24;
+border:1px solid var(--indigo);border-radius:12px;padding:12px 16px}
+.vcard .ic{font-size:26px}
+.vcard .t{font-weight:600}
+.vcard .sub{color:var(--dim);font-size:12px;margin-top:3px}
+.vcard a{margin-left:auto;background:var(--indigo);color:#fff;
+text-decoration:none;padding:7px 14px;border-radius:8px;font-size:12px}
+.count{color:var(--dim);font-size:12px;margin:2px 0 8px}
+.err{padding:48px;text-align:center;color:var(--dim)}
+.legend{display:flex;gap:16px;color:var(--dim);font-size:12px;margin-bottom:10px}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}
+</style></head>
+<body>
+<header>
+  <h1>📅 照片 + 视频时间线</h1>
+  <span class="meta" id="meta">加载中…</span>
+  <a id="back" href="#">← 照片网格</a>
+</header>
+<div class="wrap">
+  <div class="legend">
+    <span><span class="dot" style="background:#8b74e8"></span>照片(本 run)</span>
+    <span><span class="dot" style="background:var(--pink)"></span>视频片段(可审片)</span>
+    <span id="tally"></span>
+  </div>
+  <div id="list"></div>
+</div>
+<script>
+"use strict";
+const RUN_ID="__RUN_ID__";
+const $=(id)=>document.getElementById(id);
+$('back').href='/results/'+RUN_ID;
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function fmt(iso,t){ if(iso) return esc(iso).replace('T',' '); return t?new Date(t*1000).toLocaleString():'(无拍摄时间)'; }
+fetch('/timeline/data/'+encodeURIComponent(RUN_ID)).then(r=>r.json()).then(render)
+  .catch(e=>{$('list').innerHTML='<div class="err">加载失败:'+esc(e)+'</div>';});
+function render(d){
+  if(!d||!d.ok){$('list').innerHTML='<div class="err">'+esc((d&&d.error)||'无数据')+'</div>';return;}
+  const items=d.items||[];
+  $('meta').textContent=d.photo_count+' 张照片 · '+d.video_count+' 段视频';
+  $('tally').textContent='共 '+items.length+' 个时间点';
+  // Group consecutive photos in the same minute into one strip row.
+  let html=''; let i=0;
+  while(i<items.length){
+    const it=items[i];
+    if(it.kind==='video'){
+      html+='<div class="row"><div class="time">'+fmt(it.iso,it.t)+'</div><div class="body">'+
+        '<div class="vcard"><span class="ic">🎬</span><div><div class="t">'+esc(it.source_name||it.run_id)+'</div>'+
+        '<div class="sub">'+(it.duration_s?it.duration_s+'s · ':'')+(it.frame_count||0)+' 帧 · '+
+        (it.candidate_count||0)+' 个候选'+(it.best_why?(' · '+esc(it.best_why)):'')+'</div></div>'+
+        '<a href="/video/'+encodeURIComponent(it.run_id)+'">📹 审片 →</a></div></div></div>';
+      i++;
+    } else {
+      // gather a run of photos
+      const start=i; const photos=[];
+      while(i<items.length && items[i].kind==='photo'){ photos.push(items[i]); i++; }
+      const t0=fmt(photos[0].iso,photos[0].t);
+      html+='<div class="row"><div class="time">'+t0+'</div><div class="body">'+
+        '<div class="count">'+photos.length+' 张照片</div><div class="photos">'+
+        photos.slice(0,60).map(p=>'<a href="/results/'+encodeURIComponent(RUN_ID)+'"><img loading="lazy" class="'+esc(p.decision)+'" src="'+esc(p.thumb)+'" title="'+esc(p.filename)+(p.score!=null?(' · '+p.score.toFixed(2)):'')+'"></a>').join('')+
+        (photos.length>60?('<span class="count">+'+(photos.length-60)+' 更多…</span>'):'')+
+        '</div></div></div>';
+    }
+  }
+  $('list').innerHTML=html||'<div class="err">这个 run 还没有可显示的项目。</div>';
 }
 </script></body></html>"""
 
@@ -4118,6 +4339,11 @@ class _Handler(BaseHTTPRequestHandler):
             return self._serve_video_frame(path[len("/video/frame/"):])
         if path.startswith("/video/"):
             return self._serve_video_review(path[len("/video/"):])
+        # v2.0-P1-2 — joint photo + video timeline.
+        if path.startswith("/timeline/data/"):
+            return self._serve_timeline_data(path[len("/timeline/data/"):])
+        if path.startswith("/timeline/"):
+            return self._serve_timeline_page(path[len("/timeline/"):])
         if path.startswith("/xmp_zip/"):
             return self._serve_xmp_zip(path[len("/xmp_zip/"):])
         # v0.7-P1-4 — token-gated client delivery share page.
@@ -7161,6 +7387,29 @@ class _Handler(BaseHTTPRequestHandler):
             return self._send_html(404, body)
         body = _render_video_review_html(rid).encode("utf-8")
         self._send_html(200, body)
+
+    def _serve_timeline_data(self, tail: str) -> None:
+        """GET /timeline/data/<run_id> — merged photo + video timeline."""
+        rid = _safe_run_id(tail)
+        if rid is None:
+            return self._send_json(
+                400, json.dumps({"ok": False, "error": "bad run_id"}).encode())
+        photos = _photo_timeline_items(rid)
+        videos = _video_timeline_items()
+        items = build_joint_timeline(photos, videos)
+        body = json.dumps({
+            "ok": True, "run_id": rid,
+            "photo_count": len(photos), "video_count": len(videos),
+            "items": items,
+        }, ensure_ascii=False).encode("utf-8")
+        self._send_json(200, body)
+
+    def _serve_timeline_page(self, tail: str) -> None:
+        """GET /timeline/<run_id> — joint photo + video timeline page."""
+        rid = _safe_run_id(tail)
+        if rid is None:
+            return self.send_error(400, "bad run_id")
+        self._send_html(200, _render_timeline_html(rid).encode("utf-8"))
 
     def _serve_healthz(self) -> None:
         """v0.13.10 — operational health probe.
