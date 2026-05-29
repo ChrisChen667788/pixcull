@@ -125,15 +125,24 @@ def video(
         1.0, "--window-s",
         help="Time-window length (s) for temporal aggregation.",
     ),
+    no_reel: bool = typer.Option(
+        False, "--no-reel",
+        help="Skip the v2.0-P0-3 reel-candidate detector.",
+    ),
+    reel_max: int = typer.Option(
+        20, "--reel-max",
+        help="Max reel candidates to emit (default 10–20).",
+    ),
 ) -> None:
-    """v2.0 — Import a video: extract keyframes, score + temporal-rank.
+    """v2.0 — Import a video: extract → score → temporal → reel candidates.
 
     The extracted ``video_frames/<id>/`` folder is scored by the same
     pipeline as a photo shoot, so the video becomes one PixCull "run"
     (a dense burst group).  After scoring, a temporal pass adds
-    ``score_temporal`` per frame and per-window scores (``temporal.json``).
-    Use ``--extract-only`` to stop after frame extraction, or
-    ``--no-temporal`` to skip just the temporal pass.
+    ``score_temporal`` per frame + per-window scores (``temporal.json``),
+    then a reel-candidate detector emits the best diverse clips
+    (``reel_candidates.json``).  Use ``--extract-only`` to stop after
+    frame extraction, ``--no-temporal`` / ``--no-reel`` to skip a stage.
     """
     from pixcull.io.video import import_video, FFmpegError
 
@@ -197,6 +206,33 @@ def video(
             f"[{best.start_s:.1f}–{best.end_s:.1f}s] "
             f"score={best.window_score:.2f}, peak {best.peak_frame_id})"
         )
+
+    if no_reel:
+        console.print("[dim]--no-reel set; skipping reel detector.[/dim]")
+        return
+
+    console.print("[bold]Reel candidate detector…[/bold]")
+    from pixcull.scoring.reel import run_reel_detection
+
+    candidates = run_reel_detection(output, n_max=reel_max)
+    console.print(
+        f"[green]✓ Reel → reel_candidates.json[/green]  "
+        f"({len(candidates)} candidates)"
+    )
+    rtab = Table(title="Top reel candidates")
+    rtab.add_column("#", style="cyan", justify="right")
+    rtab.add_column("span")
+    rtab.add_column("score", justify="right")
+    rtab.add_column("why")
+    for c in candidates[:8]:
+        rtab.add_row(
+            str(c.rank),
+            f"{c.start_s:.1f}–{c.end_s:.1f}s",
+            f"{c.score:.2f}",
+            c.why,
+        )
+    if candidates:
+        console.print(rtab)
 
 
 # v0.13.13 — plugin management.

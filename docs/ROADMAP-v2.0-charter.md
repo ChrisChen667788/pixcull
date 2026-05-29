@@ -120,6 +120,32 @@ distinguish a 2-second highlight from a 2-second yawn.
   ```
 - 默认产生 10-20 个候选,用户在 UI 里 keep/cull 像照片一样
 
+> **✅ 已实现(2028 Q1)** — `pixcull/scoring/reel.py`,接到 `pixcull video`
+> (temporal 后自动跑,`--no-reel` / `--reel-max` 可控)。
+> - **滑动窗**:`sliding_windows` 对 1s / 2s / 3s 三种长度 + 0.5s 步长扫全
+>   片(含 tail 兜底);整段短于窗长时退化为单个整片窗。
+> - **ranking 严格按 charter 公式** `window_score × confidence × novelty`:
+>   - `window_score` = `mean(score_final)+max(score_temporal)`(P0-2 公式),
+>     归一到 [0,1]。
+>   - `confidence` = 质量一致性 + 帧覆盖度 + 峰值强度 + 时间稳定度的加权,
+>     压低"单帧 / 抖动 / 忽好忽坏"的薄弱窗。
+>   - `novelty` = `1 − 与已选候选的最大重叠`(含 containment-aware 时间重叠
+>     + 同场景近邻软惩罚),贪心选择保证候选铺开而非挤在一个瞬间。
+> - **选择 = 贪心 MMR + NMS**:每轮取 `window_score×confidence×novelty` 最高
+>   者,再抑制与之高度重叠的窗(containment-aware,把同一处的 1/2/3s 嵌套窗
+>   collapse 成一个),直到 10-20 个;低于 novelty 下限且已达下限数量则早停。
+> - **输出**:`<output>/reel_candidates.json` — 严格 charter 的 **JSON 数组**,
+>   每项 `{rank, start_s, end_s, duration_s, window_len_s, score,
+>   window_score, confidence, novelty, why, best_frame_id, best_frame_score,
+>   frame_ids}`。`best_frame` 取"画质+瞬间"综合最高帧。
+> - **why** 由窗内信号确定性合成(精彩瞬间 / 平稳运镜 / 画面稳定 / 高画质 /
+>   人物入镜 / 场景词),从 `scores.csv` 补 scene+face。
+> - 测试:`tests/test_reel.py`(26 例)覆盖重叠/novelty 数学、confidence、窗
+>   口聚合公式、滑窗覆盖、NMS 折叠嵌套窗、3 峰合成片 top-3 命中且互不重叠、
+>   n_max 上限、降序排名、why 片段、假 run 端到端写数组、缺 temporal.json 报错。
+> - **偏差**:`why` 是信号级文案(非"新郎转身+拥抱+软光"这种语义级);语义
+>   captions 需 VLM,留待精修。
+
 #### v2.0-P0-4 · 视频 lightbox · 时间线 scrubber V2
 **估时**: 2 周
 
