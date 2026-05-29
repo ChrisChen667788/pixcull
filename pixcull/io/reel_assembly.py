@@ -292,6 +292,198 @@ def assemble_reel(
                       round(out_dur, 3))
 
 
+# --------------------------------------------------------------------------
+# v2.1-P1-2 — in/out trim + multi-video (shoot-level) reels
+# --------------------------------------------------------------------------
+
+def trim_clip(clip: Clip, in_s: float | None, out_s: float | None) -> Clip:
+    """Clamp a clip to user in/out marks (intersection with [start,end])."""
+    start = clip.start_s if in_s is None else max(clip.start_s, float(in_s))
+    end = clip.end_s if out_s is None else min(clip.end_s, float(out_s))
+    if end <= start:                       # marks collapsed the clip
+        end = start + 0.1
+    return Clip(start_s=round(start, 3), end_s=round(end, 3),
+                rank=clip.rank, score=clip.score)
+
+
+@dataclass
+class SourceClips:
+    source_video: Path
+    clips: list[Clip]
+    label: str = ""
+
+
+def build_multi_edl(sources: Sequence[SourceClips], fps: float,
+                    *, title: str = "PixCull Shoot Reel") -> str:
+    """CMX-3600 EDL across multiple source clips (per-event FROM CLIP)."""
+    lines = [f"TITLE: {title}", "FCM: NON-DROP FRAME", ""]
+    rec = 0.0
+    ev = 1
+    for sc in sources:
+        name = sc.label or Path(sc.source_video).name
+        for c in sc.clips:
+            lines.append(
+                f"{ev:03d}  AX       AA/V  C        "
+                f"{seconds_to_timecode(c.start_s, fps)} "
+                f"{seconds_to_timecode(c.end_s, fps)} "
+                f"{seconds_to_timecode(rec, fps)} "
+                f"{seconds_to_timecode(rec + c.duration, fps)}")
+            lines.append(f"* FROM CLIP NAME: {name}")
+            lines.append("")
+            rec += c.duration
+            ev += 1
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def build_multi_montage_filter(
+    flat: Sequence[tuple[int, Clip]],
+    *,
+    crossfade_s: float,
+    has_audio: bool,
+    fade_io_s: float = 0.4,
+) -> tuple[str, str, str | None]:
+    """ffmpeg filter graph for clips drawn from multiple inputs.
+
+    ``flat`` is the final ordered list of ``(input_index, Clip)``."""
+    n = len(flat)
+    if n == 0:
+        raise ValueError("no clips to assemble")
+    parts: list[str] = []
+    for k, (inp, c) in enumerate(flat):
+        parts.append(f"[{inp}:v]trim=start={c.start_s:.3f}:end={c.end_s:.3f},"
+                     f"setpts=PTS-STARTPTS[v{k}]")
+        if has_audio:
+            parts.append(f"[{inp}:a]atrim=start={c.start_s:.3f}:end={c.end_s:.3f},"
+                         f"asetpts=PTS-STARTPTS[a{k}]")
+    durs = [c.duration for _, c in flat]
+    xf = max(0.0, float(crossfade_s))
+    use_xf = xf > 0 and n > 1 and all(d > xf + 0.05 for d in durs)
+    if use_xf:
+        cur, t = "v0", durs[0]
+        for k in range(1, n):
+            parts.append(f"[{cur}][v{k}]xfade=transition=fade:duration={xf:.3f}:"
+                         f"offset={t - xf:.3f}[vx{k}]")
+            cur = f"vx{k}"
+            t += durs[k] - xf
+        vlabel, alabel = cur, None
+        if has_audio:
+            acur = "a0"
+            for k in range(1, n):
+                parts.append(f"[{acur}][a{k}]acrossfade=d={xf:.3f}[ax{k}]")
+                acur = f"ax{k}"
+            alabel = acur
+        total = sum(durs) - xf * (n - 1)
+    else:
+        parts.append("".join(f"[v{k}]" for k in range(n)) + f"concat=n={n}:v=1:a=0[vcat]")
+        vlabel, alabel = "vcat", None
+        if has_audio:
+            parts.append("".join(f"[a{k}]" for k in range(n)) + f"concat=n={n}:v=0:a=1[acat]")
+            alabel = "acat"
+        total = sum(durs)
+    fio = min(fade_io_s, max(0.05, total / 4))
+    parts.append(f"[{vlabel}]fade=t=in:st=0:d={fio:.3f},"
+                 f"fade=t=out:st={max(0.0, total - fio):.3f}:d={fio:.3f}[vout]")
+    aout = None
+    if has_audio and alabel:
+        parts.append(f"[{alabel}]afade=t=in:st=0:d={fio:.3f},"
+                     f"afade=t=out:st={max(0.0, total - fio):.3f}:d={fio:.3f}[aout]")
+        aout = "aout"
+    return ";".join(parts), "vout", aout
+
+
+def assemble_multi(
+    sources: Sequence[SourceClips],
+    output_dir: Path,
+    *,
+    reel_id: str = "shoot_reel",
+    crossfade_s: float = DEFAULT_CROSSFADE_S,
+    edl_only: bool = False,
+    ffmpeg: str | None = None,
+    ffprobe: str | None = None,
+) -> ReelResult:
+    """Assemble a reel across multiple source clips (one shoot)."""
+    sources = [s for s in sources if s.clips]
+    if not sources:
+        raise ValueError("no clips selected across sources")
+    metas = [probe_video(s.source_video, ffprobe=ffprobe) for s in sources]
+    fps = next((m.fps for m in metas if m.fps), 25.0)
+    out_dir = Path(output_dir) / reel_id
+    out_dir.mkdir(parents=True, exist_ok=True)
+    edl_path = out_dir / f"{reel_id}.edl"
+    edl_path.write_text(build_multi_edl(sources, fps), encoding="utf-8")
+
+    flat = [(i, c) for i, sc in enumerate(sources) for c in sc.clips]
+    all_clips = [c for _, c in flat]
+    total = sum(c.duration for c in all_clips)
+    if edl_only:
+        return ReelResult(reel_id, None, edl_path, all_clips, round(total, 3))
+
+    ffmpeg_bin = shutil.which(ffmpeg or "ffmpeg") or ffmpeg
+    if not ffmpeg_bin:
+        raise FFmpegError("ffmpeg not found on PATH")
+    has_audio = all((m.audio_track_count or 0) > 0 for m in metas)
+    filt, vlabel, alabel = build_multi_montage_filter(
+        flat, crossfade_s=crossfade_s, has_audio=has_audio)
+    mp4_path = out_dir / f"{reel_id}.mp4"
+    cmd = [ffmpeg_bin, "-hide_banner", "-loglevel", "error", "-y"]
+    for sc in sources:
+        cmd += ["-i", str(sc.source_video)]
+    cmd += ["-filter_complex", filt, "-map", f"[{vlabel}]"]
+    if alabel:
+        cmd += ["-map", f"[{alabel}]", "-c:a", "aac", "-b:a", "160k"]
+    cmd += ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "veryfast",
+            str(mp4_path)]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
+    except (OSError, subprocess.TimeoutExpired) as exc:  # pragma: no cover
+        raise FFmpegError(f"ffmpeg multi-assembly failed: {exc}")
+    if proc.returncode != 0:
+        raise FFmpegError(
+            f"ffmpeg returned {proc.returncode}: {proc.stderr.strip()[:400]}")
+    try:
+        out_dur = probe_video(mp4_path, ffprobe=ffprobe).duration_s or total
+    except FFmpegError:
+        out_dur = total
+    return ReelResult(reel_id, mp4_path, edl_path, all_clips, round(out_dur, 3))
+
+
+def assemble_shoot(
+    run_dirs: Sequence[Path],
+    output_dir: Path,
+    *,
+    target_s: float = DEFAULT_TARGET_S,
+    crossfade_s: float = DEFAULT_CROSSFADE_S,
+    reel_id: str = "shoot_reel",
+    edl_only: bool = False,
+) -> ReelResult:
+    """Read several video runs and assemble one shoot-level reel.
+
+    Each run contributes its top candidates (split of ``target_s`` across
+    the runs), clips ordered within each source, sources in run order."""
+    from pixcull.scoring.temporal import _resolve_frames_dir
+    run_dirs = [Path(r) for r in run_dirs]
+    per_run_budget = max(2.0, target_s / max(1, len(run_dirs)))
+    sources: list[SourceClips] = []
+    for rd in run_dirs:
+        reel_path = rd / "reel_candidates.json"
+        if not reel_path.exists():
+            continue
+        cands = json.loads(reel_path.read_text("utf-8"))
+        manifest = json.loads(
+            (_resolve_frames_dir(rd, None) / "manifest.json").read_text("utf-8"))
+        src = manifest.get("source_path")
+        if not src or not Path(src).exists():
+            continue
+        clips = select_for_assembly(cands, target_s=per_run_budget)
+        if clips:
+            sources.append(SourceClips(Path(src), clips,
+                                       label=manifest.get("source_name", "")))
+    if not sources:
+        raise ValueError("no usable runs (need reel_candidates.json + source)")
+    return assemble_multi(sources, output_dir, reel_id=reel_id,
+                          crossfade_s=crossfade_s, edl_only=edl_only)
+
+
 def assemble_from_run(
     run_dir: Path,
     *,

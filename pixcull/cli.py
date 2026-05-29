@@ -260,10 +260,38 @@ def reel(
     reel_id: str = typer.Option("reel", "--id", help="Output reel id."),
     edl_only: bool = typer.Option(
         False, "--edl-only", help="Write the EDL only; skip ffmpeg render."),
+    add: Optional[list[Path]] = typer.Option(
+        None, "--add",
+        help="v2.1 — add another video run dir to build a multi-clip "
+             "SHOOT reel (repeatable). Each run contributes its top "
+             "candidates across --target-s.",
+    ),
 ) -> None:
-    """v2.0 — Auto-assemble selected reel candidates into one cut + EDL."""
-    from pixcull.io.reel_assembly import assemble_from_run
+    """v2.0/v2.1 — Auto-assemble reel candidates into one cut + EDL.
+
+    Single run by default; pass --add <run> (repeatable) to stitch a
+    shoot-level reel across multiple clips.
+    """
+    from pixcull.io.reel_assembly import assemble_from_run, assemble_shoot
     from pixcull.io.video import FFmpegError
+
+    # v2.1-P1-2 — multi-run shoot reel.
+    if add:
+        try:
+            result = assemble_shoot(
+                [run_dir, *add], run_dir, target_s=target_s,
+                crossfade_s=crossfade_s, reel_id="shoot_reel",
+                edl_only=edl_only)
+        except (FFmpegError, FileNotFoundError, ValueError) as exc:
+            console.print(f"[red]✗ {exc}[/red]")
+            raise typer.Exit(code=2)
+        console.print(
+            f"[green]✓ Shoot reel assembled[/green] — {len(result.clips)} "
+            f"clips from {1 + len(add)} runs, {result.duration_s}s")
+        console.print(f"  EDL: {result.edl_path}")
+        if result.mp4_path:
+            console.print(f"  MP4: {result.mp4_path}")
+        return
 
     rank_list = None
     if ranks:

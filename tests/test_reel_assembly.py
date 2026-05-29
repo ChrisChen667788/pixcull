@@ -193,3 +193,78 @@ def test_assemble_from_run(tmp_path):
 def test_assemble_from_run_missing_reel(tmp_path):
     with pytest.raises(FileNotFoundError, match="reel"):
         A.assemble_from_run(tmp_path)
+
+
+# --------------------------------------------------------------------------
+# v2.1-P1-2 — in/out trim + multi-video shoot reels
+# --------------------------------------------------------------------------
+
+def test_trim_clip_clamps():
+    c = A.Clip(2.0, 8.0, 1, 0.9)
+    t = A.trim_clip(c, 3.0, 6.0)
+    assert (t.start_s, t.end_s) == (3.0, 6.0)
+    # None marks leave the edge untouched.
+    assert A.trim_clip(c, None, 5.0).start_s == 2.0
+    assert A.trim_clip(c, 4.0, None).end_s == 8.0
+
+
+def test_trim_clip_collapse_guard():
+    t = A.trim_clip(A.Clip(2.0, 8.0), 7.0, 3.0)   # inverted marks
+    assert t.end_s > t.start_s
+
+
+def test_build_multi_edl():
+    srcs = [A.SourceClips("/x/a.mp4", [A.Clip(1, 3)], "a.mp4"),
+            A.SourceClips("/x/b.mov", [A.Clip(5, 7)], "b.mov")]
+    edl = A.build_multi_edl(srcs, 30.0)
+    assert edl.count("FROM CLIP NAME") == 2
+    assert "a.mp4" in edl and "b.mov" in edl
+    assert "001  AX" in edl and "002  AX" in edl
+    assert "00:00:02:00" in edl       # rec TC after the 2s first clip
+
+
+def test_build_multi_filter_two_inputs():
+    flat = [(0, A.Clip(1, 4)), (1, A.Clip(5, 8))]
+    filt, v, a = A.build_multi_montage_filter(
+        flat, crossfade_s=0.5, has_audio=True)
+    assert "[0:v]trim" in filt and "[1:v]trim" in filt
+    assert "xfade" in filt and v == "vout" and a == "aout"
+
+
+@pytestmark_ff
+def test_assemble_multi_renders(tmp_path):
+    a = _make_clip(tmp_path / "a.mp4", duration=8)
+    b = _make_clip(tmp_path / "b.mp4", duration=8)
+    srcs = [A.SourceClips(a, [A.Clip(1, 4)], "A"),
+            A.SourceClips(b, [A.Clip(2, 5)], "B")]
+    res = A.assemble_multi(srcs, tmp_path, reel_id="shoot", crossfade_s=0.5)
+    assert res.mp4_path.exists() and res.edl_path.exists()
+    edl = res.edl_path.read_text()
+    assert "A" in edl and "B" in edl
+    assert 4.5 <= res.duration_s <= 6.5     # two 3s clips − 0.5s xfade
+
+
+@pytestmark_ff
+def test_assemble_shoot_from_runs(tmp_path):
+    import json
+    runs = []
+    for i, name in enumerate(("clipA", "clipB")):
+        src = _make_clip(tmp_path / f"{name}.mp4", duration=8)
+        rd = tmp_path / f"run{i}"
+        fdir = rd / "video_frames" / name
+        fdir.mkdir(parents=True)
+        (fdir / "manifest.json").write_text(json.dumps({
+            "video_id": name, "fps": 30.0, "source_path": str(src),
+            "source_name": f"{name}.mp4", "frames": []}))
+        (rd / "reel_candidates.json").write_text(json.dumps([
+            {"rank": 1, "start_s": 1.0, "end_s": 4.0, "score": 0.9}]))
+        runs.append(rd)
+    res = A.assemble_shoot(runs, tmp_path, target_s=20, crossfade_s=0.5)
+    assert res.mp4_path.exists()
+    assert len(res.clips) == 2           # one clip from each run
+    assert "clipA.mp4" in res.edl_path.read_text()
+
+
+def test_assemble_shoot_no_usable_runs(tmp_path):
+    with pytest.raises(ValueError, match="no usable runs"):
+        A.assemble_shoot([tmp_path / "empty"], tmp_path)
