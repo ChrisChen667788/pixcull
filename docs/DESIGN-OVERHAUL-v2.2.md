@@ -56,14 +56,28 @@ themes.  Radii + motion already cascade from the shared `:root`; the
 warm-amber light shadows are intentional and kept.  Re-shot
 `12-light-theme.png` on the live Xiapu run (accent verified `#5b4ee6`).
 
+**Other surfaces** — the shared `_DESIGN_TOKENS_CSS` block in
+`serve_demo.py` (used by upload / history / admin / storage / face-audit)
+still carried the *old* pre-overhaul palette (`--bg #1a1c20`, stock
+indigo).  Moved it onto the same v2.2 tokens — deep `#0d0e12` ground,
+violet `#7c6cf5` accent, softer radii/shadows, a warm-paper + violet
+light override, plus a `--font-serif` token.  Retuned the standalone
+roots too: the photo+video **timeline** (`#0a0b0d`/`#6E56CF` →
+ground+violet) and four off-brand **`#3b82f6` blue** utility pages
+(first-run / privacy / sample-collection / batch-classify → violet), the
+landing-page "⚡ 示例数据" CTA (blue → violet), the PWA install-splash
+`background_color`, and the internal audit/admin page backgrounds.  The
+client-facing **share / portfolio** page keeps its signature purple→pink
+brand-gradient (deliberately distinct, already premium).  Re-shot
+`05-upload` / `07-history` / `10-admin-perf` / `15-bias` on the live run
+(accent `#7c6cf5`, ground `#0d0e12` verified).
+
 ## Rollout (next slices)
 
 - **Comfortable density default** — the grid card currently shows every
   axis chip at once (busy).  Default to a calm card (thumb + decision +
   score), reveal the 6-axis + canon chips on hover / selection; expose
   the VISUAL_DENSITY dial in settings.
-- **Other surfaces** — upload / history / share / admin to the new
-  language; serif hero numbers everywhere.
 - **Motion pass** — lightbox open/close spring, grid card stagger-in,
   magnetic scrubber snap (MOTION_INTENSITY dial).
 - **The 3 dials as real settings** — persist per-user.

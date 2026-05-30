@@ -979,7 +979,7 @@ function drawTimeline(){
     area+=' '+x+','+y; line+=(i?' L':'M')+x+' '+y; });
   area+=' 1000,'+H;
   s+='<polygon points="'+area+'" fill="rgba(110,86,207,0.22)"/>';
-  s+='<path d="'+line+'" fill="none" stroke="#8b74e8" stroke-width="1.6"/>';
+  s+='<path d="'+line+'" fill="none" stroke="#9a8bff" stroke-width="1.6"/>';
   // score_final faint line
   let lf=''; let any=false;
   FRAMES.forEach((f,i)=>{ if(f.sF==null) return; any=true; const x=tx(f.t).toFixed(1), y=(H-f.sF*H).toFixed(1); lf+=(lf?' L':'M')+x+' '+y; });
@@ -1222,8 +1222,8 @@ _TIMELINE_HTML = r"""<!DOCTYPE html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>PixCull · 照片 + 视频时间线</title>
 <style>
-:root{--bg:#0a0b0d;--panel:#14161b;--line:#23262e;--ink:#e8e8ea;
---dim:#9aa0aa;--indigo:#6E56CF;--indigo2:#8b74e8;--pink:#EC4899;}
+:root{--bg:#0d0e12;--panel:#16181f;--line:#20242c;--ink:#f1f3f7;
+--dim:#9aa6b4;--indigo:#7c6cf5;--indigo2:#9a8bff;--pink:#EC4899;}
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--ink);
 font:13px/1.5 system-ui,-apple-system,sans-serif}
@@ -1262,7 +1262,7 @@ text-decoration:none;padding:7px 14px;border-radius:8px;font-size:12px}
 </header>
 <div class="wrap">
   <div class="legend">
-    <span><span class="dot" style="background:#8b74e8"></span>照片(本 run)</span>
+    <span><span class="dot" style="background:#9a8bff"></span>照片(本 run)</span>
     <span><span class="dot" style="background:var(--pink)"></span>视频片段(可审片)</span>
     <span id="tally"></span>
   </div>
@@ -4827,7 +4827,7 @@ class _Handler(BaseHTTPRequestHandler):
             "<!DOCTYPE html><html lang='zh'><head><meta charset='utf-8'>"
             "<title>PixCull · 偏差审计</title>"
             "<style>"
-            "body{margin:0;background:#0a0b0d;color:#fff;"
+            "body{margin:0;background:#0d0e12;color:#fff;"
             "font:13px/1.55 system-ui,-apple-system;padding:32px;}"
             "h1{margin:0 0 4px;letter-spacing:-0.02em;}"
             ".meta{color:#888;font-size:11.5px;margin-bottom:32px;}"
@@ -5026,7 +5026,7 @@ class _Handler(BaseHTTPRequestHandler):
             "<!DOCTYPE html><html lang='zh'><head><meta charset='utf-8'>"
             "<title>PixCull · 分歧解析</title>"
             "<style>"
-            "body{margin:0;background:#0a0b0d;color:#fff;"
+            "body{margin:0;background:#0d0e12;color:#fff;"
             "font:13px/1.55 system-ui,-apple-system;padding:32px;}"
             "h1{margin:0 0 4px;letter-spacing:-0.02em;}"
             ".meta{color:#888;font-size:11.5px;margin-bottom:24px;}"
@@ -5094,7 +5094,7 @@ class _Handler(BaseHTTPRequestHandler):
             "<html lang='zh'><head><meta charset='utf-8'>"
             "<title>PixCull · 副屏</title>"
             "<style>"
-            "html,body{margin:0;background:#0a0b0d;color:#fff;"
+            "html,body{margin:0;background:#0d0e12;color:#fff;"
             "font:13px/1.4 system-ui,-apple-system;height:100%;}"
             "body{display:flex;flex-direction:column;}"
             ".bar{display:flex;align-items:center;gap:10px;"
@@ -5179,7 +5179,7 @@ class _Handler(BaseHTTPRequestHandler):
             "start_url":        "/history",
             "scope":            "/",
             "display":          "standalone",
-            "background_color": "#1a1c20",
+            "background_color": "#0d0e12",
             "theme_color":      "#6E56CF",
             "orientation":      "any",
             "categories":       ["photo", "productivity", "utilities"],
@@ -7471,7 +7471,7 @@ class _Handler(BaseHTTPRequestHandler):
             body = (
                 "<!DOCTYPE html><meta charset='utf-8'>"
                 "<title>PixCull · 视频审片</title>"
-                "<body style='background:#0a0b0d;color:#e6e6e6;"
+                "<body style='background:#0d0e12;color:#e6e6e6;"
                 "font:14px/1.6 system-ui;padding:48px;text-align:center'>"
                 "<h2>这不是一个视频 run</h2>"
                 "<p>该 run 缺少 <code>temporal.json</code>。请先运行 "
@@ -8891,7 +8891,7 @@ class _Handler(BaseHTTPRequestHandler):
                 '<div id="videoReviewCta" style="position:fixed;right:18px;'
                 'bottom:18px;z-index:9999;display:flex;gap:8px;align-items:center">'
                 f'<a href="/timeline/{rid_safe}" title="照片+视频联合时间线" '
-                'style="background:#14161b;color:#8b74e8;border:1px solid #6E56CF;'
+                'style="background:#14161b;color:#9a8bff;border:1px solid #6E56CF;'
                 'text-decoration:none;padding:9px 13px;border-radius:22px;'
                 'font:12px system-ui">🗓 联合时间线</a>'
                 f'<a href="/video/{rid_safe}" title="视频原生审片 · 时间线 scrubber" '
@@ -12556,13 +12556,13 @@ _FIRST_RUN_HTML = r"""<!DOCTYPE html>
   <title>PixCull — 首次设置</title>
   <style>
     :root {
-      --bg: #0b0d10;
-      --bg-card: #14171c;
+      --bg: #0d0e12;
+      --bg-card: #16181f;
       --fg: #e9ecf2;
       --muted: #a8b2c1;
-      --accent: #3b82f6;
-      --accent-hi: #60a5fa;
-      --border: #232830;
+      --accent: #7c6cf5;
+      --accent-hi: #9a8bff;
+      --border: #20242c;
       --keep: #4ade80;
       --maybe: #d9a30c;
       --cull: #f87171;
@@ -12779,8 +12779,8 @@ _PRIVACY_HTML = r"""<!DOCTYPE html>
   <title>PixCull — 隐私 / 错误上报政策</title>
   <style>
     :root {
-      --bg: #0b0d10; --bg-card: #14171c; --fg: #e9ecf2;
-      --muted: #a8b2c1; --accent: #3b82f6; --border: #232830;
+      --bg: #0d0e12; --bg-card: #16181f; --fg: #e9ecf2;
+      --muted: #a8b2c1; --accent: #7c6cf5; --border: #20242c;
       --keep: #4ade80; --cull: #f87171;
     }
     body {
@@ -12894,11 +12894,11 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
   <title>PixCull — 垂类样本采集</title>
   <style>
     :root {
-      --bg: #0b0d10; --bg-card: #14171c; --bg-card-hi: #1a1e25;
-      --fg: #e9ecf2; --muted: #a8b2c1; --accent: #3b82f6;
-      --accent-hi: #60a5fa; --border: #232830;
+      --bg: #0d0e12; --bg-card: #16181f; --bg-card-hi: #1f222b;
+      --fg: #e9ecf2; --muted: #a8b2c1; --accent: #7c6cf5;
+      --accent-hi: #9a8bff; --border: #20242c;
       --keep: #4ade80; --maybe: #d9a30c; --cull: #f87171;
-      --focus-ring: rgba(96,165,250,0.55);
+      --focus-ring: rgba(154,139,255,0.55);
     }
     * { box-sizing: border-box; }
     body {
@@ -14748,11 +14748,11 @@ _VERTICAL_BULK_HTML = r"""<!DOCTYPE html>
   <title>PixCull — 批量分类 · __VZH__</title>
   <style>
     :root {
-      --bg: #0b0d10; --bg-card: #14171c; --bg-card-hi: #1a1e25;
-      --fg: #e9ecf2; --muted: #a8b2c1; --accent: #3b82f6;
-      --accent-hi: #60a5fa; --border: #232830;
+      --bg: #0d0e12; --bg-card: #16181f; --bg-card-hi: #1f222b;
+      --fg: #e9ecf2; --muted: #a8b2c1; --accent: #7c6cf5;
+      --accent-hi: #9a8bff; --border: #20242c;
       --keep: #4ade80; --maybe: #d9a30c; --cull: #f87171;
-      --focus-ring: rgba(96,165,250,0.55);
+      --focus-ring: rgba(154,139,255,0.55);
     }
     * { box-sizing: border-box; }
     body {
@@ -15087,27 +15087,27 @@ _VERTICAL_BULK_HTML = r"""<!DOCTYPE html>
 # /admin/delivery/<id> all share the same visual language.
 _DESIGN_TOKENS_CSS = r"""
   :root {
-    /* surfaces — v0.5 LR-grade workspace gray */
-    --bg:           #1a1c20;
-    --bg-card:      #23262c;
-    --bg-card-hi:   #2a2e35;
-    --surface-2:    #2a2e35;
-    --surface-3:    #34383f;
-    --chrome:       #14161a;
+    /* surfaces — v2.2 Taste: deep calm gallery ground (was LR-grade gray) */
+    --bg:           #0d0e12;
+    --bg-card:      #16181f;
+    --bg-card-hi:   #1f222b;
+    --surface-2:    #1f222b;
+    --surface-3:    #282c36;
+    --chrome:       #0a0b0e;
     /* text */
     --fg:           #f1f3f7;
     --fg-2:         #c5cad4;
     --muted:        #a8b2c1;
     --muted-soft:   #7a8696;
     /* borders */
-    --border:       #232830;
-    --border-hi:    #2f3742;
-    /* accent — indigo */
-    --accent:       #6366f1;
-    --accent-hi:    #818cf8;
-    --accent-soft:  rgba(99,102,241,0.14);
-    --accent-glow:  rgba(99,102,241,0.40);
-    --focus-ring:   rgba(129,140,248,0.55);
+    --border:       #20242c;
+    --border-hi:    #2b313b;
+    /* accent — v2.2 brand violet (was stock indigo #6366f1) */
+    --accent:       #7c6cf5;
+    --accent-hi:    #9a8bff;
+    --accent-soft:  rgba(124,108,245,0.15);
+    --accent-glow:  rgba(124,108,245,0.42);
+    --focus-ring:   rgba(154,139,255,0.55);
     /* semantic palette */
     --c-success:        #34d399;
     --c-success-tint:   rgba(52,211,153,0.14);
@@ -15138,6 +15138,9 @@ _DESIGN_TOKENS_CSS = r"""
                     "Microsoft Yahei UI", sans-serif;
     --font-mono:    ui-monospace, "SF Mono", "JetBrains Mono", Menlo,
                     monospace;
+    /* v2.2 — editorial serif for hero numbers / titles (offline-first) */
+    --font-serif:   "Charter", "Iowan Old Style", "PT Serif",
+                    "Source Serif Pro", Georgia, "Songti SC", serif;
     --t-hero:    28px;  --t-h2:    18px;  --t-h3:    14px;
     --t-body:    13px;  --t-small: 11.5px; --t-tiny:  10.5px;
     --lh-tight:  1.25;  --lh-normal: 1.55; --lh-loose: 1.7;
@@ -15145,14 +15148,14 @@ _DESIGN_TOKENS_CSS = r"""
     --space-1: 4px;  --space-2: 8px;  --space-3: 12px;
     --space-4: 16px; --space-5: 20px; --space-6: 24px;
     --space-7: 32px; --space-8: 48px;
-    /* radius */
-    --radius-sm: 4px;  --radius-md: 6px;  --radius-lg: 10px;
-    --radius-xl: 14px; --radius-pill: 999px;
-    /* shadows */
-    --shadow-sm: 0 1px 2px rgba(0,0,0,0.30);
-    --shadow-md: 0 4px 12px rgba(0,0,0,0.40);
-    --shadow-lg: 0 12px 32px rgba(0,0,0,0.50);
-    --shadow-xl: 0 24px 56px rgba(0,0,0,0.55);
+    /* radius — v2.2 softer (Semi/CapCut) */
+    --radius-sm: 6px;  --radius-md: 9px;  --radius-lg: 13px;
+    --radius-xl: 18px; --radius-pill: 999px;
+    /* shadows — v2.2 softer + wider "expensive" elevation */
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.34);
+    --shadow-md: 0 6px 22px rgba(0,0,0,0.36);
+    --shadow-lg: 0 16px 40px rgba(0,0,0,0.46);
+    --shadow-xl: 0 30px 64px rgba(0,0,0,0.52);
     /* motion */
     --duration-fast: 120ms; --duration-normal: 220ms; --duration-slow: 320ms;
     /* v0.9-P0-1 — signature soft-bounce: every transition gains
@@ -15166,27 +15169,28 @@ _DESIGN_TOKENS_CSS = r"""
   }
   /* Light theme override — same shape as results.html */
   html[data-theme="light"] {
-    --bg:           #f5f6f8;
+    /* v2.2 — warm paper-and-ink editorial, mirrors results.html light */
+    --bg:           #fbf9f5;
     --bg-card:      #ffffff;
-    --bg-card-hi:   #f0f2f5;
-    --surface-2:    #ebedf0;
-    --surface-3:    #e0e3e8;
+    --bg-card-hi:   #f4eee4;
+    --surface-2:    #f0ebe1;
+    --surface-3:    #e6dfd2;
     --chrome:       #ffffff;
     --fg:           #1a1d24;
     --fg-2:         #3c4250;
     --muted:        #5b6473;
     --muted-soft:   #8c95a3;
-    --border:       #e0e3e8;
-    --border-hi:    #c8cdd5;
-    --accent:       #4f46e5;
-    --accent-hi:    #6366f1;
-    --accent-soft:  rgba(79,70,229,0.10);
-    --accent-glow:  rgba(79,70,229,0.30);
-    --focus-ring:   rgba(79,70,229,0.45);
-    --shadow-sm: 0 1px 2px rgba(15,23,42,0.06);
-    --shadow-md: 0 4px 12px rgba(15,23,42,0.08);
-    --shadow-lg: 0 12px 32px rgba(15,23,42,0.10);
-    --shadow-xl: 0 24px 56px rgba(15,23,42,0.12);
+    --border:       #e3ddcf;
+    --border-hi:    #c9c0ad;
+    --accent:       #5b4ee6;
+    --accent-hi:    #7c6cf5;
+    --accent-soft:  rgba(91,78,230,0.10);
+    --accent-glow:  rgba(91,78,230,0.30);
+    --focus-ring:   rgba(91,78,230,0.45);
+    --shadow-sm: 0 1px 2px  rgba(89,54,18,0.07);
+    --shadow-md: 0 4px 14px rgba(89,54,18,0.09);
+    --shadow-lg: 0 14px 34px rgba(89,54,18,0.10);
+    --shadow-xl: 0 28px 60px rgba(89,54,18,0.12);
   }
   @media (prefers-reduced-motion: reduce) {
     :root {
@@ -15980,7 +15984,7 @@ _UPLOAD_HTML = (r"""<!DOCTYPE html>
            the "wait, do I need to install something first" gate. -->
       <button id="sampleBtn" class="secondary"
               title="用 6 张示例数据立刻进入 /results 体验,不需要装环境"
-              style="margin-left:auto;background:rgba(59,130,246,0.15);border-color:#3b82f6;color:#a5c5ff">
+              style="margin-left:auto;background:rgba(124,108,245,0.15);border-color:#7c6cf5;color:#c3b9ff">
         ⚡ 用示例数据立刻体验
       </button>
       <span id="hint" style="color:var(--muted);font-size:12px"></span>
@@ -17028,7 +17032,7 @@ def _render_delivery_audit_html(run_id: str, md: str, preset: str) -> str:
         "<meta charset='utf-8'>"
         f"<title>交付审计 · {_html.escape(run_id)}</title>"
         "<style>"
-        "body{margin:0;background:#0b0d10;color:#e9ecf2;"
+        "body{margin:0;background:#0d0e12;color:#e9ecf2;"
         "font:13px/1.6 -apple-system,Segoe UI,PingFang SC,sans-serif}"
         "header{padding:18px 24px;border-bottom:1px solid #232830;"
         "display:flex;align-items:center;gap:12px;flex-wrap:wrap}"
@@ -17130,7 +17134,7 @@ def _render_face_audit_html(payload: dict) -> str:
         "<meta charset='utf-8'>"
         f"<title>face 库审计 · {run_id}</title>"
         "<style>"
-        "body{margin:0;background:#0b0d10;color:#e9ecf2;"
+        "body{margin:0;background:#0d0e12;color:#e9ecf2;"
         "font:13px/1.5 -apple-system,Segoe UI,PingFang SC,sans-serif}"
         "header{padding:18px 24px;border-bottom:1px solid #232830}"
         "h1{margin:0;font-size:16px;font-weight:700}"
