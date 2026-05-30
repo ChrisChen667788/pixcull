@@ -1450,18 +1450,21 @@
       to   { opacity: 1; }
     }
     @keyframes modalContentIn {
-      from { opacity: 0; transform: translateY(8px) scale(0.985); }
-      to   { opacity: 1; transform: translateY(0)   scale(1);     }
+      from { opacity: 0; transform: translateY(10px) scale(0.97); }
+      to   { opacity: 1; transform: translateY(0)    scale(1);    }
     }
     .lightbox.show, .ann-modal.show, .cmp-modal.show {
       animation: modalBackdropIn 160ms ease-out;
     }
+    /* v2.2 motion pass — open with the signature spring (gentle overshoot
+       "pop"), not the flat curve.  --ease-spring = cubic-bezier(.34,1.56,
+       .64,1).  prefers-reduced-motion still cuts the duration below. */
     .lightbox.show .img-pane,
     .lightbox.show .info-pane,
     .ann-modal.show .ann-card,
     .cmp-modal.show .cmp-header,
     .cmp-modal.show .cmp-body {
-      animation: modalContentIn 200ms cubic-bezier(0.16, 1, 0.3, 1);
+      animation: modalContentIn 250ms cubic-bezier(0.34, 1.56, 0.64, 1);
     }
     @media (prefers-reduced-motion: reduce) {
       .lightbox.show, .ann-modal.show, .cmp-modal.show,
@@ -4514,17 +4517,22 @@
       position: absolute; top: 50%;
       width: 12px; height: 12px;
       border-radius: 50%;
-      background: var(--accent, #6366f1);
+      background: var(--accent, #7c6cf5);
       box-shadow: 0 0 0 2px rgba(0,0,0,0.4),
-                  0 0 8px rgba(99,102,241,0.6);
-      transform: translate(-50%, -50%);
+                  0 0 10px var(--accent-glow, rgba(124,108,245,0.6));
+      /* v2.2 motion pass — magnetic "pop": the thumb springs up from
+         scale 0.6 → 1 (gentle overshoot) when the scrubber wakes on
+         hover / active, instead of just fading in. */
+      transform: translate(-50%, -50%) scale(0.6);
       pointer-events: none;
       opacity: 0;
-      transition: opacity var(--duration-fast) var(--ease-out);
+      transition: opacity var(--duration-fast) var(--ease-out),
+                  transform var(--duration-normal) var(--ease-spring);
     }
     .lightbox .lb-scrubber:hover .lb-scrubber-thumb,
     .lightbox .lb-scrubber.active .lb-scrubber-thumb {
       opacity: 1;
+      transform: translate(-50%, -50%) scale(1);
     }
     .lightbox .lb-scrubber-readout {
       position: absolute; bottom: 24px;
@@ -8946,8 +8954,11 @@
       cur.scrollIntoView({behavior: "smooth", block: "nearest",
                           inline: "center"});
     }
-    // v0.11-P1-1 — keep the timeline scrubber in sync too
-    _updateLbScrubber(visible, currentFn);
+    // v0.11-P1-1 — keep the timeline scrubber in sync too.
+    // v2.2 fix: `visible` was undefined in this scope (ReferenceError on
+    // every lightbox open, which also aborted scrubber sync) — compute
+    // the visible filenames the same way lightboxStep() does.
+    _updateLbScrubber(_lbVisibleFns(), currentFn);
   }
 
   // v0.11-P1-1 — DaVinci-style timeline scrubber.  Drag the bar to

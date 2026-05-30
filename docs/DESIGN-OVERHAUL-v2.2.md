@@ -72,15 +72,34 @@ brand-gradient (deliberately distinct, already premium).  Re-shot
 `05-upload` / `07-history` / `10-admin-perf` / `15-bias` on the live run
 (accent `#7c6cf5`, ground `#0d0e12` verified).
 
+**Motion pass** — the app was already motion-rich (hero-reveal card
+stagger via `--idx`, spring-eased card hover, frosted modal animations),
+so this was surgical: the **lightbox / modal open** used the *flat*
+curve, not the signature spring — switched `modalContentIn` to
+`cubic-bezier(.34,1.56,.64,1)` (250ms, scale 0.97→1) so opening a photo
+"pops" with a gentle overshoot (principle #5: one signature curve on
+open).  The **lightbox scrubber thumb** now springs up (scale 0.6→1)
+when the bar wakes on hover/active instead of just fading, and its glow
+moved off hardcoded old-indigo onto `--accent-glow`.  All
+`prefers-reduced-motion`-safe (durations already cut under that query).
+*Bonus bug found while wiring this up:* `_buildLbFilmstrip` referenced an
+undefined `visible` (line ~8958) → an uncaught `ReferenceError` on
+**every** lightbox open that also aborted scrubber sync; fixed to
+`_updateLbScrubber(_lbVisibleFns(), …)` (the same source `lightboxStep()`
+uses).  Verified: the 934 KB inline script passes `node --check`; render
++ token validators green.
+
 ## Rollout (next slices)
 
 - **Comfortable density default** — the grid card currently shows every
   axis chip at once (busy).  Default to a calm card (thumb + decision +
   score), reveal the 6-axis + canon chips on hover / selection; expose
   the VISUAL_DENSITY dial in settings.
-- **Motion pass** — lightbox open/close spring, grid card stagger-in,
-  magnetic scrubber snap (MOTION_INTENSITY dial).
 - **The 3 dials as real settings** — persist per-user.
+- **`03-lightbox` re-shoot** — the desktop lightbox screenshot is still
+  pre-overhaul; programmatic capture is flaky against the demo server's
+  HTTP/1.0 keep-alive (5 attempts stalled).  `13-lightbox-ipad` already
+  shows the new-design lightbox; a fresh `03` is a follow-up.
 
 ## Verification
 
