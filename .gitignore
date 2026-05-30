@@ -74,3 +74,6 @@ mobile/PixCullCompanion/.build/
 out_wedding_eval/realdemo01_smoke/
 goldenset/v0.11/_eval_output/
 goldenset/v0.11/training.csv
+
+# modelscope upload cache (transient)
+docs/screenshots/.ms_upload_cache

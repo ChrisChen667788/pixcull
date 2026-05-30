@@ -217,9 +217,15 @@ async def main():
                             await page.evaluate(
                                 f"localStorage.setItem({k!r}, {v!r})"
                             )
-                await page.goto(BASE + path,
-                                wait_until="domcontentloaded",
-                                timeout=20_000)
+                # v2.2 — "commit" resolves on first byte; the heavy
+                # /results page can leave a thumb request pending so
+                # "domcontentloaded" sometimes never fires under the
+                # demo server's HTTP/1.0 keep-alive.
+                try:
+                    await page.goto(BASE + path,
+                                    wait_until="commit", timeout=20_000)
+                except Exception as _e:
+                    print(f"[capture-real] goto warn {path}: {str(_e)[:80]}")
                 if "/results/" in path:
                     try:
                         # Wait for at least 10 cards to be in the DOM

@@ -62,7 +62,12 @@ buttons.
 
 ## Verification
 
-Real screenshots on the live 200-photo Xiapu run (grid) + the 16-frame
-video run (review): `/tmp/results_v2.png`, `/tmp/video-review-v2.png`.
-Pure CSS-token changes — `test_5k_scale` (renders results.html) and
-`test_video_review` (renders the video page) stay green.
+The whole README screenshot gallery (`docs/screenshots/01-19`) was
+**regenerated on the live new design** from the real 200-photo Xiapu run
+(grid / cmd-k / history / mobile / admin / light-theme / buckets /
+marquee / confidence / attribution) + the 16-frame video run
+(`18-video-review`, `19-video-grade`).  Pure CSS-token changes —
+`test_5k_scale` (renders results.html) + `test_video_review` stay green.
+
+(Lightbox `03` / tether `09` re-capture is flaky to automate — the
+token cascade restyles them at render time; a fresh shot is a follow-up.)
