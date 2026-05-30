@@ -34,12 +34,15 @@
          "void", and decision color chips stay readable against
          the chrome.  Three explicit elevation tiers + a chrome
          color used for sticky headers / inspector panes. */
-      --bg:           #1a1c20;     /* workspace gray — was #0b0d10 */
-      --bg-card:      #23262c;     /* tile surface */
-      --bg-card-hi:   #2a2e35;     /* hover / raised */
-      --surface-2:    #2a2e35;
-      --surface-3:    #34383f;     /* inset blocks (inspector cells) */
-      --chrome:       #14161a;     /* sticky chrome (header / inspector chrome) */
+      /* v2.2 "Taste" overhaul — gallery-grade calm ground so the
+         photos are the hero (Apple Photos / CapCut dark), with clear
+         elevation tiers instead of a flat workspace gray. */
+      --bg:           #0d0e12;     /* deep calm gallery ground */
+      --bg-card:      #16181f;     /* tile surface (clearly raised) */
+      --bg-card-hi:   #1f222b;     /* hover / raised */
+      --surface-2:    #1f222b;
+      --surface-3:    #282c36;     /* inset blocks (inspector cells) */
+      --chrome:       #0a0b0e;     /* sticky chrome recedes */
 
       /* —— TEXT ——————————————————————————————————————————— */
       --fg:           #f1f3f7;     /* primary text (was #e9ecf2 — bumped contrast) */
@@ -47,19 +50,21 @@
       --muted:        #a8b2c1;
       --muted-soft:   #7a8696;
 
-      /* —— BORDERS ———————————————————————————————————————— */
-      --border:       #232830;
-      --border-hi:    #2f3742;
+      /* —— BORDERS ——— hairline, gallery-soft ———————————————— */
+      --border:       #20242c;
+      --border-hi:    #2b313b;
 
       /* —— BRAND + ACCENT ————————————————————————————————————
          v0.4: single canonical accent.  --accent-hi for hover /
          focus emphasis.  All ad-hoc rgba(59,130,246,0.x) calls
          should migrate to these. */
-      --accent:       #6366f1;       /* indigo-500 — modern + works on dark + light */
-      --accent-hi:    #818cf8;       /* indigo-400 hover / active */
-      --accent-soft:  rgba(99,102,241,0.14);
-      --accent-glow:  rgba(99,102,241,0.40);
-      --focus-ring:   rgba(129,140,248,0.55);
+      /* v2.2 — refined violet that resolves into the brand gradient
+         (#6E56CF→#EC4899); less "bootstrap indigo", more editorial. */
+      --accent:       #7c6cf5;       /* refined violet-indigo */
+      --accent-hi:    #9a8bff;       /* hover / active */
+      --accent-soft:  rgba(124,108,245,0.15);
+      --accent-glow:  rgba(124,108,245,0.42);
+      --focus-ring:   rgba(154,139,255,0.55);
 
       /* —— SEMANTIC COLOR PALETTE ————————————————————————————
          5 states for the unified `.chip` system.  Each state has
@@ -136,19 +141,22 @@
       --space-7: 32px; --space-8: 48px;
 
       /* —— RADIUS ——————————————————————————————————————————— */
-      --radius-sm:  4px;
-      --radius-md:  6px;
-      --radius-lg:  10px;
-      --radius-xl:  14px;
+      /* v2.2 — softer, more generous corners (Semi / CapCut feel) */
+      --radius-sm:  6px;
+      --radius-md:  9px;
+      --radius-lg:  13px;
+      --radius-xl:  18px;
       --radius-pill: 999px;
 
       /* —— SHADOWS ——————————————————————————————————————————
          Soft layered shadows tuned for dark surfaces.  Each ramps
          in shadow + blur for elevation depth. */
-      --shadow-sm: 0 1px 2px rgba(0,0,0,0.30);
-      --shadow-md: 0 4px 12px rgba(0,0,0,0.40);
-      --shadow-lg: 0 12px 32px rgba(0,0,0,0.50);
-      --shadow-xl: 0 24px 56px rgba(0,0,0,0.55);
+      /* v2.2 — softer, wider "expensive" elevation (lower opacity,
+         more blur, a faint ambient layer). */
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.34);
+      --shadow-md: 0 6px 22px rgba(0,0,0,0.36);
+      --shadow-lg: 0 18px 48px rgba(0,0,0,0.44);
+      --shadow-xl: 0 32px 72px rgba(0,0,0,0.52);
 
       /* —— MOTION ——————————————————————————————————————————
          v0.4 will sprinkle these into chip toggle / modal / filter

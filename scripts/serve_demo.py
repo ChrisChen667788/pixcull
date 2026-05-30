@@ -757,16 +757,21 @@ _VIDEO_REVIEW_HTML = r"""<!DOCTYPE html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>PixCull · 视频审片</title>
 <style>
-:root{--bg:#0a0b0d;--panel:#14161b;--line:#23262e;--ink:#e8e8ea;
---dim:#9aa0aa;--indigo:#6E56CF;--indigo2:#8b74e8;--pink:#EC4899;
---keep:#34d399;--cull:#f87171;}
+:root{--bg:#0d0e12;--panel:rgba(20,22,29,0.74);--panel-solid:#16181f;
+--line:#20242c;--ink:#f1f3f7;--dim:#9aa6b4;--indigo:#7c6cf5;
+--indigo2:#9a8bff;--pink:#EC4899;--keep:#34d399;--cull:#f87171;
+--radius:13px;--ease:cubic-bezier(0.34,1.56,0.64,1);
+--serif:"Charter","Iowan Old Style","PT Serif",Georgia,"Songti SC",serif}
 *{box-sizing:border-box}
-html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
-font:13px/1.5 system-ui,-apple-system,"Helvetica Neue",sans-serif}
+html,body{margin:0;height:100%;background:
+radial-gradient(1200px 600px at 80% -10%,rgba(124,108,245,0.10),transparent 60%),
+var(--bg);color:var(--ink);
+font:13px/1.55 -apple-system,"SF Pro Text",system-ui,"PingFang SC",sans-serif}
 body{display:flex;flex-direction:column}
-header{display:flex;align-items:center;gap:12px;padding:10px 16px;
-border-bottom:1px solid var(--line);background:var(--panel)}
-header h1{font-size:14px;margin:0;font-weight:600;letter-spacing:.2px}
+header{display:flex;align-items:center;gap:13px;padding:12px 18px;
+border-bottom:1px solid var(--line);background:var(--panel);
+backdrop-filter:blur(22px) saturate(1.3);-webkit-backdrop-filter:blur(22px) saturate(1.3)}
+header h1{font-family:var(--serif);font-size:17px;margin:0;font-weight:600;letter-spacing:0}
 header .meta{color:var(--dim);font-size:12px}
 header a{color:var(--indigo2);text-decoration:none;margin-left:10px;
 font-size:12px;border:1px solid var(--line);padding:5px 10px;border-radius:7px}
@@ -795,17 +800,23 @@ padding:10px 12px;font-variant-numeric:tabular-nums;min-width:188px}
 .badge{position:absolute;right:14px;top:12px;background:rgba(110,86,207,.16);
 border:1px solid var(--indigo);color:var(--indigo2);padding:5px 10px;
 border-radius:20px;font-size:11px;display:none}
-.transport{display:flex;align-items:center;gap:8px;padding:8px 14px;
-border-top:1px solid var(--line);background:var(--panel)}
-.transport button{background:#1b1e26;border:1px solid var(--line);color:var(--ink);
-border-radius:8px;padding:7px 12px;font-size:13px;cursor:pointer;min-width:40px}
-.transport button:hover{border-color:var(--indigo)}
-.transport button.on{background:var(--indigo);border-color:var(--indigo);color:#fff}
+.transport{display:flex;align-items:center;gap:8px;padding:10px 16px;
+border-top:1px solid var(--line);background:var(--panel);
+backdrop-filter:blur(22px) saturate(1.3);-webkit-backdrop-filter:blur(22px) saturate(1.3)}
+.transport button{background:rgba(255,255,255,0.05);border:1px solid var(--line);color:var(--ink);
+border-radius:10px;padding:8px 13px;font-size:13px;cursor:pointer;min-width:42px;
+transition:transform .18s var(--ease),border-color .18s,background .18s}
+.transport button:hover{border-color:var(--indigo);transform:translateY(-1px)}
+.transport button:active{transform:translateY(0) scale(.96)}
+.transport button.on{background:var(--indigo);border-color:var(--indigo);color:#fff;
+box-shadow:0 4px 16px rgba(124,108,245,.4)}
 .transport .spacer{flex:1}
 .transport .count{color:var(--dim);font-variant-numeric:tabular-nums}
-.scrub{padding:6px 14px 12px;background:var(--panel);border-top:1px solid var(--line)}
+.scrub{padding:8px 16px 14px;background:var(--panel);border-top:1px solid var(--line);
+backdrop-filter:blur(22px) saturate(1.3);-webkit-backdrop-filter:blur(22px) saturate(1.3)}
 .scrub svg{width:100%;height:96px;display:block;cursor:pointer;touch-action:none}
-.reel{width:320px;border-left:1px solid var(--line);background:var(--panel);
+.reel{width:330px;border-left:1px solid var(--line);background:var(--panel);
+backdrop-filter:blur(22px) saturate(1.3);-webkit-backdrop-filter:blur(22px) saturate(1.3);
 display:flex;flex-direction:column;min-height:0}
 .reel h2{font-size:12px;text-transform:uppercase;letter-spacing:.6px;
 color:var(--dim);margin:0;padding:12px 14px;border-bottom:1px solid var(--line)}
