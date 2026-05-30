@@ -242,12 +242,17 @@
       /* —— BORDERS (slightly warmer; muted khaki not steel) —— */
       --border:       #e3ddcf;
       --border-hi:    #c9c0ad;
-      /* —— ACCENT (deeper indigo for AA contrast on white) —— */
-      --accent:       #4f46e5;
-      --accent-hi:    #6366f1;
-      --accent-soft:  rgba(79,70,229,0.10);
-      --accent-glow:  rgba(79,70,229,0.30);
-      --focus-ring:   rgba(79,70,229,0.45);
+      /* —— ACCENT (v2.2 — brand violet, not bootstrap indigo) ——
+         Parity with the dark theme's #7c6cf5 family.  Base is a deeper
+         violet (#5b4ee6, ~5.7:1 on white — AA body text); --accent-hi
+         lifts to the exact dark-theme accent so hover / borders / hero
+         gradient read as the same brand hue in both themes.  Was a
+         stock indigo afterthought before. */
+      --accent:       #5b4ee6;
+      --accent-hi:    #7c6cf5;
+      --accent-soft:  rgba(91,78,230,0.10);
+      --accent-glow:  rgba(91,78,230,0.30);
+      --focus-ring:   rgba(91,78,230,0.45);
       /* —— SEMANTIC TINTS (lighter alpha to read on white) —— */
       --c-success-tint:   rgba(16,185,129,0.10);
       --c-success-border: rgba(16,185,129,0.30);

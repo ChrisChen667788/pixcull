@@ -46,14 +46,22 @@ ground + violet radial glow, **editorial serif title**, **frosted**
 header / transport / scrubber / reel panels, spring-eased transport
 buttons.
 
+**Light theme parity** — the light `:root` was already a deliberately
+warm paper-and-ink editorial palette, but its accent was still the old
+bootstrap indigo (`#4f46e5`/`#6366f1`).  Moved it onto the brand violet
+family: `--accent #5b4ee6` (a deeper violet, ~5.7:1 on white → AA body
+text) with `--accent-hi` lifting to the exact dark-theme `#7c6cf5`, so
+hover / borders / the hero gradient read as the *same* brand hue in both
+themes.  Radii + motion already cascade from the shared `:root`; the
+warm-amber light shadows are intentional and kept.  Re-shot
+`12-light-theme.png` on the live Xiapu run (accent verified `#5b4ee6`).
+
 ## Rollout (next slices)
 
 - **Comfortable density default** — the grid card currently shows every
   axis chip at once (busy).  Default to a calm card (thumb + decision +
   score), reveal the 6-axis + canon chips on hover / selection; expose
   the VISUAL_DENSITY dial in settings.
-- **Light theme parity** — apply the same refinement to the `:root`
-  light block (warm paper ground already there; refine accent/elevation).
 - **Other surfaces** — upload / history / share / admin to the new
   language; serif hero numbers everywhere.
 - **Motion pass** — lightbox open/close spring, grid card stagger-in,
