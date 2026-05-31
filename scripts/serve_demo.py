@@ -15215,7 +15215,7 @@ _DESIGN_TOKENS_CSS = r"""
     background: var(--brand-gradient) !important;
     color: #ffffff !important;
     border: 0 !important;
-    box-shadow: 0 4px 14px rgba(110, 86, 207, 0.35);
+    box-shadow: 0 4px 14px rgba(196, 185, 169, 0.35);
     transition: filter 120ms var(--ease-out, ease-out),
                 transform 120ms var(--ease-out, ease-out),
                 box-shadow 220ms var(--ease-out, ease-out);
@@ -15224,7 +15224,7 @@ _DESIGN_TOKENS_CSS = r"""
   .btn-brand-gradient:hover {
     filter: brightness(1.08);
     transform: translateY(-1px);
-    box-shadow: 0 6px 20px rgba(110, 86, 207, 0.45);
+    box-shadow: 0 6px 20px rgba(196, 185, 169, 0.45);
   }
   button.btn-primary:active,
   .btn-brand-gradient:active {

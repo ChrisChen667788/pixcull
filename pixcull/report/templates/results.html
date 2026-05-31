@@ -565,8 +565,13 @@
       to   { opacity: 1; }
     }
     @keyframes heroCardUp {
-      from { opacity: 0; transform: translateY(18px); }
-      to   { opacity: 1; transform: translateY(0); }
+      /* v2.3 P1 — soft-skill "blur-fade": cards resolve from a soft
+         out-of-focus state into sharp, not just slide up.  One-shot
+         (hero reveal only, not scroll-driven), staggered, capped at 64
+         cards, fully skipped under prefers-reduced-motion — so it stays
+         cheap and never blurs during a fast cull scroll. */
+      from { opacity: 0; transform: translateY(18px); filter: blur(5px); }
+      to   { opacity: 1; transform: translateY(0);    filter: blur(0); }
     }
     @keyframes heroDotPop {
       from { opacity: 0; transform: scale(0.4); }
@@ -602,7 +607,7 @@
         linear-gradient(135deg, #c4b9a9, #6a6052)) !important;
       color: #ffffff !important;
       border: 0 !important;
-      box-shadow: 0 4px 14px rgba(110, 86, 207, 0.35);
+      box-shadow: 0 4px 14px rgba(196, 185, 169, 0.35);
       transition: filter var(--duration-fast) var(--ease-out),
                   transform var(--duration-fast) var(--ease-out),
                   box-shadow var(--duration-normal) var(--ease-out);
@@ -610,9 +615,12 @@
     .btn-brand-gradient:hover,
     button.btn-primary:hover,
     .export-btn.primary-cta:hover {
-      filter: brightness(1.08);
-      transform: translateY(-1px);
-      box-shadow: 0 6px 20px rgba(110, 86, 207, 0.45);
+      /* v2.3 P1 — "magnetic" lift: rises + scales a touch on the
+         spring curve, so the primary CTA feels physically drawn to
+         the cursor rather than just brightening. */
+      filter: brightness(1.06);
+      transform: translateY(-2px) scale(1.015);
+      box-shadow: 0 12px 30px rgba(196, 185, 169, 0.28);
     }
     .btn-brand-gradient:active,
     button.btn-primary:active,
@@ -625,8 +633,8 @@
        not "generic QR".  ~3px outer frame, very soft. */
     .share-url-qr {
       box-shadow:
-        0 0 0 3px rgba(110, 86, 207, 0.20),
-        0 0 0 5px rgba(236, 72, 153, 0.10);
+        0 0 0 3px rgba(196, 185, 169, 0.20),
+        0 0 0 5px rgba(106, 96, 82, 0.10);
     }
     /* Reduced-motion: skip the reveal entirely, just static load.
        Brand-gradient text stays — it's a visual brand element,
@@ -957,9 +965,9 @@
     .presence-pill {
       display: inline-flex; align-items: center; gap: 8px;
       padding: 4px 10px 4px 8px;
-      background: rgba(110, 86, 207, 0.16);     /* brand indigo wash */
+      background: rgba(196, 185, 169, 0.16);     /* brand indigo wash */
       color: #c8b7ff;
-      border: 1px solid rgba(110, 86, 207, 0.34);
+      border: 1px solid rgba(196, 185, 169, 0.34);
       border-radius: 999px;
       font-size: 11px;
       font-weight: 600;
@@ -971,8 +979,8 @@
                   border-color var(--motion-fast, 160ms) ease;
     }
     .presence-pill:hover {
-      background: rgba(110, 86, 207, 0.24);
-      border-color: rgba(168, 85, 247, 0.55);
+      background: rgba(196, 185, 169, 0.24);
+      border-color: rgba(196, 185, 169, 0.55);
     }
     .presence-pill .pp-dot {
       width: 8px; height: 8px;
@@ -1013,7 +1021,7 @@
     #presenceModal .pp-card {
       width: min(380px, 96vw);
       background: var(--surface-1, #1c1f27);
-      border: 1px solid rgba(168, 85, 247, 0.40);
+      border: 1px solid rgba(196, 185, 169, 0.40);
       border-top: 3px solid transparent;
       border-image: linear-gradient(90deg, #c4b9a9, #988b78, #6a6052) 1;
       border-radius: 14px;
@@ -1302,7 +1310,7 @@
       margin: 0 auto var(--space-3);
       box-shadow:
         0 20px 56px rgba(0, 0, 0, 0.45),
-        0 0 0 1px rgba(99, 102, 241, 0.18) inset;
+        0 0 0 1px rgba(196, 185, 169, 0.18) inset;
     }
     @media (max-width: 640px) {
       .empty-art-img { width: 220px; border-radius: 12px; }
@@ -1768,7 +1776,7 @@
     /* V9.0 style chip in card */
     .row1 .style-chip {
       font-size: 9px; padding: 1px 5px; border-radius: 2px;
-      background: rgba(168, 85, 247, 0.18); color: #d8cebf;
+      background: rgba(196, 185, 169, 0.18); color: #d8cebf;
       letter-spacing: 0.02em;
     }
     /* v0.4 — toolbar button used throughout the header.  Same
@@ -2208,7 +2216,7 @@
       font-family: ui-monospace, monospace; cursor: help;
     }
     .row1 .rs.dis { background: var(--maybe); color: white; }
-    .row1 .rs.meta { background: rgba(168, 85, 247, 0.18); color: #d8cebf; }
+    .row1 .rs.meta { background: rgba(196, 185, 169, 0.18); color: #d8cebf; }
     .row1 .rs.meta.dis { background: var(--maybe); color: white; }
     .row2 { display: flex; align-items: center; justify-content: space-between;
             margin-top: 4px; font-size: 11px; color: var(--muted); }
@@ -2350,7 +2358,7 @@
       position: absolute; left: 0; right: 0; bottom: 0;
       height: calc(var(--axis-fill, 0) * 100%);
       background: linear-gradient(180deg,
-                  rgba(110, 86, 207, 0.32),
+                  rgba(196, 185, 169, 0.32),
                   rgba(232, 72, 153, 0.32));
       pointer-events: none;
       z-index: 0;
@@ -2362,7 +2370,7 @@
        not the muted wash. */
     .row3 .ax.s5::before {
       background: linear-gradient(180deg,
-                  rgba(110, 86, 207, 0.55),
+                  rgba(196, 185, 169, 0.55),
                   rgba(232, 72, 153, 0.55));
     }
     /* Inspector pane reuses the same .ax pattern at a bigger size
@@ -2376,7 +2384,7 @@
       position: absolute; left: 0; right: 0; bottom: 0;
       height: calc(var(--axis-fill, 0) * 100%);
       background: linear-gradient(180deg,
-                  rgba(110, 86, 207, 0.25),
+                  rgba(196, 185, 169, 0.25),
                   rgba(232, 72, 153, 0.25));
       pointer-events: none;
       z-index: 0;
@@ -2968,7 +2976,7 @@
       border-radius: var(--radius-pill);
       background: var(--accent-soft);
       color: var(--accent-hi);
-      border: 1px solid rgba(99, 102, 241, 0.40);
+      border: 1px solid rgba(196, 185, 169, 0.40);
       cursor: pointer;
       letter-spacing: 0.02em;
       max-width: 130px;
@@ -2978,7 +2986,7 @@
                   transform var(--duration-fast) var(--ease-out);
     }
     .row1 .moment-chip:hover {
-      background: rgba(99, 102, 241, 0.24);
+      background: rgba(196, 185, 169, 0.24);
       border-color: var(--accent-hi);
       transform: translateY(-1px);
     }
@@ -4789,8 +4797,8 @@
     .grid-marquee {
       position: absolute;
       pointer-events: none;
-      background: rgba(99, 102, 241, 0.16);
-      border: 1.5px dashed rgba(99, 102, 241, 0.95);
+      background: rgba(196, 185, 169, 0.16);
+      border: 1.5px dashed rgba(196, 185, 169, 0.95);
       border-radius: 3px;
       z-index: 4;
       will-change: width, height, transform;
