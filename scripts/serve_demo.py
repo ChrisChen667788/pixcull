@@ -7345,6 +7345,7 @@ class _Handler(BaseHTTPRequestHandler):
             ".svg":  "image/svg+xml",
             ".gif":  "image/gif",
             ".ico":  "image/x-icon",
+            ".woff2":"font/woff2",
         }.get(suffix, "application/octet-stream")
         try:
             data = target.read_bytes()
@@ -12570,7 +12571,7 @@ _FIRST_RUN_HTML = r"""<!DOCTYPE html>
     * { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; }
     body {
-      font: 14px/1.5 -apple-system, "SF Pro Text", "Inter", "Segoe UI Variable",
+      font: 14px/1.5 -apple-system, "SF Pro Text", "Segoe UI Variable",
             "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
       background: var(--bg);
       color: var(--fg);
@@ -15086,6 +15087,7 @@ _VERTICAL_BULK_HTML = r"""<!DOCTYPE html>
 # audit page so /, /admin, /admin/face_audit/<id>, and
 # /admin/delivery/<id> all share the same visual language.
 _DESIGN_TOKENS_CSS = r"""
+  @font-face{font-family:"Geist Variable";font-style:normal;font-weight:100 900;font-display:swap;src:url("/docs/brand/geist-variable.woff2") format("woff2");}
   :root {
     /* surfaces — v2.2 Taste: deep calm gallery ground (was LR-grade gray) */
     --bg:           #161310;
@@ -15130,10 +15132,10 @@ _DESIGN_TOKENS_CSS = r"""
     --cull:  var(--c-danger);
     --error: var(--c-danger);
     /* typography */
-    --font-display: "Inter Display", "Inter", -apple-system,
+    --font-display: "Geist Variable", -apple-system,
                     BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI",
                     "PingFang SC", "Microsoft Yahei UI", sans-serif;
-    --font-body:    "Inter", -apple-system, BlinkMacSystemFont,
+    --font-body:    "Geist Variable", -apple-system, BlinkMacSystemFont,
                     "Segoe UI Variable", "Segoe UI", "PingFang SC",
                     "Microsoft Yahei UI", sans-serif;
     --font-mono:    ui-monospace, "SF Mono", "JetBrains Mono", Menlo,
@@ -15318,7 +15320,7 @@ _UPLOAD_HTML = (r"""<!DOCTYPE html>
          pinned to PingFang SC (macOS-only) before Yahei; Inter was
          last. Now: Inter → SF on macOS → Segoe UI Variable on Win11
          → Microsoft Yahei UI for CJK on Windows → fallbacks. */
-      font: 14px/1.55 "Inter", -apple-system, BlinkMacSystemFont,
+      font: 14px/1.55 -apple-system, BlinkMacSystemFont,
             "Segoe UI Variable", "Segoe UI", "PingFang SC",
             "Microsoft Yahei UI", "Microsoft Yahei",
             "Helvetica Neue", sans-serif;
