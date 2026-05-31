@@ -758,13 +758,13 @@ _VIDEO_REVIEW_HTML = r"""<!DOCTYPE html>
 <title>PixCull · 视频审片</title>
 <style>
 :root{--bg:#161310;--panel:rgba(30,26,20,0.74);--panel-solid:#1e1a14;
---line:#2b241a;--ink:#f1f3f7;--dim:#9aa6b4;--indigo:#cca36a;
---indigo2:#e0bc84;--pink:#b07d44;--keep:#6faa78;--cull:#f87171;
+--line:#2b241a;--ink:#f1f3f7;--dim:#9aa6b4;--indigo:#c4b9a9;
+--indigo2:#d8cebf;--pink:#6a6052;--keep:#6faa78;--cull:#f87171;
 --radius:13px;--ease:cubic-bezier(0.34,1.56,0.64,1);
 --serif:"Charter","Iowan Old Style","PT Serif",Georgia,"Songti SC",serif}
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;background:
-radial-gradient(1200px 600px at 80% -10%,rgba(204,163,106,0.10),transparent 60%),
+radial-gradient(1200px 600px at 80% -10%,rgba(196,185,169,0.10),transparent 60%),
 var(--bg);color:var(--ink);
 font:13px/1.55 -apple-system,"SF Pro Text",system-ui,"PingFang SC",sans-serif}
 body{display:flex;flex-direction:column}
@@ -797,7 +797,7 @@ padding:10px 12px;font-variant-numeric:tabular-nums;min-width:188px}
 .bar .track{flex:1;height:6px;background:#1c1f27;border-radius:4px;overflow:hidden}
 .bar .fill{height:100%;border-radius:4px;background:linear-gradient(90deg,var(--indigo),var(--indigo2))}
 .bar .val{width:34px;text-align:right;color:var(--ink)}
-.badge{position:absolute;right:14px;top:12px;background:rgba(220,184,126,.16);
+.badge{position:absolute;right:14px;top:12px;background:rgba(196,185,169,.16);
 border:1px solid var(--indigo);color:var(--indigo2);padding:5px 10px;
 border-radius:20px;font-size:11px;display:none}
 .transport{display:flex;align-items:center;gap:8px;padding:10px 16px;
@@ -809,7 +809,7 @@ transition:transform .18s var(--ease),border-color .18s,background .18s}
 .transport button:hover{border-color:var(--indigo);transform:translateY(-1px)}
 .transport button:active{transform:translateY(0) scale(.96)}
 .transport button.on{background:var(--indigo);border-color:var(--indigo);color:#fff;
-box-shadow:0 4px 16px rgba(204,163,106,.4)}
+box-shadow:0 4px 16px rgba(196,185,169,.4)}
 .transport .spacer{flex:1}
 .transport .count{color:var(--dim);font-variant-numeric:tabular-nums}
 .scrub{padding:8px 16px 14px;background:var(--panel);border-top:1px solid var(--line);
@@ -968,7 +968,7 @@ function drawTimeline(){
   REEL.forEach(c=>{
     const x1=tx(+c.start_s), x2=tx(+c.end_s);
     const op=0.10+0.22*Math.min(1,(+c.score||0));
-    s+='<rect x="'+x1.toFixed(1)+'" y="0" width="'+Math.max(2,(x2-x1)).toFixed(1)+'" height="'+H+'" fill="#dcb87e" opacity="'+op.toFixed(2)+'"/>';
+    s+='<rect x="'+x1.toFixed(1)+'" y="0" width="'+Math.max(2,(x2-x1)).toFixed(1)+'" height="'+H+'" fill="#c4b9a9" opacity="'+op.toFixed(2)+'"/>';
     s+='<text x="'+(x1+3).toFixed(1)+'" y="13" fill="#b9aef2" font-size="10">#'+c.rank+'</text>';
   });
   // baseline grid
@@ -978,15 +978,15 @@ function drawTimeline(){
   FRAMES.forEach((f,i)=>{ const x=tx(f.t).toFixed(1), y=(H-(f.sT||0)*H).toFixed(1);
     area+=' '+x+','+y; line+=(i?' L':'M')+x+' '+y; });
   area+=' 1000,'+H;
-  s+='<polygon points="'+area+'" fill="rgba(220,184,126,0.22)"/>';
-  s+='<path d="'+line+'" fill="none" stroke="#e0bc84" stroke-width="1.6"/>';
+  s+='<polygon points="'+area+'" fill="rgba(196,185,169,0.22)"/>';
+  s+='<path d="'+line+'" fill="none" stroke="#d8cebf" stroke-width="1.6"/>';
   // score_final faint line
   let lf=''; let any=false;
   FRAMES.forEach((f,i)=>{ if(f.sF==null) return; any=true; const x=tx(f.t).toFixed(1), y=(H-f.sF*H).toFixed(1); lf+=(lf?' L':'M')+x+' '+y; });
   if(any) s+='<path d="'+lf+'" fill="none" stroke="#3f4658" stroke-width="1" stroke-dasharray="3 3"/>';
   // playhead
-  s+='<line id="ph" x1="0" y1="0" x2="0" y2="'+H+'" stroke="#b07d44" stroke-width="2"/>';
-  s+='<circle id="phd" cx="0" cy="6" r="5" fill="#b07d44"/>';
+  s+='<line id="ph" x1="0" y1="0" x2="0" y2="'+H+'" stroke="#6a6052" stroke-width="2"/>';
+  s+='<circle id="phd" cx="0" cy="6" r="5" fill="#6a6052"/>';
   svg.innerHTML=s;
   svg.addEventListener('pointerdown',seekEvt);
   svg.addEventListener('pointermove',e=>{ if(dragging) seekEvt(e); });
@@ -1223,7 +1223,7 @@ _TIMELINE_HTML = r"""<!DOCTYPE html>
 <title>PixCull · 照片 + 视频时间线</title>
 <style>
 :root{--bg:#161310;--panel:#1e1a14;--line:#2b241a;--ink:#f1f3f7;
---dim:#9aa6b4;--indigo:#cca36a;--indigo2:#e0bc84;--pink:#b07d44;}
+--dim:#9aa6b4;--indigo:#c4b9a9;--indigo2:#d8cebf;--pink:#6a6052;}
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--ink);
 font:13px/1.5 system-ui,-apple-system,sans-serif}
@@ -1262,7 +1262,7 @@ text-decoration:none;padding:7px 14px;border-radius:8px;font-size:12px}
 </header>
 <div class="wrap">
   <div class="legend">
-    <span><span class="dot" style="background:#e0bc84"></span>照片(本 run)</span>
+    <span><span class="dot" style="background:#d8cebf"></span>照片(本 run)</span>
     <span><span class="dot" style="background:var(--pink)"></span>视频片段(可审片)</span>
     <span id="tally"></span>
   </div>
@@ -5100,7 +5100,7 @@ class _Handler(BaseHTTPRequestHandler):
             ".bar{display:flex;align-items:center;gap:10px;"
             "padding:8px 14px;background:rgba(28,30,38,0.85);"
             "backdrop-filter:saturate(180%) blur(12px);}"
-            ".bar .badge{background:rgba(204,163,106,0.18);"
+            ".bar .badge{background:rgba(196,185,169,0.18);"
             "color:#a3a5f5;padding:2px 10px;border-radius:999px;"
             "font-size:11px;font-weight:600;}"
             ".bar .fn{color:#aaa;font-family:ui-monospace,SF Mono,"
@@ -5180,7 +5180,7 @@ class _Handler(BaseHTTPRequestHandler):
             "scope":            "/",
             "display":          "standalone",
             "background_color": "#161310",
-            "theme_color":      "#dcb87e",
+            "theme_color":      "#c4b9a9",
             "orientation":      "any",
             "categories":       ["photo", "productivity", "utilities"],
             "icons": [
@@ -6050,9 +6050,9 @@ class _Handler(BaseHTTPRequestHandler):
     --fg: #e8eaed; --fg-2: #c6c9cf; --muted: #8a8e96; --muted-soft: #6b7280;
     --border: rgba(255,255,255,0.10);
     --border-hi: rgba(255,255,255,0.18);
-    --brand-gradient: linear-gradient(135deg, #dcb87e 0%, #c79a5e 50%, #b07d44 100%);
-    --brand-gradient-soft: linear-gradient(135deg, rgba(220,184,126,0.18) 0%, rgba(176,125,68,0.18) 100%);
-    --accent: #c79a5e;
+    --brand-gradient: linear-gradient(135deg, #c4b9a9 0%, #988b78 50%, #6a6052 100%);
+    --brand-gradient-soft: linear-gradient(135deg, rgba(196,185,169,0.18) 0%, rgba(106,96,82,0.18) 100%);
+    --accent: #988b78;
     --font-serif: "Charter","Iowan Old Style","PT Serif","Source Serif Pro","Cambria",Georgia,"Songti SC",serif;
     --font-sans: -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
     --ease-out: cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -6179,7 +6179,7 @@ class _Handler(BaseHTTPRequestHandler):
   .ph-card:hover {{
     transform: translateY(-3px);
     border-color: rgba(168,85,247,0.55);
-    box-shadow: 0 12px 28px rgba(220,184,126,0.25);
+    box-shadow: 0 12px 28px rgba(196,185,169,0.25);
   }}
   .ph-card img {{
     display: block; width: 100%; aspect-ratio: 3/2;
@@ -6238,7 +6238,7 @@ class _Handler(BaseHTTPRequestHandler):
     padding: 0 18px; font-size: 13px; font-weight: 600;
     background: var(--brand-gradient); color: #ffffff;
     border: 0; border-radius: 8px; cursor: pointer;
-    box-shadow: 0 4px 14px rgba(220,184,126,0.35);
+    box-shadow: 0 4px 14px rgba(196,185,169,0.35);
     transition: filter 160ms var(--ease-out),
                 transform 160ms var(--ease-out);
   }}
@@ -6353,8 +6353,8 @@ class _Handler(BaseHTTPRequestHandler):
       <svg viewBox="0 0 24 24" fill="none">
         <defs>
           <linearGradient id="pcSharePg" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%"   stop-color="#dcb87e"/>
-            <stop offset="100%" stop-color="#b07d44"/>
+            <stop offset="0%"   stop-color="#c4b9a9"/>
+            <stop offset="100%" stop-color="#6a6052"/>
           </linearGradient>
         </defs>
         <circle cx="4"  cy="5"  r="1.6" fill="currentColor" opacity="0.32"/>
@@ -8071,7 +8071,7 @@ class _Handler(BaseHTTPRequestHandler):
             'alt="" style="width:300px;max-width:80vw;height:auto;'
             'border-radius:16px;margin-bottom:18px;'
             'box-shadow:0 16px 48px rgba(0,0,0,0.4),'
-            '0 0 0 1px rgba(204,163,106,0.18) inset;"'
+            '0 0 0 1px rgba(196,185,169,0.18) inset;"'
             ' onerror="this.style.display=\'none\'">'
         )
         cards_html = "\n".join(cards) if cards else (
@@ -8092,8 +8092,8 @@ class _Handler(BaseHTTPRequestHandler):
               '<button id="historyTryDemoBtn" '
               'style="padding:11px 22px;border-radius:999px;border:0;'
               'font-weight:600;font-size:13px;cursor:pointer;'
-              'background:linear-gradient(135deg,#dcb87e 0%,#b07d44 100%);'
-              'color:#fff;box-shadow:0 4px 14px rgba(220,184,126,0.40)" '
+              'background:linear-gradient(135deg,#c4b9a9 0%,#6a6052 100%);'
+              'color:#fff;box-shadow:0 4px 14px rgba(196,185,169,0.40)" '
               'onclick="(async()=>{this.disabled=true;this.textContent=\'载入中…\';'
               'try{const r=await fetch(\'/sample_demo\',{method:\'POST\'});'
               'const d=await r.json();if(d.ok&&d.run_id){location.href=\'/results/\'+d.run_id;}'
@@ -8891,13 +8891,13 @@ class _Handler(BaseHTTPRequestHandler):
                 '<div id="videoReviewCta" style="position:fixed;right:18px;'
                 'bottom:18px;z-index:9999;display:flex;gap:8px;align-items:center">'
                 f'<a href="/timeline/{rid_safe}" title="照片+视频联合时间线" '
-                'style="background:#14161b;color:#e0bc84;border:1px solid #dcb87e;'
+                'style="background:#14161b;color:#d8cebf;border:1px solid #c4b9a9;'
                 'text-decoration:none;padding:9px 13px;border-radius:22px;'
                 'font:12px system-ui">🗓 联合时间线</a>'
                 f'<a href="/video/{rid_safe}" title="视频原生审片 · 时间线 scrubber" '
-                'style="background:#dcb87e;color:#fff;text-decoration:none;'
+                'style="background:#c4b9a9;color:#fff;text-decoration:none;'
                 'padding:10px 16px;border-radius:22px;font:13px system-ui;'
-                'box-shadow:0 4px 16px rgba(220,184,126,.5)">🎬 视频审片 →</a></div>'
+                'box-shadow:0 4px 16px rgba(196,185,169,.5)">🎬 视频审片 →</a></div>'
             )
             html = html.replace("</body>", badge + "</body>", 1)
         self._send_html(200, html.encode("utf-8"))
@@ -12560,8 +12560,8 @@ _FIRST_RUN_HTML = r"""<!DOCTYPE html>
       --bg-card: #1e1a14;
       --fg: #e9ecf2;
       --muted: #a8b2c1;
-      --accent: #cca36a;
-      --accent-hi: #e0bc84;
+      --accent: #c4b9a9;
+      --accent-hi: #d8cebf;
       --border: #2b241a;
       --keep: #4ade80;
       --maybe: #d9a30c;
@@ -12780,7 +12780,7 @@ _PRIVACY_HTML = r"""<!DOCTYPE html>
   <style>
     :root {
       --bg: #161310; --bg-card: #1e1a14; --fg: #e9ecf2;
-      --muted: #a8b2c1; --accent: #cca36a; --border: #2b241a;
+      --muted: #a8b2c1; --accent: #c4b9a9; --border: #2b241a;
       --keep: #4ade80; --cull: #f87171;
     }
     body {
@@ -12895,10 +12895,10 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
   <style>
     :root {
       --bg: #161310; --bg-card: #1e1a14; --bg-card-hi: #272118;
-      --fg: #e9ecf2; --muted: #a8b2c1; --accent: #cca36a;
-      --accent-hi: #e0bc84; --border: #2b241a;
+      --fg: #e9ecf2; --muted: #a8b2c1; --accent: #c4b9a9;
+      --accent-hi: #d8cebf; --border: #2b241a;
       --keep: #4ade80; --maybe: #d9a30c; --cull: #f87171;
-      --focus-ring: rgba(224,188,132,0.55);
+      --focus-ring: rgba(216,206,191,0.55);
     }
     * { box-sizing: border-box; }
     body {
@@ -14749,10 +14749,10 @@ _VERTICAL_BULK_HTML = r"""<!DOCTYPE html>
   <style>
     :root {
       --bg: #161310; --bg-card: #1e1a14; --bg-card-hi: #272118;
-      --fg: #e9ecf2; --muted: #a8b2c1; --accent: #cca36a;
-      --accent-hi: #e0bc84; --border: #2b241a;
+      --fg: #e9ecf2; --muted: #a8b2c1; --accent: #c4b9a9;
+      --accent-hi: #d8cebf; --border: #2b241a;
       --keep: #4ade80; --maybe: #d9a30c; --cull: #f87171;
-      --focus-ring: rgba(224,188,132,0.55);
+      --focus-ring: rgba(216,206,191,0.55);
     }
     * { box-sizing: border-box; }
     body {
@@ -15102,12 +15102,12 @@ _DESIGN_TOKENS_CSS = r"""
     /* borders */
     --border:       #2b241a;
     --border-hi:    #3a3122;
-    /* accent — v2.2 brand violet (was stock indigo #cca36a) */
-    --accent:       #cca36a;
-    --accent-hi:    #e0bc84;
-    --accent-soft:  rgba(204,163,106,0.15);
-    --accent-glow:  rgba(204,163,106,0.42);
-    --focus-ring:   rgba(224,188,132,0.55);
+    /* accent — v2.2 brand violet (was stock indigo #c4b9a9) */
+    --accent:       #c4b9a9;
+    --accent-hi:    #d8cebf;
+    --accent-soft:  rgba(196,185,169,0.15);
+    --accent-glow:  rgba(196,185,169,0.42);
+    --focus-ring:   rgba(216,206,191,0.55);
     /* semantic palette */
     --c-success:        #6faa78;
     --c-success-tint:   rgba(111,170,120,0.14);
@@ -15182,11 +15182,11 @@ _DESIGN_TOKENS_CSS = r"""
     --muted-soft:   #8c95a3;
     --border:       #e3ddcf;
     --border-hi:    #c9c0ad;
-    --accent:       #9a6f33;
-    --accent-hi:    #cca36a;
-    --accent-soft:  rgba(154,111,51,0.10);
-    --accent-glow:  rgba(154,111,51,0.30);
-    --focus-ring:   rgba(154,111,51,0.45);
+    --accent:       #473a29;
+    --accent-hi:    #62513a;
+    --accent-soft:  rgba(71,58,41,0.10);
+    --accent-glow:  rgba(71,58,41,0.30);
+    --focus-ring:   rgba(71,58,41,0.45);
     --shadow-sm: 0 1px 2px  rgba(89,54,18,0.07);
     --shadow-md: 0 4px 14px rgba(89,54,18,0.09);
     --shadow-lg: 0 14px 34px rgba(89,54,18,0.10);
@@ -15201,10 +15201,10 @@ _DESIGN_TOKENS_CSS = r"""
      on every page that uses _DESIGN_TOKENS_CSS (upload / admin / share).
      Defined here so the token name + curve are project-wide single source. */
   :root {
-    --brand-gradient:       linear-gradient(135deg, #dcb87e 0%, #b07d44 100%);
+    --brand-gradient:       linear-gradient(135deg, #c4b9a9 0%, #6a6052 100%);
     --brand-gradient-soft:  linear-gradient(135deg,
-                              rgba(220,184,126,0.18) 0%,
-                              rgba(176,125,68,0.18) 100%);
+                              rgba(196,185,169,0.18) 0%,
+                              rgba(106,96,82,0.18) 100%);
   }
   /* Primary CTA: signature gradient backdrop, white text, soft glow.
      Hover lifts 1px + brightens; active settles. */
@@ -15250,9 +15250,9 @@ _UPLOAD_HTML = (r"""<!DOCTYPE html>
        remap it to the new --accent (indigo) color. */
     :root {
       --bg-grad: radial-gradient(1200px 600px at 50% -200px,
-                 rgba(204,163,106,0.10), transparent 60%),
+                 rgba(196,185,169,0.10), transparent 60%),
                  radial-gradient(900px 500px at 90% 110%,
-                 rgba(204,163,106,0.05), transparent 60%);
+                 rgba(196,185,169,0.05), transparent 60%);
       /* legacy button paddings kept; existing buttons reference them */
       --btn-pad-s: 4px 10px;
       --btn-pad-m: 7px 14px;
@@ -15377,7 +15377,7 @@ _UPLOAD_HTML = (r"""<!DOCTYPE html>
        wordmark (matches results.html brand-mark .wordmark span). */
     .hero-wordmark b {
       font-weight: 700;
-      background: linear-gradient(135deg, #dcb87e 0%, #b07d44 100%);
+      background: linear-gradient(135deg, #c4b9a9 0%, #6a6052 100%);
       -webkit-background-clip: text;
       background-clip: text;
       color: transparent;
@@ -15393,7 +15393,7 @@ _UPLOAD_HTML = (r"""<!DOCTYPE html>
       /* v0.9-P0-3 — hero title uses the signature gradient instead
          of the previous flat white→gray.  Pure visual brand anchor
          on the first surface every new user sees. */
-      background: linear-gradient(135deg, #dcb87e 0%, #b07d44 60%, #ffffff 100%);
+      background: linear-gradient(135deg, #c4b9a9 0%, #6a6052 60%, #ffffff 100%);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
@@ -15432,14 +15432,14 @@ _UPLOAD_HTML = (r"""<!DOCTYPE html>
     }
     .hero-feature:hover {
       border-color: #4f55e8;
-      background: rgba(204,163,106,0.06);
+      background: rgba(196,185,169,0.06);
       transform: translateY(-2px);
     }
     .hero-feature-icon {
       display: inline-flex; align-items: center; justify-content: center;
       width: 32px; height: 32px;
       border-radius: 8px;
-      background: rgba(204,163,106,0.14);
+      background: rgba(196,185,169,0.14);
       color: #818cf8;
       margin-bottom: 10px;
     }
@@ -15886,8 +15886,8 @@ _UPLOAD_HTML = (r"""<!DOCTYPE html>
       <defs>
         <linearGradient id="pcBrandGradHero"
                         x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%"   stop-color="#dcb87e"/>
-          <stop offset="100%" stop-color="#b07d44"/>
+          <stop offset="0%"   stop-color="#c4b9a9"/>
+          <stop offset="100%" stop-color="#6a6052"/>
         </linearGradient>
       </defs>
       <circle cx="4"  cy="5"  r="1.6" fill="currentColor" opacity="0.32"/>
@@ -15984,7 +15984,7 @@ _UPLOAD_HTML = (r"""<!DOCTYPE html>
            the "wait, do I need to install something first" gate. -->
       <button id="sampleBtn" class="secondary"
               title="用 6 张示例数据立刻进入 /results 体验,不需要装环境"
-              style="margin-left:auto;background:rgba(204,163,106,0.15);border-color:#cca36a;color:#c3b9ff">
+              style="margin-left:auto;background:rgba(196,185,169,0.15);border-color:#c4b9a9;color:#c3b9ff">
         ⚡ 用示例数据立刻体验
       </button>
       <span id="hint" style="color:var(--muted);font-size:12px"></span>
