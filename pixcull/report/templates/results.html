@@ -5118,6 +5118,32 @@
          dot's color and reinforces "this group is active". */
       box-shadow: 0 0 0 3px color-mix(in srgb, var(--lp-dot) 22%, transparent);
     }
+
+    /* ============================================================
+       v2.2 soft-skill · layout polish — header stats + library panel
+       ------------------------------------------------------------
+       The two big slop sources (busy cards, toolbar button-wall) are
+       handled; this is the breathing-room pass on the surrounding
+       chrome so nothing competes with the photographs.
+       ============================================================ */
+    /* Header stats — turn the counter run into a typed legend: a
+       semantic colour dot on keep / maybe / cull, a touch more air. */
+    .stats { gap: 16px; align-items: baseline; }
+    .stats .keep::before,
+    .stats .maybe::before,
+    .stats .cull::before {
+      content: ""; display: inline-block;
+      width: 6px; height: 6px; border-radius: 50%;
+      margin-right: 5px; vertical-align: 1px;
+    }
+    .stats .keep::before  { background: var(--keep); }
+    .stats .maybe::before { background: var(--maybe); }
+    .stats .cull::before  { background: var(--cull); }
+    /* Library panel — editorial whitespace + a calmer, wider-tracked
+       section title. */
+    .lp-scroll { padding-top: 10px; }
+    .lp-title { letter-spacing: 0.10em; }
+    .lp-group > summary { padding: 11px 16px; }
     .lp-group[data-group="decision"] > summary { --lp-dot: var(--accent, #6366f1); }
     .lp-group[data-group="scene"]    > summary { --lp-dot: var(--c-success, #10b981); }
     .lp-group[data-group="style"]    > summary { --lp-dot: var(--c-warn, #d97706); }
