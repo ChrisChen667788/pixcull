@@ -1805,20 +1805,20 @@
        and keeps every action one click away. Inner buttons keep
        their original IDs so the existing JS listeners bind without
        modification. */
-    .filters .export-menu { position: relative; display: inline-block; }
-    .filters .export-menu-trigger.export-btn::after {
+    .export-menu { position: relative; display: inline-block; }
+    .export-menu-trigger.export-btn::after {
       content: " ▾";
       font-size: 9px; vertical-align: middle;
       margin-left: 3px; opacity: 0.7;
     }
-    .filters .export-menu-trigger.export-btn.open {
+    .export-menu-trigger.export-btn.open {
       border-color: var(--fg);
       background: var(--bg-card-hi);
     }
     /* v0.4 — export menu panel.  Now uses the elevation token
        shadow and the larger radius for a tile-y dropdown feel
        instead of the previous 6px-rounded plain panel. */
-    .filters .export-menu-panel {
+    .export-menu-panel {
       position: absolute;
       top: calc(100% + 8px); right: 0;
       min-width: 220px;
@@ -1834,15 +1834,15 @@
       transform-origin: top right;
       animation: menu-pop var(--duration-fast) var(--ease-spring);
     }
-    .filters .export-menu-panel.show { display: flex; }
+    .export-menu-panel.show { display: flex; }
     @keyframes menu-pop {
       from { transform: translateY(-4px) scale(0.96); opacity: 0; }
       to   { transform: translateY(0) scale(1); opacity: 1; }
     }
     @media (prefers-reduced-motion: reduce) {
-      .filters .export-menu-panel { animation: none; }
+      .export-menu-panel { animation: none; }
     }
-    .filters .export-menu-panel .export-btn {
+    .export-menu-panel .export-btn {
       display: block; width: 100%;
       text-align: left;
       font-size: 11.5px; font-weight: 500;
@@ -1852,7 +1852,7 @@
       color: var(--fg);
       text-decoration: none;
     }
-    .filters .export-menu-panel .export-btn:hover {
+    .export-menu-panel .export-btn:hover {
       background: var(--bg-card-hi);
       border-color: var(--border-hi);
     }
@@ -1861,8 +1861,8 @@
        shrinks rather than showing a dead row. JS toggles inline
        display:none / "" instead of a class to stay compatible with
        the pre-existing wiring. */
-    .filters .export-menu-panel .export-btn[style*="display:none"],
-    .filters .export-menu-panel .export-btn[style*="display: none"] {
+    .export-menu-panel .export-btn[style*="display:none"],
+    .export-menu-panel .export-btn[style*="display: none"] {
       display: none !important;
     }
 
@@ -2187,6 +2187,55 @@
     .row3 .ax.s3 { color: var(--muted); }
     .row3 .ax.s4 { color: #88cc88; }
     .row3 .ax.s5 { color: var(--keep); }
+
+    /* ============================================================
+       v2.2 soft-skill · "calm" card density   (taste-skill VISUAL_DENSITY ≈ 4)
+       ------------------------------------------------------------
+       Audit: the default card stacked FIVE rows — decision badge +
+       filename + up to 7 secondary chips (rescorer / meta / style /
+       cull-reason / wedding-moment / review-me / exposure) + scene +
+       score + a 6-axis grid + a reason line + up to 3 advice lines.
+       The photograph — the thing a culling pro actually reads — was
+       competing with a telemetry dashboard.  That is the "generic
+       dense-dashboard slop" the soft-skill direction exists to undo.
+
+       Calm mode (DEFAULT) is pure Lightroom-Library: the card is the
+       photo + decision badge + one *editorial* score (serif, the lone
+       hero number).  Everything else — the 6 axes, every secondary
+       chip, reason and advice — moves one click away into the
+       lightbox / inspector, which already render the full rubric.
+       `.grid.dense` restores the
+       everything-at-once view — that switch is the VISUAL_DENSITY
+       dial (toolbar toggle, persisted).  No hover-reveal in-flow, so
+       the grid never reflows mid-scan.
+       ============================================================ */
+    .grid:not(.dense) .card .row1 .rs,
+    .grid:not(.dense) .card .row1 .style-chip,
+    .grid:not(.dense) .card .row1 .cull-reason-chip,
+    .grid:not(.dense) .card .row1 .moment-chip,
+    .grid:not(.dense) .card .row1 .review-me-chip,
+    .grid:not(.dense) .card .row1 .exposure-chip,
+    .grid:not(.dense) .card .row4,
+    .grid:not(.dense) .card .row5,
+    .grid:not(.dense) .card .row3,
+    .grid:not(.dense) .card .row2 .scene {
+      display: none;
+    }
+    /* Soft-skill whitespace — let the cards breathe. */
+    .grid:not(.dense) { row-gap: 20px; }
+    .grid:not(.dense) .card .body { padding: 11px 13px 12px; }
+    .grid:not(.dense) .card .row1 { gap: 7px; }
+    .grid:not(.dense) .card .row1 .fn { font-size: 10.5px; opacity: 0.72; }
+    .grid:not(.dense) .card .row2 { margin-top: 5px; justify-content: flex-start; }
+    /* Editorial score — the single hero number, set in serif. */
+    .grid:not(.dense) .card .row2 .score-radial .ai-num {
+      font-family: "Charter","Iowan Old Style","PT Serif",Georgia,"Songti SC",serif;
+      font-size: 15.5px;
+      letter-spacing: 0.01em;
+    }
+    .grid:not(.dense) .card .row2 .score-radial svg {
+      width: 22px; height: 22px; flex-basis: 22px;
+    }
 
     /* ────────────────────────────────────────────────────────────
        v0.9-P1-4 — AI visualization
@@ -3737,7 +3786,7 @@
         font-size: 11.5px;
       }
       .filters .filter-divider { display: none; }   /* collapse dividers on phone */
-      .filters .export-menu-trigger,
+      .export-menu-trigger,
       .filters button.export-btn,
       .filters .sort-select {
         min-height: 32px; padding: 0 14px;
@@ -5881,6 +5930,13 @@
         <button type="button" data-density="m" title="标准 (240px)" class="active">M</button>
         <button type="button" data-density="l" title="宽松 (340px)">L</button>
       </div>
+      <!-- v2.2 soft-skill — VISUAL_DENSITY dial: 舒朗 (photo-hero, the
+           default) ⇄ 详尽 (every chip + reason + advice, the old view).
+           Persisted in localStorage[pixcull_calm]. -->
+      <div class="density-toolbar calm-toolbar" role="group" aria-label="信息密度">
+        <button type="button" data-calm="calm" title="舒朗 — 照片为主,轴/原因/建议进放大窗" class="active">舒朗</button>
+        <button type="button" data-calm="dense" title="详尽 — 网格内显示全部轴 / 原因 / 建议(旧版)">详尽</button>
+      </div>
     </div>
     <div class="grid density-m" id="grid"></div>
     </main>
@@ -7681,6 +7737,35 @@
         if (!d) return;
         try { localStorage.setItem(_DENSITY_KEY, d); } catch (e) {}
         _apply(d);
+      });
+    });
+  })();
+
+  // v2.2 soft-skill — VISUAL_DENSITY dial (舒朗 calm ⇄ 详尽 dense).
+  // Calm is the default: the card is photo + decision + editorial
+  // score + the quiet axis strip; dense restores every secondary chip
+  // / reason / advice line.  Toggles `.dense` on #grid (the calm CSS
+  // is gated on `.grid:not(.dense)`); persisted across reloads.
+  (function _initCalmToolbar() {
+    const _CALM_KEY = "pixcull_calm";
+    const tb = document.querySelector(".calm-toolbar");
+    if (!tb || !grid) return;
+    function _apply(mode) {
+      grid.classList.toggle("dense", mode === "dense");
+      tb.querySelectorAll("button").forEach(b => {
+        b.classList.toggle("active", b.dataset.calm === mode);
+      });
+    }
+    let saved = "calm";
+    try { saved = localStorage.getItem(_CALM_KEY) || "calm"; } catch (e) {}
+    if (!["calm", "dense"].includes(saved)) saved = "calm";
+    _apply(saved);
+    tb.querySelectorAll("button").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const m = btn.dataset.calm;
+        if (!m) return;
+        try { localStorage.setItem(_CALM_KEY, m); } catch (e) {}
+        _apply(m);
       });
     });
   })();
