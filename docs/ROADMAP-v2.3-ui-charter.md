@@ -76,3 +76,52 @@ Honest, including what my v2.2 token pass kept or introduced:
 (`skills/redesign-skill`, `skills/soft-skill`, `skills/taste-skill`,
 `skills/minimalist-skill`).  Install path for future sessions:
 `npx skills add https://github.com/Leonxlnx/taste-skill --skill redesign-skill`.
+
+## Status & handoff (resume here in a fresh session)
+
+**DONE + pushed to main:**
+- **P0 colour** — editorial-warm rebrand: `ae479f5` (espresso surfaces +
+  retire purple→pink gradient) + `e34fb70` (accent gold→warm graphite /
+  espresso ink).  Both results.html + serve_demo.py; 0 purple literals.
+- **P0-1 type** — `bd29228`: vendored **Geist** (OFL woff2 at
+  `docs/brand/geist-variable.woff2`, served via `/docs/brand/` route,
+  `.woff2`→`font/woff2` mime added), `@font-face` in results.html +
+  shared `_DESIGN_TOKENS_CSS`; stacks lead with "Geist Variable"; 0 Inter.
+- **P1 craft** — `4e2af25`: Double-Bezel cards (photo inset in a tray,
+  concentric radius + inset edge) + `:active` press scale + global
+  `:focus-visible` ring.
+- **P1 motion** — `2f9f142`: blur-fade card entry (heroCardUp blur 5→0,
+  one-shot/reduced-motion-gated) + magnetic primary CTA + swept 21
+  spaced `rgba(110, 86, 207 …)` purple leftovers the no-space passes
+  missed.
+
+**TODO — P2 (mostly CSS, no server needed):**
+- max-width container (~1440px) on ultrawide; optical (asymmetric)
+  vertical padding; varied radii audit.
+- `font-variant-numeric: tabular-nums` on every score / count (some
+  done on hero numbers; sweep the rest).
+- skeleton loaders shaped like the card (replace any spinners).
+- sentence-case headers; `text-wrap: balance` on headings.
+
+**TODO — end-of-overhaul batch (needs a HEALTHY machine — server +
+playwright):**
+1. Regenerate the README gallery `docs/screenshots/01-19` on the new
+   editorial-warm + Geist design.  Run: `pixcull` venv +
+   `scripts/brand/capture_real_screenshots.sh xiapu_demo` (run dir lives
+   at `/tmp/pixcull_demo/xiapu_demo`; re-seed if cleared).  Lightbox
+   (03) / tether (09) shots are flaky to automate — see the per-shot
+   pattern.
+2. `make modelscope-sync` to push README + the regenerated assets to
+   ModelScope (keep GitHub⇄ModelScope in lockstep).
+3. Update mobile `design-system/tokens.json` to the warm palette + fix
+   `tests/test_design_tokens.py` assertions (`#6E56CF` → brass/graphite).
+
+**Caveats for the next session:**
+- `tests/test_5k_scale.py::test_5k_scale_parse_under_2_seconds` is a pure
+  CSV-parse-*speed* assertion that flakes on a loaded box (saw 4–6s vs
+  the 2s threshold this session).  Unrelated to any UI change — run the
+  gate with `-k "not under_2_seconds"` or on a quiet machine.  (Worth
+  hardening: it's an environment-fragile timing test.)
+- `serve_demo.py` is an HTTP/1.0 toy server — flaky under load; use
+  `wait_until="commit"` + a `rows`/card-count `wait_for_function` in
+  Playwright, and kill stray `serve_demo`/`chromium` between runs.
