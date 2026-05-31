@@ -1994,6 +1994,38 @@
       overflow: hidden;
       background: #000;
     }
+
+    /* ============================================================
+       v2.3 P1 · soft-skill component craft
+       ------------------------------------------------------------
+       Double-Bezel: the card is a "tray" (outer radius + 4px inset +
+       a hairline top highlight) and the photo is the inner core with
+       a concentric radius + an inset edge, so every card reads like a
+       matted print set into hardware — not a flat div with a border.
+       Plus physical press feedback + one consistent focus ring.
+       ============================================================ */
+    .card {
+      border-radius: var(--radius-xl);
+      padding: 4px;
+      box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255,255,255,0.05);
+    }
+    .card .thumb-wrap {
+      border-radius: calc(var(--radius-xl) - 4px);
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,0.30);
+    }
+    /* body padding trimmed to absorb the 4px tray inset */
+    .card .body { padding: 7px 9px 9px; }
+    .grid:not(.dense) .card .body { padding: 8px 9px 10px; }
+    /* Physical press — a touch of scale-down on click. */
+    button:not(:disabled):active,
+    .pill:active, .export-btn:active, .card-action:active, .badge:active {
+      transform: scale(0.96);
+    }
+    /* One consistent keyboard focus ring everywhere (a11y). */
+    :focus-visible {
+      outline: 2px solid var(--focus-ring);
+      outline-offset: 2px;
+    }
     .card .thumb {
       width: 100%; height: 100%; object-fit: cover;
       background: #000; cursor: zoom-in;
