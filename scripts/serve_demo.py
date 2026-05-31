@@ -757,14 +757,14 @@ _VIDEO_REVIEW_HTML = r"""<!DOCTYPE html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>PixCull · 视频审片</title>
 <style>
-:root{--bg:#0d0e12;--panel:rgba(20,22,29,0.74);--panel-solid:#16181f;
---line:#20242c;--ink:#f1f3f7;--dim:#9aa6b4;--indigo:#7c6cf5;
---indigo2:#9a8bff;--pink:#EC4899;--keep:#34d399;--cull:#f87171;
+:root{--bg:#161310;--panel:rgba(30,26,20,0.74);--panel-solid:#1e1a14;
+--line:#2b241a;--ink:#f1f3f7;--dim:#9aa6b4;--indigo:#cca36a;
+--indigo2:#e0bc84;--pink:#b07d44;--keep:#6faa78;--cull:#f87171;
 --radius:13px;--ease:cubic-bezier(0.34,1.56,0.64,1);
 --serif:"Charter","Iowan Old Style","PT Serif",Georgia,"Songti SC",serif}
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;background:
-radial-gradient(1200px 600px at 80% -10%,rgba(124,108,245,0.10),transparent 60%),
+radial-gradient(1200px 600px at 80% -10%,rgba(204,163,106,0.10),transparent 60%),
 var(--bg);color:var(--ink);
 font:13px/1.55 -apple-system,"SF Pro Text",system-ui,"PingFang SC",sans-serif}
 body{display:flex;flex-direction:column}
@@ -797,7 +797,7 @@ padding:10px 12px;font-variant-numeric:tabular-nums;min-width:188px}
 .bar .track{flex:1;height:6px;background:#1c1f27;border-radius:4px;overflow:hidden}
 .bar .fill{height:100%;border-radius:4px;background:linear-gradient(90deg,var(--indigo),var(--indigo2))}
 .bar .val{width:34px;text-align:right;color:var(--ink)}
-.badge{position:absolute;right:14px;top:12px;background:rgba(110,86,207,.16);
+.badge{position:absolute;right:14px;top:12px;background:rgba(220,184,126,.16);
 border:1px solid var(--indigo);color:var(--indigo2);padding:5px 10px;
 border-radius:20px;font-size:11px;display:none}
 .transport{display:flex;align-items:center;gap:8px;padding:10px 16px;
@@ -809,7 +809,7 @@ transition:transform .18s var(--ease),border-color .18s,background .18s}
 .transport button:hover{border-color:var(--indigo);transform:translateY(-1px)}
 .transport button:active{transform:translateY(0) scale(.96)}
 .transport button.on{background:var(--indigo);border-color:var(--indigo);color:#fff;
-box-shadow:0 4px 16px rgba(124,108,245,.4)}
+box-shadow:0 4px 16px rgba(204,163,106,.4)}
 .transport .spacer{flex:1}
 .transport .count{color:var(--dim);font-variant-numeric:tabular-nums}
 .scrub{padding:8px 16px 14px;background:var(--panel);border-top:1px solid var(--line);
@@ -833,7 +833,7 @@ padding:1px 7px;font-size:11px;font-weight:600}
 .cand .acts{margin-top:7px;display:flex;gap:6px}
 .cand .acts button{flex:1;border:1px solid var(--line);background:#15171d;
 color:var(--dim);border-radius:7px;padding:4px 0;font-size:11px;cursor:pointer}
-.cand .acts button.keep.on{background:rgba(52,211,153,.18);
+.cand .acts button.keep.on{background:rgba(111,170,120,.18);
 border-color:var(--keep);color:var(--keep)}
 .cand .acts button.cull.on{background:rgba(248,113,113,.16);
 border-color:var(--cull);color:var(--cull)}
@@ -968,7 +968,7 @@ function drawTimeline(){
   REEL.forEach(c=>{
     const x1=tx(+c.start_s), x2=tx(+c.end_s);
     const op=0.10+0.22*Math.min(1,(+c.score||0));
-    s+='<rect x="'+x1.toFixed(1)+'" y="0" width="'+Math.max(2,(x2-x1)).toFixed(1)+'" height="'+H+'" fill="#6E56CF" opacity="'+op.toFixed(2)+'"/>';
+    s+='<rect x="'+x1.toFixed(1)+'" y="0" width="'+Math.max(2,(x2-x1)).toFixed(1)+'" height="'+H+'" fill="#dcb87e" opacity="'+op.toFixed(2)+'"/>';
     s+='<text x="'+(x1+3).toFixed(1)+'" y="13" fill="#b9aef2" font-size="10">#'+c.rank+'</text>';
   });
   // baseline grid
@@ -978,15 +978,15 @@ function drawTimeline(){
   FRAMES.forEach((f,i)=>{ const x=tx(f.t).toFixed(1), y=(H-(f.sT||0)*H).toFixed(1);
     area+=' '+x+','+y; line+=(i?' L':'M')+x+' '+y; });
   area+=' 1000,'+H;
-  s+='<polygon points="'+area+'" fill="rgba(110,86,207,0.22)"/>';
-  s+='<path d="'+line+'" fill="none" stroke="#9a8bff" stroke-width="1.6"/>';
+  s+='<polygon points="'+area+'" fill="rgba(220,184,126,0.22)"/>';
+  s+='<path d="'+line+'" fill="none" stroke="#e0bc84" stroke-width="1.6"/>';
   // score_final faint line
   let lf=''; let any=false;
   FRAMES.forEach((f,i)=>{ if(f.sF==null) return; any=true; const x=tx(f.t).toFixed(1), y=(H-f.sF*H).toFixed(1); lf+=(lf?' L':'M')+x+' '+y; });
   if(any) s+='<path d="'+lf+'" fill="none" stroke="#3f4658" stroke-width="1" stroke-dasharray="3 3"/>';
   // playhead
-  s+='<line id="ph" x1="0" y1="0" x2="0" y2="'+H+'" stroke="#EC4899" stroke-width="2"/>';
-  s+='<circle id="phd" cx="0" cy="6" r="5" fill="#EC4899"/>';
+  s+='<line id="ph" x1="0" y1="0" x2="0" y2="'+H+'" stroke="#b07d44" stroke-width="2"/>';
+  s+='<circle id="phd" cx="0" cy="6" r="5" fill="#b07d44"/>';
   svg.innerHTML=s;
   svg.addEventListener('pointerdown',seekEvt);
   svg.addEventListener('pointermove',e=>{ if(dragging) seekEvt(e); });
@@ -1222,8 +1222,8 @@ _TIMELINE_HTML = r"""<!DOCTYPE html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>PixCull · 照片 + 视频时间线</title>
 <style>
-:root{--bg:#0d0e12;--panel:#16181f;--line:#20242c;--ink:#f1f3f7;
---dim:#9aa6b4;--indigo:#7c6cf5;--indigo2:#9a8bff;--pink:#EC4899;}
+:root{--bg:#161310;--panel:#1e1a14;--line:#2b241a;--ink:#f1f3f7;
+--dim:#9aa6b4;--indigo:#cca36a;--indigo2:#e0bc84;--pink:#b07d44;}
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--ink);
 font:13px/1.5 system-ui,-apple-system,sans-serif}
@@ -1241,7 +1241,7 @@ flex-shrink:0;font-size:12px;padding-top:4px}
 .photos{display:flex;flex-wrap:wrap;gap:5px}
 .photos img{width:78px;height:58px;object-fit:cover;border-radius:5px;
 background:#1b1e26;border:1px solid var(--line)}
-.photos img.keep{border-color:#34d399}.photos img.cull{opacity:.4}
+.photos img.keep{border-color:#6faa78}.photos img.cull{opacity:.4}
 .vcard{display:flex;align-items:center;gap:14px;background:#161a24;
 border:1px solid var(--indigo);border-radius:12px;padding:12px 16px}
 .vcard .ic{font-size:26px}
@@ -1262,7 +1262,7 @@ text-decoration:none;padding:7px 14px;border-radius:8px;font-size:12px}
 </header>
 <div class="wrap">
   <div class="legend">
-    <span><span class="dot" style="background:#9a8bff"></span>照片(本 run)</span>
+    <span><span class="dot" style="background:#e0bc84"></span>照片(本 run)</span>
     <span><span class="dot" style="background:var(--pink)"></span>视频片段(可审片)</span>
     <span id="tally"></span>
   </div>
@@ -4827,7 +4827,7 @@ class _Handler(BaseHTTPRequestHandler):
             "<!DOCTYPE html><html lang='zh'><head><meta charset='utf-8'>"
             "<title>PixCull · 偏差审计</title>"
             "<style>"
-            "body{margin:0;background:#0d0e12;color:#fff;"
+            "body{margin:0;background:#161310;color:#fff;"
             "font:13px/1.55 system-ui,-apple-system;padding:32px;}"
             "h1{margin:0 0 4px;letter-spacing:-0.02em;}"
             ".meta{color:#888;font-size:11.5px;margin-bottom:32px;}"
@@ -5026,7 +5026,7 @@ class _Handler(BaseHTTPRequestHandler):
             "<!DOCTYPE html><html lang='zh'><head><meta charset='utf-8'>"
             "<title>PixCull · 分歧解析</title>"
             "<style>"
-            "body{margin:0;background:#0d0e12;color:#fff;"
+            "body{margin:0;background:#161310;color:#fff;"
             "font:13px/1.55 system-ui,-apple-system;padding:32px;}"
             "h1{margin:0 0 4px;letter-spacing:-0.02em;}"
             ".meta{color:#888;font-size:11.5px;margin-bottom:24px;}"
@@ -5094,13 +5094,13 @@ class _Handler(BaseHTTPRequestHandler):
             "<html lang='zh'><head><meta charset='utf-8'>"
             "<title>PixCull · 副屏</title>"
             "<style>"
-            "html,body{margin:0;background:#0d0e12;color:#fff;"
+            "html,body{margin:0;background:#161310;color:#fff;"
             "font:13px/1.4 system-ui,-apple-system;height:100%;}"
             "body{display:flex;flex-direction:column;}"
             ".bar{display:flex;align-items:center;gap:10px;"
             "padding:8px 14px;background:rgba(28,30,38,0.85);"
             "backdrop-filter:saturate(180%) blur(12px);}"
-            ".bar .badge{background:rgba(99,102,241,0.18);"
+            ".bar .badge{background:rgba(204,163,106,0.18);"
             "color:#a3a5f5;padding:2px 10px;border-radius:999px;"
             "font-size:11px;font-weight:600;}"
             ".bar .fn{color:#aaa;font-family:ui-monospace,SF Mono,"
@@ -5179,8 +5179,8 @@ class _Handler(BaseHTTPRequestHandler):
             "start_url":        "/history",
             "scope":            "/",
             "display":          "standalone",
-            "background_color": "#0d0e12",
-            "theme_color":      "#6E56CF",
+            "background_color": "#161310",
+            "theme_color":      "#dcb87e",
             "orientation":      "any",
             "categories":       ["photo", "productivity", "utilities"],
             "icons": [
@@ -6050,9 +6050,9 @@ class _Handler(BaseHTTPRequestHandler):
     --fg: #e8eaed; --fg-2: #c6c9cf; --muted: #8a8e96; --muted-soft: #6b7280;
     --border: rgba(255,255,255,0.10);
     --border-hi: rgba(255,255,255,0.18);
-    --brand-gradient: linear-gradient(135deg, #6E56CF 0%, #A855F7 50%, #EC4899 100%);
-    --brand-gradient-soft: linear-gradient(135deg, rgba(110,86,207,0.18) 0%, rgba(236,72,153,0.18) 100%);
-    --accent: #A855F7;
+    --brand-gradient: linear-gradient(135deg, #dcb87e 0%, #c79a5e 50%, #b07d44 100%);
+    --brand-gradient-soft: linear-gradient(135deg, rgba(220,184,126,0.18) 0%, rgba(176,125,68,0.18) 100%);
+    --accent: #c79a5e;
     --font-serif: "Charter","Iowan Old Style","PT Serif","Source Serif Pro","Cambria",Georgia,"Songti SC",serif;
     --font-sans: -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
     --ease-out: cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -6179,7 +6179,7 @@ class _Handler(BaseHTTPRequestHandler):
   .ph-card:hover {{
     transform: translateY(-3px);
     border-color: rgba(168,85,247,0.55);
-    box-shadow: 0 12px 28px rgba(110,86,207,0.25);
+    box-shadow: 0 12px 28px rgba(220,184,126,0.25);
   }}
   .ph-card img {{
     display: block; width: 100%; aspect-ratio: 3/2;
@@ -6238,7 +6238,7 @@ class _Handler(BaseHTTPRequestHandler):
     padding: 0 18px; font-size: 13px; font-weight: 600;
     background: var(--brand-gradient); color: #ffffff;
     border: 0; border-radius: 8px; cursor: pointer;
-    box-shadow: 0 4px 14px rgba(110,86,207,0.35);
+    box-shadow: 0 4px 14px rgba(220,184,126,0.35);
     transition: filter 160ms var(--ease-out),
                 transform 160ms var(--ease-out);
   }}
@@ -6353,8 +6353,8 @@ class _Handler(BaseHTTPRequestHandler):
       <svg viewBox="0 0 24 24" fill="none">
         <defs>
           <linearGradient id="pcSharePg" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%"   stop-color="#6E56CF"/>
-            <stop offset="100%" stop-color="#EC4899"/>
+            <stop offset="0%"   stop-color="#dcb87e"/>
+            <stop offset="100%" stop-color="#b07d44"/>
           </linearGradient>
         </defs>
         <circle cx="4"  cy="5"  r="1.6" fill="currentColor" opacity="0.32"/>
@@ -7471,7 +7471,7 @@ class _Handler(BaseHTTPRequestHandler):
             body = (
                 "<!DOCTYPE html><meta charset='utf-8'>"
                 "<title>PixCull · 视频审片</title>"
-                "<body style='background:#0d0e12;color:#e6e6e6;"
+                "<body style='background:#161310;color:#e6e6e6;"
                 "font:14px/1.6 system-ui;padding:48px;text-align:center'>"
                 "<h2>这不是一个视频 run</h2>"
                 "<p>该 run 缺少 <code>temporal.json</code>。请先运行 "
@@ -8071,7 +8071,7 @@ class _Handler(BaseHTTPRequestHandler):
             'alt="" style="width:300px;max-width:80vw;height:auto;'
             'border-radius:16px;margin-bottom:18px;'
             'box-shadow:0 16px 48px rgba(0,0,0,0.4),'
-            '0 0 0 1px rgba(99,102,241,0.18) inset;"'
+            '0 0 0 1px rgba(204,163,106,0.18) inset;"'
             ' onerror="this.style.display=\'none\'">'
         )
         cards_html = "\n".join(cards) if cards else (
@@ -8092,8 +8092,8 @@ class _Handler(BaseHTTPRequestHandler):
               '<button id="historyTryDemoBtn" '
               'style="padding:11px 22px;border-radius:999px;border:0;'
               'font-weight:600;font-size:13px;cursor:pointer;'
-              'background:linear-gradient(135deg,#6E56CF 0%,#EC4899 100%);'
-              'color:#fff;box-shadow:0 4px 14px rgba(110,86,207,0.40)" '
+              'background:linear-gradient(135deg,#dcb87e 0%,#b07d44 100%);'
+              'color:#fff;box-shadow:0 4px 14px rgba(220,184,126,0.40)" '
               'onclick="(async()=>{this.disabled=true;this.textContent=\'载入中…\';'
               'try{const r=await fetch(\'/sample_demo\',{method:\'POST\'});'
               'const d=await r.json();if(d.ok&&d.run_id){location.href=\'/results/\'+d.run_id;}'
@@ -8891,13 +8891,13 @@ class _Handler(BaseHTTPRequestHandler):
                 '<div id="videoReviewCta" style="position:fixed;right:18px;'
                 'bottom:18px;z-index:9999;display:flex;gap:8px;align-items:center">'
                 f'<a href="/timeline/{rid_safe}" title="照片+视频联合时间线" '
-                'style="background:#14161b;color:#9a8bff;border:1px solid #6E56CF;'
+                'style="background:#14161b;color:#e0bc84;border:1px solid #dcb87e;'
                 'text-decoration:none;padding:9px 13px;border-radius:22px;'
                 'font:12px system-ui">🗓 联合时间线</a>'
                 f'<a href="/video/{rid_safe}" title="视频原生审片 · 时间线 scrubber" '
-                'style="background:#6E56CF;color:#fff;text-decoration:none;'
+                'style="background:#dcb87e;color:#fff;text-decoration:none;'
                 'padding:10px 16px;border-radius:22px;font:13px system-ui;'
-                'box-shadow:0 4px 16px rgba(110,86,207,.5)">🎬 视频审片 →</a></div>'
+                'box-shadow:0 4px 16px rgba(220,184,126,.5)">🎬 视频审片 →</a></div>'
             )
             html = html.replace("</body>", badge + "</body>", 1)
         self._send_html(200, html.encode("utf-8"))
@@ -12556,13 +12556,13 @@ _FIRST_RUN_HTML = r"""<!DOCTYPE html>
   <title>PixCull — 首次设置</title>
   <style>
     :root {
-      --bg: #0d0e12;
-      --bg-card: #16181f;
+      --bg: #161310;
+      --bg-card: #1e1a14;
       --fg: #e9ecf2;
       --muted: #a8b2c1;
-      --accent: #7c6cf5;
-      --accent-hi: #9a8bff;
-      --border: #20242c;
+      --accent: #cca36a;
+      --accent-hi: #e0bc84;
+      --border: #2b241a;
       --keep: #4ade80;
       --maybe: #d9a30c;
       --cull: #f87171;
@@ -12779,8 +12779,8 @@ _PRIVACY_HTML = r"""<!DOCTYPE html>
   <title>PixCull — 隐私 / 错误上报政策</title>
   <style>
     :root {
-      --bg: #0d0e12; --bg-card: #16181f; --fg: #e9ecf2;
-      --muted: #a8b2c1; --accent: #7c6cf5; --border: #20242c;
+      --bg: #161310; --bg-card: #1e1a14; --fg: #e9ecf2;
+      --muted: #a8b2c1; --accent: #cca36a; --border: #2b241a;
       --keep: #4ade80; --cull: #f87171;
     }
     body {
@@ -12894,11 +12894,11 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
   <title>PixCull — 垂类样本采集</title>
   <style>
     :root {
-      --bg: #0d0e12; --bg-card: #16181f; --bg-card-hi: #1f222b;
-      --fg: #e9ecf2; --muted: #a8b2c1; --accent: #7c6cf5;
-      --accent-hi: #9a8bff; --border: #20242c;
+      --bg: #161310; --bg-card: #1e1a14; --bg-card-hi: #272118;
+      --fg: #e9ecf2; --muted: #a8b2c1; --accent: #cca36a;
+      --accent-hi: #e0bc84; --border: #2b241a;
       --keep: #4ade80; --maybe: #d9a30c; --cull: #f87171;
-      --focus-ring: rgba(154,139,255,0.55);
+      --focus-ring: rgba(224,188,132,0.55);
     }
     * { box-sizing: border-box; }
     body {
@@ -13123,7 +13123,7 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
     .vactions .row.secondary .bulk-link .ic { font-size: 13px; }
     /* V17.13 — Unsplash button uses Unsplash-y warm-orange accent */
     .vactions .row.secondary button.unsplash:hover {
-      border-color: #f59e0b; color: #fbbf24;
+      border-color: #f59e0b; color: #d6a443;
     }
     /* Disabled state — when there are no samples, secondary tools
        can't do anything useful. Make that obvious. */
@@ -14748,11 +14748,11 @@ _VERTICAL_BULK_HTML = r"""<!DOCTYPE html>
   <title>PixCull — 批量分类 · __VZH__</title>
   <style>
     :root {
-      --bg: #0d0e12; --bg-card: #16181f; --bg-card-hi: #1f222b;
-      --fg: #e9ecf2; --muted: #a8b2c1; --accent: #7c6cf5;
-      --accent-hi: #9a8bff; --border: #20242c;
+      --bg: #161310; --bg-card: #1e1a14; --bg-card-hi: #272118;
+      --fg: #e9ecf2; --muted: #a8b2c1; --accent: #cca36a;
+      --accent-hi: #e0bc84; --border: #2b241a;
       --keep: #4ade80; --maybe: #d9a30c; --cull: #f87171;
-      --focus-ring: rgba(154,139,255,0.55);
+      --focus-ring: rgba(224,188,132,0.55);
     }
     * { box-sizing: border-box; }
     body {
@@ -15088,39 +15088,39 @@ _VERTICAL_BULK_HTML = r"""<!DOCTYPE html>
 _DESIGN_TOKENS_CSS = r"""
   :root {
     /* surfaces — v2.2 Taste: deep calm gallery ground (was LR-grade gray) */
-    --bg:           #0d0e12;
-    --bg-card:      #16181f;
-    --bg-card-hi:   #1f222b;
-    --surface-2:    #1f222b;
-    --surface-3:    #282c36;
-    --chrome:       #0a0b0e;
+    --bg:           #161310;
+    --bg-card:      #1e1a14;
+    --bg-card-hi:   #272118;
+    --surface-2:    #272118;
+    --surface-3:    #322a1e;
+    --chrome:       #100d0a;
     /* text */
     --fg:           #f1f3f7;
     --fg-2:         #c5cad4;
     --muted:        #a8b2c1;
     --muted-soft:   #7a8696;
     /* borders */
-    --border:       #20242c;
-    --border-hi:    #2b313b;
-    /* accent — v2.2 brand violet (was stock indigo #6366f1) */
-    --accent:       #7c6cf5;
-    --accent-hi:    #9a8bff;
-    --accent-soft:  rgba(124,108,245,0.15);
-    --accent-glow:  rgba(124,108,245,0.42);
-    --focus-ring:   rgba(154,139,255,0.55);
+    --border:       #2b241a;
+    --border-hi:    #3a3122;
+    /* accent — v2.2 brand violet (was stock indigo #cca36a) */
+    --accent:       #cca36a;
+    --accent-hi:    #e0bc84;
+    --accent-soft:  rgba(204,163,106,0.15);
+    --accent-glow:  rgba(204,163,106,0.42);
+    --focus-ring:   rgba(224,188,132,0.55);
     /* semantic palette */
-    --c-success:        #34d399;
-    --c-success-tint:   rgba(52,211,153,0.14);
-    --c-success-border: rgba(52,211,153,0.40);
-    --c-warn:           #fbbf24;
-    --c-warn-tint:      rgba(251,191,36,0.14);
-    --c-warn-border:    rgba(251,191,36,0.40);
-    --c-danger:         #ef6363;
-    --c-danger-tint:    rgba(239,99,99,0.14);
-    --c-danger-border:  rgba(239,99,99,0.40);
-    --c-info:           #38bdf8;
-    --c-info-tint:      rgba(56,189,248,0.14);
-    --c-info-border:    rgba(56,189,248,0.40);
+    --c-success:        #6faa78;
+    --c-success-tint:   rgba(111,170,120,0.14);
+    --c-success-border: rgba(111,170,120,0.40);
+    --c-warn:           #d6a443;
+    --c-warn-tint:      rgba(214,164,67,0.14);
+    --c-warn-border:    rgba(214,164,67,0.40);
+    --c-danger:         #cf6f5b;
+    --c-danger-tint:    rgba(207,111,91,0.14);
+    --c-danger-border:  rgba(207,111,91,0.40);
+    --c-info:           #6ea2b0;
+    --c-info-tint:      rgba(110,162,176,0.14);
+    --c-info-border:    rgba(110,162,176,0.40);
     --c-neutral:        #a8b2c1;
     --c-neutral-tint:   rgba(168,178,193,0.10);
     --c-neutral-border: rgba(168,178,193,0.30);
@@ -15182,11 +15182,11 @@ _DESIGN_TOKENS_CSS = r"""
     --muted-soft:   #8c95a3;
     --border:       #e3ddcf;
     --border-hi:    #c9c0ad;
-    --accent:       #5b4ee6;
-    --accent-hi:    #7c6cf5;
-    --accent-soft:  rgba(91,78,230,0.10);
-    --accent-glow:  rgba(91,78,230,0.30);
-    --focus-ring:   rgba(91,78,230,0.45);
+    --accent:       #9a6f33;
+    --accent-hi:    #cca36a;
+    --accent-soft:  rgba(154,111,51,0.10);
+    --accent-glow:  rgba(154,111,51,0.30);
+    --focus-ring:   rgba(154,111,51,0.45);
     --shadow-sm: 0 1px 2px  rgba(89,54,18,0.07);
     --shadow-md: 0 4px 14px rgba(89,54,18,0.09);
     --shadow-lg: 0 14px 34px rgba(89,54,18,0.10);
@@ -15201,10 +15201,10 @@ _DESIGN_TOKENS_CSS = r"""
      on every page that uses _DESIGN_TOKENS_CSS (upload / admin / share).
      Defined here so the token name + curve are project-wide single source. */
   :root {
-    --brand-gradient:       linear-gradient(135deg, #6E56CF 0%, #EC4899 100%);
+    --brand-gradient:       linear-gradient(135deg, #dcb87e 0%, #b07d44 100%);
     --brand-gradient-soft:  linear-gradient(135deg,
-                              rgba(110,86,207,0.18) 0%,
-                              rgba(236,72,153,0.18) 100%);
+                              rgba(220,184,126,0.18) 0%,
+                              rgba(176,125,68,0.18) 100%);
   }
   /* Primary CTA: signature gradient backdrop, white text, soft glow.
      Hover lifts 1px + brightens; active settles. */
@@ -15250,9 +15250,9 @@ _UPLOAD_HTML = (r"""<!DOCTYPE html>
        remap it to the new --accent (indigo) color. */
     :root {
       --bg-grad: radial-gradient(1200px 600px at 50% -200px,
-                 rgba(99,102,241,0.10), transparent 60%),
+                 rgba(204,163,106,0.10), transparent 60%),
                  radial-gradient(900px 500px at 90% 110%,
-                 rgba(99,102,241,0.05), transparent 60%);
+                 rgba(204,163,106,0.05), transparent 60%);
       /* legacy button paddings kept; existing buttons reference them */
       --btn-pad-s: 4px 10px;
       --btn-pad-m: 7px 14px;
@@ -15377,7 +15377,7 @@ _UPLOAD_HTML = (r"""<!DOCTYPE html>
        wordmark (matches results.html brand-mark .wordmark span). */
     .hero-wordmark b {
       font-weight: 700;
-      background: linear-gradient(135deg, #6E56CF 0%, #EC4899 100%);
+      background: linear-gradient(135deg, #dcb87e 0%, #b07d44 100%);
       -webkit-background-clip: text;
       background-clip: text;
       color: transparent;
@@ -15393,7 +15393,7 @@ _UPLOAD_HTML = (r"""<!DOCTYPE html>
       /* v0.9-P0-3 — hero title uses the signature gradient instead
          of the previous flat white→gray.  Pure visual brand anchor
          on the first surface every new user sees. */
-      background: linear-gradient(135deg, #6E56CF 0%, #EC4899 60%, #ffffff 100%);
+      background: linear-gradient(135deg, #dcb87e 0%, #b07d44 60%, #ffffff 100%);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
@@ -15432,14 +15432,14 @@ _UPLOAD_HTML = (r"""<!DOCTYPE html>
     }
     .hero-feature:hover {
       border-color: #4f55e8;
-      background: rgba(99,102,241,0.06);
+      background: rgba(204,163,106,0.06);
       transform: translateY(-2px);
     }
     .hero-feature-icon {
       display: inline-flex; align-items: center; justify-content: center;
       width: 32px; height: 32px;
       border-radius: 8px;
-      background: rgba(99,102,241,0.14);
+      background: rgba(204,163,106,0.14);
       color: #818cf8;
       margin-bottom: 10px;
     }
@@ -15886,8 +15886,8 @@ _UPLOAD_HTML = (r"""<!DOCTYPE html>
       <defs>
         <linearGradient id="pcBrandGradHero"
                         x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%"   stop-color="#6E56CF"/>
-          <stop offset="100%" stop-color="#EC4899"/>
+          <stop offset="0%"   stop-color="#dcb87e"/>
+          <stop offset="100%" stop-color="#b07d44"/>
         </linearGradient>
       </defs>
       <circle cx="4"  cy="5"  r="1.6" fill="currentColor" opacity="0.32"/>
@@ -15984,7 +15984,7 @@ _UPLOAD_HTML = (r"""<!DOCTYPE html>
            the "wait, do I need to install something first" gate. -->
       <button id="sampleBtn" class="secondary"
               title="用 6 张示例数据立刻进入 /results 体验,不需要装环境"
-              style="margin-left:auto;background:rgba(124,108,245,0.15);border-color:#7c6cf5;color:#c3b9ff">
+              style="margin-left:auto;background:rgba(204,163,106,0.15);border-color:#cca36a;color:#c3b9ff">
         ⚡ 用示例数据立刻体验
       </button>
       <span id="hint" style="color:var(--muted);font-size:12px"></span>
@@ -16297,7 +16297,7 @@ _UPLOAD_HTML = (r"""<!DOCTYPE html>
           : '<span style="color:var(--muted-soft);margin-left:6px;font-size:10px">点击切换</span>';
         return `<div data-uid="${u.user_id}" class="user-row"
                 style="padding:8px 10px;border-radius:4px;
-                ${u.is_active ? 'background:rgba(52,211,153,0.08);' : 'cursor:pointer;'}
+                ${u.is_active ? 'background:rgba(111,170,120,0.08);' : 'cursor:pointer;'}
                 margin-bottom:4px;display:flex;justify-content:space-between;
                 align-items:center;font-size:12px">
           <span><b>${u.user_id}</b>${tag}</span>
@@ -17032,7 +17032,7 @@ def _render_delivery_audit_html(run_id: str, md: str, preset: str) -> str:
         "<meta charset='utf-8'>"
         f"<title>交付审计 · {_html.escape(run_id)}</title>"
         "<style>"
-        "body{margin:0;background:#0d0e12;color:#e9ecf2;"
+        "body{margin:0;background:#161310;color:#e9ecf2;"
         "font:13px/1.6 -apple-system,Segoe UI,PingFang SC,sans-serif}"
         "header{padding:18px 24px;border-bottom:1px solid #232830;"
         "display:flex;align-items:center;gap:12px;flex-wrap:wrap}"
@@ -17134,7 +17134,7 @@ def _render_face_audit_html(payload: dict) -> str:
         "<meta charset='utf-8'>"
         f"<title>face 库审计 · {run_id}</title>"
         "<style>"
-        "body{margin:0;background:#0d0e12;color:#e9ecf2;"
+        "body{margin:0;background:#161310;color:#e9ecf2;"
         "font:13px/1.5 -apple-system,Segoe UI,PingFang SC,sans-serif}"
         "header{padding:18px 24px;border-bottom:1px solid #232830}"
         "h1{margin:0;font-size:16px;font-weight:700}"
@@ -17149,9 +17149,9 @@ def _render_face_audit_html(payload: dict) -> str:
         ".kpi{padding:8px 12px;background:#11141a;border:1px solid #232830;"
         "border-radius:6px;font-size:11.5px}"
         ".kpi b{font-size:14px;color:#fff;display:block;line-height:1.1}"
-        ".kpi.warn b{color:#fbbf24}"
-        ".kpi.bad b{color:#ef6363}"
-        ".kpi.good b{color:#34d399}"
+        ".kpi.warn b{color:#d6a443}"
+        ".kpi.bad b{color:#cf6f5b}"
+        ".kpi.good b{color:#6faa78}"
         "table{width:100%;border-collapse:collapse;font-size:12px;"
         "background:#11141a;border:1px solid #232830;border-radius:6px;"
         "overflow:hidden}"
@@ -17161,7 +17161,7 @@ def _render_face_audit_html(payload: dict) -> str:
         "border-bottom:1px solid #232830}"
         "td{padding:7px 12px;border-bottom:1px solid #1c2027}"
         "tr:last-child td{border-bottom:none}"
-        "tr.polluted{background:rgba(239,99,99,0.06)}"
+        "tr.polluted{background:rgba(207,111,91,0.06)}"
         "tr.polluted td:last-child{color:#ff9a9a}"
         "tr.clean td:last-child{color:#7fe1b8}"
         "footer{padding:18px 24px;color:#7a8696;font-size:11.5px;"
@@ -17555,7 +17555,7 @@ PYTHONPATH=. python scripts/eval_on_golden_set.py golden/ \
       const k = r.kv != null ? r.kv.toFixed(2) : "--";
       const c = r.cv != null ? r.cv.toFixed(2) : "--";
       const d = r.diff != null
-        ? `<b style="color:${r.diff > 1.5 ? '#34d399' : r.diff > 0.5 ? '#fbbf24' : 'var(--muted)'}">${r.diff >= 0 ? '+' : ''}${r.diff.toFixed(2)}</b>`
+        ? `<b style="color:${r.diff > 1.5 ? '#6faa78' : r.diff > 0.5 ? '#d6a443' : 'var(--muted)'}">${r.diff >= 0 ? '+' : ''}${r.diff.toFixed(2)}</b>`
         : "--";
       return `<tr><td>${r.label}</td><td>${k}</td><td>${c}</td><td>${d}</td></tr>`;
     }).join("");

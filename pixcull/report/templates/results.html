@@ -37,55 +37,59 @@
       /* v2.2 "Taste" overhaul — gallery-grade calm ground so the
          photos are the hero (Apple Photos / CapCut dark), with clear
          elevation tiers instead of a flat workspace gray. */
-      --bg:           #0d0e12;     /* deep calm gallery ground */
-      --bg-card:      #16181f;     /* tile surface (clearly raised) */
-      --bg-card-hi:   #1f222b;     /* hover / raised */
-      --surface-2:    #1f222b;
-      --surface-3:    #282c36;     /* inset blocks (inspector cells) */
-      --chrome:       #0a0b0e;     /* sticky chrome recedes */
+      /* v2.3 Editorial-Luxury — warm espresso ground (photos pop on a
+         warm dark, not a cold black) replacing the cool #0d0e12 family. */
+      --bg:           #161310;     /* warm espresso ground */
+      --bg-card:      #1e1a14;     /* warm raised tile */
+      --bg-card-hi:   #272118;     /* hover / raised */
+      --surface-2:    #272118;
+      --surface-3:    #322a1e;     /* inset blocks (inspector cells) */
+      --chrome:       #100d0a;     /* sticky chrome recedes */
 
-      /* —— TEXT ——————————————————————————————————————————— */
-      --fg:           #f1f3f7;     /* primary text (was #e9ecf2 — bumped contrast) */
-      --fg-2:         #c5cad4;     /* secondary text (was missing — for chip labels) */
-      --muted:        #a8b2c1;
-      --muted-soft:   #7a8696;
+      /* —— TEXT —— warm cream on espresso ————————————————————— */
+      --fg:           #f3ede1;     /* warm cream primary */
+      --fg-2:         #d3c9b6;     /* secondary (chip labels) */
+      --muted:        #a89d88;
+      --muted-soft:   #7d7361;
 
-      /* —— BORDERS ——— hairline, gallery-soft ———————————————— */
-      --border:       #20242c;
-      --border-hi:    #2b313b;
+      /* —— BORDERS ——— warm hairline ———————————————————————— */
+      --border:       #2b241a;
+      --border-hi:    #3a3122;
 
       /* —— BRAND + ACCENT ————————————————————————————————————
-         v0.4: single canonical accent.  --accent-hi for hover /
-         focus emphasis.  All ad-hoc rgba(59,130,246,0.x) calls
-         should migrate to these. */
-      /* v2.2 — refined violet that resolves into the brand gradient
-         (#6E56CF→#EC4899); less "bootstrap indigo", more editorial. */
-      --accent:       #7c6cf5;       /* refined violet-indigo */
-      --accent-hi:    #9a8bff;       /* hover / active */
-      --accent-soft:  rgba(124,108,245,0.15);
-      --accent-glow:  rgba(124,108,245,0.42);
-      --focus-ring:   rgba(154,139,255,0.55);
+         v2.3 Editorial-Luxury — ONE restrained warm accent (brass /
+         film ochre), replacing the violet + the purple→pink gradient
+         that redesign-skill names as "the AI design fingerprint".
+         Paper-and-ink / film register, not bootstrap indigo. */
+      --accent:       #cca36a;       /* brass / film ochre */
+      --accent-hi:    #e0bc84;       /* hover / active (lighter brass) */
+      --accent-soft:  rgba(204,163,106,0.16);
+      --accent-glow:  rgba(204,163,106,0.40);
+      --focus-ring:   rgba(224,188,132,0.55);
 
       /* —— SEMANTIC COLOR PALETTE ————————————————————————————
          5 states for the unified `.chip` system.  Each state has
          (a) a base color, (b) a translucent tint for backgrounds,
          (c) a border tint.  All chips look the same shape; only
          the palette changes. */
-      --c-success:        #34d399;
-      --c-success-tint:   rgba(52,211,153,0.14);
-      --c-success-border: rgba(52,211,153,0.40);
-      --c-warn:           #fbbf24;
-      --c-warn-tint:      rgba(251,191,36,0.14);
-      --c-warn-border:    rgba(251,191,36,0.40);
-      --c-danger:         #ef6363;
-      --c-danger-tint:    rgba(239,99,99,0.14);
-      --c-danger-border:  rgba(239,99,99,0.40);
-      --c-info:           #38bdf8;
-      --c-info-tint:      rgba(56,189,248,0.14);
-      --c-info-border:    rgba(56,189,248,0.40);
-      --c-neutral:        #a8b2c1;
-      --c-neutral-tint:   rgba(168,178,193,0.10);
-      --c-neutral-border: rgba(168,178,193,0.30);
+      /* v2.3 — desaturated to sit in the warm editorial system
+         (<80% sat per redesign-skill); still clearly go / caution /
+         stop, but sage / ochre / terracotta rather than neon. */
+      --c-success:        #6faa78;   /* sage (keep) */
+      --c-success-tint:   rgba(111,170,120,0.15);
+      --c-success-border: rgba(111,170,120,0.42);
+      --c-warn:           #d6a443;   /* ochre-amber (maybe) */
+      --c-warn-tint:      rgba(214,164,67,0.15);
+      --c-warn-border:    rgba(214,164,67,0.42);
+      --c-danger:         #cf6f5b;   /* terracotta (cull) */
+      --c-danger-tint:    rgba(207,111,91,0.15);
+      --c-danger-border:  rgba(207,111,91,0.42);
+      --c-info:           #6ea2b0;   /* muted teal-slate (info) */
+      --c-info-tint:      rgba(110,162,176,0.15);
+      --c-info-border:    rgba(110,162,176,0.42);
+      --c-neutral:        #a89d88;
+      --c-neutral-tint:   rgba(168,157,136,0.10);
+      --c-neutral-border: rgba(168,157,136,0.30);
 
       /* —— LEGACY KEEP / MAYBE / CULL ————————————————————————
          These remain for V14 backwards compat (badges in results
@@ -153,10 +157,12 @@
          in shadow + blur for elevation depth. */
       /* v2.2 — softer, wider "expensive" elevation (lower opacity,
          more blur, a faint ambient layer). */
-      --shadow-sm: 0 1px 3px rgba(0,0,0,0.34);
-      --shadow-md: 0 6px 22px rgba(0,0,0,0.36);
-      --shadow-lg: 0 18px 48px rgba(0,0,0,0.44);
-      --shadow-xl: 0 32px 72px rgba(0,0,0,0.52);
+      /* v2.3 — warm espresso-tinted shadows (carry the bg hue, per
+         redesign-skill) rather than pure black. */
+      --shadow-sm: 0 1px 3px rgba(20,12,4,0.36);
+      --shadow-md: 0 6px 22px rgba(20,12,4,0.40);
+      --shadow-lg: 0 18px 48px rgba(20,12,4,0.50);
+      --shadow-xl: 0 32px 72px rgba(20,12,4,0.58);
 
       /* —— MOTION ——————————————————————————————————————————
          v0.4 will sprinkle these into chip toggle / modal / filter
@@ -184,10 +190,13 @@
          feel, harmonises with existing indigo accent.  Lives in
          logo wordmark, primary CTAs, loading bars, QR brand-frame,
          large score numbers.  "See the gradient, know it's PixCull." */
-      --brand-gradient:  linear-gradient(135deg, #6E56CF 0%, #EC4899 100%);
+      /* v2.3 — brass tonal, replacing the purple→pink "AI fingerprint".
+         Keeps a brand signature (wordmark / hero numbers / CTAs) in the
+         editorial register. */
+      --brand-gradient:  linear-gradient(135deg, #dcb87e 0%, #b07d44 100%);
       --brand-gradient-soft: linear-gradient(135deg,
-                              rgba(110,86,207,0.18) 0%,
-                              rgba(236,72,153,0.18) 100%);
+                              rgba(220,184,126,0.16) 0%,
+                              rgba(176,125,68,0.16) 100%);
     }
     /* Honor system color-scheme + reduce-motion preferences */
     @media (prefers-reduced-motion: reduce) {
@@ -243,16 +252,16 @@
       --border:       #e3ddcf;
       --border-hi:    #c9c0ad;
       /* —— ACCENT (v2.2 — brand violet, not bootstrap indigo) ——
-         Parity with the dark theme's #7c6cf5 family.  Base is a deeper
-         violet (#5b4ee6, ~5.7:1 on white — AA body text); --accent-hi
+         Parity with the dark theme's #cca36a family.  Base is a deeper
+         violet (#9a6f33, ~5.7:1 on white — AA body text); --accent-hi
          lifts to the exact dark-theme accent so hover / borders / hero
          gradient read as the same brand hue in both themes.  Was a
          stock indigo afterthought before. */
-      --accent:       #5b4ee6;
-      --accent-hi:    #7c6cf5;
-      --accent-soft:  rgba(91,78,230,0.10);
-      --accent-glow:  rgba(91,78,230,0.30);
-      --focus-ring:   rgba(91,78,230,0.45);
+      --accent:       #9a6f33;
+      --accent-hi:    #cca36a;
+      --accent-soft:  rgba(154,111,51,0.10);
+      --accent-glow:  rgba(154,111,51,0.30);
+      --focus-ring:   rgba(154,111,51,0.45);
       /* —— SEMANTIC TINTS (lighter alpha to read on white) —— */
       --c-success-tint:   rgba(16,185,129,0.10);
       --c-success-border: rgba(16,185,129,0.30);
@@ -429,7 +438,7 @@
        in the top-left, reinforcing identity every time. */
     .brand-mark .wordmark span {
       background: var(--brand-gradient,
-        linear-gradient(135deg, #6E56CF, #EC4899));
+        linear-gradient(135deg, #dcb87e, #b07d44));
       -webkit-background-clip: text;
       background-clip: text;
       color: transparent;
@@ -573,7 +582,7 @@
     .score-number,
     .stat-value-large {
       background: var(--brand-gradient,
-        linear-gradient(135deg, #6E56CF, #EC4899));
+        linear-gradient(135deg, #dcb87e, #b07d44));
       -webkit-background-clip: text;
       background-clip: text;
       color: transparent;
@@ -589,7 +598,7 @@
     button.btn-primary,
     .export-btn.primary-cta {
       background: var(--brand-gradient,
-        linear-gradient(135deg, #6E56CF, #EC4899)) !important;
+        linear-gradient(135deg, #dcb87e, #b07d44)) !important;
       color: #ffffff !important;
       border: 0 !important;
       box-shadow: 0 4px 14px rgba(110, 86, 207, 0.35);
@@ -819,10 +828,10 @@
     .cmdk-item.active {
       background: var(--brand-gradient-soft,
                   linear-gradient(135deg,
-                    rgba(110,86,207,0.18),
-                    rgba(236,72,153,0.18)));
+                    rgba(220,184,126,0.18),
+                    rgba(176,125,68,0.18)));
       color: var(--fg);
-      box-shadow: inset 0 0 0 1px rgba(110,86,207,0.30);
+      box-shadow: inset 0 0 0 1px rgba(220,184,126,0.30);
     }
     .cmdk-item-icon {
       width: 22px; height: 22px;
@@ -849,7 +858,7 @@
     }
     .cmdk-item-mark {
       background: var(--brand-gradient,
-        linear-gradient(135deg, #6E56CF, #EC4899));
+        linear-gradient(135deg, #dcb87e, #b07d44));
       -webkit-background-clip: text;
       background-clip: text;
       color: transparent;
@@ -882,7 +891,7 @@
     .cmdk-foot-spacer { flex: 1; }
     .cmdk-foot-brand {
       background: var(--brand-gradient,
-        linear-gradient(135deg, #6E56CF, #EC4899));
+        linear-gradient(135deg, #dcb87e, #b07d44));
       -webkit-background-clip: text;
       background-clip: text;
       color: transparent;
@@ -1005,7 +1014,7 @@
       background: var(--surface-1, #1c1f27);
       border: 1px solid rgba(168, 85, 247, 0.40);
       border-top: 3px solid transparent;
-      border-image: linear-gradient(90deg, #6E56CF, #A855F7, #EC4899) 1;
+      border-image: linear-gradient(90deg, #dcb87e, #c79a5e, #b07d44) 1;
       border-radius: 14px;
       padding: 16px 18px;
       box-shadow: 0 18px 40px -8px rgba(0, 0, 0, 0.55);
@@ -1028,7 +1037,7 @@
     #presenceModal .pp-avatar {
       width: 28px; height: 28px;
       border-radius: 50%;
-      background: linear-gradient(135deg, #6E56CF, #EC4899);
+      background: linear-gradient(135deg, #dcb87e, #b07d44);
       color: #fff;
       display: inline-flex; align-items: center; justify-content: center;
       font-size: 12px; font-weight: 700;
@@ -1758,7 +1767,7 @@
     /* V9.0 style chip in card */
     .row1 .style-chip {
       font-size: 9px; padding: 1px 5px; border-radius: 2px;
-      background: rgba(168, 85, 247, 0.18); color: #c4b5fd;
+      background: rgba(168, 85, 247, 0.18); color: #e0bc84;
       letter-spacing: 0.02em;
     }
     /* v0.4 — toolbar button used throughout the header.  Same
@@ -2166,7 +2175,7 @@
       font-family: ui-monospace, monospace; cursor: help;
     }
     .row1 .rs.dis { background: var(--maybe); color: white; }
-    .row1 .rs.meta { background: rgba(168, 85, 247, 0.18); color: #c4b5fd; }
+    .row1 .rs.meta { background: rgba(168, 85, 247, 0.18); color: #e0bc84; }
     .row1 .rs.meta.dis { background: var(--maybe); color: white; }
     .row2 { display: flex; align-items: center; justify-content: space-between;
             margin-top: 4px; font-size: 11px; color: var(--muted); }
@@ -2256,9 +2265,9 @@
        ──────────────────────────────────────────────────────────── */
     .ai-num {
       background: linear-gradient(135deg,
-                  var(--brand-indigo, #6E56CF) 0%,
-                  var(--brand-violet, #A855F7) 50%,
-                  var(--brand-pink,   #EC4899) 100%);
+                  var(--brand-indigo, #dcb87e) 0%,
+                  var(--brand-violet, #c79a5e) 50%,
+                  var(--brand-pink,   #b07d44) 100%);
       -webkit-background-clip: text;
               background-clip: text;
       -webkit-text-fill-color: transparent;
@@ -2443,7 +2452,7 @@
     }
     .card-action:hover {
       background: var(--brand-gradient,
-        linear-gradient(135deg, #6E56CF, #EC4899));
+        linear-gradient(135deg, #dcb87e, #b07d44));
       border-color: transparent;
       color: #ffffff;
       transform: translateY(-1px) scale(1.06);
@@ -2489,10 +2498,10 @@
     .modal-action     {
       border-top: 3px solid transparent !important;
       border-image: var(--brand-gradient,
-        linear-gradient(135deg, #6E56CF, #EC4899)) 1 0 0 0 !important;
+        linear-gradient(135deg, #dcb87e, #b07d44)) 1 0 0 0 !important;
       border-image-slice: 1 !important;
     }
-    .modal-detail     { border-top: 3px solid var(--accent, #6366f1) !important; }
+    .modal-detail     { border-top: 3px solid var(--accent, #cca36a) !important; }
     .modal-destructive {
       border-top: 3px solid var(--c-danger, #ef4444) !important;
     }
@@ -2501,7 +2510,7 @@
     .modal-action .btn-primary,
     .modal-action button[type="submit"] {
       background: var(--brand-gradient,
-        linear-gradient(135deg, #6E56CF, #EC4899));
+        linear-gradient(135deg, #dcb87e, #b07d44));
       border: 0;
       color: #ffffff;
     }
@@ -2513,7 +2522,7 @@
     }
     .modal-destructive .btn-secondary,
     .modal-destructive button.secondary {
-      background: var(--accent, #6366f1) !important;
+      background: var(--accent, #cca36a) !important;
       color: #ffffff !important;
       /* reverse-pair: cancel becomes the visually-primary button so
          the user has to deliberately click the red one to confirm */
@@ -2796,7 +2805,7 @@
        a feature signal, not a status. */
     .chip--brand   { background: var(--accent-soft);
                      color: var(--accent-hi);
-                     border-color: rgba(99,102,241,0.40); }
+                     border-color: rgba(204,163,106,0.40); }
     .chip--clickable { cursor: pointer; }
     .chip--clickable:hover {
       background: var(--c-info-tint);
@@ -2805,7 +2814,7 @@
     .chip--success.chip--clickable:hover { background: var(--c-success-tint); filter: brightness(1.15); }
     .chip--warn.chip--clickable:hover    { background: var(--c-warn-tint);    filter: brightness(1.15); }
     .chip--danger.chip--clickable:hover  { background: var(--c-danger-tint);  filter: brightness(1.15); }
-    .chip--brand.chip--clickable:hover   { background: rgba(99,102,241,0.24); filter: brightness(1.10); }
+    .chip--brand.chip--clickable:hover   { background: rgba(204,163,106,0.24); filter: brightness(1.10); }
     /* active = "this filter is currently on" — saturated fill +
        white text for unmistakable contrast against the dim
        background chips. */
@@ -3895,7 +3904,7 @@
     }
     .ann-progress .ann-progress-cell.lit {
       background: var(--accent);
-      box-shadow: 0 0 6px var(--accent-soft, rgba(99,102,241,0.4));
+      box-shadow: 0 0 6px var(--accent-soft, rgba(204,163,106,0.4));
     }
     .ann-progress .ann-progress-count {
       font-family: ui-monospace, "SF Mono", Menlo, monospace;
@@ -4327,7 +4336,7 @@
     .lightbox .info-pane .style-tag {
       display: inline-block; margin-right: 4px;
       font-size: 10px; padding: 1px 6px; border-radius: 2px;
-      background: rgba(168,85,247,0.18); color: #c4b5fd;
+      background: rgba(204,163,106,0.18); color: #e0bc84;
     }
     .lightbox .close-btn {
       position: absolute; top: 18px; right: 408px;
@@ -4497,7 +4506,7 @@
     .lightbox .fs-thumb.current {
       opacity: 1;
       box-shadow: 0 0 0 2px var(--accent),
-                  0 0 0 4px rgba(99,102,241,0.45);
+                  0 0 0 4px rgba(204,163,106,0.45);
       transform: translateY(-3px);
     }
     .lightbox .fs-thumb img {
@@ -4557,7 +4566,7 @@
     }
     .lightbox .lb-scrubber-fill {
       position: absolute; top: 0; left: 0; bottom: 0;
-      background: var(--accent, #6366f1);
+      background: var(--accent, #cca36a);
       width: 0%;
       transition: width 60ms linear;
       pointer-events: none;
@@ -4566,9 +4575,9 @@
       position: absolute; top: 50%;
       width: 12px; height: 12px;
       border-radius: 50%;
-      background: var(--accent, #7c6cf5);
+      background: var(--accent, #cca36a);
       box-shadow: 0 0 0 2px rgba(0,0,0,0.4),
-                  0 0 10px var(--accent-glow, rgba(124,108,245,0.6));
+                  0 0 10px var(--accent-glow, rgba(204,163,106,0.6));
       /* v2.2 motion pass — magnetic "pop": the thumb springs up from
          scale 0.6 → 1 (gentle overshoot) when the scrubber wakes on
          hover / active, instead of just fading in. */
@@ -4754,9 +4763,9 @@
       will-change: width, height, transform;
     }
     .card.marquee-selected {
-      outline: 2px solid var(--accent, #6366f1);
+      outline: 2px solid var(--accent, #cca36a);
       outline-offset: -2px;
-      box-shadow: 0 0 0 4px rgba(99,102,241,0.30);
+      box-shadow: 0 0 0 4px rgba(204,163,106,0.30);
     }
     .bulk-toolbar {
       position: fixed; left: 50%; bottom: 20px;
@@ -5144,13 +5153,13 @@
     .lp-scroll { padding-top: 10px; }
     .lp-title { letter-spacing: 0.10em; }
     .lp-group > summary { padding: 11px 16px; }
-    .lp-group[data-group="decision"] > summary { --lp-dot: var(--accent, #6366f1); }
+    .lp-group[data-group="decision"] > summary { --lp-dot: var(--accent, #cca36a); }
     .lp-group[data-group="scene"]    > summary { --lp-dot: var(--c-success, #10b981); }
     .lp-group[data-group="style"]    > summary { --lp-dot: var(--c-warn, #d97706); }
     .lp-group[data-group="face"]     > summary { --lp-dot: var(--c-info, #0ea5e9); }
-    .lp-group[data-group="location"] > summary { --lp-dot: #ec4899; }   /* brand pink */
+    .lp-group[data-group="location"] > summary { --lp-dot: #c2807a; }   /* brand pink */
     .lp-group[data-group="burst"]    > summary { --lp-dot: var(--c-danger, #ef4444); }
-    .lp-group[data-group="reason"]   > summary { --lp-dot: #a855f7; }   /* brand violet */
+    .lp-group[data-group="reason"]   > summary { --lp-dot: #b08948; }   /* brand violet */
     .lp-group[data-group="al"]       > summary { --lp-dot: #f59e0b; }   /* amber-amber */
     .lp-group .lp-count {
       margin-left: auto;
@@ -5294,13 +5303,13 @@
            Diagonal version drives 1-D stroke + dot fills; vertical drives
            the area-under-the-curve fill in the inspector sparkline. -->
       <linearGradient id="aiBrandGrad" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%"   stop-color="#6E56CF"/>
-        <stop offset="55%"  stop-color="#A855F7"/>
-        <stop offset="100%" stop-color="#EC4899"/>
+        <stop offset="0%"   stop-color="#dcb87e"/>
+        <stop offset="55%"  stop-color="#c79a5e"/>
+        <stop offset="100%" stop-color="#b07d44"/>
       </linearGradient>
       <linearGradient id="aiBrandGradV" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%"   stop-color="#6E56CF"/>
-        <stop offset="100%" stop-color="#EC4899"/>
+        <stop offset="0%"   stop-color="#dcb87e"/>
+        <stop offset="100%" stop-color="#b07d44"/>
       </linearGradient>
       <!-- Archive / bucket — for the P-UX-22 deliverable buckets toggle -->
       <symbol id="icon-archive" viewBox="0 0 24 24" fill="none"
@@ -5474,7 +5483,7 @@
               stroke-linecap="round" stroke-linejoin="round">
         <!-- floor shadow -->
         <ellipse cx="80" cy="103" rx="50" ry="5"
-                 fill="rgba(99,102,241,0.10)"/>
+                 fill="rgba(204,163,106,0.10)"/>
         <!-- main inbox tray -->
         <path d="M30 55l10-32a4 4 0 0 1 4-3h72a4 4 0 0 1 4 3l10 32"
               stroke="var(--muted)" stroke-width="2"/>
@@ -5484,7 +5493,7 @@
         <!-- inbox slot -->
         <path d="M30 55h32l4 8h28l4-8h32"
               stroke="var(--accent)" stroke-width="2.5"
-              fill="rgba(99,102,241,0.16)"/>
+              fill="rgba(204,163,106,0.16)"/>
         <!-- subtle "dust" — sparkles drifting in to show "nothing here yet" -->
         <circle cx="48" cy="34" r="1.5" fill="var(--accent)" opacity="0.6"/>
         <circle cx="112" cy="38" r="1.2" fill="var(--accent)" opacity="0.5"/>
@@ -5495,7 +5504,7 @@
       <symbol id="art-no-match" viewBox="0 0 160 120" fill="none"
               stroke-linecap="round" stroke-linejoin="round">
         <ellipse cx="80" cy="103" rx="50" ry="5"
-                 fill="rgba(99,102,241,0.10)"/>
+                 fill="rgba(204,163,106,0.10)"/>
         <!-- empty result strip (suggests photos that COULD match) -->
         <rect x="22" y="48" width="22" height="22" rx="3"
               stroke="var(--muted-soft)" stroke-width="1.5"
@@ -5536,7 +5545,7 @@
            ============================================================
            Same 160×120 viewport + two-tone palette (var(--muted) for
            outlines, var(--accent) for the "this is the meaningful
-           thing" highlight, rgba(99,102,241,X) for soft wash) as the
+           thing" highlight, rgba(204,163,106,X) for soft wash) as the
            v0.4 P1 (3/4) trio above, so the art system reads as a
            single coherent family across all empty surfaces.
            ============================================================ -->
@@ -5546,7 +5555,7 @@
       <symbol id="art-empty-buckets" viewBox="0 0 160 120" fill="none"
               stroke-linecap="round" stroke-linejoin="round">
         <ellipse cx="80" cy="103" rx="50" ry="5"
-                 fill="rgba(99,102,241,0.10)"/>
+                 fill="rgba(204,163,106,0.10)"/>
         <!-- Background buckets (muted, drift away to suggest "more await") -->
         <path d="M28 50h28l-3 38a3 3 0 0 1-3 3H34a3 3 0 0 1-3-3z"
               stroke="var(--muted-soft)" stroke-width="1.6"
@@ -5557,7 +5566,7 @@
         <!-- Centre bucket (accent — the one the user would create) -->
         <path d="M64 44h32l-4 46a4 4 0 0 1-4 4H72a4 4 0 0 1-4-4z"
               stroke="var(--accent)" stroke-width="2.4"
-              fill="rgba(99,102,241,0.16)"/>
+              fill="rgba(204,163,106,0.16)"/>
         <path d="M64 48h32" stroke="var(--accent)" stroke-width="1.6" opacity="0.5"/>
         <!-- Tiny "+" sign hovering above the centre bucket — implies "add one" -->
         <path d="M80 28v10M75 33h10"
@@ -5569,7 +5578,7 @@
       <symbol id="art-empty-history" viewBox="0 0 160 120" fill="none"
               stroke-linecap="round" stroke-linejoin="round">
         <ellipse cx="80" cy="103" rx="50" ry="5"
-                 fill="rgba(99,102,241,0.10)"/>
+                 fill="rgba(204,163,106,0.10)"/>
         <!-- Clock body -->
         <circle cx="80" cy="58" r="32"
                 fill="var(--surface-2)" stroke="var(--muted)"
@@ -5593,7 +5602,7 @@
       <symbol id="art-no-peer" viewBox="0 0 160 120" fill="none"
               stroke-linecap="round" stroke-linejoin="round">
         <ellipse cx="80" cy="103" rx="50" ry="5"
-                 fill="rgba(99,102,241,0.10)"/>
+                 fill="rgba(204,163,106,0.10)"/>
         <!-- Three concentric arcs (signal ripples), outer two muted -->
         <path d="M44 78a40 40 0 0 1 72 0"
               stroke="var(--muted-soft)" stroke-width="2" opacity="0.45"/>
@@ -5619,7 +5628,7 @@
       <symbol id="art-no-annotations" viewBox="0 0 160 120" fill="none"
               stroke-linecap="round" stroke-linejoin="round">
         <ellipse cx="80" cy="103" rx="50" ry="5"
-                 fill="rgba(99,102,241,0.10)"/>
+                 fill="rgba(204,163,106,0.10)"/>
         <!-- Clipboard body -->
         <rect x="48" y="20" width="64" height="74" rx="5"
               fill="var(--surface-2)" stroke="var(--muted)"
@@ -5634,7 +5643,7 @@
         <!-- Pencil hovering over the third line (mid-thought, no ink yet) -->
         <path d="M104 66l16-16 6 6-16 16zM118 52l4 4"
               stroke="var(--accent)" stroke-width="2"
-              fill="rgba(99,102,241,0.16)"/>
+              fill="rgba(204,163,106,0.16)"/>
         <circle cx="100" cy="70" r="2" fill="var(--accent)"/>
         <!-- Star outline — implies "ratings would go here" -->
         <path d="M58 84l3 6 6 1-4 4 1 6-5-3-5 3 1-6-4-4 6-1z"
@@ -5651,7 +5660,7 @@
       <symbol id="art-no-search" viewBox="0 0 160 120" fill="none"
               stroke-linecap="round" stroke-linejoin="round">
         <ellipse cx="80" cy="103" rx="50" ry="5"
-                 fill="rgba(99,102,241,0.10)"/>
+                 fill="rgba(204,163,106,0.10)"/>
         <!-- Search input rectangle (suggests the text field that fired) -->
         <rect x="22" y="62" width="116" height="28" rx="14"
               fill="var(--surface-2)" stroke="var(--muted)"
@@ -5704,8 +5713,8 @@
           <defs>
             <linearGradient id="pcBrandGrad"
                             x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0%"   stop-color="#6E56CF"/>
-              <stop offset="100%" stop-color="#EC4899"/>
+              <stop offset="0%"   stop-color="#dcb87e"/>
+              <stop offset="100%" stop-color="#b07d44"/>
             </linearGradient>
           </defs>
           <!-- the crowd -->
@@ -8019,7 +8028,7 @@
         if (al) {
           activeLearningBadge =
             `<div style="position:absolute;top:6px;left:6px;
-             background:linear-gradient(90deg,#3b82f6,#6366f1);
+             background:linear-gradient(90deg,#3b82f6,#cca36a);
              color:#fff;padding:2px 8px;border-radius:3px;
              font-size:10px;font-weight:600;z-index:5;
              box-shadow:0 1px 4px rgba(0,0,0,0.4)"
@@ -8925,7 +8934,7 @@
       + "#lbVideoBar .vbc{display:flex;gap:8px;align-items:center;margin-bottom:5px}"
       + "#lbVideoBar button{background:#1b1e26;border:1px solid #23262e;color:#e8e8ea;"
       + "border-radius:7px;padding:4px 11px;font-size:13px;cursor:pointer}"
-      + "#lbVideoBar button.on{background:#6E56CF;border-color:#6E56CF;color:#fff}"
+      + "#lbVideoBar button.on{background:#dcb87e;border-color:#dcb87e;color:#fff}"
       + "#lbVideoBar .vbr{margin-left:auto;color:#9aa0aa;font:11px ui-monospace,monospace}"
       + "#vbTl{width:100%;height:54px;display:block;cursor:pointer;touch-action:none}";
     document.head.appendChild(st);
@@ -8946,7 +8955,7 @@
       reel.forEach((c) => {
         const x1 = tx(+c.start_s), x2 = tx(+c.end_s);
         s += '<rect x="' + x1.toFixed(1) + '" y="0" width="'
-          + Math.max(2, x2 - x1).toFixed(1) + '" height="60" fill="#6E56CF" '
+          + Math.max(2, x2 - x1).toFixed(1) + '" height="60" fill="#dcb87e" '
           + 'opacity="' + (0.12 + 0.22 * Math.min(1, +c.score || 0)).toFixed(2) + '"/>';
         s += '<text x="' + (x1 + 2).toFixed(1) + '" y="11" fill="#b9aef2" '
           + 'font-size="9">#' + c.rank + '</text>';
@@ -8957,9 +8966,9 @@
         area += " " + x + "," + y; line += (i ? " L" : "M") + x + " " + y;
       });
       area += " 1000,60";
-      s += '<polygon points="' + area + '" fill="rgba(110,86,207,0.22)"/>';
+      s += '<polygon points="' + area + '" fill="rgba(220,184,126,0.22)"/>';
       s += '<path d="' + line + '" fill="none" stroke="#8b74e8" stroke-width="1.4"/>';
-      s += '<line id="vbPh" x1="0" y1="0" x2="0" y2="60" stroke="#EC4899" stroke-width="2"/>';
+      s += '<line id="vbPh" x1="0" y1="0" x2="0" y2="60" stroke="#b07d44" stroke-width="2"/>';
       tl.innerHTML = s;
     }
     const curIdx = () => fnIdx.has(_lbCurrentFn) ? fnIdx.get(_lbCurrentFn) : 0;
@@ -9746,7 +9755,7 @@
       let fg = "var(--muted)";
       let bd = "rgba(148,148,160,0.35)";
       if (d <= 0.15)      { bg = "rgba(74,222,128,0.18)"; fg = "#88e0a6"; bd = "rgba(74,222,128,0.35)"; }
-      else if (d <= 0.30) { bg = "rgba(99,102,241,0.18)"; fg = "#a3a5f5"; bd = "rgba(99,102,241,0.35)"; }
+      else if (d <= 0.30) { bg = "rgba(204,163,106,0.18)"; fg = "#a3a5f5"; bd = "rgba(204,163,106,0.35)"; }
       else if (d <= 0.50) { bg = "rgba(217,163,12,0.20)"; fg = "#e3c25e"; bd = "rgba(217,163,12,0.40)"; }
       else                { bg = "rgba(248,113,113,0.20)"; fg = "#ee8888"; bd = "rgba(248,113,113,0.40)"; }
       return {bg, fg, bd};
@@ -9798,8 +9807,8 @@
                      lamSrc.startsWith('auto:') ?
                        '基于 docs/STYLE-V2-BENCHMARK.md 推荐表自动选择' :
                        '可点击在 0.0 / 0.3 / 0.5 / 0.7 / 1.0 之间循环'}"
-                   style="background:rgba(99,102,241,0.10);color:#a3a5f5;
-                          border:1px dashed rgba(99,102,241,0.40);
+                   style="background:rgba(204,163,106,0.10);color:#a3a5f5;
+                          border:1px dashed rgba(204,163,106,0.40);
                           font-size:9.5px;cursor:pointer;font-family:inherit">
              λ ${curLam.toFixed(2)}${srcLabel}
            </button>`);
@@ -13314,7 +13323,7 @@
       menuEl.innerHTML = items.map((c, i) =>
         `<div class="slash-item${i === selectedIndex ? " sel" : ""}" ` +
         ` style="padding:6px 12px;cursor:pointer;` +
-        ` ${i === selectedIndex ? "background:var(--accent-soft, rgba(99,102,241,0.16));" : ""}"` +
+        ` ${i === selectedIndex ? "background:var(--accent-soft, rgba(204,163,106,0.16));" : ""}"` +
         ` data-key="${c.key}">` +
         `  <span style="color:var(--accent);margin-right:6px">/</span>` +
         `  <b>${c.key}</b>` +
@@ -15614,7 +15623,7 @@
       "background:rgba(20,22,28,0.96);color:#fff;" +
       "padding:14px 16px;border-radius:8px;" +
       "min-width:260px;max-width:340px;" +
-      "border:1px solid rgba(99,102,241,0.30);" +
+      "border:1px solid rgba(204,163,106,0.30);" +
       "box-shadow:0 12px 32px rgba(0,0,0,0.45);" +
       "font:12px/1.5 system-ui;"
     );
@@ -15638,8 +15647,8 @@
       `<div style='font-weight:600;color:#a3a5f5;margin-bottom:8px;` +
       `letter-spacing:0.02em;text-transform:uppercase;font-size:10.5px'>` +
       `视觉距离细分 · ${row.filename.slice(0, 30)}</div>` +
-      _bar("V1 · axis-MAD", v1, maxD, "#6E56CF") +
-      _bar("V2 · CLIP cosine", v2, maxD, "#EC4899") +
+      _bar("V1 · axis-MAD", v1, maxD, "#dcb87e") +
+      _bar("V2 · CLIP cosine", v2, maxD, "#b07d44") +
       _bar("综合 blend", blend, maxD, "#a3a5f5") +
       "<div id='styleRefBreakdown' style='margin-top:10px'>" +
       "<div style='color:#888;font-size:10.5px;margin-bottom:6px'>" +
@@ -15692,7 +15701,7 @@
               "<div style='height:3px;background:rgba(255,255,255,0.08);" +
               "border-radius:2px;margin-top:2px'>" +
               `<div style='height:100%;width:${pct.toFixed(0)}%;` +
-              `background:#EC4899;border-radius:2px'></div></div></div>` +
+              `background:#b07d44;border-radius:2px'></div></div></div>` +
               `<span style='color:#fff;font-family:ui-monospace;font-size:9.5px'>` +
               `${r.distance.toFixed(3)}</span></div>`
             );
@@ -15792,7 +15801,7 @@
         "padding:9px 12px;border-radius:8px;" +
         "font:11.5px/1.5 system-ui;max-width:230px;" +
         "box-shadow:0 6px 20px rgba(0,0,0,0.40);" +
-        "border:1px solid rgba(99,102,241,0.30);"
+        "border:1px solid rgba(204,163,106,0.30);"
       );
       const reasons = _explainRow(row);
       popover.innerHTML = (
@@ -16166,7 +16175,7 @@
           badge.style.cssText = (
             "position:absolute;top:6px;right:6px;width:22px;height:22px;" +
             "display:flex;align-items:center;justify-content:center;" +
-            "background:rgba(99,102,241,0.85);color:#fff;" +
+            "background:rgba(204,163,106,0.85);color:#fff;" +
             "border-radius:4px;font-size:14px;z-index:2;" +
             "pointer-events:none;box-shadow:0 1px 4px rgba(0,0,0,0.4);"
           );
@@ -16348,8 +16357,8 @@
     chip.style.cssText = (
       "display:inline-flex;align-items:center;gap:6px;" +
       "padding:3px 9px;border-radius:999px;" +
-      "background:rgba(99,102,241,0.14);color:#a3a5f5;" +
-      "border:1px dashed rgba(99,102,241,0.40);" +
+      "background:rgba(204,163,106,0.14);color:#a3a5f5;" +
+      "border:1px dashed rgba(204,163,106,0.40);" +
       "font-size:10.5px;font-weight:500;cursor:help;" +
       "margin-left:8px;"
     );
@@ -16392,7 +16401,7 @@
         "padding:14px 22px;border-radius:12px;z-index:8;" +
         "font:13px/1.6 system-ui;text-align:center;" +
         "box-shadow:0 12px 32px rgba(0,0,0,0.45);" +
-        "border:1px solid rgba(99,102,241,0.30);" +
+        "border:1px solid rgba(204,163,106,0.30);" +
         "max-width:min(560px,90vw);" +
         "opacity:0;transition:opacity 320ms cubic-bezier(0.2,0.8,0.2,1)," +
         "transform 320ms cubic-bezier(0.34,1.56,0.64,1);"
@@ -16403,17 +16412,17 @@
         "✨ 这是你第一次打开 lightbox</div>" +
         "<div>三个 PixCull 专属键位:</div>" +
         "<div style='margin-top:8px;display:flex;justify-content:center;gap:18px;flex-wrap:wrap'>" +
-        "<span><kbd style='background:rgba(99,102,241,0.20);padding:3px 8px;" +
+        "<span><kbd style='background:rgba(204,163,106,0.20);padding:3px 8px;" +
         "border-radius:4px;font-family:ui-monospace,Menlo;color:#fff;" +
-        "border:1px solid rgba(99,102,241,0.40);font-size:11px'>A</kbd> " +
+        "border:1px solid rgba(204,163,106,0.40);font-size:11px'>A</kbd> " +
         "<span style='color:#aaa;font-size:11.5px'>AI heatmap</span></span>" +
-        "<span><kbd style='background:rgba(99,102,241,0.20);padding:3px 8px;" +
+        "<span><kbd style='background:rgba(204,163,106,0.20);padding:3px 8px;" +
         "border-radius:4px;font-family:ui-monospace,Menlo;color:#fff;" +
-        "border:1px solid rgba(99,102,241,0.40);font-size:11px'>H</kbd> " +
+        "border:1px solid rgba(204,163,106,0.40);font-size:11px'>H</kbd> " +
         "<span style='color:#aaa;font-size:11.5px'>EXIF + 直方图</span></span>" +
-        "<span><kbd style='background:rgba(99,102,241,0.20);padding:3px 8px;" +
+        "<span><kbd style='background:rgba(204,163,106,0.20);padding:3px 8px;" +
         "border-radius:4px;font-family:ui-monospace,Menlo;color:#fff;" +
-        "border:1px solid rgba(99,102,241,0.40);font-size:11px'>\\</kbd> " +
+        "border:1px solid rgba(204,163,106,0.40);font-size:11px'>\\</kbd> " +
         "<span style='color:#aaa;font-size:11.5px'>burst 比较</span></span>" +
         "</div>" +
         "<div style='margin-top:8px;color:#888;font-size:10.5px'>" +
@@ -16549,7 +16558,7 @@
         histCtx.clearRect(0, 0, cv.width, cv.height);
         const maxB = Math.max(...bins, 1);
         const bw = cv.width / 64;
-        histCtx.fillStyle = "rgba(99,102,241,0.75)";
+        histCtx.fillStyle = "rgba(204,163,106,0.75)";
         for (let i = 0; i < 64; i++) {
           const h = (bins[i] / maxB) * cv.height;
           histCtx.fillRect(i * bw, cv.height - h, bw - 0.5, h);
@@ -16633,7 +16642,7 @@
         "Tab 在轴间跳 · 1-5 直接给当前轴打星 · 一张全维度评分通常 &lt; 5 秒。" +
         "</div>" +
         "<button id='rubricIntroDismiss' type='button' " +
-        "style='background:linear-gradient(135deg,#6E56CF,#EC4899);color:#fff;" +
+        "style='background:linear-gradient(135deg,#dcb87e,#b07d44);color:#fff;" +
         "border:0;padding:9px 22px;border-radius:999px;font-weight:600;" +
         "font-size:13px;cursor:pointer'>开始 →</button>"
       );
