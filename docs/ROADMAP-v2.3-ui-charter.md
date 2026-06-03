@@ -94,27 +94,31 @@ Honest, including what my v2.2 token pass kept or introduced:
   one-shot/reduced-motion-gated) + magnetic primary CTA + swept 21
   spaced `rgba(110, 86, 207 …)` purple leftovers the no-space passes
   missed.
+- **P2 CSS** — `8b35d7a`: max-width 2400px container (centered) +
+  `tabular-nums` (header counters / 6-axis scores / sidebar filter
+  counts) + de-all-caps the LIBRARY label.  (Optical asymmetric padding
+  + a shimmer skeleton already existed — grid is top 20 / bottom 48px;
+  `.card-placeholder` uses `pcPlaceholderShimmer` — so nothing to add.)
+- **design-system tokens** — `ac0a60b`: `design-system/tokens.json` (the
+  multi-target source of truth) + regenerated `tokens.css` / iOS
+  `BrandTokens.swift` / `tokens.python.json` rebranded to editorial-warm;
+  `make tokens-check` reports all targets in sync.
 
-**TODO — P2 (mostly CSS, no server needed):**
-- max-width container (~1440px) on ultrawide; optical (asymmetric)
-  vertical padding; varied radii audit.
-- `font-variant-numeric: tabular-nums` on every score / count (some
-  done on hero numbers; sweep the rest).
-- skeleton loaders shaped like the card (replace any spinners).
-- sentence-case headers; `text-wrap: balance` on headings.
-
-**TODO — end-of-overhaul batch (needs a HEALTHY machine — server +
-playwright):**
-1. Regenerate the README gallery `docs/screenshots/01-19` on the new
-   editorial-warm + Geist design.  Run: `pixcull` venv +
-   `scripts/brand/capture_real_screenshots.sh xiapu_demo` (run dir lives
-   at `/tmp/pixcull_demo/xiapu_demo`; re-seed if cleared).  Lightbox
-   (03) / tether (09) shots are flaky to automate — see the per-shot
-   pattern.
-2. `make modelscope-sync` to push README + the regenerated assets to
-   ModelScope (keep GitHub⇄ModelScope in lockstep).
-3. Update mobile `design-system/tokens.json` to the warm palette + fix
-   `tests/test_design_tokens.py` assertions (`#6E56CF` → brass/graphite).
+**TODO — the ONLY remaining item (BLOCKED on data; needs a fresh session):**
+- **Regenerate the README gallery `docs/screenshots/01-19`** on the new
+  editorial-warm + Geist + Double-Bezel design, then `make
+  modelscope-sync` (keep GitHub⇄ModelScope in lockstep).
+  **Blocker (this session):** the 200-photo `xiapu_demo` run was purged
+  from `/tmp` (input/ empty, no `scores.csv`) and
+  `/Volumes/One Touch/100CANON/` is unmounted — so re-seed first (mount
+  the drive → `pixcull run <photos> -o /tmp/pixcull_demo/xiapu_demo/
+  output`, heavy/torch), THEN `scripts/brand/capture_real_screenshots.sh
+  xiapu_demo`.  Do NOT substitute the 6-photo `samples/` run for the
+  public gallery.  Lightbox (03) / tether (09) shots are flaky — use the
+  per-shot `window.openLightbox(rows[0].filename)` pattern.
+- Optional deeper P2 (low value, skip unless asked): per-thumbnail
+  skeleton (local thumbs load instantly + perf-risky on 200 cards);
+  `text-wrap: balance` on headings.
 
 **Caveats for the next session:**
 - `tests/test_5k_scale.py::test_5k_scale_parse_under_2_seconds` is a pure
