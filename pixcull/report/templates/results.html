@@ -410,6 +410,36 @@
       min-height: 48px;
       border-bottom: 1px solid var(--border);
     }
+
+    /* ============================================================
+       v2.3 P2 (CSS-only) · container constraint · tabular figures · case
+       ------------------------------------------------------------
+       redesign-skill: add a max-width container; tabular figures on
+       data-heavy UI; avoid all-caps subheaders.  Tool-appropriate —
+       the cap is generous (no effect on normal / large monitors; it
+       only stops the culling grid from stretching to an absurd width
+       on ultra-wide displays), and tabular-nums only changes digit
+       alignment (never layout).
+       ============================================================ */
+    .workspace-bar,
+    .workspace-layout {
+      max-width: 2400px;
+      margin-inline: auto;
+      width: 100%;
+    }
+    /* Tabular figures everywhere a number can change / needs to align:
+       header counters, the 6-axis scores, sidebar filter counts. */
+    .stats,
+    .card .row3,
+    .library-panel .lp-content {
+      font-variant-numeric: tabular-nums;
+    }
+    /* Sentence-case the lone all-caps English label (Lightroom-ism →
+       editorial).  Chinese labels are unaffected by text-transform. */
+    .lp-title {
+      text-transform: none;
+      letter-spacing: 0.04em;
+    }
     .brand-mark {
       display: inline-flex; align-items: center;
       gap: 8px;
