@@ -147,6 +147,7 @@ _GITATTRIBUTES_TEXT = "\n".join([
     "# pixcull: render docs as text; host images via LFS",
     "*.md text", "README.md text", "*.svg text",
     "*.png filter=lfs diff=lfs merge=lfs -text",
+    "*.gif filter=lfs diff=lfs merge=lfs -text",
     "*.jpg filter=lfs diff=lfs merge=lfs -text",
     "*.jpeg filter=lfs diff=lfs merge=lfs -text",
     "*.webp filter=lfs diff=lfs merge=lfs -text",
@@ -211,10 +212,10 @@ def _git_push_readme(repo_id: str, branch: str, readme_text: str) -> bool:
 
 def _upload_referenced_assets(api, repo_id: str, branch: str,
                               readme_text: str) -> int:
-    """Upload every ``docs/...(png|svg|jpg|jpeg|webp)`` the README
+    """Upload every ``docs/...(png|gif|svg|jpg|jpeg|webp)`` the README
     references so the relative paths resolve on ModelScope itself."""
     paths = sorted(set(re.findall(
-        r"docs/[A-Za-z0-9/_.-]+\.(?:png|svg|jpe?g|webp)", readme_text)))
+        r"docs/[A-Za-z0-9/_.-]+\.(?:png|gif|svg|jpe?g|webp)", readme_text)))
     n = 0
     for rel in paths:
         local = REPO_ROOT / rel
