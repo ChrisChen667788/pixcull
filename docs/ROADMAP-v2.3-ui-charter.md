@@ -128,13 +128,17 @@ content-guard + retry + skip-on-fail against one pre-warmed server**
   full-page) → 2560×3200 ~5MB.  The share page keeps its distinct
   (now-brass) brand gradient by design.
 
-**TODO — the ONE remaining shot (niche, low value):**
-- **04 ab-compare** — the A/B compare modal needs a multi-photo *burst*
-  cluster (this run has 198 single-frame clusters) and `openCompareCustom`
-  is closure-local (not on `window`, so `page.evaluate` can't call it).
-  Stays pre-overhaul until a run with real bursts exists — minor.
-- Optional deeper P2 (low value): per-thumbnail skeleton; `text-wrap:
-  balance` on headings.
+- **04 ab-compare** — DONE.  Solved the closure-fn problem by driving
+  the real UI: hover + `force`-click two cards' `.card-cmp-btn`
+  (`pinForCompare` A→B → `openCompareCustom`, which runs in page scope so
+  the closure resolves).  Shows the A/B modal with two real Xiapu frames
+  on the warm design.
+
+**All 19 gallery screenshots (01–19) are now on the editorial-warm +
+Geist + Double-Bezel design and synced to GitHub + ModelScope.**
+
+Optional deeper P2 (low value, skip unless asked): per-thumbnail
+skeleton; `text-wrap: balance` on headings.
 
 **Caveats for the next session:**
 - `tests/test_5k_scale.py::test_5k_scale_parse_under_2_seconds` is a pure
