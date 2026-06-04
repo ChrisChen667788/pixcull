@@ -75,8 +75,12 @@ def test_redacts_windows_home_path():
 
 
 def test_redacts_deepseek_key():
-    out = redact("DEEPSEEK_API_KEY=sk-ad921045a25c42279ffa0464a11e3e8f failed")
-    assert "sk-ad921045" not in out
+    # Synthetic, runtime-assembled non-secret: no literal API key ever lands
+    # in the repo (that would trip GitHub secret scanning).  Still exercises
+    # the ``sk-...`` redaction rule end-to-end.
+    fake = "sk-" + "0" * 32
+    out = redact(f"DEEPSEEK_API_KEY={fake} failed")
+    assert fake not in out
     assert "sk-***" in out
 
 
