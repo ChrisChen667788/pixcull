@@ -104,21 +104,31 @@ Honest, including what my v2.2 token pass kept or introduced:
   `BrandTokens.swift` / `tokens.python.json` rebranded to editorial-warm;
   `make tokens-check` reports all targets in sync.
 
-**TODO — the ONLY remaining item (BLOCKED on data; needs a fresh session):**
-- **Regenerate the README gallery `docs/screenshots/01-19`** on the new
-  editorial-warm + Geist + Double-Bezel design, then `make
-  modelscope-sync` (keep GitHub⇄ModelScope in lockstep).
-  **Blocker (this session):** the 200-photo `xiapu_demo` run was purged
-  from `/tmp` (input/ empty, no `scores.csv`) and
-  `/Volumes/One Touch/100CANON/` is unmounted — so re-seed first (mount
-  the drive → `pixcull run <photos> -o /tmp/pixcull_demo/xiapu_demo/
-  output`, heavy/torch), THEN `scripts/brand/capture_real_screenshots.sh
-  xiapu_demo`.  Do NOT substitute the 6-photo `samples/` run for the
-  public gallery.  Lightbox (03) / tether (09) shots are flaky — use the
-  per-shot `window.openLightbox(rows[0].filename)` pattern.
-- Optional deeper P2 (low value, skip unless asked): per-thumbnail
-  skeleton (local thumbs load instantly + perf-risky on 200 cards);
-  `text-wrap: balance` on headings.
+**DONE — gallery (mostly):** `6ebfd94` re-seeded the 198-photo Xiapu run
+(drive remounted at `/Volumes/One Touch 1/100CANON`, symlinked 198 →
+`pixcull run … --scene landscape`) and regenerated **14** screenshots on
+the new design (01 grid · 02 cmd-k · 03 lightbox · 05 upload · 07 history
+· 08 mobile · 09 tether · 10 admin · 11 buckets · 12 light · 13 ipad-lb ·
+14 marquee · 15 bias · 16 confidence), then `make modelscope-sync` (21/21
+hosted, README renders, verified HTTP 200).  **Lesson:** the bash
+`capture_real_screenshots.sh` server choked under rapid Playwright load
+(HTTP/1.0) and wrote 19307-byte blanks — use a **per-shot harness with a
+content-guard + retry + skip-on-fail against one pre-warmed server**
+(see `/tmp/shot_gallery.py` pattern) instead.
+
+**TODO — 5 stragglers still on the old palette (lower value):**
+- **18 / 19 video-review/grade** — need the `videodemo` run re-seeded
+  (it was purged too: no `temporal.json`/manifest).  Re-extract a demo
+  clip → `pixcull video <mp4>` (ffmpeg + temporal + reel, heavy) → shoot
+  `/video/<id>`.  The video surface itself is already warm in code.
+- **17 attribution-heatmap** — a *synthetic* overlay mockup; re-inject
+  the heatmap/axis-tabs JS (warm colours) on the lightbox.
+- **04 ab-compare** — needs 2 cards selected + the compare modal opened.
+- **06 share-portfolio** — heavy full-page; note the share page kept a
+  distinct brand-gradient (now brass after the global pass) — decide
+  whether to keep it bespoke.
+- Optional deeper P2 (low value): per-thumbnail skeleton; `text-wrap:
+  balance` on headings.
 
 **Caveats for the next session:**
 - `tests/test_5k_scale.py::test_5k_scale_parse_under_2_seconds` is a pure
