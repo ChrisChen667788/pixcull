@@ -116,17 +116,23 @@ hosted, README renders, verified HTTP 200).  **Lesson:** the bash
 content-guard + retry + skip-on-fail against one pre-warmed server**
 (see `/tmp/shot_gallery.py` pattern) instead.
 
-**TODO — 5 stragglers still on the old palette (lower value):**
-- **18 / 19 video-review/grade** — need the `videodemo` run re-seeded
-  (it was purged too: no `temporal.json`/manifest).  Re-extract a demo
-  clip → `pixcull video <mp4>` (ffmpeg + temporal + reel, heavy) → shoot
-  `/video/<id>`.  The video surface itself is already warm in code.
-- **17 attribution-heatmap** — a *synthetic* overlay mockup; re-inject
-  the heatmap/axis-tabs JS (warm colours) on the lightbox.
-- **04 ab-compare** — needs 2 cards selected + the compare modal opened.
-- **06 share-portfolio** — heavy full-page; note the share page kept a
-  distinct brand-gradient (now brass after the global pass) — decide
-  whether to keep it bespoke.
+**DONE — stragglers (`c87ffc4`, ModelScope-synced, verified HTTP 200):**
+- **18 / 19 video-review + grade** — re-seeded `videodemo` from a REAL
+  7.5-min clip (`我的城 我的家1.mp4` → `pixcull video --interval-s 4` →
+  113 frames + temporal + reel + audio); 19 with the Kodak Vision3 LUT.
+  Shown frames = title card + aerial scenery (no identifiable faces);
+  extracted frames stay local in /tmp, only the 2 PNGs are public.
+- **17 attribution-heatmap** — warm axis-tab + heatmap overlay re-injected
+  on the lightbox.
+- **06 share-portfolio** — re-shot BOUNDED (was a 25,760px / 20MB
+  full-page) → 2560×3200 ~5MB.  The share page keeps its distinct
+  (now-brass) brand gradient by design.
+
+**TODO — the ONE remaining shot (niche, low value):**
+- **04 ab-compare** — the A/B compare modal needs a multi-photo *burst*
+  cluster (this run has 198 single-frame clusters) and `openCompareCustom`
+  is closure-local (not on `window`, so `page.evaluate` can't call it).
+  Stays pre-overhaul until a run with real bursts exists — minor.
 - Optional deeper P2 (low value): per-thumbnail skeleton; `text-wrap:
   balance` on headings.
 
