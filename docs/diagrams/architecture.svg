@@ -1,0 +1,209 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720" font-family="'Geist Variable',-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,system-ui,sans-serif" role="img" aria-label="PixCull system architecture: input to CLI to orchestrator to scoring engine to outputs and web report, over an IO and formats foundation">
+  <title>PixCull — System Architecture</title>
+  <defs>
+    <linearGradient id="brand" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#dcb87e"/>
+      <stop offset="0.55" stop-color="#c4b9a9"/>
+      <stop offset="1" stop-color="#6a6052"/>
+    </linearGradient>
+    <radialGradient id="vignette" cx="0.5" cy="0.42" r="0.75">
+      <stop offset="0" stop-color="#1b1712"/>
+      <stop offset="1" stop-color="#161310"/>
+    </radialGradient>
+    <linearGradient id="cardSheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.05"/>
+      <stop offset="0.18" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <marker id="arrow" viewBox="0 0 10 10" refX="7.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#c9b48a"/>
+    </marker>
+    <marker id="arrowUp" viewBox="0 0 10 10" refX="7.5" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#7d7361"/>
+    </marker>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="7" stdDeviation="11" flood-color="#140c04" flood-opacity="0.55"/>
+    </filter>
+    <style>
+      text{ -webkit-font-smoothing:antialiased; }
+      .title{ fill:#f3ede1; font-weight:600; }
+      .sub{ fill:#a89d88; font-weight:500; }
+      .tag{ fill:#8a7f6a; font-weight:700; letter-spacing:.16em; }
+      .chipT{ fill:#d3c9b6; font-weight:500; }
+      .num{ fill:#7d7361; font-weight:600; font-feature-settings:"tnum"; }
+      .card{ fill:#1e1a14; stroke:#3a3122; stroke-width:1; }
+      .panel{ fill:#1b1712; stroke:#332b1f; stroke-width:1; }
+      .chip{ fill:#221d16; stroke:#37301f; stroke-width:1; }
+      .bezel{ fill:none; stroke:#2b241a; stroke-width:1; }
+      .flowBase{ fill:none; stroke:#33291c; stroke-width:2.5; stroke-linecap:round; }
+      .flow{ fill:none; stroke:#d8c192; stroke-width:3; stroke-linecap:round; stroke-dasharray:2 11; }
+      .flowUp{ fill:none; stroke:#8a7f6a; stroke-width:1.8; stroke-linecap:round; stroke-dasharray:2 11; opacity:.85; }
+      .led{ fill:#dcb87e; }
+      .ping{ fill:none; stroke:#dcb87e; stroke-width:1.4; }
+      .dotK{ fill:#6faa78; } .dotM{ fill:#d6a443; } .dotC{ fill:#cf6f5b; }
+      @media (prefers-reduced-motion: no-preference){
+        .flow{ animation:flow 1.5s linear infinite; }
+        .flowUp{ animation:flow 3s linear infinite; }
+        @keyframes flow{ to{ stroke-dashoffset:-26; } }
+        .ping{ transform-box:fill-box; transform-origin:center; animation:ping 3s cubic-bezier(0.16,1,0.3,1) infinite; }
+        @keyframes ping{ 0%{ transform:scale(.5); opacity:.75; } 70%,100%{ transform:scale(2.7); opacity:0; } }
+        .led{ animation:led 3s ease-in-out infinite; }
+        @keyframes led{ 0%,58%,100%{ opacity:.32; } 12%{ opacity:1; } }
+        .d0{ animation-delay:0s; } .d1{ animation-delay:.5s; } .d2{ animation-delay:1s; }
+        .d3{ animation-delay:1.5s; } .d4{ animation-delay:2s; }
+      }
+    </style>
+  </defs>
+
+  <rect width="1280" height="720" fill="#161310"/>
+  <rect width="1280" height="720" fill="url(#vignette)"/>
+
+  <!-- ===== Title ===== -->
+  <g>
+    <rect x="40" y="34" width="30" height="30" rx="9" fill="url(#brand)" filter="url(#soft)"/>
+    <circle cx="55" cy="49" r="7" fill="none" stroke="#161310" stroke-width="2"/>
+    <circle cx="55" cy="49" r="2.4" fill="#161310"/>
+    <text x="82" y="51" class="title" font-size="19">PixCull</text>
+    <text x="82" y="67" class="sub" font-size="11.5">系统架构 · System Architecture</text>
+  </g>
+
+  <!-- ===== Legend ===== -->
+  <g font-size="11" transform="translate(958,40)">
+    <line x1="0" y1="6" x2="34" y2="6" class="flowBase"/>
+    <line x1="0" y1="6" x2="34" y2="6" class="flow"/>
+    <text x="44" y="10" class="sub">数据流 · data flowing</text>
+    <circle cx="6" cy="28" r="3" class="led"/>
+    <circle cx="6" cy="28" r="3" class="ping"/>
+    <text x="44" y="32" class="sub">阶段状态 · stage active</text>
+  </g>
+
+  <!-- ===== Rail connectors (drawn first, behind cards) ===== -->
+  <g>
+    <!-- Ingest -> CLI : 220->262 -->
+    <line x1="220" y1="300" x2="258" y2="300" class="flowBase" marker-end="url(#arrow)"/>
+    <line x1="220" y1="300" x2="256" y2="300" class="flow"/>
+    <!-- CLI -> Orchestrator : 432->474 -->
+    <line x1="432" y1="300" x2="470" y2="300" class="flowBase" marker-end="url(#arrow)"/>
+    <line x1="432" y1="300" x2="468" y2="300" class="flow"/>
+    <!-- Orchestrator -> Scoring : 644->686 -->
+    <line x1="644" y1="300" x2="682" y2="300" class="flowBase" marker-end="url(#arrow)"/>
+    <line x1="644" y1="300" x2="680" y2="300" class="flow"/>
+    <!-- Scoring -> Output : 966->1008 -->
+    <line x1="966" y1="300" x2="1004" y2="300" class="flowBase" marker-end="url(#arrow)"/>
+    <line x1="966" y1="300" x2="1002" y2="300" class="flow"/>
+  </g>
+
+  <!-- ===== IO / Formats foundation (drawn before its feeders) ===== -->
+  <g>
+    <rect x="262" y="452" width="704" height="96" rx="16" class="panel" filter="url(#soft)"/>
+    <rect x="262.5" y="452.5" width="703" height="22" rx="15" fill="url(#cardSheen)"/>
+    <text x="280" y="478" class="tag" font-size="10.5">IO / FORMATS</text>
+    <text x="372" y="478" class="sub" font-size="10.5">解码 · 抽帧 · 装配 · 元数据基座</text>
+    <!-- chips -->
+    <g font-size="11" class="chipT">
+      <g transform="translate(280,494)"><rect width="96" height="34" rx="8" class="chip"/><text x="48" y="16" text-anchor="middle">loader</text><text x="48" y="28" text-anchor="middle" class="num" font-size="9">RAW · JPEG · HEIC</text></g>
+      <g transform="translate(388,494)"><rect width="104" height="34" rx="8" class="chip"/><text x="52" y="16" text-anchor="middle">video.extract</text><text x="52" y="28" text-anchor="middle" class="num" font-size="9">probe · frames</text></g>
+      <g transform="translate(504,494)"><rect width="116" height="34" rx="8" class="chip"/><text x="58" y="16" text-anchor="middle">reel_assembly</text><text x="58" y="28" text-anchor="middle" class="num" font-size="9">cut · EDL</text></g>
+      <g transform="translate(632,494)"><rect width="92" height="34" rx="8" class="chip"/><text x="46" y="16" text-anchor="middle">gpmf</text><text x="46" y="28" text-anchor="middle" class="num" font-size="9">GPS · IMU</text></g>
+      <g transform="translate(736,494)"><rect width="96" height="34" rx="8" class="chip"/><text x="48" y="16" text-anchor="middle">exif · xmp</text><text x="48" y="28" text-anchor="middle" class="num" font-size="9">metadata</text></g>
+      <g transform="translate(844,494)"><rect width="106" height="34" rx="8" class="chip"/><text x="53" y="16" text-anchor="middle">raw_proxy</text><text x="53" y="28" text-anchor="middle" class="num" font-size="9">4K/8K bridge</text></g>
+    </g>
+    <!-- feeders up to orchestrator + scoring -->
+    <line x1="540" y1="452" x2="540" y2="358" class="flowUp" marker-end="url(#arrowUp)"/>
+    <line x1="800" y1="452" x2="800" y2="414" class="flowUp" marker-end="url(#arrowUp)"/>
+  </g>
+
+  <!-- ===== Stage 1 · Ingest ===== -->
+  <g>
+    <rect x="40" y="220" width="180" height="160" rx="16" class="card" filter="url(#soft)"/>
+    <rect x="40.5" y="220.5" width="179" height="26" rx="15" fill="url(#cardSheen)"/>
+    <circle cx="56" cy="244" r="3" class="led d0"/>
+    <circle cx="56" cy="244" r="3" class="ping d0"/>
+    <text x="68" y="248" class="tag" font-size="10.5">INPUT</text>
+    <g transform="translate(58,272)">
+      <rect width="144" height="42" rx="10" class="chip"/>
+      <text x="14" y="19" class="chipT" font-size="12.5">Photos</text>
+      <text x="14" y="33" class="num" font-size="9.5">RAW · JPEG · HEIC</text>
+    </g>
+    <g transform="translate(58,322)">
+      <rect width="144" height="42" rx="10" class="chip"/>
+      <text x="14" y="19" class="chipT" font-size="12.5">Video</text>
+      <text x="14" y="33" class="num" font-size="9.5">MP4 · MOV · GoPro · DJI</text>
+    </g>
+  </g>
+
+  <!-- ===== Stage 2 · CLI ===== -->
+  <g>
+    <rect x="262" y="232" width="170" height="136" rx="16" class="card" filter="url(#soft)"/>
+    <rect x="262.5" y="232.5" width="169" height="26" rx="15" fill="url(#cardSheen)"/>
+    <circle cx="278" cy="256" r="3" class="led d1"/>
+    <circle cx="278" cy="256" r="3" class="ping d1"/>
+    <text x="290" y="260" class="tag" font-size="10.5">CLI</text>
+    <text x="280" y="290" class="title" font-size="14">pixcull</text>
+    <g font-size="11.5" class="chipT" font-family="ui-monospace,'SF Mono',Menlo,monospace">
+      <text x="280" y="312">run</text><text x="330" y="312">video</text>
+      <text x="280" y="332">reel</text><text x="330" y="332">export</text>
+      <text x="280" y="352" class="num" font-size="10">scan · bench · plugins</text>
+    </g>
+  </g>
+
+  <!-- ===== Stage 3 · Orchestrator ===== -->
+  <g>
+    <rect x="474" y="246" width="170" height="108" rx="16" class="card" filter="url(#soft)"/>
+    <rect x="474.5" y="246.5" width="169" height="26" rx="15" fill="url(#cardSheen)"/>
+    <circle cx="490" cy="270" r="3" class="led d2"/>
+    <circle cx="490" cy="270" r="3" class="ping d2"/>
+    <text x="502" y="274" class="tag" font-size="10.5">PIPELINE</text>
+    <text x="490" y="304" class="title" font-size="14">orchestrator</text>
+    <text x="490" y="324" class="chipT" font-size="11.5" font-family="ui-monospace,'SF Mono',Menlo,monospace">run_pipeline()</text>
+    <text x="490" y="343" class="num" font-size="10">fan-out · fuse · decide</text>
+  </g>
+
+  <!-- ===== Stage 4 · Scoring engine (hero) ===== -->
+  <g>
+    <rect x="686" y="190" width="280" height="220" rx="18" class="card" filter="url(#soft)"/>
+    <rect x="692" y="196" width="268" height="208" rx="14" class="bezel"/>
+    <rect x="686.5" y="190.5" width="279" height="28" rx="17" fill="url(#cardSheen)"/>
+    <circle cx="706" cy="216" r="3.2" class="led d3"/>
+    <circle cx="706" cy="216" r="3.2" class="ping d3"/>
+    <text x="719" y="220" class="tag" font-size="10.5">SCORING ENGINE</text>
+    <text x="706" y="244" class="title" font-size="14">评分引擎 · on-device</text>
+    <g font-size="11" class="chipT">
+      <g transform="translate(706,256)"><rect width="116" height="30" rx="8" class="chip"/><text x="12" y="19">Aesthetic</text></g>
+      <g transform="translate(830,256)"><rect width="116" height="30" rx="8" class="chip"/><text x="12" y="19">Composition</text></g>
+      <g transform="translate(706,292)"><rect width="116" height="30" rx="8" class="chip"/><text x="12" y="19">Temporal</text></g>
+      <g transform="translate(830,292)"><rect width="116" height="30" rx="8" class="chip"/><text x="12" y="19">Reel select</text></g>
+      <g transform="translate(706,328)"><rect width="116" height="30" rx="8" class="chip"/><text x="12" y="19">Shake / blur</text></g>
+      <g transform="translate(830,328)"><rect width="116" height="30" rx="8" class="chip"/><text x="12" y="19">Audio events</text></g>
+    </g>
+    <g transform="translate(706,366)">
+      <rect width="240" height="30" rx="8" fill="#241d12" stroke="#4a3c22"/>
+      <text x="12" y="19" class="chipT" font-size="11">Fusion → Decision</text>
+      <circle cx="168" cy="15" r="4" class="dotK"/><text x="178" y="19" class="num" font-size="9">keep</text>
+      <circle cx="205" cy="15" r="4" class="dotM"/>
+      <circle cx="222" cy="15" r="4" class="dotC"/>
+    </g>
+  </g>
+
+  <!-- ===== Stage 5 · Outputs + Report ===== -->
+  <g>
+    <rect x="1008" y="205" width="230" height="190" rx="16" class="card" filter="url(#soft)"/>
+    <rect x="1008.5" y="205.5" width="229" height="26" rx="15" fill="url(#cardSheen)"/>
+    <circle cx="1024" cy="229" r="3" class="led d4"/>
+    <circle cx="1024" cy="229" r="3" class="ping d4"/>
+    <text x="1036" y="233" class="tag" font-size="10.5">OUTPUTS · REPORT</text>
+    <g font-size="10.5" class="chipT" font-family="ui-monospace,'SF Mono',Menlo,monospace">
+      <g transform="translate(1024,246)"><rect width="98" height="26" rx="7" class="chip"/><text x="49" y="17" text-anchor="middle">scores.csv</text></g>
+      <g transform="translate(1130,246)"><rect width="92" height="26" rx="7" class="chip"/><text x="46" y="17" text-anchor="middle">rubric.jsonl</text></g>
+      <g transform="translate(1024,278)"><rect width="98" height="26" rx="7" class="chip"/><text x="49" y="17" text-anchor="middle">manifest.json</text></g>
+      <g transform="translate(1130,278)"><rect width="92" height="26" rx="7" class="chip"/><text x="46" y="17" text-anchor="middle">reel · EDL</text></g>
+    </g>
+    <line x1="1024" y1="318" x2="1222" y2="318" stroke="#2b241a" stroke-width="1"/>
+    <text x="1024" y="340" class="title" font-size="12.5" font-family="ui-monospace,'SF Mono',Menlo,monospace">serve_demo → results.html</text>
+    <text x="1024" y="360" class="sub" font-size="10.5">Grid · Lightbox · Video review</text>
+    <text x="1024" y="376" class="sub" font-size="10.5">Timeline · A/B compare · export</text>
+  </g>
+
+  <!-- ===== Footer ===== -->
+  <text x="40" y="690" class="sub" font-size="11">Local-first · 全程在本机离线运行 · 你的照片永不出本机</text>
+  <text x="1240" y="690" text-anchor="end" class="num" font-size="10.5">v2.3 · editorial-warm</text>
+</svg>

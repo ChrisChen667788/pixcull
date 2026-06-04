@@ -1,0 +1,150 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 760" width="1280" height="760" font-family="'Geist Variable',-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,system-ui,sans-serif" role="img" aria-label="PixCull video culling sequence diagram across photographer, CLI, extract, score, select and output participants">
+  <title>PixCull — Video Culling Sequence</title>
+  <defs>
+    <linearGradient id="brand" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#dcb87e"/><stop offset="0.55" stop-color="#c4b9a9"/><stop offset="1" stop-color="#6a6052"/>
+    </linearGradient>
+    <radialGradient id="vignette" cx="0.5" cy="0.3" r="0.85">
+      <stop offset="0" stop-color="#1b1712"/><stop offset="1" stop-color="#161310"/>
+    </radialGradient>
+    <linearGradient id="cardSheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.05"/><stop offset="0.4" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="sweep" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#dcb87e" stop-opacity="0"/><stop offset="0.5" stop-color="#dcb87e" stop-opacity="0.16"/><stop offset="1" stop-color="#dcb87e" stop-opacity="0"/>
+    </linearGradient>
+    <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#cdb888"/></marker>
+    <marker id="arrR" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#9a8e78"/></marker>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="200%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#140c04" flood-opacity="0.5"/></filter>
+    <style>
+      .title{ fill:#f3ede1; font-weight:600; } .sub{ fill:#a89d88; font-weight:500; }
+      .tag{ fill:#8a7f6a; font-weight:700; letter-spacing:.16em; }
+      .name{ fill:#f3ede1; font-weight:600; } .msg{ fill:#d3c9b6; font-weight:500; }
+      .mono{ font-family:ui-monospace,'SF Mono',Menlo,monospace; } .num{ fill:#7d7361; font-weight:600; }
+      .head{ fill:#1e1a14; stroke:#3a3122; stroke-width:1; } .actor{ fill:#241d12; stroke:#4a3c22; stroke-width:1; }
+      .life{ stroke:#2b241a; stroke-width:1.4; stroke-dasharray:2 6; }
+      .act{ fill:#2a2318; stroke:#473a29; stroke-width:1; }
+      .flowBase{ fill:none; stroke:#33291c; stroke-width:2.4; stroke-linecap:round; }
+      .flow{ fill:none; stroke:#d8c192; stroke-width:2.8; stroke-linecap:round; stroke-dasharray:2 11; }
+      .flowR{ fill:none; stroke:#9a8e78; stroke-width:2.2; stroke-linecap:round; stroke-dasharray:2 11; }
+      .badge{ fill:#241d12; stroke:#6a5836; stroke-width:1; } .bnum{ fill:#e6cf9a; font-weight:700; }
+      @media (prefers-reduced-motion: no-preference){
+        .flow,.flowR{ animation:flow 1.5s linear infinite; }
+        @keyframes flow{ to{ stroke-dashoffset:-26; } }
+        .sweepbar{ animation:sweep 6s cubic-bezier(0.4,0,0.2,1) infinite; }
+        @keyframes sweep{ 0%{ transform:translateY(0); opacity:0; } 8%{ opacity:1; } 84%{ opacity:1; } 100%{ transform:translateY(515px); opacity:0; } }
+      }
+    </style>
+  </defs>
+
+  <rect width="1280" height="760" fill="#161310"/>
+  <rect width="1280" height="760" fill="url(#vignette)"/>
+
+  <!-- title -->
+  <rect x="40" y="32" width="30" height="30" rx="9" fill="url(#brand)" filter="url(#soft)"/>
+  <path d="M49 47 l6 6 l8 -12" fill="none" stroke="#161310" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="82" y="49" class="title" font-size="19">视频审片时序</text>
+  <text x="82" y="66" class="sub" font-size="11.5">Video culling sequence · pixcull video</text>
+  <g font-size="11" transform="translate(980,40)">
+    <line x1="0" y1="6" x2="30" y2="6" class="flowBase"/><line x1="0" y1="6" x2="30" y2="6" class="flow"/>
+    <text x="40" y="10" class="sub">调用 call</text>
+    <line x1="148" y1="6" x2="178" y2="6" class="flowR"/>
+    <text x="188" y="10" class="sub">返回 return</text>
+  </g>
+
+  <!-- sweeping playhead -->
+  <g class="sweepbar"><rect x="40" y="150" width="1200" height="34" fill="url(#sweep)"/></g>
+
+  <!-- lifelines -->
+  <line x1="140" y1="116" x2="140" y2="694" class="life"/>
+  <line x1="340" y1="116" x2="340" y2="694" class="life"/>
+  <line x1="540" y1="116" x2="540" y2="694" class="life"/>
+  <line x1="740" y1="116" x2="740" y2="694" class="life"/>
+  <line x1="940" y1="116" x2="940" y2="694" class="life"/>
+  <line x1="1140" y1="116" x2="1140" y2="694" class="life"/>
+
+  <!-- activation bars -->
+  <rect x="335" y="158" width="10" height="462" rx="5" class="act"/>
+  <rect x="535" y="216" width="10" height="74" rx="5" class="act"/>
+  <rect x="735" y="274" width="10" height="132" rx="5" class="act"/>
+  <rect x="935" y="390" width="10" height="132" rx="5" class="act"/>
+  <rect x="1135" y="506" width="10" height="74" rx="5" class="act"/>
+
+  <!-- participant headers -->
+  <g>
+    <g transform="translate(58,70)"><rect width="164" height="44" rx="12" class="head" filter="url(#soft)"/><rect x="0.5" y="0.5" width="163" height="20" rx="11" fill="url(#cardSheen)"/><text x="82" y="22" text-anchor="middle" class="name" font-size="13">摄影师</text><text x="82" y="36" text-anchor="middle" class="sub" font-size="10">you · operator</text></g>
+    <g transform="translate(258,70)"><rect width="164" height="44" rx="12" class="head" filter="url(#soft)"/><rect x="0.5" y="0.5" width="163" height="20" rx="11" fill="url(#cardSheen)"/><text x="82" y="22" text-anchor="middle" class="name mono" font-size="12.5">CLI</text><text x="82" y="36" text-anchor="middle" class="sub mono" font-size="10">pixcull video</text></g>
+    <g transform="translate(458,70)"><rect width="164" height="44" rx="12" class="head" filter="url(#soft)"/><rect x="0.5" y="0.5" width="163" height="20" rx="11" fill="url(#cardSheen)"/><text x="82" y="22" text-anchor="middle" class="name" font-size="13">Extract</text><text x="82" y="36" text-anchor="middle" class="sub mono" font-size="10">io/video.py</text></g>
+    <g transform="translate(658,70)"><rect width="164" height="44" rx="12" class="head" filter="url(#soft)"/><rect x="0.5" y="0.5" width="163" height="20" rx="11" fill="url(#cardSheen)"/><text x="82" y="22" text-anchor="middle" class="name" font-size="13">Score</text><text x="82" y="36" text-anchor="middle" class="sub mono" font-size="10">scoring/*</text></g>
+    <g transform="translate(858,70)"><rect width="164" height="44" rx="12" class="head" filter="url(#soft)"/><rect x="0.5" y="0.5" width="163" height="20" rx="11" fill="url(#cardSheen)"/><text x="82" y="22" text-anchor="middle" class="name" font-size="13">Select</text><text x="82" y="36" text-anchor="middle" class="sub mono" font-size="10">temporal · reel</text></g>
+    <g transform="translate(1058,70)"><rect width="164" height="44" rx="12" class="head" filter="url(#soft)"/><rect x="0.5" y="0.5" width="163" height="20" rx="11" fill="url(#cardSheen)"/><text x="82" y="22" text-anchor="middle" class="name" font-size="13">Output</text><text x="82" y="36" text-anchor="middle" class="sub" font-size="10">assembly · report</text></g>
+  </g>
+
+  <!-- messages -->
+  <!-- 1 -->
+  <g>
+    <text x="240" y="150" text-anchor="middle" class="msg mono" font-size="11">video clip.mp4 -o out --interval-s 1</text>
+    <line x1="145" y1="158" x2="332" y2="158" class="flowBase" marker-end="url(#arr)"/><line x1="145" y1="158" x2="330" y2="158" class="flow"/>
+    <circle cx="140" cy="158" r="9" class="badge"/><text x="140" y="162" text-anchor="middle" class="bnum" font-size="11">1</text>
+  </g>
+  <!-- 2 -->
+  <g>
+    <text x="440" y="208" text-anchor="middle" class="msg" font-size="11">probe + 抽帧 extract @ interval</text>
+    <line x1="345" y1="216" x2="532" y2="216" class="flowBase" marker-end="url(#arr)"/><line x1="345" y1="216" x2="530" y2="216" class="flow"/>
+    <circle cx="340" cy="216" r="9" class="badge"/><text x="340" y="220" text-anchor="middle" class="bnum" font-size="11">2</text>
+  </g>
+  <!-- 3 -->
+  <g>
+    <text x="640" y="266" text-anchor="middle" class="msg" font-size="11">frames (N) <tspan class="num mono" font-size="10">· proxy if 4K/8K</tspan></text>
+    <line x1="545" y1="274" x2="732" y2="274" class="flowBase" marker-end="url(#arr)"/><line x1="545" y1="274" x2="730" y2="274" class="flow"/>
+    <circle cx="540" cy="274" r="9" class="badge"/><text x="540" y="278" text-anchor="middle" class="bnum" font-size="11">3</text>
+  </g>
+  <!-- 4 self-loop on Score -->
+  <g>
+    <path d="M745 326 h70 v22 h-68" class="flowBase" marker-end="url(#arr)"/><path d="M745 326 h70 v22 h-68" class="flow"/>
+    <text x="825" y="330" class="msg" font-size="11">aesthetic · shake/blur</text>
+    <text x="825" y="345" class="sub" font-size="10">· audio events · fusion</text>
+    <circle cx="740" cy="326" r="9" class="badge"/><text x="740" y="330" text-anchor="middle" class="bnum" font-size="11">4</text>
+  </g>
+  <!-- 5 -->
+  <g>
+    <text x="840" y="382" text-anchor="middle" class="msg" font-size="11">per-frame scores</text>
+    <line x1="745" y1="390" x2="932" y2="390" class="flowBase" marker-end="url(#arr)"/><line x1="745" y1="390" x2="930" y2="390" class="flow"/>
+    <circle cx="740" cy="390" r="9" class="badge"/><text x="740" y="394" text-anchor="middle" class="bnum" font-size="11">5</text>
+  </g>
+  <!-- 6 self-loop on Select -->
+  <g>
+    <path d="M945 442 h70 v22 h-68" class="flowBase" marker-end="url(#arr)"/><path d="M945 442 h70 v22 h-68" class="flow"/>
+    <text x="1025" y="446" class="msg" font-size="11">temporal windows</text>
+    <text x="1025" y="461" class="sub" font-size="10">· peak · reel candidates</text>
+    <circle cx="940" cy="442" r="9" class="badge"/><text x="940" y="446" text-anchor="middle" class="bnum" font-size="11">6</text>
+  </g>
+  <!-- 7 -->
+  <g>
+    <text x="1040" y="498" text-anchor="middle" class="msg" font-size="11">best frames + reel cut</text>
+    <line x1="945" y1="506" x2="1132" y2="506" class="flowBase" marker-end="url(#arr)"/><line x1="945" y1="506" x2="1130" y2="506" class="flow"/>
+    <circle cx="940" cy="506" r="9" class="badge"/><text x="940" y="510" text-anchor="middle" class="bnum" font-size="11">7</text>
+  </g>
+  <!-- 8 return Output -> CLI -->
+  <g>
+    <text x="740" y="556" text-anchor="middle" class="sub mono" font-size="11">reel.mp4 · EDL · manifest.json</text>
+    <line x1="1135" y1="564" x2="348" y2="564" class="flowR" marker-end="url(#arrR)"/>
+    <circle cx="1140" cy="564" r="9" class="badge"/><text x="1140" y="568" text-anchor="middle" class="bnum" font-size="11">8</text>
+  </g>
+  <!-- 9 return CLI -> Photographer -->
+  <g>
+    <text x="240" y="606" text-anchor="middle" class="sub" font-size="11">done · open report</text>
+    <line x1="335" y1="614" x2="148" y2="614" class="flowR" marker-end="url(#arrR)"/>
+    <circle cx="340" cy="614" r="9" class="badge"/><text x="340" y="618" text-anchor="middle" class="bnum" font-size="11">9</text>
+  </g>
+
+  <!-- result note -->
+  <g transform="translate(58,648)">
+    <rect width="282" height="34" rx="10" class="actor"/>
+    <circle cx="20" cy="17" r="5" fill="#6faa78"/>
+    <text x="36" y="21" class="msg" font-size="11">浏览 results.html · 网格 / 灯箱 / 时间线</text>
+  </g>
+
+  <text x="40" y="730" class="sub" font-size="11">Local-first · 全程在本机离线运行</text>
+  <text x="1240" y="730" text-anchor="end" class="num" font-size="10.5">v2.3 · editorial-warm</text>
+</svg>

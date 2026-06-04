@@ -464,6 +464,22 @@ Sparkle-update pipeline.
 
 ## Architecture at a glance
 
+Three editorial-warm diagrams, **animated on GitHub** — data flows along
+the connectors and each stage pulses as it activates (reduced-motion
+users get a clean static frame). Editable draw.io sources sit beside
+them in [`docs/diagrams/`](docs/diagrams/).
+
+<div align="center">
+  <img src="docs/diagrams/architecture.svg" alt="PixCull system architecture — input to CLI to orchestrator to an on-device scoring engine to outputs and the web report, over an IO/formats foundation" width="100%" /><br/>
+  <sub><b>System architecture</b> · input → CLI → <code>run_pipeline</code> → on-device scoring engine → outputs → web report, over an IO / formats foundation</sub>
+  <br/><br/>
+  <img src="docs/diagrams/sequence.svg" alt="PixCull video culling sequence across photographer, CLI, extract, score, select and output" width="100%" /><br/>
+  <sub><b>Video culling sequence</b> · <code>pixcull video</code> → extract frames → score → temporal / reel select → assemble reel + open report</sub>
+  <br/><br/>
+  <img src="docs/diagrams/dataflow.svg" alt="PixCull data flow — pixels to rubric.jsonl to scores.csv to manifest.json to the report, with a video reel branch" width="100%" /><br/>
+  <sub><b>Data flow</b> · pixels → <code>rubric.jsonl</code> → <code>scores.csv</code> → <code>manifest.json</code> → report, plus the video-reel branch</sub>
+</div>
+
 For the full engineering-grade architecture (C4 system context +
 container diagram + photo-pipeline sequence + LAN sync sequence +
 **16-row ML model card** + storage layout + tech-decision table),
@@ -474,7 +490,7 @@ The 10-second version, showing how PixCull is positioned in the
 team workflow:
 
 ```mermaid
-%%{init: {'theme':'base','themeVariables':{'primaryColor':'#6E56CF','primaryTextColor':'#fff','lineColor':'#A855F7','primaryBorderColor':'#EC4899','tertiaryColor':'#1a1d24'}}}%%
+%%{init: {'theme':'base','themeVariables':{'primaryColor':'#241d12','primaryTextColor':'#f3ede1','lineColor':'#c4b9a9','primaryBorderColor':'#3a3122','tertiaryColor':'#161310'}}}%%
 flowchart LR
     P[("📷 Head shooter")]
     S[("📷 Second shooter")]
@@ -489,8 +505,8 @@ flowchart LR
     PIX -->|"portfolio share link<br/>/share/&lt;token&gt;"| C
     PIX -.->|"opt-in · text only"| DS
 
-    style PIX fill:#6E56CF,color:#fff,stroke:#A855F7
-    style DS  fill:#2a2e35,stroke:#6E56CF
+    style PIX fill:#241d12,color:#f3ede1,stroke:#c4b9a9
+    style DS  fill:#1b1712,stroke:#6a6052
 ```
 
 The architecture has a few non-obvious commitments worth calling
@@ -903,7 +919,7 @@ Developer ID)。`app/RELEASE.md` 里有完整的构建 / 公证 / Sparkle 更
 10 秒版,PixCull 在团队工作流中的位置:
 
 ```mermaid
-%%{init: {'theme':'base','themeVariables':{'primaryColor':'#6E56CF','primaryTextColor':'#fff','lineColor':'#A855F7','primaryBorderColor':'#EC4899','tertiaryColor':'#1a1d24'}}}%%
+%%{init: {'theme':'base','themeVariables':{'primaryColor':'#241d12','primaryTextColor':'#f3ede1','lineColor':'#c4b9a9','primaryBorderColor':'#3a3122','tertiaryColor':'#161310'}}}%%
 flowchart LR
     P[("📷 主摄")]
     S[("📷 二摄")]
@@ -918,8 +934,8 @@ flowchart LR
     PIX -->|"作品集分享链接<br/>/share/&lt;token&gt;"| C
     PIX -.->|"opt-in · 仅文本"| DS
 
-    style PIX fill:#6E56CF,color:#fff,stroke:#A855F7
-    style DS  fill:#2a2e35,stroke:#6E56CF
+    style PIX fill:#241d12,color:#f3ede1,stroke:#c4b9a9
+    style DS  fill:#1b1712,stroke:#6a6052
 ```
 
 几个不太显眼但值得点出的工程承诺:

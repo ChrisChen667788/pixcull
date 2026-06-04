@@ -1,0 +1,175 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720" font-family="'Geist Variable',-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,system-ui,sans-serif" role="img" aria-label="PixCull data flow: source decoded to frames, scored to rubric.jsonl, fused to scores.csv and manifest.json for the web report, with a video branch producing a reel">
+  <title>PixCull — Data Flow</title>
+  <defs>
+    <linearGradient id="brand" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#dcb87e"/><stop offset="0.55" stop-color="#c4b9a9"/><stop offset="1" stop-color="#6a6052"/>
+    </linearGradient>
+    <radialGradient id="vignette" cx="0.5" cy="0.36" r="0.8">
+      <stop offset="0" stop-color="#1b1712"/><stop offset="1" stop-color="#161310"/>
+    </radialGradient>
+    <linearGradient id="cardSheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.05"/><stop offset="0.4" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="pkt" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#fbe6bf"/><stop offset="0.5" stop-color="#ecca8c"/><stop offset="1" stop-color="#ecca8c" stop-opacity="0"/>
+    </radialGradient>
+    <marker id="arr" viewBox="0 0 10 10" refX="7.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#cdb888"/></marker>
+    <filter id="soft" x="-30%" y="-30%" width="160%" height="180%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#140c04" flood-opacity="0.5"/></filter>
+    <style>
+      .title{ fill:#f3ede1; font-weight:600; } .sub{ fill:#a89d88; font-weight:500; }
+      .tag{ fill:#8a7f6a; font-weight:700; letter-spacing:.16em; }
+      .pt{ fill:#f3ede1; font-weight:600; } .ps{ fill:#a89d88; font-weight:500; }
+      .mono{ font-family:ui-monospace,'SF Mono',Menlo,monospace; } .num{ fill:#7d7361; font-weight:600; }
+      .proc{ fill:#1e1a14; stroke:#3a3122; stroke-width:1; }
+      .sink{ fill:#211c15; stroke:#5a4a2e; stroke-width:1.2; }
+      .artifact{ fill:#221d16; stroke:#473a29; stroke-width:1; }
+      .transient{ fill:#1b1712; stroke:#3a3122; stroke-width:1; stroke-dasharray:3 3; }
+      .file{ fill:#d3c9b6; } .stem{ stroke:#473a29; stroke-width:1; }
+      .pipeBase{ fill:none; stroke:#33291c; stroke-width:3; stroke-linecap:round; }
+      .pipe{ fill:none; stroke:#d8c192; stroke-width:3; stroke-linecap:round; stroke-dasharray:2 12; }
+      .dotK{ fill:#6faa78; } .dotM{ fill:#d6a443; } .dotC{ fill:#cf6f5b; }
+      @media (prefers-reduced-motion: no-preference){
+        .pipe{ animation:flow 1.5s linear infinite; }
+        @keyframes flow{ to{ stroke-dashoffset:-28; } }
+      }
+    </style>
+  </defs>
+
+  <rect width="1280" height="720" fill="#161310"/>
+  <rect width="1280" height="720" fill="url(#vignette)"/>
+
+  <!-- title + legend -->
+  <rect x="40" y="32" width="30" height="30" rx="9" fill="url(#brand)" filter="url(#soft)"/>
+  <path d="M48 47 h14 M48 41 h14 M48 53 h9" stroke="#161310" stroke-width="2.2" stroke-linecap="round"/>
+  <text x="82" y="49" class="title" font-size="19">数据流程</text>
+  <text x="82" y="66" class="sub" font-size="11.5">Data flow · pixel → score → decision → report</text>
+  <g font-size="11" transform="translate(902,38)">
+    <circle cx="6" cy="7" r="4" fill="url(#pkt)"/><text x="18" y="11" class="sub">数据包 packet</text>
+    <rect x="120" y="2" width="14" height="11" rx="3" class="proc"/><text x="140" y="11" class="sub">处理 process</text>
+    <rect x="240" y="2" width="14" height="11" rx="3" class="artifact"/><text x="260" y="11" class="sub">产物 artifact</text>
+  </g>
+
+  <!-- ================= LANE A pipes (behind nodes) ================= -->
+  <g>
+    <line x1="170" y1="216" x2="298" y2="216" class="pipeBase" marker-end="url(#arr)"/><line x1="170" y1="216" x2="296" y2="216" class="pipe"/>
+    <line x1="420" y1="216" x2="548" y2="216" class="pipeBase" marker-end="url(#arr)"/><line x1="420" y1="216" x2="546" y2="216" class="pipe"/>
+    <line x1="670" y1="216" x2="798" y2="216" class="pipeBase" marker-end="url(#arr)"/><line x1="670" y1="216" x2="796" y2="216" class="pipe"/>
+    <line x1="950" y1="216" x2="1088" y2="216" class="pipeBase" marker-end="url(#arr)"/><line x1="950" y1="216" x2="1086" y2="216" class="pipe"/>
+    <!-- branch from Score down to Temporal -->
+    <path d="M610,256 C610,330 625,338 625,394" class="pipeBase" marker-end="url(#arr)"/>
+    <path d="M610,256 C610,330 625,338 625,394" class="pipe"/>
+    <!-- LANE B pipes -->
+    <line x1="700" y1="433" x2="798" y2="433" class="pipeBase" marker-end="url(#arr)"/><line x1="700" y1="433" x2="796" y2="433" class="pipe"/>
+    <line x1="950" y1="433" x2="1088" y2="433" class="pipeBase" marker-end="url(#arr)"/><line x1="950" y1="433" x2="1086" y2="433" class="pipe"/>
+  </g>
+
+  <!-- ================= traveling data packets (SMIL motion) ================= -->
+  <g>
+    <circle r="5" fill="url(#pkt)"><animateMotion dur="2s" begin="0s" repeatCount="indefinite" path="M170,216 H296"/></circle>
+    <circle r="5" fill="url(#pkt)"><animateMotion dur="2s" begin="-0.6s" repeatCount="indefinite" path="M420,216 H546"/></circle>
+    <circle r="5" fill="url(#pkt)"><animateMotion dur="2s" begin="-1.2s" repeatCount="indefinite" path="M670,216 H796"/></circle>
+    <circle r="5" fill="url(#pkt)"><animateMotion dur="2s" begin="-0.4s" repeatCount="indefinite" path="M950,216 H1086"/></circle>
+    <circle r="5" fill="url(#pkt)"><animateMotion dur="2s" begin="-0.9s" repeatCount="indefinite" path="M610,256 C610,330 625,338 625,394"/></circle>
+    <circle r="5" fill="url(#pkt)"><animateMotion dur="2s" begin="-1.4s" repeatCount="indefinite" path="M700,433 H796"/></circle>
+    <circle r="5" fill="url(#pkt)"><animateMotion dur="2s" begin="-0.7s" repeatCount="indefinite" path="M950,433 H1086"/></circle>
+  </g>
+
+  <!-- ================= LANE A nodes ================= -->
+  <!-- Source -->
+  <g>
+    <rect x="40" y="176" width="130" height="92" rx="15" class="proc" filter="url(#soft)"/>
+    <rect x="40.5" y="176.5" width="129" height="24" rx="14" fill="url(#cardSheen)"/>
+    <text x="56" y="198" class="tag" font-size="10">SOURCE</text>
+    <g transform="translate(54,208)"><rect width="102" height="22" rx="6" fill="#221d16" stroke="#37301f"/><text x="10" y="15" class="ps" font-size="10.5">Photos <tspan class="num">RAW/JPEG</tspan></text></g>
+    <g transform="translate(54,236)"><rect width="102" height="22" rx="6" fill="#221d16" stroke="#37301f"/><text x="10" y="15" class="ps" font-size="10.5">Video <tspan class="num">MP4/MOV</tspan></text></g>
+  </g>
+  <!-- Decode -->
+  <g>
+    <rect x="300" y="176" width="120" height="80" rx="15" class="proc" filter="url(#soft)"/>
+    <rect x="300.5" y="176.5" width="119" height="24" rx="14" fill="url(#cardSheen)"/>
+    <circle cx="318" cy="198" r="3.2" fill="#c4b9a9"/>
+    <text x="330" y="202" class="tag" font-size="10">PROCESS</text>
+    <text x="316" y="226" class="pt" font-size="13.5">Decode</text>
+    <text x="316" y="244" class="ps mono" font-size="10">loader · raw_proxy</text>
+  </g>
+  <!-- Score -->
+  <g>
+    <rect x="550" y="176" width="120" height="80" rx="15" class="proc" filter="url(#soft)"/>
+    <rect x="550.5" y="176.5" width="119" height="24" rx="14" fill="url(#cardSheen)"/>
+    <circle cx="568" cy="198" r="3.2" fill="#c4b9a9"/>
+    <text x="580" y="202" class="tag" font-size="10">PROCESS</text>
+    <text x="566" y="226" class="pt" font-size="13.5">Score</text>
+    <text x="566" y="244" class="ps" font-size="10">per-axis · on-device</text>
+  </g>
+  <!-- Fuse · Decide -->
+  <g>
+    <rect x="800" y="176" width="150" height="80" rx="15" class="proc" filter="url(#soft)"/>
+    <rect x="800.5" y="176.5" width="149" height="24" rx="14" fill="url(#cardSheen)"/>
+    <circle cx="818" cy="198" r="3.2" fill="#c4b9a9"/>
+    <text x="830" y="202" class="tag" font-size="10">PROCESS</text>
+    <text x="816" y="226" class="pt" font-size="13.5">Fuse · Decide</text>
+    <text x="816" y="244" class="ps" font-size="10">λ per genre → keep/maybe/cull</text>
+  </g>
+  <!-- Report (sink) -->
+  <g>
+    <rect x="1090" y="176" width="150" height="80" rx="15" class="sink" filter="url(#soft)"/>
+    <rect x="1090.5" y="176.5" width="149" height="24" rx="14" fill="url(#cardSheen)"/>
+    <rect x="1106" y="190" width="16" height="12" rx="2" fill="none" stroke="#dcb87e" stroke-width="1.4"/><line x1="1114" y1="202" x2="1114" y2="206" stroke="#dcb87e" stroke-width="1.4"/>
+    <text x="1130" y="201" class="tag" font-size="10">SINK</text>
+    <text x="1106" y="226" class="pt" font-size="13.5">Report</text>
+    <text x="1106" y="244" class="ps mono" font-size="10">serve_demo · results.html</text>
+  </g>
+
+  <!-- ================= LANE B nodes (video branch) ================= -->
+  <text x="550" y="360" class="tag" font-size="10">VIDEO BRANCH · 视频分支</text>
+  <!-- Temporal · Reel -->
+  <g>
+    <rect x="550" y="396" width="150" height="74" rx="15" class="proc" filter="url(#soft)"/>
+    <rect x="550.5" y="396.5" width="149" height="22" rx="14" fill="url(#cardSheen)"/>
+    <circle cx="568" cy="416" r="3.2" fill="#c4b9a9"/>
+    <text x="580" y="420" class="tag" font-size="10">PROCESS</text>
+    <text x="566" y="444" class="pt" font-size="13">Temporal · Reel</text>
+    <text x="566" y="460" class="ps" font-size="10">windows · peak · candidates</text>
+  </g>
+  <!-- Assembly -->
+  <g>
+    <rect x="800" y="396" width="150" height="74" rx="15" class="proc" filter="url(#soft)"/>
+    <rect x="800.5" y="396.5" width="149" height="22" rx="14" fill="url(#cardSheen)"/>
+    <circle cx="818" cy="416" r="3.2" fill="#c4b9a9"/>
+    <text x="830" y="420" class="tag" font-size="10">PROCESS</text>
+    <text x="816" y="444" class="pt" font-size="13">Assembly</text>
+    <text x="816" y="460" class="ps mono" font-size="10">reel_assembly · cut</text>
+  </g>
+  <!-- reel out (sink) -->
+  <g>
+    <rect x="1090" y="396" width="150" height="74" rx="15" class="sink" filter="url(#soft)"/>
+    <rect x="1090.5" y="396.5" width="149" height="22" rx="14" fill="url(#cardSheen)"/>
+    <path d="M1106 410 h16 v12 h-16 z M1110 410 v12 M1118 410 v12" fill="none" stroke="#dcb87e" stroke-width="1.2"/>
+    <text x="1130" y="420" class="tag" font-size="10">SINK</text>
+    <text x="1106" y="444" class="pt mono" font-size="12.5">reel.mp4 · .edl</text>
+    <text x="1106" y="460" class="ps" font-size="10">Reels / Shorts / 16:9</text>
+  </g>
+
+  <!-- ================= artifact tags on pipes ================= -->
+  <!-- A1 frames (transient) -->
+  <line x1="233" y1="200" x2="233" y2="214" class="stem"/>
+  <g transform="translate(186,176)"><rect width="94" height="24" rx="7" class="transient"/><text x="47" y="16" text-anchor="middle" class="file mono" font-size="10.5">frames</text></g>
+  <!-- A2 rubric.jsonl -->
+  <line x1="485" y1="200" x2="485" y2="214" class="stem"/>
+  <g transform="translate(430,176)"><rect width="110" height="24" rx="7" class="artifact"/><path d="M12 6 h8 l3 3 v9 h-11 z" fill="none" stroke="#cdbfa6" stroke-width="1"/><text x="62" y="16" text-anchor="middle" class="file mono" font-size="10.5">rubric.jsonl</text></g>
+  <!-- A3 scores.csv -->
+  <line x1="735" y1="200" x2="735" y2="214" class="stem"/>
+  <g transform="translate(672,176)"><rect width="126" height="24" rx="7" class="artifact"/><path d="M12 6 h8 l3 3 v9 h-11 z" fill="none" stroke="#cdbfa6" stroke-width="1"/><text x="30" y="16" class="file mono" font-size="10.5">scores.csv</text><circle cx="100" cy="12" r="3.2" class="dotK"/><circle cx="110" cy="12" r="3.2" class="dotM"/><circle cx="120" cy="12" r="3.2" class="dotC"/></g>
+  <!-- A4 manifest.json -->
+  <line x1="1020" y1="200" x2="1020" y2="214" class="stem"/>
+  <g transform="translate(957,176)"><rect width="126" height="24" rx="7" class="artifact"/><path d="M12 6 h8 l3 3 v9 h-11 z" fill="none" stroke="#cdbfa6" stroke-width="1"/><text x="64" y="16" text-anchor="middle" class="file mono" font-size="10.5">manifest.json</text></g>
+  <!-- B1 reel candidates -->
+  <line x1="748" y1="417" x2="748" y2="431" class="stem"/>
+  <g transform="translate(693,393)"><rect width="110" height="24" rx="7" class="artifact"/><text x="55" y="16" text-anchor="middle" class="file" font-size="10.5">reel candidates</text></g>
+  <!-- B2 EDL/encode -->
+  <line x1="1020" y1="417" x2="1020" y2="431" class="stem"/>
+  <g transform="translate(965,393)"><rect width="110" height="24" rx="7" class="artifact"/><text x="55" y="16" text-anchor="middle" class="file" font-size="10.5">EDL → encode</text></g>
+
+  <text x="40" y="694" class="sub" font-size="11">Local-first · 数据全程留在本机 · scores.csv / rubric.jsonl / manifest.json 落盘可复核</text>
+  <text x="1240" y="694" text-anchor="end" class="num" font-size="10.5">v2.3 · editorial-warm</text>
+</svg>

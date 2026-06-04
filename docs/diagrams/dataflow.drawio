@@ -1,0 +1,26 @@
+<mxfile host="app.diagrams.net" agent="PixCull editorial-warm" version="24.0.0">
+  <diagram name="PixCull · Data Flow" id="pixcull-dataflow">
+    <mxGraphModel dx="1280" dy="720" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1280" pageHeight="720" math="0" shadow="1" background="#161310">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" value="PixCull · 数据流程 / Data flow" style="text;html=1;fontColor=#f3ede1;fontSize=18;fontStyle=1;align=left;" vertex="1" parent="1"><mxGeometry x="40" y="34" width="420" height="30" as="geometry" /></mxCell>
+        <mxCell id="src" value="SOURCE&#10;Photos · RAW / JPEG&#10;Video · MP4 / MOV" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1e1a14;strokeColor=#3a3122;fontColor=#f3ede1;fontSize=12;arcSize=14;shadow=1;verticalAlign=middle;" vertex="1" parent="1"><mxGeometry x="40" y="180" width="160" height="92" as="geometry" /></mxCell>
+        <mxCell id="dec" value="Decode&#10;loader · raw_proxy" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1e1a14;strokeColor=#3a3122;fontColor=#f3ede1;fontSize=12;arcSize=14;shadow=1;" vertex="1" parent="1"><mxGeometry x="290" y="190" width="130" height="72" as="geometry" /></mxCell>
+        <mxCell id="sco" value="Score&#10;per-axis · on-device" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1e1a14;strokeColor=#3a3122;fontColor=#f3ede1;fontSize=12;arcSize=14;shadow=1;" vertex="1" parent="1"><mxGeometry x="540" y="190" width="130" height="72" as="geometry" /></mxCell>
+        <mxCell id="fus" value="Fuse · Decide&#10;λ per genre → keep / maybe / cull" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1e1a14;strokeColor=#3a3122;fontColor=#f3ede1;fontSize=12;arcSize=14;shadow=1;" vertex="1" parent="1"><mxGeometry x="790" y="190" width="160" height="72" as="geometry" /></mxCell>
+        <mxCell id="rep" value="Report (sink)&#10;serve_demo · results.html" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#211c15;strokeColor=#5a4a2e;fontColor=#f3ede1;fontSize=12;arcSize=14;shadow=1;" vertex="1" parent="1"><mxGeometry x="1080" y="190" width="160" height="72" as="geometry" /></mxCell>
+        <mxCell id="tmp" value="Temporal · Reel&#10;windows · peak · candidates" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1e1a14;strokeColor=#3a3122;fontColor=#f3ede1;fontSize=12;arcSize=14;shadow=1;" vertex="1" parent="1"><mxGeometry x="540" y="400" width="160" height="72" as="geometry" /></mxCell>
+        <mxCell id="asm" value="Assembly&#10;reel_assembly · cut" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1e1a14;strokeColor=#3a3122;fontColor=#f3ede1;fontSize=12;arcSize=14;shadow=1;" vertex="1" parent="1"><mxGeometry x="790" y="400" width="160" height="72" as="geometry" /></mxCell>
+        <mxCell id="reel" value="reel.mp4 · .edl (sink)&#10;Reels / Shorts / 16:9" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#211c15;strokeColor=#5a4a2e;fontColor=#f3ede1;fontSize=12;arcSize=14;shadow=1;" vertex="1" parent="1"><mxGeometry x="1080" y="400" width="160" height="72" as="geometry" /></mxCell>
+        <mxCell id="d1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;flowAnimation=1;strokeColor=#c4b9a9;strokeWidth=2.5;endArrow=block;endFill=1;" edge="1" parent="1" source="src" target="dec"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="d2" value="frames" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;flowAnimation=1;strokeColor=#c4b9a9;strokeWidth=2.5;endArrow=block;endFill=1;fontColor=#d3c9b6;fontSize=10;" edge="1" parent="1" source="dec" target="sco"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="d3" value="rubric.jsonl" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;flowAnimation=1;strokeColor=#c4b9a9;strokeWidth=2.5;endArrow=block;endFill=1;fontColor=#d3c9b6;fontSize=10;" edge="1" parent="1" source="sco" target="fus"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="d4" value="scores.csv · manifest.json" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;flowAnimation=1;strokeColor=#c4b9a9;strokeWidth=2.5;endArrow=block;endFill=1;fontColor=#d3c9b6;fontSize=10;" edge="1" parent="1" source="fus" target="rep"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="d5" value="scores + frames" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;flowAnimation=1;strokeColor=#8a7f6a;strokeWidth=2;endArrow=block;endFill=1;fontColor=#a89d88;fontSize=10;" edge="1" parent="1" source="sco" target="tmp"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="d6" value="reel candidates" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;flowAnimation=1;strokeColor=#c4b9a9;strokeWidth=2.5;endArrow=block;endFill=1;fontColor=#d3c9b6;fontSize=10;" edge="1" parent="1" source="tmp" target="asm"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="d7" value="EDL → encode" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;flowAnimation=1;strokeColor=#c4b9a9;strokeWidth=2.5;endArrow=block;endFill=1;fontColor=#d3c9b6;fontSize=10;" edge="1" parent="1" source="asm" target="reel"><mxGeometry relative="1" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
