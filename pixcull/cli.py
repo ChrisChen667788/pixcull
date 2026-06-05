@@ -437,5 +437,81 @@ def plugins_reload() -> None:
         f"(enabled only)")
 
 
+# v2.2-P1-2 — optional learned-model manager.
+models_app = typer.Typer(
+    help="Pull + locate PixCull's optional learned models (v2.2-P1-2).",
+    no_args_is_help=True)
+app.add_typer(models_app, name="models")
+
+
+@models_app.command("list")
+def models_list() -> None:
+    """Show the optional-model catalogue + install state."""
+    from pixcull.models_manager import list_models
+    rows = list_models()
+    table = Table(title=f"PixCull optional models ({len(rows)})")
+    table.add_column("Name", style="bold")
+    table.add_column("Status")
+    table.add_column("Size", justify="right", style="dim")
+    table.add_column("Used by", style="dim")
+    for r in rows:
+        if r.installed:
+            status = "[green]installed[/green]"
+        elif r.spec.published:
+            status = "[cyan]available — pull[/cyan]"
+        else:
+            status = "[dim]unpublished[/dim]"
+        size = f"{r.spec.size / 1e6:.1f} MB" if r.spec.size else "—"
+        table.add_row(r.spec.name, status, size, r.spec.used_by)
+    console.print(table)
+    console.print(
+        "Cache: [cyan]~/.pixcull/models/[/cyan]  ·  fetch with "
+        "[cyan]pixcull models pull <name>[/cyan]")
+
+
+@models_app.command("pull")
+def models_pull(
+    name: str = typer.Argument(..., help="Catalogue name, e.g. audio-tagger."),
+    force: bool = typer.Option(False, "--force", "-f",
+                               help="Re-download even if already cached."),
+) -> None:
+    """Download + checksum-verify a model into ~/.pixcull/models/."""
+    from pixcull.models_manager import pull, ChecksumError, NotPublishedError
+    try:
+        path = pull(name, force=force)
+    except KeyError as exc:
+        console.print(f"[red]✗ {exc}[/red]")
+        raise typer.Exit(code=2)
+    except NotPublishedError as exc:
+        console.print(f"[yellow]• {exc}[/yellow]")
+        raise typer.Exit(code=3)
+    except ChecksumError as exc:
+        console.print(f"[red]✗ {exc}[/red]")
+        raise typer.Exit(code=4)
+    except Exception as exc:  # noqa: BLE001 — network / IO
+        console.print(f"[red]✗ download failed: {exc}[/red]")
+        raise typer.Exit(code=5)
+    console.print(f"[green]✓ {name} → {path}[/green]")
+
+
+@models_app.command("path")
+def models_path(
+    name: str = typer.Argument(..., help="Catalogue name, e.g. audio-tagger."),
+) -> None:
+    """Print a model's local cache path (exit 1 if not installed).
+
+    Scriptable: ``MODEL=$(pixcull models path audio-tagger) && …``.
+    """
+    from pixcull.models_manager import get_spec, is_installed, resolve_path
+    try:
+        get_spec(name)
+    except KeyError as exc:
+        console.print(f"[red]✗ {exc}[/red]")
+        raise typer.Exit(code=2)
+    print(resolve_path(name))          # plain stdout, no rich markup
+    if not is_installed(name):
+        raise typer.Exit(code=1)
+
+
 if __name__ == "__main__":
     app()

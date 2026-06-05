@@ -45,10 +45,20 @@ big v2.0 deferral (the separate video review surface).
 - Resample GPMF ACCL/GYRO to frame timestamps automatically and feed
   `analyze_quality(imu_shake=…)` inside the video run, no caller wiring.
 
-#### v2.2-P1-2 · `pixcull models` manager
+#### v2.2-P1-2 · `pixcull models` manager — ✅ DONE
 **估时**: 1 周
 - `pixcull models list/pull/path` for the optional audio/LLM/VLM models
   (cached under `~/.pixcull/models`), with checksums.
+- **Shipped:** `pixcull/models_manager.py` — a `ModelSpec` registry +
+  sha256-verified fetch (`http(s)://` and `file://`), atomic temp→move
+  install, idempotent (skip when present + checksum-valid), sidecar
+  (labels.json) support — plus the `pixcull models` sub-app
+  (`list`/`pull`/`path`) and `tests/test_models_manager.py` (whole fetch
+  path exercised over `file://`).  Catalogue rows for `audio-tagger` /
+  `vlm-caption` are **"unpublished"** (no URL) until their exports land
+  in P0-1 / P0-3 — `pull` says so cleanly instead of 404-ing.  The cache
+  path matches what `scoring/audio_tagger.py` already searches, so a
+  pulled model is picked up with no extra wiring.
 
 #### v2.2-P1-3 · Reel export presets (Reels / Shorts / 16:9)
 **估时**: 1.5 周

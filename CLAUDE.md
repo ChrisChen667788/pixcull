@@ -82,7 +82,10 @@ Audit the diff before any push (`git -C <repo> diff origin/main..main`):
 ## Architecture quick map
 
 - CLI: `pixcull/cli.py` (typer) — `scan / run / export / bench / video /
-  reel / plugins`.
+  reel / plugins / models`.  Sub-apps via `app.add_typer(...)`
+  (`plugins`, `models`).  `models` = `pixcull/models_manager.py`
+  (optional-model registry + sha256-verified pull into
+  `~/.pixcull/models/`).
 - Pipeline: `pixcull/pipeline/orchestrator.py::run_pipeline(folder,
   output, …)` → `scores.csv` + `rubric.jsonl` in the run dir.
 - Web demo: `scripts/serve_demo.py` (BaseHTTPRequestHandler;
@@ -110,6 +113,14 @@ honest deviations) and `docs/DESIGN-AUDIT-2028Q2.md` (4.4/5).
 ONNX + DSP fallback) · video-review discoverability · semantic reel
 captions · real .cube LUTs · in/out trim + multi-video shoot reels ·
 DJI SRT GPS + GPMF IMU shake · RAW proxy bridge.
-**Next: v2.2** — `docs/ROADMAP-v2.2-charter.md` (bundle+eval a small
-audio tagger · merge the video scrubber into the unified lightbox · VLM
-vision captions · `pixcull models` manager · Reels/Shorts export presets).
+**v2.3 "UI overhaul" shipped** — `docs/ROADMAP-v2.3-ui-charter.md`:
+editorial-warm rebrand + vendored Geist + Double-Bezel cards + scroll/
+spring motion + the 19-shot gallery, all on GitHub + ModelScope.  Plus
+the editorial-warm animated architecture / sequence / data-flow diagrams
+in `docs/diagrams/` (animated SVG on GitHub, GIF on ModelScope).
+**v2.2 in progress** — `docs/ROADMAP-v2.2-charter.md`.  Shipped: unified
+lightbox (P0-2) · IMU→frame shake (P1-1) · Reels/Shorts export presets
+(P1-3) · **`pixcull models` manager (P1-2 — `list/pull/path`, cache
+`~/.pixcull/models/`, sha256-verified, http(s)/file:// fetch)**.  Open:
+bundled audio-tagger export (P0-1) · VLM caption (P0-3) · GPS map
+overlay (P2-1).
