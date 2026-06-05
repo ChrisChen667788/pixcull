@@ -120,7 +120,7 @@ Payment: 30% at kickoff, 70% at delivery acceptance.
 
 ## How to bid
 
-Reply to chenhaorui667788@gmail.com with:
+Reply to hello@pixcull.dev with:
 
 1. Portfolio (5-8 example illustrations in the editorial-line style)
 2. Rate (per-illustration or fixed-project)

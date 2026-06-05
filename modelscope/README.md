@@ -359,7 +359,7 @@ MIT 开源,让下一个摄影师不用再从头造一遍。
 
 - GitHub: [@ChrisChen667788](https://github.com/ChrisChen667788)
 - ModelScope: [@haozi667788](https://www.modelscope.cn/profile/haozi667788)
-- 联系: chenhaorui667788@gmail.com
+- 联系: hello@pixcull.dev
 
 ---
 

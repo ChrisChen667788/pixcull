@@ -67,7 +67,7 @@ Each delivered as:
    technical), 小红书 (photographer-voice, image-driven), 36kr /
    tech press (product-market-fit framing)
 4. **FAQ doc** — anticipated press questions + on-message answers
-5. **Press contact + author bio** — chenhaorui667788@gmail.com +
+5. **Press contact + author bio** — hello@pixcull.dev +
    GitHub + ModelScope + short 50-word bio
 
 ### D. Boilerplate
@@ -123,4 +123,4 @@ Reply with:
 - Crew + production capacity for the 30s trailer
 - Sample written copy in PixCull's photographer-voice style
 
-Contact: chenhaorui667788@gmail.com
+Contact: hello@pixcull.dev

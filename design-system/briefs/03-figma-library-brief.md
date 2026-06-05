@@ -161,4 +161,4 @@ Reply with:
 3. Comfort level with Tokens Studio specifically
 4. Any change you'd push back on in this spec
 
-Contact: chenhaorui667788@gmail.com
+Contact: hello@pixcull.dev

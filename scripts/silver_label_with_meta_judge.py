@@ -130,7 +130,7 @@ def main() -> int:
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument(
         "--goldenset", type=Path,
-        default=Path("/Users/chenhaorui/Pictures/pixcull-goldenset"),
+        default=Path("~/Pictures/pixcull-goldenset").expanduser(),
         help="Goldenset root containing ground_truth.csv + _eval_output/scores.csv",
     )
     parser.add_argument(

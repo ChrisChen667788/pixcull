@@ -114,4 +114,4 @@ Payment: 30% kickoff, 30% at moment 1 acceptance, 40% at delivery.
 
 Reply with portfolio (3-5 prior Rive projects), rate, timeline.
 
-Contact: chenhaorui667788@gmail.com
+Contact: hello@pixcull.dev

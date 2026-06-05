@@ -6,7 +6,7 @@ this repo.  Read it before each session.
 
 ## Golden rules
 
-1. **Always `git -C /Users/chenhaorui/Downloads/zero-basics-python/2/pixcull-restored …`.**
+1. **Always `git -C ~/Downloads/zero-basics-python/2/pixcull-restored …`.**
    The cwd can drift up to the parent `zero-basics-python` course repo
    (a *different* git repo on branch `master`).  Never run bare `git`
    from an ambiguous cwd — always pass `-C <this repo's abspath>`.

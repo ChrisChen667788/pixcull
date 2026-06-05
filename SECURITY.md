@@ -8,7 +8,7 @@ supported version. Patches for older commits are not backported.
 ## Reporting a vulnerability
 
 If you think you've found a security issue, **do not open a public issue**.
-Email the maintainer at `chenhaorui667788@gmail.com` with:
+Email the maintainer at `hello@pixcull.dev` with:
 
 - A short description of the issue
 - A reproduction recipe (commands, payload, expected vs actual)

@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.11,<3.13"
 license = "MIT"
 authors = [
-    { name = "Chris Chen", email = "chenhaorui667788@gmail.com" },
+    { name = "Chris Chen", email = "hello@pixcull.dev" },
 ]
 keywords = [
     "photography", "photo-culling", "ai", "computer-vision",

@@ -85,8 +85,8 @@ GitHub Actions 自动镜像到 ModelScope。
    git clone https://www.modelscope.cn/haozi667788/pixcull.git pixcull-ms
    cd pixcull-ms
 
-   cp /Users/chenhaorui/Downloads/zero-basics-python/2/pixcull-restored/modelscope/README.md .
-   cp /Users/chenhaorui/Downloads/zero-basics-python/2/pixcull-restored/LICENSE .
+   cp ~/Downloads/zero-basics-python/2/pixcull-restored/modelscope/README.md .
+   cp ~/Downloads/zero-basics-python/2/pixcull-restored/LICENSE .
 
    git add -A
    git commit -m "Initial release · mirror of github.com/ChrisChen667788/pixcull"
@@ -135,8 +135,8 @@ GitHub Actions 自动镜像到 ModelScope。
    ```
 4. 拷贝 demo 文件:
    ```bash
-   cp /Users/chenhaorui/Downloads/zero-basics-python/2/pixcull-restored/modelscope/app.py .
-   cp /Users/chenhaorui/Downloads/zero-basics-python/2/pixcull-restored/modelscope/requirements.txt .
+   cp ~/Downloads/zero-basics-python/2/pixcull-restored/modelscope/app.py .
+   cp ~/Downloads/zero-basics-python/2/pixcull-restored/modelscope/requirements.txt .
    git add app.py requirements.txt
    git commit -m "Initial demo: single-image PixCull rubric scoring"
    git push
@@ -151,7 +151,7 @@ GitHub Actions 自动镜像到 ModelScope。
 如果想两边同步、只推一次:
 
 ```bash
-cd /Users/chenhaorui/Downloads/zero-basics-python/2/pixcull-restored
+cd ~/Downloads/zero-basics-python/2/pixcull-restored
 git remote add modelscope https://www.modelscope.cn/haozi667788/pixcull.git
 git push modelscope main
 ```

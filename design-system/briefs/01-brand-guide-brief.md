@@ -167,5 +167,5 @@ Please reply with:
    Penpot vs Adobe XD — we prefer Figma but can adapt)
 5. Any clarification questions on the brief above
 
-Contact: chenhaorui667788@gmail.com · GitHub
+Contact: hello@pixcull.dev · GitHub
 [@ChrisChen667788](https://github.com/ChrisChen667788)

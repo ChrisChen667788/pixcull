@@ -159,7 +159,7 @@ acceptance), 25% at end of month 2 (CJK draft acceptance),
 
 ## How to bid
 
-Reply to chenhaorui667788@gmail.com with:
+Reply to hello@pixcull.dev with:
 
 1. Portfolio: 2-3 prior typefaces shipped (links to specimens)
 2. Experience with CJK + Latin in the same family (mandatory)
@@ -168,4 +168,4 @@ Reply to chenhaorui667788@gmail.com with:
 5. Tool preference (Glyphs / FontLab / RoboFont)
 6. Any change you'd push back on in this spec
 
-Contact: chenhaorui667788@gmail.com
+Contact: hello@pixcull.dev

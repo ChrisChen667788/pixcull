@@ -61,7 +61,7 @@ and "where you can get stuck".
    gh repo create ChrisChen667788/homebrew-pixcull --public
    git clone https://github.com/ChrisChen667788/homebrew-pixcull.git
    cd homebrew-pixcull
-   cp /Users/chenhaorui/Downloads/zero-basics-python/2/pixcull-restored/dist/pixcull.rb .
+   cp ~/Downloads/zero-basics-python/2/pixcull-restored/dist/pixcull.rb .
    git add pixcull.rb && git commit -m "Initial v0.11.0 cask"
    git push
    ```
