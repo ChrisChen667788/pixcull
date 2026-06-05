@@ -821,6 +821,12 @@ display:flex;flex-direction:column;min-height:0}
 .reel h2{font-size:12px;text-transform:uppercase;letter-spacing:.6px;
 color:var(--dim);margin:0;padding:12px 14px;border-bottom:1px solid var(--line)}
 .reel .list{overflow:auto;flex:1}
+.gpsmap{border-bottom:1px solid var(--line);padding:11px 14px 12px}
+.gpsmap h2{font-size:12px;text-transform:uppercase;letter-spacing:.6px;
+color:var(--dim);margin:0 0 8px;padding:0;border:0}
+.gpsmap svg{width:100%;height:auto;display:block;background:#15120d;
+border:1px solid var(--line);border-radius:9px}
+.gpsmeta{color:var(--dim);font-size:11px;margin-top:6px;font-variant-numeric:tabular-nums}
 .cand{padding:10px 14px;border-bottom:1px solid var(--line);cursor:pointer}
 .cand:hover{background:#1a1d24}
 .cand.active{background:#1d2030;box-shadow:inset 3px 0 0 var(--indigo)}
@@ -880,6 +886,11 @@ padding:1px 6px;font-size:11px;color:var(--ink)}
     <div class="scrub"><svg id="tl" viewBox="0 0 1000 96" preserveAspectRatio="none"></svg></div>
   </div>
   <aside class="reel">
+    <div class="gpsmap" id="gpsmap" style="display:none">
+      <h2>📍 轨迹 · GPS</h2>
+      <svg id="gpssvg" viewBox="0 0 320 190" preserveAspectRatio="xMidYMid meet"></svg>
+      <div class="gpsmeta" id="gpsmeta"></div>
+    </div>
     <h2 id="reelHead">Reel 候选</h2>
     <div class="list" id="reelList"></div>
   </aside>
@@ -927,7 +938,7 @@ function init(d){
   const sel=$('grade'); const grades=d.grades||[{id:'none',label:'Original'}];
   sel.innerHTML=grades.map(g=>'<option value="'+g.id+'">'+g.label+'</option>').join('');
   sel.onchange=()=>{ GRADE=sel.value; show(cur); renderReel(); };
-  drawTimeline(); renderReel(); show(0); bindControls();
+  drawTimeline(); drawGPS(); renderReel(); show(0); bindControls();
 }
 
 function frameURL(f, w){ let u=DATA.frame_base+encodeURIComponent(f.frame_id)+'.jpg'; const q=[]; if(GRADE&&GRADE!=='none')q.push('grade='+encodeURIComponent(GRADE)); if(w)q.push('w='+w); return u+(q.length?('?'+q.join('&')):''); }
@@ -947,7 +958,7 @@ function show(i){
   $('bB').style.width=pct(f.bE)+'%'; $('vB').textContent=f.bE.toFixed(2);
   $('bQ').style.width=pct(f.sF)+'%'; $('vQ').textContent=(f.sF==null?'—':f.sF.toFixed(2));
   $('count').textContent=(cur+1)+' / '+FRAMES.length;
-  updatePlayhead(); markActiveCandidate(f.t);
+  updatePlayhead(); markActiveCandidate(f.t); updateGPSMarker();
   // preload neighbour
   const nx=cur+(playing<0?-1:1);
   if(nx>=0&&nx<FRAMES.length){ const im=new Image(); im.src=frameURL(FRAMES[nx]); }
@@ -960,6 +971,31 @@ function nearestFrame(t){
   return lo;
 }
 function frameByID(id){ for(let i=0;i<FRAMES.length;i++) if(FRAMES[i].frame_id===id) return i; return -1; }
+
+/* ---- gps mini-map (v2.2-P2-1) ---- */
+function drawGPS(){
+  const g = DATA && DATA.gps;
+  if(!g || !g.points || g.points.length<2){ $('gpsmap').style.display='none'; return; }
+  $('gpsmap').style.display='block';
+  const p=g.points, p0=p[0], pN=p[p.length-1];
+  let s='<path d="'+g.path+'" fill="none" stroke="#c4b9a9" stroke-width="2" '
+      +'stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/>';
+  s+='<circle cx="'+p0.x+'" cy="'+p0.y+'" r="4" fill="#6faa78"/>';
+  s+='<circle cx="'+pN.x+'" cy="'+pN.y+'" r="4" fill="#cf6f5b"/>';
+  s+='<circle id="gpsdot" cx="'+p0.x+'" cy="'+p0.y+'" r="5.5" fill="#dcb87e" '
+      +'stroke="#161310" stroke-width="1.5"/>';
+  $('gpssvg').innerHTML=s;
+  const km=(g.distance_km!=null && g.distance_km>0)?(g.distance_km.toFixed(2)+' km · '):'';
+  $('gpsmeta').textContent=km+g.n+' 点'+(g.source?(' · '+g.source):'');
+  updateGPSMarker();
+}
+function updateGPSMarker(){
+  const g=DATA&&DATA.gps; if(!g||!g.points||g.points.length<2) return;
+  const dot=$('gpsdot'); if(!dot||!FRAMES.length) return;
+  const frac=(tEnd>t0)?(FRAMES[cur].t-t0)/(tEnd-t0):0;
+  const idx=Math.max(0,Math.min(g.points.length-1,Math.round(frac*(g.points.length-1))));
+  const q=g.points[idx]; dot.setAttribute('cx',q.x); dot.setAttribute('cy',q.y);
+}
 
 /* ---- timeline ---- */
 function drawTimeline(){
@@ -7401,6 +7437,28 @@ class _Handler(BaseHTTPRequestHandler):
             grades = list_presets() + list_cubes()   # + v2.1 user .cube LUTs
         except Exception:
             grades = [{"id": "none", "label": "Original"}]
+        # v2.2-P2-1 — GPS travel-map track (lazy-extracted, cached to gps.json).
+        gps_payload = None
+        try:
+            from pixcull.io.gps_map import gps_points_for_video, project_track
+            gps_cache = run_dir / "gps.json"
+            if gps_cache.exists():
+                raw = json.loads(gps_cache.read_text("utf-8"))
+            else:
+                src = manifest.get("source_path")
+                raw = (gps_points_for_video(Path(src))
+                       if src and Path(src).exists()
+                       else {"points": [], "source": ""})
+                try:
+                    gps_cache.write_text(
+                        json.dumps(raw, ensure_ascii=False), encoding="utf-8")
+                except OSError:
+                    pass
+            proj = project_track(raw.get("points", []))
+            if proj:
+                gps_payload = {**proj, "source": raw.get("source", "")}
+        except Exception:
+            gps_payload = None
         body = json.dumps({
             "ok": True,
             "run_id": rid,
@@ -7409,6 +7467,7 @@ class _Handler(BaseHTTPRequestHandler):
             "temporal": temporal,
             "reel": reel,
             "grades": grades,
+            "gps": gps_payload,
         }, ensure_ascii=False).encode("utf-8")
         self._send_json(200, body)
 

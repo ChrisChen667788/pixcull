@@ -120,7 +120,9 @@ the editorial-warm animated architecture / sequence / data-flow diagrams
 in `docs/diagrams/` (animated SVG on GitHub, GIF on ModelScope).
 **v2.2 in progress** — `docs/ROADMAP-v2.2-charter.md`.  Shipped: unified
 lightbox (P0-2) · IMU→frame shake (P1-1) · Reels/Shorts export presets
-(P1-3) · **`pixcull models` manager (P1-2 — `list/pull/path`, cache
-`~/.pixcull/models/`, sha256-verified, http(s)/file:// fetch)**.  Open:
-bundled audio-tagger export (P0-1) · VLM caption (P0-3) · GPS map
-overlay (P2-1).
+(P1-3) · `pixcull models` manager (P1-2 — `list/pull/path`, cache
+`~/.pixcull/models/`, sha256-verified) · **GPS travel-map overlay (P2-1
+— `io/gps_map.py` projects the GoPro/DJI GPS track into a mini-map on
+the `/video` timeline, playhead-synced marker)**.  Open: bundled
+audio-tagger export (P0-1) · VLM caption (P0-3) — both need real model +
+eval assets (the owner's external drive).

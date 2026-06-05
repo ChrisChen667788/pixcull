@@ -67,10 +67,20 @@ big v2.0 deferral (the separate video review surface).
 
 ### P2(锦上添花)
 
-#### v2.2-P2-1 · GPMF GPS map overlay
+#### v2.2-P2-1 · GPMF GPS map overlay — ✅ DONE
 **估时**: 1 周
 - Plot the GoPro/DJI GPS track on the timeline (mini map) for the
   travel-story view.
+- **Shipped:** `pixcull/io/gps_map.py` — pure `project_track()`
+  (equirectangular, cos-lat aspect, north-up, fit-to-box) +
+  `haversine_km` / `track_length_km` + `gps_points_for_video()` reusing
+  the existing `parse_telemetry` (GPMF GPS5 → DJI-SRT fallback).
+  `_serve_video_data` lazy-extracts + caches `gps.json` and ships a
+  projected track; the `/video` review page draws an editorial-warm
+  mini-map (track + start/end dots + a brass marker that follows the
+  playhead) in the reel rail, hidden when a clip has no GPS.
+  `tests/test_gps_map.py` covers projection geometry + telemetry mapping;
+  screenshot-verified on a synthetic track (real GoPro/DJI clip pending).
 
 #### v2.2-P2-2 · DESIGN-AUDIT-2029Q2 + v2.3 charter
 
