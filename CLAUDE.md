@@ -57,6 +57,16 @@ Audit the diff before any push (`git -C <repo> diff origin/main..main`):
   read keys from env vars / files outside the repo (e.g.
   `scripts/brand/gen_empty_state_art.py` reads `MINIMAX_API_KEY` or
   `~/.minimax_key_tmp`).  Never commit a key; rotate if one leaks.
+- **No real personal email / machine-username path / key literal in any
+  public file** — learned from a 2026-06-05 leak (a DeepSeek key
+  test-fixture + the owner's Gmail + the `/Users/<name>` home path had
+  all gone public):
+  - real personal email → the role alias `hello@pixcull.dev`;
+  - local home paths `/Users/<name>/…` → `~/…` / `$HOME` /
+    `Path("~/…").expanduser()` (never the literal macOS username);
+  - **never a key / token literal anywhere — including test fixtures.**
+    Build them at runtime (e.g. `"sk-" + "0" * 32`) so secret scanners
+    have nothing to match.
 - **No `MARKET_ANALYSIS_V10.md`** in the public repo.
 - **No `.claude/launch.json`.**
 - **Eval / training data is local-only:** `out_wedding_eval/`,
