@@ -19,13 +19,25 @@ big v2.0 deferral (the separate video review surface).
 
 ### P0(必须做)
 
-#### v2.2-P0-1 · Bundle + evaluate a small audio tagger
+#### v2.2-P0-1 · Bundle + evaluate a small audio tagger — 🟡 harness + baseline done; learned model pending
 **估时**: 2 周
 - Quantise/export a compact audio-event model (YAMNet-lite / PANNs-CNN10)
   to ONNX, ship it (or a `pixcull models pull` fetch), wire into the
   P0-1 `OnnxTagger`.
 - Eval on a labelled laughter/applause/music clip set; the learned path
   must beat the DSP baseline before it becomes default.
+- **Done:** `scripts/eval_audio_tagger.py` (folder-per-class eval →
+  per-kind detection P/R/F1 via `eval_metrics.binary_prf`, DSP-vs-learned
+  + promote/keep verdict) and a measured DSP baseline on a real ESC-50
+  subset — **macro-F1 0.075** (applause F1 0.00, laughter 0.15), recorded
+  in `docs/AUDIO-TAGGER-EVAL.md`. The weak baseline is the honest case
+  for a learned tagger; the model slot is ready via P1-2
+  (`pixcull models` → `~/.pixcull/models/audio_tagger.onnx`).
+- **Pending:** a verified contract-compatible ONNX. No clean public
+  YAMNet ONNX exists (TFLite/SavedModel only; YAMNet's waveform-in I/O
+  differs from `OnnxTagger`'s `[N,frame]→[N,classes]`) → convert via
+  tf2onnx (TF stack) or owner-supplied; then it's a one-command eval +
+  promote-to-default.
 
 #### v2.2-P0-2 · Unified lightbox (merge the video scrubber)
 **估时**: 3 周

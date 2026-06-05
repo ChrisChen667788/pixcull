@@ -100,6 +100,24 @@ def macro_f1(
     return sum(f1 for _, _, f1 in pr.values()) / len(pr)
 
 
+def binary_prf(y_true: Sequence[bool], y_pred: Sequence[bool]) -> dict:
+    """Detection-style precision / recall / F1 for one class.
+
+    ``y_true[i]`` / ``y_pred[i]`` are booleans (does clip *i* truly carry /
+    is it predicted to carry this class).  Used by the v2.2-P0-1 audio
+    tagger eval, where each clip can independently fire any of
+    laughter / applause / music, so single-label accuracy doesn't fit.
+    """
+    tp = sum(1 for t, p in zip(y_true, y_pred) if t and p)
+    fp = sum(1 for t, p in zip(y_true, y_pred) if p and not t)
+    fn = sum(1 for t, p in zip(y_true, y_pred) if t and not p)
+    prec = tp / (tp + fp) if (tp + fp) else 0.0
+    rec = tp / (tp + fn) if (tp + fn) else 0.0
+    f1 = 2 * prec * rec / (prec + rec) if (prec + rec) else 0.0
+    return {"precision": prec, "recall": rec, "f1": f1,
+            "tp": tp, "fp": fp, "fn": fn, "n_pos": tp + fn}
+
+
 def accuracy(
     pairs: Iterable[tuple[str, str]],
     labels: Sequence[str],
