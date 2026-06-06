@@ -6214,7 +6214,7 @@ class _Handler(BaseHTTPRequestHandler):
   }}
   .ph-card:hover {{
     transform: translateY(-3px);
-    border-color: rgba(168,85,247,0.55);
+    border-color: rgba(196,185,169,0.55);
     box-shadow: 0 12px 28px rgba(196,185,169,0.25);
   }}
   .ph-card img {{
@@ -6259,7 +6259,7 @@ class _Handler(BaseHTTPRequestHandler):
   }}
   .ph-comment-form textarea:focus {{
     outline: 0; border-color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(168,85,247,0.20);
+    box-shadow: 0 0 0 3px rgba(196,185,169,0.20);
   }}
   .ph-comment-form-row {{
     display: flex; gap: 10px; margin-top: 10px;
@@ -12669,7 +12669,7 @@ _FIRST_RUN_HTML = r"""<!DOCTYPE html>
       );
       border-radius: 999px;
       transition: width 320ms cubic-bezier(0.16, 1, 0.3, 1);
-      box-shadow: 0 0 12px rgba(59,130,246,0.4);
+      box-shadow: 0 0 12px rgba(196,185,169,0.4);
       width: 0%;
     }
     /* Indeterminate shimmer while a step is in flight (we know
@@ -12999,8 +12999,8 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
     }
     .vtab:hover { color: var(--fg); background: rgba(255,255,255,0.04); }
     .vtab.active {
-      color: var(--accent-hi); background: rgba(59,130,246,0.12);
-      border-color: rgba(59,130,246,0.30);
+      color: var(--accent-hi); background: rgba(196,185,169,0.12);
+      border-color: rgba(196,185,169,0.30);
     }
     .vsort { display: inline-flex; align-items: center; gap: 6px;
               font-size: 12px; color: var(--muted); }
@@ -13092,14 +13092,14 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
     .vstats .pill.tuned {
       color: var(--accent-hi);
       border-color: rgba(96,165,250,0.4);
-      background: rgba(59,130,246,0.10);
+      background: rgba(196,185,169,0.10);
       cursor: help;
     }
     /* V17.5 — AI phrase override pill */
     .vstats .pill.phrased {
       color: #c4b5fd;
-      border-color: rgba(168,85,247,0.40);
-      background: rgba(168,85,247,0.10);
+      border-color: rgba(196,185,169,0.40);
+      background: rgba(196,185,169,0.10);
       cursor: help;
     }
     /* V17.7 — two-row button layout. The previous flex:1 / 6-buttons
@@ -13123,7 +13123,7 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
       transition: border-color 120ms, background 120ms, color 120ms;
     }
     .vactions button:hover {
-      border-color: var(--accent); background: rgba(59,130,246,0.08);
+      border-color: var(--accent); background: rgba(196,185,169,0.08);
     }
     /* Row 1 — primary action buttons. Coded green / red so the user
        immediately reads "add good / add bad" from color alone. */
@@ -13217,7 +13217,7 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
       cursor: pointer; transition: border-color 120ms, background 120ms;
     }
     .drop-zone:hover, .drop-zone.over {
-      border-color: var(--accent); background: rgba(59,130,246,0.05);
+      border-color: var(--accent); background: rgba(196,185,169,0.05);
       color: var(--fg);
     }
     .sample-grid {
@@ -15542,7 +15542,7 @@ _UPLOAD_HTML = (r"""<!DOCTYPE html>
     }
     .drop-zone:hover, .drop-zone.dragover {
       border-color: var(--accent);
-      background: linear-gradient(180deg, rgba(59,130,246,0.06), transparent);
+      background: linear-gradient(180deg, rgba(196,185,169,0.06), transparent);
       box-shadow: 0 0 0 4px var(--accent-glow);
     }
     .drop-zone .big {
@@ -15709,7 +15709,7 @@ _UPLOAD_HTML = (r"""<!DOCTYPE html>
     .tabs .tab:hover { color: var(--fg); }
 
     .scan-explain {
-      background: rgba(59, 130, 246, 0.08);
+      background: rgba(196, 185, 169, 0.08);
       border-left: 3px solid var(--accent);
       padding: 10px 14px; border-radius: 4px;
       font-size: 12px; color: var(--fg); line-height: 1.6;
@@ -15860,7 +15860,7 @@ _UPLOAD_HTML = (r"""<!DOCTYPE html>
     .browser-body .name { flex: 1; min-width: 0;
         overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .browser-body .badge {
-      background: rgba(59,130,246,0.15); color: #4b9aff;
+      background: rgba(196,185,169,0.15); color: #d8cebf;
       padding: 1px 6px; font-size: 10px; border-radius: 2px;
       flex-shrink: 0;
     }
@@ -16302,7 +16302,7 @@ _UPLOAD_HTML = (r"""<!DOCTYPE html>
     // Float a small 👋 pill — non-blocking, dismissible.
     const pill = document.createElement("button");
     pill.className = "shortcuts-hint";   // reuse existing floating-pill style
-    pill.style.cssText = "bottom: 60px; right: 18px; cursor: pointer; border: 0; background: rgba(59,130,246,0.92); color: white;";
+    pill.style.cssText = "bottom: 60px; right: 18px; cursor: pointer; border: 0; background: rgba(196,185,169,0.92); color: white;";
     pill.type = "button";
     pill.setAttribute("aria-label", "打开新手引导");
     pill.innerHTML = "👋 30 秒看完核心用法 <span style=\"opacity:0.6;margin-left:8px;font-size:11px\">✕</span>";
@@ -17655,7 +17655,7 @@ PYTHONPATH=. python scripts/eval_on_golden_set.py golden/ \
         // Mode tag: 'scan' = no copies, only derived data. Reassures
         // the user that deleting a scan run won't touch their originals.
         const modeP = r.mode === "scan"
-          ? `<span class="pill" style="background:rgba(59,130,246,0.18);color:#4b9aff" title="扫描模式 — 只存派生数据,删除不影响原图">scan</span>`
+          ? `<span class="pill" style="background:rgba(196,185,169,0.18);color:#d8cebf" title="扫描模式 — 只存派生数据,删除不影响原图">scan</span>`
           : `<span class="pill" style="background:rgba(255,255,255,0.06);color:var(--muted)" title="上传模式 — 原图副本存在 input/">upload</span>`;
         const isRunning = r.state === "running";
         return `<tr data-id="${r.run_id}">

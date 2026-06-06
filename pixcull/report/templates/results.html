@@ -1145,8 +1145,8 @@
     .stats .vertical-badge {
       display: inline-flex; align-items: center; gap: 6px;
       padding: 2px 10px;
-      background: rgba(59,130,246,0.12);
-      border: 1px solid rgba(59,130,246,0.35);
+      background: rgba(196,185,169,0.12);
+      border: 1px solid rgba(196,185,169,0.35);
       border-radius: 999px;
       color: var(--accent-hi);
       font-size: 11.5px;
@@ -1283,12 +1283,12 @@
     }
     .cluster-divider .compare-btn {
       cursor: pointer; padding: 2px 8px; border-radius: 4px;
-      background: rgba(59,130,246,0.15); color: #4b9aff;
-      border: 1px solid rgba(59,130,246,0.3);
+      background: rgba(196,185,169,0.15); color: #d8cebf;
+      border: 1px solid rgba(196,185,169,0.3);
       font-size: 10px; text-transform: none; letter-spacing: 0;
       user-select: none;
     }
-    .cluster-divider .compare-btn:hover { background: rgba(59,130,246,0.25); }
+    .cluster-divider .compare-btn:hover { background: rgba(196,185,169,0.25); }
 
     /* v0.4 — empty state.  Refreshed with token spacing + larger
        icon + more generous typography hierarchy.  No more dashed
@@ -1841,7 +1841,7 @@
       opacity: 0.4; cursor: wait; transform: none;
     }
     .filters .export-status { font-size: 11px; color: var(--muted); }
-    .filters .export-status a { color: #4b9aff; text-decoration: none; }
+    .filters .export-status a { color: #d8cebf; text-decoration: none; }
     .filters .export-status a:hover { text-decoration: underline; }
 
     /* P-UX-1 — export action menu. The 5 export-related buttons
@@ -2389,7 +2389,7 @@
       height: calc(var(--axis-fill, 0) * 100%);
       background: linear-gradient(180deg,
                   rgba(196, 185, 169, 0.32),
-                  rgba(232, 72, 153, 0.32));
+                  rgba(220, 184, 126, 0.32));
       pointer-events: none;
       z-index: 0;
       transition: height var(--duration-mid, 280ms)
@@ -2401,7 +2401,7 @@
     .row3 .ax.s5::before {
       background: linear-gradient(180deg,
                   rgba(196, 185, 169, 0.55),
-                  rgba(232, 72, 153, 0.55));
+                  rgba(220, 184, 126, 0.55));
     }
     /* Inspector pane reuses the same .ax pattern at a bigger size
        — same ::before logic still works thanks to inline --axis-fill. */
@@ -2415,7 +2415,7 @@
       height: calc(var(--axis-fill, 0) * 100%);
       background: linear-gradient(180deg,
                   rgba(196, 185, 169, 0.25),
-                  rgba(232, 72, 153, 0.25));
+                  rgba(220, 184, 126, 0.25));
       pointer-events: none;
       z-index: 0;
     }
@@ -2718,7 +2718,7 @@
       display: none;
       align-items: center; gap: 12px;
       padding: 8px 14px 8px 16px;
-      background: rgba(59,130,246,0.95);
+      background: rgba(196,185,169,0.95);
       color: #fff;
       border-radius: 999px;
       box-shadow: 0 10px 30px rgba(0,0,0,0.5),
@@ -3054,9 +3054,9 @@
        the page; if a user knows what they're doing the hints
        just decorate. */
     @keyframes pix-onboard-pulse {
-      0%   { box-shadow: 0 0 0 0 rgba(59,130,246,0.65); }
-      70%  { box-shadow: 0 0 0 14px rgba(59,130,246,0); }
-      100% { box-shadow: 0 0 0 0 rgba(59,130,246,0); }
+      0%   { box-shadow: 0 0 0 0 rgba(196,185,169,0.65); }
+      70%  { box-shadow: 0 0 0 14px rgba(196,185,169,0); }
+      100% { box-shadow: 0 0 0 0 rgba(196,185,169,0); }
     }
     .onboard-pulse {
       animation: pix-onboard-pulse 1.8s ease-out 3;
@@ -3065,7 +3065,7 @@
       position: fixed; bottom: 70px; right: 22px;
       z-index: 12;
       background: linear-gradient(180deg, rgba(31,41,55,0.97), rgba(20,23,28,0.97));
-      border: 1px solid rgba(59,130,246,0.4);
+      border: 1px solid rgba(196,185,169,0.4);
       border-radius: 10px;
       padding: 12px 14px;
       width: 288px;
@@ -3110,15 +3110,15 @@
     .onboard-tip .onb-dismiss {
       width: 100%;
       padding: 6px 12px;
-      background: rgba(59,130,246,0.18);
+      background: rgba(196,185,169,0.18);
       color: #79c8ff;
-      border: 1px solid rgba(59,130,246,0.35);
+      border: 1px solid rgba(196,185,169,0.35);
       border-radius: 5px;
       font-size: 11.5px; font-weight: 500;
       cursor: pointer;
     }
     .onboard-tip .onb-dismiss:hover {
-      background: rgba(59,130,246,0.28);
+      background: rgba(196,185,169,0.28);
     }
     /* Respect prefers-reduced-motion — flat, no animation */
     @media (prefers-reduced-motion: reduce) {
@@ -3173,8 +3173,8 @@
       max-width: 620px;
       display: flex; align-items: center; gap: 10px;
       padding: 8px 14px;
-      background: rgba(59, 130, 246, 0.14);
-      border: 1px solid rgba(59, 130, 246, 0.55);
+      background: rgba(196, 185, 169, 0.14);
+      border: 1px solid rgba(196, 185, 169, 0.55);
       color: #79c8ff;
       border-radius: 8px;
       font-size: 12px; line-height: 1.4;
@@ -3186,34 +3186,34 @@
     .scene-anomaly-banner .sab-msg b { color: #fff; }
     .scene-anomaly-banner .sab-close {
       background: transparent; color: #79c8ff;
-      border: 1px solid rgba(59, 130, 246, 0.4);
+      border: 1px solid rgba(196, 185, 169, 0.4);
       width: 22px; height: 22px;
       border-radius: 4px; cursor: pointer;
       font-size: 12px; line-height: 1;
       padding: 0;
     }
     .scene-anomaly-banner .sab-close:hover {
-      background: rgba(59, 130, 246, 0.18);
+      background: rgba(196, 185, 169, 0.18);
     }
     /* P-UX-28 — "查看分布详情" expandable pie chart panel.
        Slides down beneath the banner when the user clicks the
        "查看分布详情" link; inline SVG, no external chart lib. */
     .scene-anomaly-banner .sab-toggle {
       background: transparent; color: #79c8ff;
-      border: 1px solid rgba(59, 130, 246, 0.40);
+      border: 1px solid rgba(196, 185, 169, 0.40);
       padding: 2px 8px; font-size: 11px;
       border-radius: 5px; cursor: pointer;
       white-space: nowrap;
     }
     .scene-anomaly-banner .sab-toggle:hover {
-      background: rgba(59, 130, 246, 0.14);
+      background: rgba(196, 185, 169, 0.14);
     }
     .scene-distribution-panel {
       position: fixed; top: 110px; left: 50%; transform: translateX(-50%);
       z-index: 10;
       max-width: 620px; width: 90%;
       background: rgba(20, 23, 28, 0.97);
-      border: 1px solid rgba(59, 130, 246, 0.40);
+      border: 1px solid rgba(196, 185, 169, 0.40);
       border-radius: 10px;
       padding: 16px 20px;
       box-shadow: 0 12px 36px rgba(0,0,0,0.55);
@@ -3340,7 +3340,7 @@
     /* v0.6 (4/5) — card-into-bucket drop highlight (existing) */
     .buckets-panel .bk-item.drag-over {
       border-color: var(--accent);
-      background: rgba(59,130,246,0.10);
+      background: rgba(196,185,169,0.10);
     }
     /* v0.6 (4/5) — bucket-reorder visual states */
     .buckets-panel .bk-item.bk-reordering {
@@ -3411,7 +3411,7 @@
     .card.bk-tagged::after {
       content: attr(data-bk-tags);
       position: absolute; top: 6px; right: 36px;
-      background: rgba(59,130,246,0.85); color: #fff;
+      background: rgba(196,185,169,0.85); color: #fff;
       padding: 1px 6px; border-radius: 8px;
       font-size: 9.5px; font-weight: 600;
       pointer-events: none;
@@ -3647,9 +3647,9 @@
       display: inline-flex; align-items: center;
       padding: 3px 10px; border-radius: 999px;
       font-size: 11px; font-weight: 500; letter-spacing: 0.02em;
-      background: rgba(59,130,246,0.14);
+      background: rgba(196,185,169,0.14);
       color: var(--accent-hi, #79c8ff);
-      border: 1px solid rgba(59,130,246,0.34);
+      border: 1px solid rgba(196,185,169,0.34);
     }
     .shortcuts-ctx-badge:empty { display: none; }
     .shortcuts-body { display: flex; flex-direction: column; }
@@ -3658,8 +3658,8 @@
     .shortcut-section.ctx-active {
       order: 1;
       padding: 10px 12px; margin: 0 0 14px;
-      background: rgba(59,130,246,0.06);
-      border: 1px solid rgba(59,130,246,0.28);
+      background: rgba(196,185,169,0.06);
+      border: 1px solid rgba(196,185,169,0.28);
       border-radius: 6px;
     }
     .shortcut-section.ctx-active .shortcut-section-title {
@@ -4470,7 +4470,7 @@
     }
     .lightbox .zoom-btn:hover { background: rgba(0,0,0,0.85); }
     .lightbox .zoom-btn.active {
-      background: rgba(59,130,246,0.85);
+      background: rgba(196,185,169,0.85);
       border-color: var(--accent);
     }
     .lightbox .zoom-badge {
@@ -8099,7 +8099,7 @@
         if (al) {
           activeLearningBadge =
             `<div style="position:absolute;top:6px;left:6px;
-             background:linear-gradient(90deg,#3b82f6,#c4b9a9);
+             background:linear-gradient(90deg,#c4b9a9,#c4b9a9);
              color:#fff;padding:2px 8px;border-radius:3px;
              font-size:10px;font-weight:600;z-index:5;
              box-shadow:0 1px 4px rgba(0,0,0,0.4)"
