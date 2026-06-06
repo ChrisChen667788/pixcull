@@ -84,12 +84,15 @@ REGISTRY: dict[str, "ModelSpec"] = {
     "audio-tagger": ModelSpec(
         name="audio-tagger",
         filename="audio_tagger.onnx",
-        description="Learned laughter / applause / music tagger (ONNX).",
+        description="Learned laughter/applause/music tagger — YAMNet→ONNX (Apache-2.0).",
         used_by="pixcull video · scoring/audio_tagger.py (else DSP fallback)",
-        url="",      # published by v2.2-P0-1
-        sha256="",
-        size=0,
-        sidecars=(Sidecar("audio_tagger.onnx.labels.json"),),
+        url="https://www.modelscope.cn/models/haozi667788/pixcull/resolve/master/models/audio_tagger.onnx",
+        sha256="958ea367582f8dedc857939a0412d01100695f42844fd29a6130ffe10b42defa",
+        size=16109257,
+        sidecars=(Sidecar(
+            "audio_tagger.onnx.labels.json",
+            "https://www.modelscope.cn/models/haozi667788/pixcull/resolve/master/models/audio_tagger.onnx.labels.json",
+            "48bd2a121adae947e4b6ad4514dbd5b85a363ad3e1baf92f656b1b9e7f50731e"),),
     ),
     "vlm-caption": ModelSpec(
         name="vlm-caption",

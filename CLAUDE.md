@@ -123,7 +123,9 @@ lightbox (P0-2) · IMU→frame shake (P1-1) · Reels/Shorts export presets
 (P1-3) · `pixcull models` manager (P1-2 — `list/pull/path`, cache
 `~/.pixcull/models/`, sha256-verified) · **GPS travel-map overlay (P2-1
 — `io/gps_map.py` projects the GoPro/DJI GPS track into a mini-map on
-the `/video` timeline, playhead-synced marker)**.  Open: **audio-tagger
-P0-1 — 🟡 eval harness (`scripts/eval_audio_tagger.py`) + measured DSP
-baseline (macro-F1 0.075, `docs/AUDIO-TAGGER-EVAL.md`) shipped; learned
-model pending a verified ONNX** · VLM caption (P0-3).
+the `/video` timeline, playhead-synced marker) · **audio-tagger P0-1 —
+learned YAMNet→ONNX tagger beats the DSP baseline (macro-F1 0.629 vs
+0.075, `docs/AUDIO-TAGGER-EVAL.md`); `OnnxTagger` waveform-in branch
+auto-promotes it when present at `~/.pixcull/models/`; reproduce via
+`scripts/convert_yamnet_to_onnx.py` (throwaway TF venv)**.  Open: VLM
+caption (P0-3) — last v2.2 P0.

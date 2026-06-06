@@ -27,6 +27,7 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Protocol, Sequence, runtime_checkable
 
@@ -158,6 +159,13 @@ class HeuristicTagger:
         return analyze_audio(samples, sr).events
 
 
+@lru_cache(maxsize=4)
+def _load_session(model_path: str):
+    """Cache ONNX sessions by path (avoids reloading the model per clip)."""
+    import onnxruntime as ort
+    return ort.InferenceSession(model_path, providers=["CPUExecutionProvider"])
+
+
 @dataclass
 class OnnxTagger:
     """Optional learned backend (YAMNet/PANNs-style ONNX).
@@ -207,15 +215,27 @@ class OnnxTagger:
     def tag(self, samples: np.ndarray, sr: int = DEFAULT_SR) -> list[AudioEvent]:
         if not self.available():
             return []
-        import onnxruntime as ort
-        sess = ort.InferenceSession(
-            self.model_path, providers=["CPUExecutionProvider"])
-        frames, times = self._frames(samples, sr)
-        inp = sess.get_inputs()[0].name
-        probs = sess.run(None, {inp: frames})[0]
-        probs = np.asarray(probs, dtype=np.float64)
-        if probs.ndim == 1:
-            probs = probs[None, :]
+        sess = _load_session(self.model_path)
+        inp = sess.get_inputs()[0]
+        if len(inp.shape) == 1:
+            # Waveform-in model (e.g. YAMNet): feed the whole 16 kHz signal;
+            # it does its own 0.96 s / 0.48 s framing → [n_frames, n_classes].
+            x = np.asarray(samples, dtype=np.float32).ravel()
+            if sr != 16000 and x.size:
+                n = max(1, round(x.size * 16000 / sr))
+                x = np.interp(np.linspace(0, x.size, n, endpoint=False),
+                              np.arange(x.size), x).astype(np.float32)
+            probs = np.asarray(sess.run(None, {inp.name: x})[0], dtype=np.float64)
+            if probs.ndim == 1:
+                probs = probs[None, :]
+            times = [i * self.hop_s for i in range(probs.shape[0])]
+        else:
+            # Framed-in model: [N, frame_samples] → [N, n_classes].
+            frames, times = self._frames(samples, sr)
+            probs = np.asarray(sess.run(None, {inp.name: frames})[0],
+                               dtype=np.float64)
+            if probs.ndim == 1:
+                probs = probs[None, :]
         return probs_to_events(probs, times, self._labels(),
                                hop_s=self.hop_s, thresh=self.thresh)
 

@@ -57,9 +57,9 @@ def test_get_spec_unknown_raises():
 
 
 def test_pull_unpublished_raises():
-    # real audio-tagger is catalogued but has no URL yet → no fs touch
+    # vlm-caption is catalogued but has no URL yet → no fs touch
     with pytest.raises(NotPublishedError):
-        pull("audio-tagger")
+        pull("vlm-caption")
 
 
 # --- fetch happy path ------------------------------------------------- #
