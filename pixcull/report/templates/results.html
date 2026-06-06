@@ -6469,15 +6469,15 @@
           <div class="shortcut-row"><span class="keys">拖动图片</span><span class="desc">在 1:1 模式下平移</span></div>
           <div class="shortcut-row"><span class="keys">滚轮</span><span class="desc">以光标为中心放大/缩小</span></div>
           <!-- v0.13.4 — surface v0.11-v0.13 new keys -->
-          <div class="shortcut-row"><span class="keys"><kbd>A</kbd></span><span class="desc"><span style="color:#a3a5f5">v0.13</span> · 6 轴 AI attribution heatmap</span></div>
-          <div class="shortcut-row"><span class="keys"><kbd>H</kbd></span><span class="desc"><span style="color:#a3a5f5">v0.12</span> · EXIF / 直方图 overlay</span></div>
-          <div class="shortcut-row"><span class="keys"><kbd>\</kbd></span><span class="desc"><span style="color:#a3a5f5">v0.12</span> · 一键打开同 burst 组 A/B 比较</span></div>
-          <div class="shortcut-row"><span class="keys">底部 1px 条</span><span class="desc"><span style="color:#a3a5f5">v0.11</span> · 拖动 scrub 所有可见照片(DaVinci-style)</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>A</kbd></span><span class="desc"><span style="color:#c4b9a9">v0.13</span> · 6 轴 AI attribution heatmap</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>H</kbd></span><span class="desc"><span style="color:#c4b9a9">v0.12</span> · EXIF / 直方图 overlay</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>\</kbd></span><span class="desc"><span style="color:#c4b9a9">v0.12</span> · 一键打开同 burst 组 A/B 比较</span></div>
+          <div class="shortcut-row"><span class="keys">底部 1px 条</span><span class="desc"><span style="color:#c4b9a9">v0.11</span> · 拖动 scrub 所有可见照片(DaVinci-style)</span></div>
         </div>
         <!-- v0.13.4 — grid: marquee + v0.12 bulk -->
         <div class="shortcut-section" data-ctx="grid">
           <div class="shortcut-section-title">批量(v0.11+)</div>
-          <div class="shortcut-row"><span class="keys">网格空白处拖框</span><span class="desc"><span style="color:#a3a5f5">v0.11</span> · marquee 框选;底部弹出批量工具栏</span></div>
+          <div class="shortcut-row"><span class="keys">网格空白处拖框</span><span class="desc"><span style="color:#c4b9a9">v0.11</span> · marquee 框选;底部弹出批量工具栏</span></div>
           <div class="shortcut-row"><span class="keys"><kbd>⌘</kbd>+<kbd>A</kbd></span><span class="desc">全选当前可见</span></div>
           <div class="shortcut-row"><span class="keys"><kbd>Esc</kbd></span><span class="desc">取消所有 marquee 选择</span></div>
           <div class="shortcut-row"><span class="keys"><kbd>⌘</kbd>+<kbd>K</kbd></span><span class="desc">命令面板(模糊搜索动作)</span></div>
@@ -8929,6 +8929,10 @@
     const r = rows.find(x => x.filename === fn);
     if (!r) return;
     _lbCurrentFn = fn;
+    // v2.3.1-C — the grid-context "新手提示" coachmark must not linger
+    // over the lightbox (they overlapped in the first-open screenshots).
+    // Dismiss it the moment a photo opens; the lightbox has its own hint.
+    document.querySelectorAll(".onboard-tip").forEach((t) => t.remove());
     // P-UX-2 — reset zoom state for each photo. A culling pass is
     // "fit, glance, decide" — landing on the next frame already
     // zoomed-in from the previous one would be disorienting. Pros
@@ -9826,7 +9830,7 @@
       let fg = "var(--muted)";
       let bd = "rgba(148,148,160,0.35)";
       if (d <= 0.15)      { bg = "rgba(74,222,128,0.18)"; fg = "#88e0a6"; bd = "rgba(74,222,128,0.35)"; }
-      else if (d <= 0.30) { bg = "rgba(196,185,169,0.18)"; fg = "#a3a5f5"; bd = "rgba(196,185,169,0.35)"; }
+      else if (d <= 0.30) { bg = "rgba(196,185,169,0.18)"; fg = "#c4b9a9"; bd = "rgba(196,185,169,0.35)"; }
       else if (d <= 0.50) { bg = "rgba(217,163,12,0.20)"; fg = "#e3c25e"; bd = "rgba(217,163,12,0.40)"; }
       else                { bg = "rgba(248,113,113,0.20)"; fg = "#ee8888"; bd = "rgba(248,113,113,0.40)"; }
       return {bg, fg, bd};
@@ -9878,7 +9882,7 @@
                      lamSrc.startsWith('auto:') ?
                        '基于 docs/STYLE-V2-BENCHMARK.md 推荐表自动选择' :
                        '可点击在 0.0 / 0.3 / 0.5 / 0.7 / 1.0 之间循环'}"
-                   style="background:rgba(196,185,169,0.10);color:#a3a5f5;
+                   style="background:rgba(196,185,169,0.10);color:#c4b9a9;
                           border:1px dashed rgba(196,185,169,0.40);
                           font-size:9.5px;cursor:pointer;font-family:inherit">
              λ ${curLam.toFixed(2)}${srcLabel}
@@ -15691,7 +15695,7 @@
     pop.className = "style-ref-viz";
     pop.style.cssText = (
       "position:fixed;z-index:140;" +
-      "background:rgba(20,22,28,0.96);color:#fff;" +
+      "background:rgba(20,18,14,0.96);color:#fff;" +
       "padding:14px 16px;border-radius:8px;" +
       "min-width:260px;max-width:340px;" +
       "border:1px solid rgba(196,185,169,0.30);" +
@@ -15715,12 +15719,12 @@
     }
     const maxD = Math.max(v1 || 0, v2 || 0, blend || 0, 1.0);
     pop.innerHTML = (
-      `<div style='font-weight:600;color:#a3a5f5;margin-bottom:8px;` +
+      `<div style='font-weight:600;color:#c4b9a9;margin-bottom:8px;` +
       `letter-spacing:0.02em;text-transform:uppercase;font-size:10.5px'>` +
       `视觉距离细分 · ${row.filename.slice(0, 30)}</div>` +
       _bar("V1 · axis-MAD", v1, maxD, "#c4b9a9") +
       _bar("V2 · CLIP cosine", v2, maxD, "#6a6052") +
-      _bar("综合 blend", blend, maxD, "#a3a5f5") +
+      _bar("综合 blend", blend, maxD, "#c4b9a9") +
       "<div id='styleRefBreakdown' style='margin-top:10px'>" +
       "<div style='color:#888;font-size:10.5px;margin-bottom:6px'>" +
       "<span class='dots-load'>↻ 加载逐张参考贡献…</span></div></div>" +
@@ -15754,7 +15758,7 @@
         const top = d.refs.slice(0, 8);
         const maxRefD = Math.max(...top.map(r => r.distance), 0.01);
         const html = (
-          "<div style='font-size:10.5px;color:#a3a5f5;margin-bottom:6px;" +
+          "<div style='font-size:10.5px;color:#c4b9a9;margin-bottom:6px;" +
           "letter-spacing:0.02em;text-transform:uppercase'>" +
           `Top ${top.length} ref by similarity</div>` +
           top.map(r => {
@@ -15868,7 +15872,7 @@
       popover.className = "confidence-popover";
       popover.style.cssText = (
         "position:absolute;z-index:30;" +
-        "background:rgba(20,22,28,0.96);color:#fff;" +
+        "background:rgba(20,18,14,0.96);color:#fff;" +
         "padding:9px 12px;border-radius:8px;" +
         "font:11.5px/1.5 system-ui;max-width:230px;" +
         "box-shadow:0 6px 20px rgba(0,0,0,0.40);" +
@@ -15876,7 +15880,7 @@
       );
       const reasons = _explainRow(row);
       popover.innerHTML = (
-        "<div style='font-weight:600;color:#a3a5f5;margin-bottom:4px'>" +
+        "<div style='font-weight:600;color:#c4b9a9;margin-bottom:4px'>" +
         "⌬ model 不确定</div>" +
         reasons.map((r, i) => (
           `<div style='color:${i === 0 ? "#fff" : "#aaa"}'>${
@@ -16428,7 +16432,7 @@
     chip.style.cssText = (
       "display:inline-flex;align-items:center;gap:6px;" +
       "padding:3px 9px;border-radius:999px;" +
-      "background:rgba(196,185,169,0.14);color:#a3a5f5;" +
+      "background:rgba(196,185,169,0.14);color:#c4b9a9;" +
       "border:1px dashed rgba(196,185,169,0.40);" +
       "font-size:10.5px;font-weight:500;cursor:help;" +
       "margin-left:8px;"
@@ -16468,7 +16472,7 @@
       const toast = document.createElement("div");
       toast.style.cssText = (
         "position:absolute;bottom:120px;left:50%;transform:translateX(-50%);" +
-        "background:rgba(20,22,28,0.96);color:#fff;" +
+        "background:rgba(20,18,14,0.96);color:#fff;" +
         "padding:14px 22px;border-radius:12px;z-index:8;" +
         "font:13px/1.6 system-ui;text-align:center;" +
         "box-shadow:0 12px 32px rgba(0,0,0,0.45);" +
@@ -16478,7 +16482,7 @@
         "transform 320ms cubic-bezier(0.34,1.56,0.64,1);"
       );
       toast.innerHTML = (
-        "<div style='font-weight:600;color:#a3a5f5;margin-bottom:6px;" +
+        "<div style='font-weight:600;color:#c4b9a9;margin-bottom:6px;" +
         "font-size:11px;letter-spacing:0.04em;text-transform:uppercase'>" +
         "✨ 这是你第一次打开 lightbox</div>" +
         "<div>三个 PixCull 专属键位:</div>" +
@@ -16572,7 +16576,7 @@
       panel.className = "lb-exif-overlay";
       panel.style.cssText = (
         "position:absolute;top:12px;left:12px;z-index:6;" +
-        "background:rgba(20,22,28,0.92);color:#fff;" +
+        "background:rgba(20,18,14,0.92);color:#fff;" +
         "padding:10px 14px;border-radius:8px;" +
         "font:11.5px/1.4 ui-monospace,SF Mono,Menlo,monospace;" +
         "display:none;min-width:180px;max-width:280px;" +
