@@ -99,7 +99,19 @@ big v2.0 deferral (the separate video review surface).
   `tests/test_gps_map.py` covers projection geometry + telemetry mapping;
   screenshot-verified on a synthetic track (real GoPro/DJI clip pending).
 
-#### v2.2-P2-2 · DESIGN-AUDIT-2029Q2 + v2.3 charter
+#### v2.2-P2-2 · DESIGN-AUDIT-2029Q2 + v2.3 charter — ✅ DONE
+- `docs/DESIGN-AUDIT-2029Q2.md` (**4.3 / 5**) + the v2.3 editorial-warm
+  charter (`ROADMAP-v2.3-ui-charter.md`, shipped) + the v2.4 plan
+  (`ROADMAP-v2.4-charter.md`).
+
+## ✅ v2.2 — CLOSED
+Shipped: P0-1 audio tagger · P0-2 unified lightbox · P1-1 IMU shake ·
+P1-2 `pixcull models` · P1-3 reel presets · P2-1 GPS map · P2-2 audit.
+Plus an unplanned **v2.3 editorial-warm overhaul** + **v2.3.1 hotfix**
+(palette-leak sweep, coachmark overlap, CJK-safe fonts, toolbar density).
+**Carried to v2.4:** P0-3 VLM best-frame caption → **v2.4-P0-1** (the one
+remaining model-dependent slice; same convert→host→pull loop as the
+audio tagger).
 
 ## 不做的事(scope discipline)
 

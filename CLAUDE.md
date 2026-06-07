@@ -46,8 +46,10 @@ script now strips `README.md`/`*.md`/`docs/` LFS rules and pins
 `README.md text` before each upload.  Never use `--github-links` unless
 you specifically want CDN-linked images instead of ModelScope-hosted.
 
-New screenshots: next free number is **19** (01–18 used; 17 =
-attribution-heatmap, 18 = video-review).
+New screenshots: next free number is **20** (01–19 used; 17 =
+attribution-heatmap, 18 = video-review, 19 = video-grade).  The
+animated architecture / sequence / data-flow diagrams live separately in
+`docs/diagrams/` (SVG for GitHub, GIF for ModelScope).
 
 ## Repo hygiene — what must NOT go public
 
@@ -118,14 +120,22 @@ editorial-warm rebrand + vendored Geist + Double-Bezel cards + scroll/
 spring motion + the 19-shot gallery, all on GitHub + ModelScope.  Plus
 the editorial-warm animated architecture / sequence / data-flow diagrams
 in `docs/diagrams/` (animated SVG on GitHub, GIF on ModelScope).
-**v2.2 in progress** — `docs/ROADMAP-v2.2-charter.md`.  Shipped: unified
-lightbox (P0-2) · IMU→frame shake (P1-1) · Reels/Shorts export presets
-(P1-3) · `pixcull models` manager (P1-2 — `list/pull/path`, cache
-`~/.pixcull/models/`, sha256-verified) · **GPS travel-map overlay (P2-1
-— `io/gps_map.py` projects the GoPro/DJI GPS track into a mini-map on
-the `/video` timeline, playhead-synced marker) · **audio-tagger P0-1 —
-learned YAMNet→ONNX tagger beats the DSP baseline (macro-F1 0.629 vs
-0.075, `docs/AUDIO-TAGGER-EVAL.md`); `OnnxTagger` waveform-in branch
-auto-promotes it when present at `~/.pixcull/models/`; reproduce via
-`scripts/convert_yamnet_to_onnx.py` (throwaway TF venv)**.  Open: VLM
-caption (P0-3) — last v2.2 P0.
+**v2.2 CLOSED** — `docs/ROADMAP-v2.2-charter.md` +
+`docs/DESIGN-AUDIT-2029Q2.md` (4.3/5).  Shipped: audio tagger (P0-1 —
+learned YAMNet→ONNX beats DSP, macro-F1 0.629 vs 0.075, auto-promotes
+from `~/.pixcull/models/`; `scripts/convert_yamnet_to_onnx.py` +
+`docs/AUDIO-TAGGER-EVAL.md`) · unified lightbox (P0-2) · IMU shake
+(P1-1) · `pixcull models` manager (P1-2) · reel presets (P1-3) · GPS
+travel-map (P2-1, `io/gps_map.py`) · audit (P2-2).  **Carried to
+v2.4-P0-1:** VLM best-frame caption.
+**v2.3.1 hotfix shipped** — purged the leaked pre-v2.3 palette (decimal
+`rgba()` + separate hexes + a JS **hex-arithmetic** colour ramp only a
+live-DOM probe found), warmed the attribution heatmap (`_colorize_warm`),
+fixed the onboarding-coachmark/lightbox overlap, `unicode-range`-scoped
+the Geist `@font-face` (CJK-safe), mid-width toolbar density; gallery
+regenerated + synced.
+**Next: v2.4** — `docs/ROADMAP-v2.4-charter.md` (intelligence + workflow:
+VLM caption · personalisation-from-corrections · keyboard-first cull loop
+· burst best-of · NL search · audio-threshold calibration).  The audit's
+#1 ask: pull forward a Playwright **visual-regression smoke** (v2.5-P0-2)
+so a palette leak can't ship silently again.
