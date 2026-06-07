@@ -759,7 +759,7 @@ _VIDEO_REVIEW_HTML = r"""<!DOCTYPE html>
 <style>
 :root{--bg:#161310;--panel:rgba(30,26,20,0.74);--panel-solid:#1e1a14;
 --line:#2b241a;--ink:#f1f3f7;--dim:#9aa6b4;--indigo:#c4b9a9;
---indigo2:#d8cebf;--pink:#6a6052;--keep:#6faa78;--cull:#f87171;
+--indigo2:#d8cebf;--pink:#6a6052;--keep:#6faa78;--cull:#cf6f5b;
 --radius:13px;--ease:cubic-bezier(0.34,1.56,0.64,1);
 --serif:"Charter","Iowan Old Style","PT Serif",Georgia,"Songti SC",serif}
 *{box-sizing:border-box}
@@ -1005,7 +1005,7 @@ function drawTimeline(){
     const x1=tx(+c.start_s), x2=tx(+c.end_s);
     const op=0.10+0.22*Math.min(1,(+c.score||0));
     s+='<rect x="'+x1.toFixed(1)+'" y="0" width="'+Math.max(2,(x2-x1)).toFixed(1)+'" height="'+H+'" fill="#c4b9a9" opacity="'+op.toFixed(2)+'"/>';
-    s+='<text x="'+(x1+3).toFixed(1)+'" y="13" fill="#b9aef2" font-size="10">#'+c.rank+'</text>';
+    s+='<text x="'+(x1+3).toFixed(1)+'" y="13" fill="#d8cebf" font-size="10">#'+c.rank+'</text>';
   });
   // baseline grid
   for(let g=0;g<=4;g++){ const y=H-g/4*H; s+='<line x1="0" y1="'+y+'" x2="1000" y2="'+y+'" stroke="#23262e" stroke-width="0.5"/>'; }
@@ -4867,7 +4867,7 @@ class _Handler(BaseHTTPRequestHandler):
             "font:13px/1.55 system-ui,-apple-system;padding:32px;}"
             "h1{margin:0 0 4px;letter-spacing:-0.02em;}"
             ".meta{color:#888;font-size:11.5px;margin-bottom:32px;}"
-            ".meta a{color:#a3a5f5;text-decoration:none;margin-left:14px;}"
+            ".meta a{color:#c4b9a9;text-decoration:none;margin-left:14px;}"
             "section{margin:24px 0;}"
             ".findings .finding{padding:14px;border-radius:8px;margin:10px 0;"
             "background:rgba(220,38,38,0.10);"
@@ -4884,11 +4884,11 @@ class _Handler(BaseHTTPRequestHandler):
             "border-bottom:1px solid rgba(255,255,255,0.10);}"
             "th{color:#a0a4b0;font-weight:600;}"
             "tr.under{opacity:0.45;}"
-            ".family h2{font-size:14px;color:#a3a5f5;"
+            ".family h2{font-size:14px;color:#c4b9a9;"
             "letter-spacing:0.02em;text-transform:uppercase;}"
             "</style></head><body>"
             "<h1>偏差审计"
-            + (f" · <span style='color:#a3a5f5;font-size:18px'>"
+            + (f" · <span style='color:#c4b9a9;font-size:18px'>"
                f"@{_esc(user_filter)}</span>"
                if user_filter else "")
             + "</h1>"
@@ -4899,13 +4899,13 @@ class _Handler(BaseHTTPRequestHandler):
                 "&nbsp;&nbsp;|&nbsp;&nbsp;<span style='color:#888'>"
                 + "切片:</span> "
                 + ("<a href='/admin/bias' style='" +
-                   (("color:#a3a5f5" if user_filter else
+                   (("color:#c4b9a9" if user_filter else
                      "color:#fff;text-decoration:underline"))
                    + "'>全部</a>"
                    + "".join(
                        f" · <a href='/admin/bias?user={_esc(u)}' style='"
                        + (("color:#fff;text-decoration:underline" if u == user_filter
-                           else "color:#a3a5f5"))
+                           else "color:#c4b9a9"))
                        + f"'>{_esc(u)}</a>"
                        for u in annotators[:10]))
                 if annotators else ""
@@ -5066,15 +5066,15 @@ class _Handler(BaseHTTPRequestHandler):
             "font:13px/1.55 system-ui,-apple-system;padding:32px;}"
             "h1{margin:0 0 4px;letter-spacing:-0.02em;}"
             ".meta{color:#888;font-size:11.5px;margin-bottom:24px;}"
-            ".meta a{color:#a3a5f5;text-decoration:none;margin-left:14px;}"
+            ".meta a{color:#c4b9a9;text-decoration:none;margin-left:14px;}"
             "section{margin:24px 0;}"
             "table{border-collapse:collapse;width:100%;font-size:12px;}"
             "th,td{padding:6px 10px;text-align:left;"
             "border-bottom:1px solid rgba(255,255,255,0.10);}"
             "th{color:#a0a4b0;font-weight:600;}"
-            "a{color:#a3a5f5;text-decoration:none;}"
+            "a{color:#c4b9a9;text-decoration:none;}"
             "a:hover{text-decoration:underline;}"
-            "h2{font-size:14px;color:#a3a5f5;"
+            "h2{font-size:14px;color:#c4b9a9;"
             "letter-spacing:0.02em;text-transform:uppercase;}"
             "</style></head><body>"
             "<h1>分歧解析</h1>"
@@ -5137,7 +5137,7 @@ class _Handler(BaseHTTPRequestHandler):
             "padding:8px 14px;background:rgba(28,30,38,0.85);"
             "backdrop-filter:saturate(180%) blur(12px);}"
             ".bar .badge{background:rgba(196,185,169,0.18);"
-            "color:#a3a5f5;padding:2px 10px;border-radius:999px;"
+            "color:#c4b9a9;padding:2px 10px;border-radius:999px;"
             "font-size:11px;font-weight:600;}"
             ".bar .fn{color:#aaa;font-family:ui-monospace,SF Mono,"
             "Menlo,monospace;font-size:11.5px;flex:1;overflow:hidden;"
@@ -12625,7 +12625,7 @@ _FIRST_RUN_HTML = r"""<!DOCTYPE html>
       --border: #2b241a;
       --keep: #4ade80;
       --maybe: #d9a30c;
-      --cull: #f87171;
+      --cull: #cf6f5b;
     }
     * { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; }
@@ -12841,7 +12841,7 @@ _PRIVACY_HTML = r"""<!DOCTYPE html>
     :root {
       --bg: #161310; --bg-card: #1e1a14; --fg: #e9ecf2;
       --muted: #a8b2c1; --accent: #c4b9a9; --border: #2b241a;
-      --keep: #4ade80; --cull: #f87171;
+      --keep: #4ade80; --cull: #cf6f5b;
     }
     body {
       margin: 0; min-height: 100vh; background: var(--bg); color: var(--fg);
@@ -12957,7 +12957,7 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
       --bg: #161310; --bg-card: #1e1a14; --bg-card-hi: #272118;
       --fg: #e9ecf2; --muted: #a8b2c1; --accent: #c4b9a9;
       --accent-hi: #d8cebf; --border: #2b241a;
-      --keep: #4ade80; --maybe: #d9a30c; --cull: #f87171;
+      --keep: #4ade80; --maybe: #d9a30c; --cull: #cf6f5b;
       --focus-ring: rgba(216,206,191,0.55);
     }
     * { box-sizing: border-box; }
@@ -13097,7 +13097,7 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
     }
     /* V17.5 — AI phrase override pill */
     .vstats .pill.phrased {
-      color: #c4b5fd;
+      color: #d8cebf;
       border-color: rgba(196,185,169,0.40);
       background: rgba(196,185,169,0.10);
       cursor: help;
@@ -13162,7 +13162,7 @@ _VERTICALS_HTML = r"""<!DOCTYPE html>
       border-color: var(--accent); color: var(--accent-hi);
     }
     .vactions .row.secondary button.llm-phrases:hover {
-      border-color: #c4b5fd; color: #c4b5fd;
+      border-color: #d8cebf; color: #d8cebf;
     }
     .vactions .row.secondary button.eval:hover {
       border-color: var(--keep); color: var(--keep);
@@ -14811,7 +14811,7 @@ _VERTICAL_BULK_HTML = r"""<!DOCTYPE html>
       --bg: #161310; --bg-card: #1e1a14; --bg-card-hi: #272118;
       --fg: #e9ecf2; --muted: #a8b2c1; --accent: #c4b9a9;
       --accent-hi: #d8cebf; --border: #2b241a;
-      --keep: #4ade80; --maybe: #d9a30c; --cull: #f87171;
+      --keep: #4ade80; --maybe: #d9a30c; --cull: #cf6f5b;
       --focus-ring: rgba(216,206,191,0.55);
     }
     * { box-sizing: border-box; }
@@ -15492,7 +15492,7 @@ _UPLOAD_HTML = (r"""<!DOCTYPE html>
                   transform 180ms cubic-bezier(0.16,1,0.3,1);
     }
     .hero-feature:hover {
-      border-color: #4f55e8;
+      border-color: #c4b9a9;
       background: rgba(196,185,169,0.06);
       transform: translateY(-2px);
     }
@@ -15501,7 +15501,7 @@ _UPLOAD_HTML = (r"""<!DOCTYPE html>
       width: 32px; height: 32px;
       border-radius: 8px;
       background: rgba(196,185,169,0.14);
-      color: #818cf8;
+      color: #d8cebf;
       margin-bottom: 10px;
     }
     .hero-feature-title {
@@ -16045,7 +16045,7 @@ _UPLOAD_HTML = (r"""<!DOCTYPE html>
            the "wait, do I need to install something first" gate. -->
       <button id="sampleBtn" class="secondary"
               title="用 6 张示例数据立刻进入 /results 体验,不需要装环境"
-              style="margin-left:auto;background:rgba(196,185,169,0.15);border-color:#c4b9a9;color:#c3b9ff">
+              style="margin-left:auto;background:rgba(196,185,169,0.15);border-color:#c4b9a9;color:#d8cebf">
         ⚡ 用示例数据立刻体验
       </button>
       <span id="hint" style="color:var(--muted);font-size:12px"></span>
@@ -17111,7 +17111,7 @@ def _render_delivery_audit_html(run_id: str, md: str, preset: str) -> str:
         "i{color:#7a8696;font-style:normal;font-size:11.5px}"
         "code{font-family:ui-monospace,monospace;font-size:11.5px;"
         "padding:1px 5px;background:#11141a;border-radius:3px;"
-        "color:#79c8ff}"
+        "color:#d8cebf}"
         "table{width:100%;border-collapse:collapse;font-size:12px;"
         "background:#11141a;border:1px solid #232830;border-radius:6px;"
         "overflow:hidden;margin:6px 0 16px}"

@@ -275,7 +275,7 @@
       --c-danger:         #dc2626;
       --c-info-tint:      rgba(14,165,233,0.10);
       --c-info-border:    rgba(14,165,233,0.32);
-      --c-info:           #0284c7;
+      --c-info:           #c4b9a9;
       --c-neutral-tint:   rgba(75,85,99,0.06);
       --c-neutral-border: rgba(75,85,99,0.22);
       --c-neutral:        #4b5563;
@@ -459,6 +459,9 @@
       gap: 8px;
       text-decoration: none;
       flex-shrink: 0;
+      /* v2.5-P0-2 — pin the <a> colour so it never falls back to the
+         browser's dark-mode UA link colour (a periwinkle blue). */
+      color: var(--accent);
     }
     .brand-mark svg {
       width: 22px; height: 22px;
@@ -1010,7 +1013,7 @@
       display: inline-flex; align-items: center; gap: 8px;
       padding: 4px 10px 4px 8px;
       background: rgba(196, 185, 169, 0.16);     /* brand indigo wash */
-      color: #c8b7ff;
+      color: #d8cebf;
       border: 1px solid rgba(196, 185, 169, 0.34);
       border-radius: 999px;
       font-size: 11px;
@@ -1076,7 +1079,7 @@
       font-size: 11px;
       letter-spacing: 0.18em;
       text-transform: uppercase;
-      color: #b3a3f0;
+      color: #d8cebf;
       margin: 0 0 8px;
     }
     #presenceModal .pp-list { display: flex; flex-direction: column; gap: 10px; }
@@ -1098,7 +1101,7 @@
     }
     #presenceModal .pp-name { font-weight: 600; color: #fff; font-size: 13px; }
     #presenceModal .pp-meta { font-size: 11px; color: #9ca3af; margin-top: 2px; line-height: 1.5; }
-    #presenceModal .pp-fn { color: #c8b7ff; }
+    #presenceModal .pp-fn { color: #d8cebf; }
     #presenceModal .pp-action { color: #4ade80; }
     #presenceModal .pp-empty { color: #6b7280; font-size: 12px; padding: 12px 4px; }
     #presenceModal .pp-foot {
@@ -1110,7 +1113,7 @@
       display: flex; justify-content: space-between; gap: 8px; align-items: center;
     }
     #presenceModal .pp-foot a {
-      color: #c8b7ff;
+      color: #d8cebf;
       text-decoration: none;
       cursor: pointer;
     }
@@ -3125,7 +3128,7 @@
       width: 100%;
       padding: 6px 12px;
       background: rgba(196,185,169,0.18);
-      color: #79c8ff;
+      color: #d8cebf;
       border: 1px solid rgba(196,185,169,0.35);
       border-radius: 5px;
       font-size: 11.5px; font-weight: 500;
@@ -3189,7 +3192,7 @@
       padding: 8px 14px;
       background: rgba(196, 185, 169, 0.14);
       border: 1px solid rgba(196, 185, 169, 0.55);
-      color: #79c8ff;
+      color: #d8cebf;
       border-radius: 8px;
       font-size: 12px; line-height: 1.4;
       box-shadow: 0 8px 28px rgba(0,0,0,0.45);
@@ -3199,7 +3202,7 @@
     .scene-anomaly-banner .sab-msg   { flex: 1; }
     .scene-anomaly-banner .sab-msg b { color: #fff; }
     .scene-anomaly-banner .sab-close {
-      background: transparent; color: #79c8ff;
+      background: transparent; color: #d8cebf;
       border: 1px solid rgba(196, 185, 169, 0.4);
       width: 22px; height: 22px;
       border-radius: 4px; cursor: pointer;
@@ -3213,7 +3216,7 @@
        Slides down beneath the banner when the user clicks the
        "查看分布详情" link; inline SVG, no external chart lib. */
     .scene-anomaly-banner .sab-toggle {
-      background: transparent; color: #79c8ff;
+      background: transparent; color: #d8cebf;
       border: 1px solid rgba(196, 185, 169, 0.40);
       padding: 2px 8px; font-size: 11px;
       border-radius: 5px; cursor: pointer;
@@ -3284,7 +3287,7 @@
     .a11y-toggle:hover { opacity: 1; }
     .a11y-toggle.on {
       background: rgba(14,165,233,0.18);
-      color: #79c8ff; border-color: rgba(14,165,233,0.40);
+      color: #d8cebf; border-color: rgba(14,165,233,0.40);
       opacity: 1;
     }
 
@@ -3662,7 +3665,7 @@
       padding: 3px 10px; border-radius: 999px;
       font-size: 11px; font-weight: 500; letter-spacing: 0.02em;
       background: rgba(196,185,169,0.14);
-      color: var(--accent-hi, #79c8ff);
+      color: var(--accent-hi, #d8cebf);
       border: 1px solid rgba(196,185,169,0.34);
     }
     .shortcuts-ctx-badge:empty { display: none; }
@@ -3677,7 +3680,7 @@
       border-radius: 6px;
     }
     .shortcut-section.ctx-active .shortcut-section-title {
-      color: var(--accent-hi, #79c8ff);
+      color: var(--accent-hi, #d8cebf);
     }
     /* sections that aren't relevant to the current context stay
        visible but dimmed; the user can still scroll to reference
@@ -9046,7 +9049,7 @@
         s += '<rect x="' + x1.toFixed(1) + '" y="0" width="'
           + Math.max(2, x2 - x1).toFixed(1) + '" height="60" fill="#c4b9a9" '
           + 'opacity="' + (0.12 + 0.22 * Math.min(1, +c.score || 0)).toFixed(2) + '"/>';
-        s += '<text x="' + (x1 + 2).toFixed(1) + '" y="11" fill="#b9aef2" '
+        s += '<text x="' + (x1 + 2).toFixed(1) + '" y="11" fill="#d8cebf" '
           + 'font-size="9">#' + c.rank + '</text>';
       });
       let area = "0,60", line = "";
@@ -9056,7 +9059,7 @@
       });
       area += " 1000,60";
       s += '<polygon points="' + area + '" fill="rgba(196,185,169,0.22)"/>';
-      s += '<path d="' + line + '" fill="none" stroke="#8b74e8" stroke-width="1.4"/>';
+      s += '<path d="' + line + '" fill="none" stroke="#c4b9a9" stroke-width="1.4"/>';
       s += '<line id="vbPh" x1="0" y1="0" x2="0" y2="60" stroke="#6a6052" stroke-width="2"/>';
       tl.innerHTML = s;
     }
