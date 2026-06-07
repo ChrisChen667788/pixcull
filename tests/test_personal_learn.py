@@ -82,6 +82,22 @@ def test_gather_empty_when_no_runs(tmp_path):
     assert gather_examples_from_runs(tmp_path / "nope") == []
 
 
+def test_decide_applies_personal_shift_in_pipeline():
+    """v2.4-P0-2b — the learned threshold shift moves the keep/cull
+    boundary inside decide() (this is what the orchestrator passes in)."""
+    from pixcull.config import PixCullConfig
+    from pixcull.scoring.decision import Decision, decide
+    cfg = PixCullConfig.load()
+    thr = (cfg.fusion.get("strictness_presets", {}).get("standard")
+           or cfg.fusion.get("decision", {}))
+    keep_min = float(thr.get("keep_min_score", 6.5)) / 10.0
+    score = keep_min - 0.02                       # just under the keep line
+    generic, _ = decide(score, [], cfg)
+    looser, _ = decide(score, [], cfg, personal_shift=-0.05)   # keeps more
+    assert generic is not Decision.KEEP           # generic: below keep_min
+    assert looser is Decision.KEEP                # shift lowered keep_min
+
+
 def test_cli_personalize_show_and_reset(tmp_path, monkeypatch):
     from typer.testing import CliRunner
     import pixcull.cli as cli

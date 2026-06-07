@@ -103,7 +103,7 @@ inspection:
   fallback unchanged when absent; same convert→host→pull loop as
   audio-tagger.
 
-### v2.4-P0-2 · Personalisation from corrections (the real moat) — 🟡 learning + eval + CLI done; pipeline-apply = P0-2b
+### v2.4-P0-2 · Personalisation from corrections (the real moat) — ✅ DONE
 - **What**: every keep/cull/maybe override is already logged
   (`annotations.jsonl`); learn from it — fit a lightweight per-user
   residual on top of the rubric (per-axis weight + decision threshold
@@ -124,10 +124,18 @@ inspection:
   **Proof** on a synthetic composition-driven shooter: held-out keep-F1
   **0.39 → 1.0** (recovers most-cared = composition).
   `tests/test_personal_learn.py`.
-- **P0-2b (next):** apply the saved profile in the orchestrator decision
-  (`load_profile` + `apply_threshold_shift`, + axis reweight) so a *fresh*
-  run is scored to taste, and surface a "tuned to you" badge + undo in
-  `results.html` (serve_demo already exposes `/api/v1/users/profile`).
+- **P0-2b — DONE:** the orchestrator loads the saved profile and, when
+  active (≥ 50 corrections), passes its `keep_threshold_shift` into
+  `decide()` as `personal_shift` — nudging the keep/cull boundary like a
+  vertical policy (the generic fusion score is untouched; no-op until the
+  user has enough data, so zero regression for everyone else).  A
+  "🎯 已按你调校" badge appears in the workspace bar when active (reads
+  `/api/v1/users/profile`); undo = `pixcull personalize reset`.
+  `tests/test_personal_learn.py::test_decide_applies_personal_shift_in_pipeline`.
+  *Not done (deliberate):* axis-reweighting the fused score in the pipeline
+  — that would override the model/VLM/DeepSeek fusion; the axis preference
+  stays an insight + drives the eval, while the pipeline applies the safe
+  calibrated boundary shift.
 
 ### v2.4-P0-3 · Keyboard-first photo cull loop
 - **What**: bring the video surface's J/K/L muscle-memory to the photo

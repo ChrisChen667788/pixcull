@@ -48,6 +48,7 @@ def decide(
     *,
     rescorer_prob_keep: float | None = None,
     vertical: str | None = None,
+    personal_shift: float = 0.0,
 ) -> tuple[Decision, list[str]]:
     """Map final score + blocking flags to Keep / Maybe / Cull with human-readable reasons.
 
@@ -92,6 +93,14 @@ def decide(
         except Exception:
             # Verticals module is non-essential; never let it break decide().
             vert_policy = None
+
+    # v2.4-P0-2b — personal-taste calibration. ``personal_shift`` is the
+    # user's learned keep_threshold_shift (signed; + = this shooter keeps
+    # fewer → stricter). Nudges the keep/cull boundary like a vertical
+    # policy; 0.0 (default / < 50 corrections) is a no-op.
+    if personal_shift:
+        keep_min = max(0.0, min(1.0, keep_min + personal_shift))
+        cull_max = max(0.0, min(1.0, cull_max + personal_shift * 0.5))
 
     reasons: list[str] = []
     # Hard-cull flags: any of these forces CULL regardless of score.

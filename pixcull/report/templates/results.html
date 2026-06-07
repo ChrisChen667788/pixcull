@@ -530,6 +530,14 @@
       letter-spacing: 0.01em;
     }
     .workspace-bar-spacer { flex: 1; }
+    /* v2.4-P0-2b — "tuned to you" badge: shown when a personal taste
+       profile is active (decisions are calibrated to the user). */
+    .tuned-badge {
+      font-size: 11px; padding: 3px 10px; border-radius: 999px;
+      color: var(--accent-hi); background: var(--accent-soft);
+      border: 1px solid var(--accent); white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
 
     /* v0.8-P1-3 — share-URL modal.  Centre-screen card with the QR
        on the left + short URL / copy buttons on the right.  Reused
@@ -5837,6 +5845,8 @@
         <span id="runPill" class="run-pill" style="display:none"></span>
       </span>
       <span class="workspace-bar-spacer"></span>
+      <span id="tunedBadge" class="tuned-badge" style="display:none"
+            title="v2.4 · 决策阈值已按你历史的 keep/cull 校准 · 命令行 pixcull personalize reset 可还原"></span>
       <div class="stats" id="stats"></div>
       <!-- v0.8-P0-1 — language switcher.  Cycles zh_CN → en_US.
            Persists pixcull_lang in localStorage; updates every
@@ -14359,6 +14369,23 @@
   // pulse + tip combo gives the same hint density without
   // hijacking attention.
   // ==================================================================
+  // v2.4-P0-2b — surface "tuned to you" when a personal taste profile is
+  // active (decisions were calibrated to the user's keep/cull history).
+  (function _initTunedBadge() {
+    const el = document.getElementById("tunedBadge");
+    if (!el) return;
+    fetch("/api/v1/users/profile")
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d && d.is_active) {
+          const axis = d.most_cared_axis || "";
+          el.textContent = "🎯 已按你调校" + (axis ? (" · 重" + axis) : "");
+          el.style.display = "";
+        }
+      })
+      .catch(() => {});
+  })();
+
   (function _initOnboarding() {
     const KEY = "pixcull_onboarded_v1";
     let done = false;

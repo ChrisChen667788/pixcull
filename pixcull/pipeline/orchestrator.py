@@ -163,6 +163,21 @@ def run_pipeline(
 
     if progress_cb is not None:
         progress_cb(total, total, "评分与决策…")
+    # v2.4-P0-2b — apply the user's learned taste profile (no-op until they
+    # have ≥ MIN_ANNS_FOR_PERSONALIZATION corrections). Shifts the keep/cull
+    # boundary inside decide(); the generic fusion score is unchanged.
+    _personal_shift = 0.0
+    try:
+        from pixcull.scoring.personalized import load_profile
+        _pp = load_profile(Path.home() / ".pixcull" / "personal_profile.json")
+        if _pp is not None and _pp.is_active():
+            _personal_shift = float(_pp.keep_threshold_shift)
+            console.print(
+                f"[cyan]Personalized[/] keep/cull boundary shifted "
+                f"{_personal_shift:+.3f} (from {_pp.n_annotations} of your "
+                f"corrections; cares most about {_pp.most_cared_axis or '—'})")
+    except Exception:
+        _personal_shift = 0.0
     decisions, dim_scores, reasons_all = [], [], []
     rescorer_preds: list[str | None] = []
     rescorer_probs: list[float | None] = []
@@ -197,6 +212,7 @@ def run_pipeline(
             scene=row["scene"],
             rescorer_prob_keep=r_prob,
             vertical=vertical,           # V17.2 — per-batch override
+            personal_shift=_personal_shift,   # v2.4-P0-2b — your taste
         )
 
         # Rescorer's keep/maybe verdict is meaningless for rule-CULL rows
