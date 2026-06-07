@@ -116,7 +116,16 @@ def test_grid_and_lightbox_have_no_legacy_palette(base_url):
             "localStorage.setItem('pixcull_seen_rubric_intro_v1','1');}catch(e){}")
         pg = ctx.new_page()
         errs = []
-        pg.on("console", lambda m: errs.append(m.text) if m.type == "error" else None)
+        # Guard JS errors + uncaught exceptions, NOT demo-asset availability:
+        # a CI run has the scores/manifest but not the photographer's source
+        # photos, so the lazy /thumb/ + /full/ images 404. results.html is
+        # self-contained (inline CSS/JS), so there are no external JS/CSS to
+        # 404 — filtering resource-load failures only drops the missing-image
+        # noise, never a real regression.
+        def _on_console(m):
+            if m.type == "error" and "Failed to load resource" not in m.text:
+                errs.append(m.text)
+        pg.on("console", _on_console)
         pg.on("pageerror", lambda e: errs.append(str(e)))
 
         pg.goto(f"{base_url}/results/{RUN}", wait_until="domcontentloaded", timeout=30000)
