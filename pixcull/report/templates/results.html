@@ -3578,6 +3578,15 @@
     .lightbox .info-pane .decision-btn:hover.keep  { border-color: var(--keep); }
     .lightbox .info-pane .decision-btn:hover.maybe { border-color: var(--maybe); }
     .lightbox .info-pane .decision-btn:hover.cull  { border-color: var(--cull); }
+    /* v2.4 — auto-advance toggle: a secondary, narrow pill in the
+       decision toolbar (not a keep/maybe/cull colour). active = accent. */
+    .lightbox .info-pane .decision-btn.auto-adv {
+      flex: 0 0 auto; min-width: 0; padding-inline: 12px;
+      opacity: 0.6; font-size: 11px;
+    }
+    .lightbox .info-pane .decision-btn.auto-adv.active {
+      opacity: 1; border-color: var(--accent); color: var(--accent-hi);
+    }
     /* Smooth thumbnail rotation — same easing as the lightbox img
        so they feel like the same gesture. */
     .card .thumb { transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1); }
@@ -10069,6 +10078,12 @@
           <span class="label">剔除</span>
           <span class="hk">3</span>
         </button>
+        <button class="decision-btn auto-adv ${_autoAdvance ? 'active' : ''}"
+                id="lbAutoAdvBtn" type="button"
+                aria-pressed="${_autoAdvance ? 'true' : 'false'}"
+                title="决策后自动跳下一张(rapid cull · 点此可开关 · 持久化)">
+          <span class="label">⏩ 自动</span>
+        </button>
       </div>
     `;
   }
@@ -10627,15 +10642,17 @@
     } catch (_e) { /* ignore network blip */ }
     _updateLbDecisionToolbar(label);
     if (label === "cull") promptCullReason(fn);
-    // Advance to next visible photo (same as keyboard 1/2/3 + j).
-    // Skip the advance if the user just culled and we want them to
-    // engage the reason picker without a card swap underneath.
-    if (label !== "cull") lightboxStep(+1);
+    // Advance to next visible photo (same as keyboard 1/2/3 + j) when
+    // auto-advance is on. Cull keeps the photo up so the reason picker
+    // isn't swapped out from under the user.
+    if (_autoAdvance && label !== "cull") lightboxStep(+1);
   }
 
   // Event delegation on the lightbox so the toolbar wiring survives
   // every renderInfoPane() rebuild without needing re-attachment.
   lb.addEventListener("click", e => {
+    const adv = e.target.closest("#lbAutoAdvBtn");
+    if (adv) { e.stopPropagation(); _setAutoAdvance(!_autoAdvance); return; }
     const btn = e.target.closest(".decision-btn[data-label]");
     if (!btn) return;
     e.stopPropagation();
@@ -10652,6 +10669,19 @@
   // Active card is the one that has class .focused (visually outlined).
   // ==================================================================
   let focusedFn = null;
+  // v2.4 — keyboard-first cull loop: a keep/maybe/cull decision hops to
+  // the next photo so a pass flows at ~1-2 s/photo (the lightbox already
+  // did this; the grid now does too). Toggle persists in localStorage.
+  let _autoAdvance = true;
+  try { _autoAdvance = localStorage.getItem("pixcull_autoadvance") !== "0"; } catch (e) {}
+  function _setAutoAdvance(on) {
+    _autoAdvance = !!on;
+    try { localStorage.setItem("pixcull_autoadvance", on ? "1" : "0"); } catch (e) {}
+    document.querySelectorAll(".decision-btn.auto-adv").forEach(b => {
+      b.classList.toggle("active", _autoAdvance);
+      b.setAttribute("aria-pressed", _autoAdvance ? "true" : "false");
+    });
+  }
   // V10.1 toast (single-element, bottom-center). V14.2 — keep the
   // signature, delegate to the new stack-based ``toast()`` so we get
   // multi-toast support for free without rewriting all callers.
@@ -10789,6 +10819,9 @@
     // P-UX-4 — after a cull, prompt for a reason. Opt-in: auto-
     // dismisses in ~6 s, never blocks the keep/maybe/cull rhythm.
     if (label === "cull") promptCullReason(wasFn);
+    // v2.4 — keyboard cull loop: hop focus to the next card so a
+    // 1 / 2 / 3 spree flows through the grid without reaching for the mouse.
+    if (_autoAdvance) moveFocus(1);
   }
   // V14.5 — shortcuts cheat sheet replaces the old alert(). The
   // overlay HTML is statically rendered; JS just toggles .show
@@ -14364,7 +14397,7 @@
         <button class="onb-close" type="button" aria-label="关闭提示">✕</button>
       </div>
       <ul class="onb-list">
-        <li><kbd>1</kbd> / <kbd>2</kbd> / <kbd>3</kbd> 快速标 keep / maybe / cull</li>
+        <li><kbd>1</kbd> / <kbd>2</kbd> / <kbd>3</kbd> 标 keep / maybe / cull<b>并自动跳下一张</b>(连标 ~1-2 秒/张;⏩ 可关)</li>
         <li><kbd>?</kbd> 看所有快捷键(根据当前视图自动高亮)</li>
         <li>右上角 <b>🪣 桶</b>:拖卡片进去整理交付包</li>
       </ul>
