@@ -15146,7 +15146,7 @@ _VERTICAL_BULK_HTML = r"""<!DOCTYPE html>
 # audit page so /, /admin, /admin/face_audit/<id>, and
 # /admin/delivery/<id> all share the same visual language.
 _DESIGN_TOKENS_CSS = r"""
-  @font-face{font-family:"Geist Variable";font-style:normal;font-weight:100 900;font-display:swap;src:url("/docs/brand/geist-variable.woff2") format("woff2");}
+  @font-face{font-family:"Geist Variable";font-style:normal;font-weight:100 900;font-display:swap;src:url("/docs/brand/geist-variable.woff2") format("woff2");unicode-range:U+0000-2E7F;}
   :root {
     /* surfaces — v2.2 Taste: deep calm gallery ground (was LR-grade gray) */
     --bg:           #161310;
@@ -15193,10 +15193,10 @@ _DESIGN_TOKENS_CSS = r"""
     /* typography */
     --font-display: "Geist Variable", -apple-system,
                     BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI",
-                    "PingFang SC", "Microsoft Yahei UI", sans-serif;
+                    "PingFang SC", "Microsoft Yahei UI", "Noto Sans SC", sans-serif;
     --font-body:    "Geist Variable", -apple-system, BlinkMacSystemFont,
                     "Segoe UI Variable", "Segoe UI", "PingFang SC",
-                    "Microsoft Yahei UI", sans-serif;
+                    "Microsoft Yahei UI", "Noto Sans SC", sans-serif;
     --font-mono:    ui-monospace, "SF Mono", "JetBrains Mono", Menlo,
                     monospace;
     /* v2.2 — editorial serif for hero numbers / titles (offline-first) */

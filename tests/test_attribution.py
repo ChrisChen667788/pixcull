@@ -15,7 +15,7 @@ from pixcull.scoring.attribution import (
     AXES,
     MissingTorchError,
     _cache_dir_for,
-    _colorize_indigo,
+    _colorize_warm,
     _photo_sha,
     build_heatmap,
     clear_cache,
@@ -84,7 +84,7 @@ def test_cache_dir_creates_axis_path(tmp_path):
 def test_colorize_produces_rgba_shape():
     import numpy as np
     sal = np.zeros((32, 32), dtype=np.uint8)
-    out = _colorize_indigo(sal)
+    out = _colorize_warm(sal)
     assert out.shape == (32, 32, 4)
     assert out.dtype == np.uint8
 
@@ -93,15 +93,15 @@ def test_colorize_zero_input_is_low_alpha():
     """Zero saliency → fully transparent (or near-transparent)."""
     import numpy as np
     sal = np.zeros((8, 8), dtype=np.uint8)
-    out = _colorize_indigo(sal)
+    out = _colorize_warm(sal)
     assert out[..., 3].max() == 0
 
 
 def test_colorize_full_input_is_high_alpha():
-    """Max saliency → near-opaque indigo→pink color."""
+    """Max saliency → near-opaque warm (brass) color."""
     import numpy as np
     sal = np.full((8, 8), 255, dtype=np.uint8)
-    out = _colorize_indigo(sal)
+    out = _colorize_warm(sal)
     # Alpha approaches 200 cap
     assert out[..., 3].min() >= 199
 
@@ -110,7 +110,7 @@ def test_colorize_gradient_monotonic_in_alpha():
     """Alpha should grow with saliency."""
     import numpy as np
     sal = np.array([[0, 64, 128, 192, 255]], dtype=np.uint8)
-    out = _colorize_indigo(sal)
+    out = _colorize_warm(sal)
     alphas = out[0, :, 3]
     assert all(alphas[i] <= alphas[i+1] for i in range(len(alphas)-1))
 

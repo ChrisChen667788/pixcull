@@ -143,8 +143,8 @@ def build_heatmap(
     sal_im = Image.fromarray(
         (sal_n * 255).astype(np.uint8), mode="L"
     ).resize((256, 256), Image.BICUBIC)
-    # Colorize: indigo gradient ramp (PixCull brand)
-    sal_rgba = _colorize_indigo(np.asarray(sal_im))
+    # Colorize: editorial-warm graphite→brass ramp
+    sal_rgba = _colorize_warm(np.asarray(sal_im))
     Image.fromarray(sal_rgba, mode="RGBA").save(out_path, "PNG")
     return out_path
 
@@ -237,18 +237,19 @@ def _get_axis_head(axis: str):
 # ---------------------------------------------------------------------------
 
 
-def _colorize_indigo(sal_8bit):
+def _colorize_warm(sal_8bit):
     """Map a single-channel 0..255 saliency to an RGBA gradient
-    in the PixCull indigo→pink brand range.  Higher saliency =
+    in the editorial-warm graphite→brass range.  Higher saliency =
     more saturated + more opaque."""
     import numpy as np
     h, w = sal_8bit.shape
     out = np.zeros((h, w, 4), dtype=np.uint8)
     norm = sal_8bit.astype(np.float32) / 255.0
-    # 6E56CF (indigo) at 0.0 → EC4899 (pink) at 1.0
-    r = 0x6E + (0xEC - 0x6E) * norm
-    g = 0x56 + (0x48 - 0x56) * norm
-    b = 0xCF + (0x99 - 0xCF) * norm
+    # v2.3.1-F editorial-warm ramp:
+    # 6a6052 (graphite) at 0.0 → dcb87e (brass) at 1.0
+    r = 0x6a + (0xdc - 0x6a) * norm
+    g = 0x60 + (0xb8 - 0x60) * norm
+    b = 0x52 + (0x7e - 0x52) * norm
     a = (norm * 200).clip(0, 200).astype(np.uint8)
     out[..., 0] = r.astype(np.uint8)
     out[..., 1] = g.astype(np.uint8)
