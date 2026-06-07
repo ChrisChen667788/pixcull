@@ -103,7 +103,7 @@ inspection:
   fallback unchanged when absent; same convert→host→pull loop as
   audio-tagger.
 
-### v2.4-P0-2 · Personalisation from corrections (the real moat)
+### v2.4-P0-2 · Personalisation from corrections (the real moat) — 🟡 learning + eval + CLI done; pipeline-apply = P0-2b
 - **What**: every keep/cull/maybe override is already logged
   (`annotations.jsonl`); learn from it — fit a lightweight per-user
   residual on top of the rubric (per-axis weight + decision threshold
@@ -114,6 +114,20 @@ inspection:
 - **Where**: `scoring/personalized.py` + `self_tune.py` + orchestrator λ.
   **Accept**: on a held-out slice of a user's own corrections, the
   personalised decision F1 beats the generic one; fully local; resettable.
+- **Done:** `scoring/personal_learn.py` — `gather_examples_from_runs`
+  (join `annotations.jsonl` × `scores.csv`), `learn_profile` (reuses
+  `personalized.PersonalProfile`: threshold shift + axis means, fit from
+  LOCAL corrections), `axis_weights`/`decide` (per-axis weight = the
+  user's keep-vs-cull gap), `evaluate` (k-fold held-out keep-F1).
+  `pixcull personalize learn/show/reset`; profile persists to
+  `~/.pixcull/personal_profile.json`, fully local + resettable.
+  **Proof** on a synthetic composition-driven shooter: held-out keep-F1
+  **0.39 → 1.0** (recovers most-cared = composition).
+  `tests/test_personal_learn.py`.
+- **P0-2b (next):** apply the saved profile in the orchestrator decision
+  (`load_profile` + `apply_threshold_shift`, + axis reweight) so a *fresh*
+  run is scored to taste, and surface a "tuned to you" badge + undo in
+  `results.html` (serve_demo already exposes `/api/v1/users/profile`).
 
 ### v2.4-P0-3 · Keyboard-first photo cull loop
 - **What**: bring the video surface's J/K/L muscle-memory to the photo

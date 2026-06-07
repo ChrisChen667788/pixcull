@@ -513,5 +513,77 @@ def models_path(
         raise typer.Exit(code=1)
 
 
+# v2.4-P0-2 — personal taste profile learned from your own corrections.
+personalize_app = typer.Typer(
+    help="Learn / show / reset a local taste profile from your keep-cull "
+         "corrections (v2.4-P0-2).", no_args_is_help=True)
+app.add_typer(personalize_app, name="personalize")
+
+_PROFILE_PATH = Path.home() / ".pixcull" / "personal_profile.json"
+
+
+@personalize_app.command("learn")
+def personalize_learn(
+    runs_root: Path = typer.Option(
+        Path.home() / ".pixcull" / "runs",
+        help="Where your run dirs (annotations.jsonl + scores.csv) live."),
+) -> None:
+    """Fit a taste profile from your corrections + report held-out
+    keep-F1, personalised vs generic."""
+    from pixcull.scoring.personal_learn import (
+        evaluate, gather_examples_from_runs, learn_profile)
+    from pixcull.scoring.personalized import (
+        MIN_ANNS_FOR_PERSONALIZATION, save_profile)
+    exs = gather_examples_from_runs(runs_root)
+    if not exs:
+        console.print(f"[yellow]No corrections found under {runs_root}.[/yellow] "
+                      "Cull a batch first (1 / 2 / 3), then re-run.")
+        raise typer.Exit(code=1)
+    prof = learn_profile(exs)
+    save_profile(prof, _PROFILE_PATH)
+    ev = evaluate(exs)
+    console.print(f"[green]✓ learned from {prof.n_annotations} corrections[/green] "
+                  f"→ {_PROFILE_PATH}")
+    table = Table(title="Your taste")
+    table.add_column("metric")
+    table.add_column("value", justify="right")
+    table.add_row("keep rate", f"{prof.keep_rate:.0%}")
+    table.add_row("threshold shift", f"{prof.keep_threshold_shift:+.3f}")
+    table.add_row("most-cared axis", prof.most_cared_axis or "—")
+    table.add_row("held-out keep-F1 · generic", f"{ev['generic_f1']:.3f}")
+    table.add_row("held-out keep-F1 · personal", f"{ev['personal_f1']:.3f}")
+    table.add_row("Δ (personal − generic)", f"{ev['delta']:+.3f}")
+    console.print(table)
+    if not prof.is_active():
+        console.print(
+            f"[dim]< {MIN_ANNS_FOR_PERSONALIZATION} corrections — the pipeline "
+            "treats personalization as inactive until then.[/dim]")
+
+
+@personalize_app.command("show")
+def personalize_show() -> None:
+    """Print the current saved taste profile."""
+    from pixcull.scoring.personalized import load_profile
+    prof = load_profile(_PROFILE_PATH)
+    if prof is None:
+        console.print("[yellow]No profile yet.[/yellow] Run "
+                      "[cyan]pixcull personalize learn[/cyan].")
+        raise typer.Exit(code=1)
+    console.print(
+        f"[bold]Taste profile[/bold] ({prof.n_annotations} corrections) · "
+        f"keep {prof.keep_rate:.0%} · shift {prof.keep_threshold_shift:+.3f} · "
+        f"cares most about [cyan]{prof.most_cared_axis or '—'}[/cyan]")
+
+
+@personalize_app.command("reset")
+def personalize_reset() -> None:
+    """Delete the saved profile (back to generic scoring)."""
+    if _PROFILE_PATH.exists():
+        _PROFILE_PATH.unlink()
+        console.print("[green]✓ profile reset[/green] — scoring is generic again.")
+    else:
+        console.print("[dim]No profile to reset.[/dim]")
+
+
 if __name__ == "__main__":
     app()
