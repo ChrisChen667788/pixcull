@@ -155,12 +155,31 @@ inspection:
   cluster collapses to 1 hero + expandable; best-pick agreement vs human
   on the eval set reported.
 
-### v2.4-P1-2 · NL semantic search over a shoot
+### v2.4-P1-2 · NL semantic search over a shoot — ✅ DONE (was silently broken)
 - **What**: "红衣服的人 / sharpest sunset / boats on water" → CLIP-embed
   query over the run (embeddings already computed). Search box in the
   grid.
 - **Where**: `scoring/semantic_search.py` (exists) → wire a UI. **Accept**:
   top-k visually relevant; <200 ms on 5k.
+- **Done:** the search box (`#semSearchInput` + `runSemSearch`) and the
+  endpoint (`/api/v1/runs/<id>/semantic_search`, lazy-builds
+  `embeddings.npz`) were already wired — but the **real CLIP path was
+  broken** and only the synthetic unit tests (which skip the model) were
+  green.  Two live-only bugs, found by actually running it:
+  1. **transformers ≥ 5** returns a `BaseModelOutputWithPooling` from
+     `get_image_features` / `get_text_features` (not a tensor) →
+     `'…Pooling' object has no attribute 'cpu'`.  Added `_feature_tensor`
+     to pull the projected `pooler_output` (512-d), tolerating both old
+     (tensor) and new (object) returns.
+  2. `np.savez` appends `.npz` to a target not ending in `.npz`, so the
+     `embeddings.npz.tmp` temp landed at `…tmp.npz` and the atomic rename
+     `FileNotFound`ed.  Write through an explicit file handle.
+  Also fixed a test-pollution bug: two unit tests clobbered
+  `ss.encode_query` globally without restoring (now `monkeypatch`).
+  **Proof:** red/green/blue swatches built + queried — each colour query
+  ranks its own swatch #1 (red 0.272 / blue 0.270 / green 0.278).  New
+  `test_build_search_real_clip_end_to_end` exercises the real model
+  (skips where CLIP can't load) and would have caught both bugs.
 
 ### v2.4-P1-3 · Audio-tagger threshold calibration — ✅ DONE
 - **What**: laughter recall is 0.25 @ thresh 0.5 (precision 1.0). Sweep

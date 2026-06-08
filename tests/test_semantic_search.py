@@ -28,7 +28,7 @@ def test_norm_unit_vectors():
     assert z.shape == (1, 4)
 
 
-def test_search_returns_topk_by_cosine(tmp_path: Path):
+def test_search_returns_topk_by_cosine(tmp_path: Path, monkeypatch):
     """Search picks the top-k entries by dot-product against the query."""
     # 3 image embeddings + 1 query, all 2-D for easy hand-checking
     # img0 points (1, 0)   → very similar to query (0.9, 0.4)
@@ -39,9 +39,13 @@ def test_search_returns_topk_by_cosine(tmp_path: Path):
         "vectors":   _norm(np.array([[1, 0], [0, 1], [-1, 0]], dtype=np.float32)),
         "model":     "test",
     }
-    # We can't call the real encode_query (needs CLIP); patch it.
+    # We can't call the real encode_query (needs CLIP); patch it — via the
+    # monkeypatch fixture so it's restored (else it leaks into later tests
+    # that DO use the real encoder, e.g. the CLIP integration test below).
     import pixcull.scoring.semantic_search as ss
-    ss.encode_query = lambda q: _norm(np.array([0.9, 0.4], np.float32)[None])[0]
+    monkeypatch.setattr(
+        ss, "encode_query",
+        lambda q: _norm(np.array([0.9, 0.4], np.float32)[None])[0])
 
     ranked = search("query string", cache=cache, k=3)
     assert [r[0] for r in ranked] == ["img0.jpg", "img1.jpg", "img2.jpg"]
@@ -79,7 +83,7 @@ def test_load_embeddings_cache_round_trip(tmp_path: Path):
     assert loaded["model"] == "test-model"
 
 
-def test_search_k_clamped_to_cache_size():
+def test_search_k_clamped_to_cache_size(monkeypatch):
     """Asking for k larger than cache size returns just cache_size items."""
     cache = {
         "filenames": np.array(["a.jpg", "b.jpg"]),
@@ -87,6 +91,58 @@ def test_search_k_clamped_to_cache_size():
         "model":     "test",
     }
     import pixcull.scoring.semantic_search as ss
-    ss.encode_query = lambda q: _norm(np.array([1.0, 0.0], np.float32)[None])[0]
+    monkeypatch.setattr(
+        ss, "encode_query",
+        lambda q: _norm(np.array([1.0, 0.0], np.float32)[None])[0])
     ranked = search("query", cache=cache, k=10)
     assert len(ranked) == 2
+
+
+# --------------------------------------------------------------------------
+# v2.4-P1-2 — integration test over the REAL CLIP model.
+#
+# The unit tests above deliberately skip the model, so they could not see
+# two breakages that only the live path hits: (1) transformers ≥ 5 returns
+# a BaseModelOutputWithPooling from get_image_features/get_text_features
+# (not a tensor), and (2) np.savez appends ".npz" to the ".npz.tmp" temp
+# file, breaking the atomic rename.  This exercises encode → build → save →
+# reload → rank, and skips cleanly where CLIP can't load (no torch / no
+# model cache in CI).
+# --------------------------------------------------------------------------
+
+def _require_clip():
+    pytest.importorskip("torch")
+    pytest.importorskip("transformers")
+    pytest.importorskip("PIL")
+    try:
+        from pixcull.detectors.scene import _clip
+        _clip()
+    except Exception as e:                                   # noqa: BLE001
+        pytest.skip(f"CLIP model unavailable: {e}")
+
+
+def test_build_search_real_clip_end_to_end(tmp_path: Path):
+    _require_clip()
+    from PIL import Image
+    from pixcull.scoring import semantic_search as ss
+
+    colors = {"red": (220, 30, 30), "green": (30, 180, 40), "blue": (30, 60, 210)}
+    paths = []
+    for name, rgb in colors.items():
+        p = tmp_path / f"{name}.png"
+        Image.new("RGB", (224, 224), rgb).save(p)
+        paths.append(p)
+
+    cache_path = tmp_path / "embeddings.npz"
+    cache = ss.build_embeddings_cache(paths, cache_path)
+    assert cache["vectors"].shape == (3, 512)               # projected dim
+    assert cache_path.is_file()                             # savez+rename OK
+    # round-trips from disk
+    assert ss.load_embeddings_cache(cache_path)["vectors"].shape == (3, 512)
+
+    # text→image relevance: each colour query ranks its own swatch first.
+    for q, want in [("a red photo", "red.png"),
+                    ("a blue photo", "blue.png"),
+                    ("a green photo", "green.png")]:
+        ranked = ss.search(q, cache=cache, k=3)
+        assert ranked[0][0] == want, f"{q!r} ranked {ranked}"

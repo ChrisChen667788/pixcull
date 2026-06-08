@@ -37,6 +37,28 @@ def _norm(v: np.ndarray) -> np.ndarray:
     return v / n
 
 
+def _feature_tensor(feats):
+    """Normalise CLIP ``get_image_features`` / ``get_text_features`` output
+    to the projected-embedding tensor.
+
+    transformers < 5 returned the projected ``[N, proj_dim]`` tensor
+    directly; transformers ≥ 5 wraps it in a ``BaseModelOutputWithPooling``
+    whose ``pooler_output`` IS that projected embedding (512-d for CLIP
+    ViT-B/32).  Accept either so the search works across the version range
+    instead of crashing with ``'…OutputWithPooling' object has no
+    attribute 'cpu'``.
+    """
+    import torch
+    if torch.is_tensor(feats):
+        return feats
+    for attr in ("pooler_output", "image_embeds", "text_embeds"):
+        v = getattr(feats, attr, None)
+        if torch.is_tensor(v):
+            return v
+    raise TypeError(
+        f"unexpected CLIP feature output: {type(feats).__name__}")
+
+
 def build_embeddings_cache(
     image_paths: list[Path],
     cache_path: Path,
@@ -76,7 +98,7 @@ def build_embeddings_cache(
         with torch.no_grad():
             inputs = proc(images=imgs, return_tensors="pt", padding=True).to(device)
             feats = model.get_image_features(pixel_values=inputs["pixel_values"])
-            feats = feats.cpu().numpy().astype(np.float32)
+            feats = _feature_tensor(feats).cpu().numpy().astype(np.float32)
         for name, vec in zip(names, feats):
             filenames.append(name)
             vectors.append(vec)
@@ -95,10 +117,16 @@ def build_embeddings_cache(
         "vectors":   arr,
         "model":     np.array("clip-vit-base-patch32"),
     }
-    # Atomic save: write next to cache_path, then rename
+    # Atomic save: write next to cache_path, then rename.
+    # NB: np.savez appends ".npz" to a str/Path target that doesn't already
+    # end in ".npz" — our ".npz.tmp" temp would then land at
+    # ".npz.tmp.npz" and the rename below would FileNotFound.  Writing
+    # through an explicit binary file handle makes numpy honour the path
+    # exactly, keeping the write truly atomic (same-dir rename).
     tmp = cache_path.with_suffix(cache_path.suffix + ".tmp")
     cache_path.parent.mkdir(parents=True, exist_ok=True)
-    np.savez(tmp, **payload)
+    with open(tmp, "wb") as fh:
+        np.savez(fh, **payload)
     tmp.rename(cache_path)
     return {
         "filenames": payload["filenames"],
@@ -132,7 +160,7 @@ def encode_query(text: str) -> np.ndarray:
     with torch.no_grad():
         inputs = proc(text=[text], return_tensors="pt", padding=True).to(device)
         feats = model.get_text_features(**inputs)
-        v = feats.cpu().numpy().astype(np.float32)[0]
+        v = _feature_tensor(feats).cpu().numpy().astype(np.float32)[0]
     return _norm(v[None])[0]
 
 
