@@ -59,7 +59,10 @@ def test_onnxtagger_waveform_branch(tmp_path):
     (tmp_path / "wav_model.onnx.labels.json").write_text(
         '["Laughter", "Applause", "Music"]')
 
-    tagger = OnnxTagger(model_path=str(mp))
+    # apply_calibrated_defaults=False: this synthetic model's probs are on
+    # an arbitrary scale, so test the waveform branch + mapping against the
+    # raw 0.5 threshold (not the YAMNet-specific v2.4-P1-3 calibration).
+    tagger = OnnxTagger(model_path=str(mp), apply_calibrated_defaults=False)
     if not tagger.available():            # onnxruntime missing → skip
         __import__("pytest").skip("onnxruntime unavailable")
     events = tagger.tag(np.zeros(16000, dtype=np.float32), sr=16000)

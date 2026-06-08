@@ -20,10 +20,16 @@ used here for evaluation only — not redistributed.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
 TARGET_KINDS = ("laughter", "applause", "music")
+
+
+def _grid(lo: float = 0.05, hi: float = 0.95, step: float = 0.05) -> list[float]:
+    n = int(round((hi - lo) / step)) + 1
+    return [round(lo + i * step, 3) for i in range(n)]
 
 
 def _clips(eval_dir: Path):
@@ -114,6 +120,90 @@ def format_report(res: dict, eval_dir: Path) -> str:
     return "\n".join(out) + "\n"
 
 
+def calibrate(eval_dir: Path, model: str, grid: list[float] | None = None) -> dict:
+    """v2.4-P1-3 — sweep per-kind detection thresholds on the eval set and
+    pick the F1-max operating point per kind.
+
+    The default 0.5 blanket threshold is precision-heavy (laughter recall
+    0.25 @ P 1.0); a lower per-kind threshold trades a little precision for
+    a lot of recall.  We run the model ONCE per clip (``infer_probs``),
+    cache the probs, then sweep thresholds through the **real**
+    :func:`probs_to_events` detection path (min-duration merging included),
+    so the chosen point is faithful to what the pipeline will do.
+
+    Returns ``{kind: {threshold, f1, recall, precision, f1_at_0.5,
+    recall_at_0.5}}`` (kinds with no positive in the set are skipped).
+    """
+    from pixcull.scoring.audio_events import extract_audio
+    from pixcull.scoring.audio_tagger import (
+        OnnxTagger, best_threshold, probs_to_events)
+    from pixcull.scoring.eval_metrics import binary_prf
+
+    grid = grid or _grid()
+    tagger = OnnxTagger(model_path=str(model))
+    if not tagger.available():
+        raise SystemExit(f"model {model} unusable (labels.json / onnxruntime)")
+
+    cache = []   # (true_kind, probs, times)
+    for true_kind, wav in _clips(eval_dir):
+        try:
+            samples, sr = extract_audio(wav)
+        except Exception as exc:                       # noqa: BLE001
+            print(f"[skip] {wav.name}: {exc}", file=sys.stderr)
+            continue
+        probs, times = tagger.infer_probs(samples, sr)
+        cache.append((true_kind, probs, times))
+    labels, hop = tagger._labels(), tagger.hop_s
+
+    def detect(probs, times, t, K) -> bool:
+        return K in {e.kind for e in probs_to_events(
+            probs, times, labels, hop_s=hop, thresh=t)}
+
+    result: dict = {}
+    for K in TARGET_KINDS:
+        truth = [tk == K for tk, _, _ in cache]
+        if not any(truth):
+            continue
+
+        def scorer(t, K=K):
+            return [detect(p, ti, t, K) for _, p, ti in cache]
+
+        thr, f1 = best_threshold(truth, scorer, grid=grid)
+        base = binary_prf(truth, scorer(0.5))
+        best = binary_prf(truth, scorer(thr))
+        result[K] = {
+            "threshold": round(thr, 3),
+            "f1": round(best["f1"], 3),
+            "recall": round(best["recall"], 3),
+            "precision": round(best["precision"], 3),
+            "f1_at_0.5": round(base["f1"], 3),
+            "recall_at_0.5": round(base["recall"], 3),
+        }
+    return result
+
+
+def format_calibration(cal: dict) -> str:
+    out = ["# Audio tagger threshold calibration — v2.4-P1-3\n",
+           "Per-kind F1-max operating point swept on the ESC-50 subset "
+           "(CC BY-NC 3.0 — eval only).\n",
+           "| kind | thresh | F1 @0.5 → F1\\* | recall @0.5 → recall\\* | "
+           "precision\\* |",
+           "|---|---|---|---|---|"]
+    for K in sorted(cal):
+        c = cal[K]
+        out.append(
+            f"| {K} | {c['threshold']:.2f} | "
+            f"{c['f1_at_0.5']:.2f} → {c['f1']:.2f} | "
+            f"{c['recall_at_0.5']:.2f} → {c['recall']:.2f} | "
+            f"{c['precision']:.2f} |")
+    if cal:
+        mb = sum(c["f1_at_0.5"] for c in cal.values()) / len(cal)
+        ma = sum(c["f1"] for c in cal.values()) / len(cal)
+        out.append(f"\n- **macro-F1:** `{mb:.3f}` → **`{ma:.3f}`** "
+                   f"(Δ `{ma - mb:+.3f}`)")
+    return "\n".join(out) + "\n"
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -122,9 +212,32 @@ def main() -> int:
     ap.add_argument("--model", default=None, help="ONNX audio model (optional)")
     ap.add_argument("--out", type=Path, default=None,
                     help="write the markdown report here")
+    ap.add_argument("--calibrate", action="store_true",
+                    help="v2.4-P1-3: sweep per-kind thresholds → F1-max "
+                         "operating point (requires --model)")
+    ap.add_argument("--write-thresholds", type=Path, default=None,
+                    help="write the calibrated {kind: threshold} sidecar "
+                         "JSON here (pair with --calibrate)")
     a = ap.parse_args()
     if not a.eval_dir.is_dir():
         ap.error(f"eval dir not found: {a.eval_dir}")
+
+    if a.calibrate:
+        if not a.model:
+            ap.error("--calibrate requires --model")
+        cal = calibrate(a.eval_dir, a.model)
+        report = format_calibration(cal)
+        print(report)
+        if a.write_thresholds:
+            payload = {k: v["threshold"] for k, v in cal.items()}
+            a.write_thresholds.write_text(
+                json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+            print(f"[written] {a.write_thresholds}", file=sys.stderr)
+        if a.out:
+            a.out.write_text(report, encoding="utf-8")
+            print(f"[written] {a.out}", file=sys.stderr)
+        return 0
+
     res = run_eval(a.eval_dir, a.model)
     report = format_report(res, a.eval_dir)
     print(report)

@@ -70,6 +70,71 @@ def test_probs_to_events_empty():
 
 
 # --------------------------------------------------------------------------
+# v2.4-P1-3 — per-kind threshold calibration
+# --------------------------------------------------------------------------
+
+def test_probs_to_events_per_kind_threshold():
+    n = 6
+    probs = np.zeros((n, 3))
+    probs[1:5, 0] = 0.4                    # laughter run @ 0.4
+    probs[1:5, 1] = 0.4                    # applause run @ 0.4
+    times = [i * 0.5 for i in range(n)]
+    labels = ["laughter", "applause", "music"]
+    evs = T.probs_to_events(probs, times, labels, hop_s=0.5,
+                            thresh={"laughter": 0.3, "applause": 0.5},
+                            min_dur_s=0.6)
+    kinds = {e.kind for e in evs}
+    assert "laughter" in kinds            # 0.4 > 0.3 → fires
+    assert "applause" not in kinds        # 0.4 < 0.5 → suppressed
+    # A kind absent from the mapping falls back to the 0.5 default.
+    probs2 = np.zeros((n, 3)); probs2[1:5, 2] = 0.6
+    evs2 = T.probs_to_events(probs2, times, labels, hop_s=0.5,
+                             thresh={"laughter": 0.3}, min_dur_s=0.6)
+    assert any(e.kind == "music" for e in evs2)   # 0.6 > 0.5 default
+
+
+def test_best_threshold_recovers_recall():
+    # 4 positives [0.1,0.2,0.3,0.6], 2 negatives [0.0,0.05]. At 0.5 only 1/4
+    # positives caught (recall .25); at 0.05 all 4 and no negative leaks
+    # (precision 1) → F1-best is the low, recall-recovering threshold.
+    scores = [0.1, 0.2, 0.3, 0.6, 0.0, 0.05]
+    truth = [True, True, True, True, False, False]
+    thr, f1 = T.best_threshold(truth, lambda t: [s > t for s in scores],
+                               grid=[0.05, 0.25, 0.5, 0.75])
+    assert thr == 0.05
+    assert f1 == pytest.approx(1.0)
+
+
+def test_best_threshold_tie_breaks_toward_recall():
+    # both grid points score F1=1 → the smaller (higher-recall) one wins.
+    thr, f1 = T.best_threshold([True, True],
+                               lambda t: [s > t for s in (0.4, 0.6)],
+                               grid=[0.3, 0.1])
+    assert thr == 0.1 and f1 == pytest.approx(1.0)
+
+
+def test_best_threshold_degenerate():
+    assert T.best_threshold([], lambda t: [], grid=[0.5]) == (0.5, 0.0)
+    assert T.best_threshold([False], lambda t: [False], grid=[]) == (0.5, 0.0)
+
+
+def test_onnx_thresholds_packaged_default(tmp_path):
+    # No per-model sidecar → the packaged calibrated default loads.
+    tg = T.OnnxTagger(model_path=str(tmp_path / "nope.onnx"))
+    th = tg._thresholds()
+    assert isinstance(th, dict)
+    assert th.get("laughter") == pytest.approx(0.05)
+
+
+def test_onnx_thresholds_sidecar_overrides(tmp_path):
+    model = tmp_path / "m.onnx"; model.write_bytes(b"x")
+    (tmp_path / "m.onnx.thresholds.json").write_text(
+        json.dumps({"laughter": 0.2, "applause": 0.4}))
+    tg = T.OnnxTagger(model_path=str(model))
+    assert tg._thresholds() == {"laughter": 0.2, "applause": 0.4}
+
+
+# --------------------------------------------------------------------------
 # HeuristicTagger (always available)
 # --------------------------------------------------------------------------
 

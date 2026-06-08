@@ -120,6 +120,7 @@ packages = ["pixcull"]
 [tool.hatch.build]
 include = [
     "pixcull/scoring/templates/*.yaml",
+    "pixcull/scoring/data/*.json",        # v2.4-P1-3 — calibrated audio thresholds ship with the package
     "pixcull/report/templates/*.j2",
     "pixcull/report/templates/*.html",   # V19.4.1 — results.html is loaded from disk at runtime
 ]

@@ -61,3 +61,34 @@ ESC-50 (Piczak, *ACM MM* 2015), CC BY-NC 3.0 — a subset of the
 evaluation only and is **not** redistributed (repo-hygiene: eval data is
 local-only). ESC-50 has no generic *music* class, so `music` is not
 covered by this set.
+
+## v2.4-P1-3 — per-kind threshold calibration
+
+The blanket 0.5 threshold above was precision-heavy: laughter recall
+**0.25** at precision 1.00 — YAMNet spreads its softmax over 521 AudioSet
+classes, so a genuine laughter clip often peaks well below 0.5. We sweep
+each kind's threshold on the eval set and pick the **F1-max operating
+point**, swept through the *real* `probs_to_events` detection path
+(min-duration merging included), tie-breaking toward recall.
+
+| kind | thresh | F1 @0.5 → F1\* | recall @0.5 → recall\* | precision\* |
+|---|---|---|---|---|
+| applause | 0.05 | 0.86 → 0.95 | 0.75 → 0.90 | 1.00 |
+| laughter | 0.05 | 0.40 → 0.92 | 0.25 → **0.85** | 1.00 |
+
+- **macro-F1:** `0.629` → **`0.933`** (Δ `+0.304`) — precision stays 1.00.
+
+The calibrated points ship as `scoring/data/audio_tagger_thresholds.json`
+(the packaged default, applied by `OnnxTagger` for the catalogued YAMNet
+model) and can be overridden per-model by a `<model>.thresholds.json`
+sidecar. `music` keeps the 0.5 default (not covered by ESC-50). 0.05 is
+the sweep floor, so a small recall gap remains at the operating point —
+that's where F1 peaks while precision is still perfect on this set.
+
+Re-run / re-calibrate:
+
+```bash
+python scripts/eval_audio_tagger.py --calibrate \
+  --model ~/.pixcull/models/audio_tagger.onnx \
+  --write-thresholds ~/.pixcull/models/audio_tagger.onnx.thresholds.json
+```

@@ -162,11 +162,23 @@ inspection:
 - **Where**: `scoring/semantic_search.py` (exists) → wire a UI. **Accept**:
   top-k visually relevant; <200 ms on 5k.
 
-### v2.4-P1-3 · Audio-tagger threshold calibration
+### v2.4-P1-3 · Audio-tagger threshold calibration — ✅ DONE
 - **What**: laughter recall is 0.25 @ thresh 0.5 (precision 1.0). Sweep
   per-kind thresholds on the eval set; pick the F1-max operating point;
   expose as config. **Where**: `scoring/audio_tagger.py` + the eval
   harness. **Accept**: macro-F1 ≥ current 0.629 with laughter recall ↑.
+- **Done:** `probs_to_events` / `OnnxTagger` now take **per-kind**
+  thresholds (scalar back-compat kept); `best_threshold` sweeps the F1-max
+  point through the *real* detection path; `eval_audio_tagger.py
+  --calibrate --write-thresholds` produces the sidecar. Calibrated points
+  ship as the packaged default `scoring/data/audio_tagger_thresholds.json`
+  (overridable per-model by `<model>.thresholds.json`; opt out with
+  `apply_calibrated_defaults=False`). **Result on the ESC-50 subset:
+  laughter recall 0.25 → 0.85 (F1 0.40 → 0.92), applause F1 0.86 → 0.95,
+  macro-F1 0.629 → 0.933 (Δ +0.304), precision stays 1.00** — exceeds the
+  accept bar. `docs/AUDIO-TAGGER-EVAL.md` §v2.4-P1-3;
+  `tests/test_audio_tagger.py` (per-kind threshold + `best_threshold`
+  + sidecar/packaged-default resolution).
 
 ---
 

@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -93,7 +94,7 @@ def probs_to_events(
     labels: Sequence[str],
     *,
     hop_s: float,
-    thresh: float = 0.5,
+    thresh: float | Mapping[str, float] = 0.5,
     min_dur_s: float = _MIN_EVENT_S,
     temperature: float = 1.5,
 ) -> list[AudioEvent]:
@@ -103,6 +104,11 @@ def probs_to_events(
     Classes that don't map to a kind are ignored.  Per kind, frames above
     ``thresh`` are run-length-merged into ≥ ``min_dur_s`` segments with a
     calibrated mean confidence.
+
+    ``thresh`` is either a single float applied to every kind, or a
+    per-kind mapping (``{"laughter": 0.3, "applause": 0.55}``) — the
+    v2.4-P1-3 calibrated operating point.  Kinds missing from the mapping
+    fall back to ``0.5``.
     """
     probs = np.asarray(probs, dtype=np.float64)
     times = np.asarray(frame_times, dtype=np.float64)
@@ -122,7 +128,8 @@ def probs_to_events(
     n = probs.shape[0]
     for k in kinds:
         kp = kind_prob[k]
-        mask = kp > thresh
+        kt = thresh.get(k, 0.5) if isinstance(thresh, Mapping) else thresh
+        mask = kp > kt
         i = 0
         while i < n:
             if mask[i]:
@@ -142,6 +149,33 @@ def probs_to_events(
                 i += 1
     out.sort(key=lambda e: e.start_s)
     return out
+
+
+def best_threshold(truth, scorer, *, grid) -> tuple[float, float]:
+    """Pick the threshold in ``grid`` that maximises detection F1.
+
+    ``truth`` is the per-clip boolean ground truth for one kind; ``scorer``
+    is a callable ``t -> list[bool]`` giving that kind's prediction for
+    every clip at threshold ``t`` (the v2.4-P1-3 calibrator passes a closure
+    that re-runs :func:`probs_to_events` on cached probs, so the sweep is
+    faithful to the real detection path — min-duration merging and all).
+
+    Returns ``(threshold, f1)``.  ``grid`` is swept ascending, so on an F1
+    tie the **smaller** threshold wins — deliberately biasing toward recall,
+    which is the operating point this calibration is meant to recover
+    (laughter recall was 0.25 at the blanket 0.5).  Degenerate input
+    (empty grid / no positives) → ``(0.5, 0.0)``.
+    """
+    from pixcull.scoring.eval_metrics import binary_prf
+    truth = list(truth)
+    if not grid or not any(truth):
+        return 0.5, 0.0
+    best_t, best_f1 = 0.5, -1.0
+    for t in sorted(grid):
+        f1 = binary_prf(truth, list(scorer(t)))["f1"]
+        if f1 > best_f1:
+            best_t, best_f1 = float(t), float(f1)
+    return best_t, max(0.0, best_f1)
 
 
 # --------------------------------------------------------------------------
@@ -180,6 +214,7 @@ class OnnxTagger:
     frame_s: float = 0.96
     hop_s: float = 0.48
     thresh: float = 0.5
+    apply_calibrated_defaults: bool = True
 
     def _labels(self) -> list[str]:
         lp = Path(str(self.model_path) + ".labels.json")
@@ -212,9 +247,49 @@ class OnnxTagger:
         times = [s / sr for s in starts]
         return frames, times
 
-    def tag(self, samples: np.ndarray, sr: int = DEFAULT_SR) -> list[AudioEvent]:
+    def _thresholds(self) -> float | dict[str, float]:
+        """Per-kind detection thresholds — the v2.4-P1-3 calibrated operating
+        point.  Resolution order:
+
+        1. a per-model ``<model>.thresholds.json`` sidecar (a user's own or
+           a published-model override) — always honoured, else
+        2. the packaged default (``scoring/data/audio_tagger_thresholds.json``
+           — the F1-max sweep on the ESC-50 subset: laughter recall
+           0.25 → 0.85, macro-F1 0.629 → 0.933) when
+           ``apply_calibrated_defaults`` (the production path: the only
+           catalogued audio model is the YAMNet export these were tuned
+           for), else
+        3. the scalar ``self.thresh`` (0.5).
+
+        Kinds missing from the chosen mapping fall back to 0.5 inside
+        :func:`probs_to_events` (e.g. ``music`` has no calibrated point yet).
+        A caller feeding a *different* model's probs (or a synthetic test
+        signal) sets ``apply_calibrated_defaults=False`` to get the raw 0.5.
+        """
+        cands = [Path(str(self.model_path) + ".thresholds.json")]
+        if self.apply_calibrated_defaults:
+            cands.append(Path(__file__).parent / "data"
+                         / "audio_tagger_thresholds.json")
+        for cand in cands:
+            if cand.exists():
+                try:
+                    d = json.loads(cand.read_text("utf-8"))
+                    if isinstance(d, dict) and d:
+                        return {str(k): float(v) for k, v in d.items()}
+                except (OSError, ValueError, TypeError):
+                    continue
+        return self.thresh
+
+    def infer_probs(self, samples: np.ndarray, sr: int = DEFAULT_SR
+                    ) -> tuple[np.ndarray, list[float]]:
+        """Run the model → ``([n_frames, n_classes] probs, frame_times)``.
+
+        The raw, pre-threshold output.  Used by :meth:`tag` and by the
+        v2.4-P1-3 threshold calibration (which sweeps thresholds on these
+        cached probs).  Empty ``(0, 0)`` array when unavailable.
+        """
         if not self.available():
-            return []
+            return np.zeros((0, 0)), []
         sess = _load_session(self.model_path)
         inp = sess.get_inputs()[0]
         if len(inp.shape) == 1:
@@ -236,8 +311,14 @@ class OnnxTagger:
                                dtype=np.float64)
             if probs.ndim == 1:
                 probs = probs[None, :]
+        return probs, times
+
+    def tag(self, samples: np.ndarray, sr: int = DEFAULT_SR) -> list[AudioEvent]:
+        if not self.available():
+            return []
+        probs, times = self.infer_probs(samples, sr)
         return probs_to_events(probs, times, self._labels(),
-                               hop_s=self.hop_s, thresh=self.thresh)
+                               hop_s=self.hop_s, thresh=self._thresholds())
 
 
 def find_model() -> str | None:
