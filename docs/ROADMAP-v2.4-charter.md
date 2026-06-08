@@ -146,7 +146,7 @@ inspection:
 - **Where**: `results.html` keybindings + a new focus/rapid mode.
   **Accept**: cull 200 photos keyboard-only, no mouse; <2 s/photo.
 
-### v2.4-P1-1 · Burst "best-of" auto-pick + near-dup collapse
+### v2.4-P1-1 · Burst "best-of" auto-pick + near-dup collapse — ✅ DONE
 - **What**: the run already clusters bursts; auto-select the best frame
   per burst (sharpness + eyes-open + composition) and collapse near-dups
   (CLIP distance) into a stack with a count badge.
@@ -154,6 +154,20 @@ inspection:
 - **Where**: `scoring/burst_peak.py` + grid stack UI. **Accept**: a burst
   cluster collapses to 1 hero + expandable; best-pick agreement vs human
   on the eval set reported.
+- **Done:** the **best-of pick** was already shipped (P-AI-5
+  `scoring/burst_peak.py`: motion-aware `rank_burst_peak` + scene-aware
+  weights → `is_burst_peak` / `burst_peak_reason`, surfaced as the 连拍峰值
+  badge, the "🎯 每连拍峰值" filter, and the burst-compare modal;
+  agreement vs human in `docs/burst-peak-tuning.md`).  This slice adds the
+  missing **"折叠成堆"** grid collapse: a toggle reduces each ≥2-frame burst
+  to its peak hero carrying a **⧉N stack badge**; clicking the badge
+  expands that cluster into the side-by-side compare modal (`openCompare`).
+  **Verified** on a synthetic 3-frame burst (Playwright): toggle visible →
+  collapse yields 1 hero with `⧉ 3` (brass, on-brand) → click opens
+  `#cmpModal`; zero console errors; visual-smoke + palette-guard green.
+  *Note:* "near-dup by CLIP distance" beyond time-bucketed bursts is
+  deferred — bursts already are the dominant near-dup case; a CLIP-distance
+  pass can reuse the now-fixed `embeddings.npz` later.
 
 ### v2.4-P1-2 · NL semantic search over a shoot — ✅ DONE (was silently broken)
 - **What**: "红衣服的人 / sharpest sunset / boats on water" → CLIP-embed

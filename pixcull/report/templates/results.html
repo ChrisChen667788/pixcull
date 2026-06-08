@@ -2121,6 +2121,27 @@
     .card .thumb-decision-glyph.dg-keep  { background: rgba(52,211,153,0.85);  color: #052e1f; }
     .card .thumb-decision-glyph.dg-maybe { background: rgba(251,191,36,0.85);  color: #2a1d05; }
     .card .thumb-decision-glyph.dg-cull  { background: rgba(239,99,99,0.85);   color: #2a0606; }
+    /* v2.4-P1-1 — burst-stack "⧉N" badge.  Top-right (clear of the
+       top-left AL badge + the decision glyph).  The layered offset
+       shadow reads as a literal stack of cards behind it. */
+    .card .burst-stack-badge {
+      position: absolute; top: 6px; right: 6px; z-index: 5;
+      display: inline-flex; align-items: center; gap: 3px;
+      padding: 2px 8px; border-radius: 4px; cursor: pointer;
+      font-size: 11px; font-weight: 600; line-height: 1.4;
+      color: #161310; background: linear-gradient(180deg, #e6c98f, #dcb87e);
+      border: 1px solid rgba(22, 19, 16, 0.25);
+      box-shadow: 2px 2px 0 -1px #c4b9a9, 4px 4px 0 -2px #6a6052,
+                  0 2px 6px rgba(0, 0, 0, 0.35);
+      transition: transform 0.12s ease, box-shadow 0.12s ease;
+    }
+    .card .burst-stack-badge:hover {
+      transform: translateY(-1px);
+      box-shadow: 2px 2px 0 -1px #c4b9a9, 5px 5px 0 -2px #6a6052,
+                  0 4px 10px rgba(0, 0, 0, 0.45);
+    }
+    .card .burst-stack-badge:active { transform: translateY(0); }
+
     /* Bottom gradient strip with filename + score.  Always visible
        at low opacity; brightens on hover.  Mirrors LR Library's
        per-thumbnail caption strip. */
@@ -7626,11 +7647,23 @@
       `title="${_REAL_BURSTS.length} 个连拍组,共 ${totalBurstPhotos} 张 — ` +
       `打开后只保留每组的最佳一张">` +
       `🎯 每连拍峰值 <span style="opacity:0.5">${_REAL_BURSTS.length}</span></span>` +
+      // v2.4-P1-1 — collapse each burst into a single peak "hero" card
+      // carrying a ⧉N stack badge (click it to expand → compare modal).
+      `<span class="pill burst-collapse-toggle${filterState.collapseBursts ? ' active' : ''}" ` +
+      `title="把每个连拍组折叠成一张峰值代表 + ⧉计数;点卡片角的 ⧉N 展开并排比较">` +
+      `⧉ 折叠成堆</span>` +
       // P0.3 — direct entry to the V9.2 compare modal without
       // having to switch to sort=cluster first.
       `<span class="pill burst-compare-jump" ` +
       `title="打开并排比较 — 从第一个连拍组开始,←/→ 翻页">` +
       `⊞ 并排比较</span>`;
+    el.querySelectorAll(".burst-collapse-toggle").forEach(b => {
+      b.addEventListener("click", () => {
+        filterState.collapseBursts = !filterState.collapseBursts;
+        b.classList.toggle("active");
+        render();
+      });
+    });
     el.querySelectorAll(".burst-peak-toggle").forEach(b => {
       b.addEventListener("click", () => {
         filterState.burstPeakOnly = !filterState.burstPeakOnly;
@@ -8028,7 +8061,10 @@
     // V27 — "每连拍峰值" toggle. Keep only the photo with
     // is_burst_peak=true in each burst cluster of size ≥ 2 (singletons
     // pass-through since they're not real bursts).
-    if (filterState.burstPeakOnly) {
+    // V27 peak-only OR v2.4-P1-1 折叠成堆 both reduce each burst cluster
+    // (size ≥ 2) to just its is_burst_peak hero; singletons pass through.
+    // 折叠成堆 additionally renders a ⧉N stack badge on the survivor.
+    if (filterState.burstPeakOnly || filterState.collapseBursts) {
       filtered = filtered.filter(r => {
         const size = _BURST_CLUSTER_SIZES.get(r.cluster_id) || 0;
         if (size < 2) return true;       // singleton cluster: keep
@@ -8142,6 +8178,21 @@
              title="${esc(al.why || '')}">AL #${al.rank}</div>`;
         }
       }
+      // v2.4-P1-1 — burst "stack" badge.  In 折叠成堆 mode each ≥2-frame
+      // burst collapses to its peak hero; this ⧉N badge shows how many
+      // frames the card stands in for and opens the side-by-side compare
+      // modal for that cluster (the "expand" affordance).
+      let burstStackBadge = "";
+      if (filterState.collapseBursts && r.is_burst_peak) {
+        const _stackN = _BURST_CLUSTER_SIZES.get(r.cluster_id) || 0;
+        if (_stackN >= 2) {
+          burstStackBadge =
+            `<button type="button" class="burst-stack-badge" `
+            + `data-cluster="c${esc(String(r.cluster_id))}" `
+            + `title="此连拍组共 ${_stackN} 张 — 点击展开并排比较">`
+            + `⧉ ${_stackN}</button>`;
+        }
+      }
       // V16.0 — translate reason tokens for the card display.
       // Keep the raw value in the title attr so power users can still
       // grep for the underlying token if needed.
@@ -8233,6 +8284,7 @@
       return `
         <div class="card ${cardCls}" data-fn="${fnEsc}">
           ${activeLearningBadge}
+          ${burstStackBadge}
           <div class="thumb-wrap">
             <!-- v0.13.5 — decoding="async" so the main thread isn't
                  blocked decoding 200+ JPEGs simultaneously on initial
@@ -10100,6 +10152,16 @@
 
   grid.addEventListener("click", e => {
     const t = e.target;
+    // v2.4-P1-1 — ⧉N burst-stack badge → expand the collapsed cluster
+    // into the side-by-side compare modal.  Stop propagation so the
+    // underlying thumb click (open lightbox) doesn't also fire.
+    const stackBadge = t.closest(".burst-stack-badge");
+    if (stackBadge && stackBadge.dataset.cluster) {
+      e.stopPropagation();
+      e.preventDefault();
+      if (typeof openCompare === "function") openCompare(stackBadge.dataset.cluster);
+      return;
+    }
     // P-UX-27 — clickable wedding moment chip.  Toggle the
     // matching moment in filterState.weddingMoments + re-render.
     // Stops propagation so the underlying card thumb click
