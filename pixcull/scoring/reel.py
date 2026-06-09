@@ -428,10 +428,13 @@ def run_reel_detection(
 
     # v2.1-P0-3 — add a fluent `why_semantic` per candidate (optional LLM,
     # deterministic template fallback — always succeeds).
+    # v2.4-P0-1 — pass the run's output dir so the opt-in VLM path
+    # (PIXCULL_REEL_VLM=on) can find + caption each candidate's best frame
+    # under output_dir/video_frames/<id>/.
     dicts = [c.to_dict() for c in candidates]
     try:
         from pixcull.scoring.reel_caption import enrich
-        enrich(dicts)
+        enrich(dicts, frames_root=output_dir)
     except Exception:  # pragma: no cover - captioning is best-effort
         pass
     if write:

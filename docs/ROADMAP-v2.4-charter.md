@@ -94,7 +94,7 @@ inspection:
 
 ## 3. v2.4 — intelligence + workflow  (the headline)
 
-### v2.4-P0-1 · Finish the last v2.2 P0 — VLM best-frame caption
+### v2.4-P0-1 · Finish the last v2.2 P0 — VLM best-frame caption — ✅ DONE
 - **What**: optional small local VLM (moondream / Qwen-VL export) captions
   the reel's best frame; template fallback stays.
 - **Why**: closes v2.2; makes reels self-describing for clients.
@@ -102,6 +102,26 @@ inspection:
   slot already catalogued). **Accept**: renders a sentence on eval clips;
   fallback unchanged when absent; same convert→host→pull loop as
   audio-tagger.
+- **Done:** `reel_caption.py` until now only rewrote candidate *signals*
+  into prose (text-LLM-or-template); it never looked at the picture.  This
+  adds a **true VLM path** that captions the candidate's actual best frame:
+  `_resolve_best_frame` finds `output_dir/video_frames/<id>/<best_frame_id>.jpg`
+  (wired through `run_reel_detection` → `enrich(frames_root=output_dir)`),
+  `vlm_caption` runs a small captioning VLM (default
+  `Salesforce/blip-image-captioning-base` via transformers, like the CLIP
+  path) and prefixes the time range.  Priority is **VLM → text-LLM → template**
+  with `caption_source` recorded; **opt-in** via `PIXCULL_REEL_VLM=on` (the
+  model is a ~1 GB download + ~2 s/candidate, so the default stays
+  byte-identical → zero regression).  **Proof** on the real Xiapu reel run:
+  frame `frame_000049` → template said `高画质、精彩瞬间`, the VLM said
+  **"A group of birds standing in the water"** (it reads pixels, not
+  signals).  `tests/test_reel_caption.py` (source priority + frame resolver
+  + a real-model integration test, skipped where the VLM can't load).
+  *Note:* the catalogued `vlm-caption` ONNX slot stays reserved for a
+  future self-hosted export; the runnable default uses transformers (HF
+  cache), consistent with CLIP/scene/face.  BLIP is English — a bilingual
+  rewrite (feed the VLM caption back through the zh text-LLM) is a clean
+  follow-up.
 
 ### v2.4-P0-2 · Personalisation from corrections (the real moat) — ✅ DONE
 - **What**: every keep/cull/maybe override is already logged

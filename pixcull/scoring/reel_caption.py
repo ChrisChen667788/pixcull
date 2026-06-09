@@ -7,18 +7,31 @@ otherwise composes a richer deterministic sentence from the same signals
 — mirroring the v0.13 NL-explainer's LLM-or-template contract so it
 **always returns a usable string** with zero required dependencies.
 
-A true vision model (VLM looking at the best frame) is the ideal; this
-ships the signal→sentence rewrite (text LLM via the existing GGUF loader,
-template otherwise), which is the honest dependency-light step.
+v2.4-P0-1 closes the loop: when **opt-in** (``PIXCULL_REEL_VLM=on``) and a
+small captioning VLM is installed (default ``Salesforce/blip-image-
+captioning-base`` via transformers, like the CLIP path elsewhere), we now
+caption the **actual best frame** — a true vision model looking at the
+pixels.  The priority is VLM → text-LLM-over-signals → template, so the
+guaranteed-string contract and zero-dependency default are unchanged
+(the VLM is off unless explicitly enabled, since it's a ~1 GB download).
 """
 
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import Sequence
 
-# Toggle: PIXCULL_REEL_CAPTION=off forces the template.
+# Toggle: PIXCULL_REEL_CAPTION=off forces the template (disables text LLM).
 _LLM_ENABLED = os.environ.get("PIXCULL_REEL_CAPTION", "auto").lower() != "off"
+
+# v2.4-P0-1 — the true-VLM path is OPT-IN (a captioning VLM is a ~1 GB
+# download + a couple of seconds per candidate; auto-enabling would
+# silently slow every video run).  Enable with PIXCULL_REEL_VLM=on.
+_VLM_ENABLED = os.environ.get("PIXCULL_REEL_VLM", "off").lower() in {
+    "on", "1", "true", "yes", "auto"}
+_VLM_MODEL = os.environ.get(
+    "PIXCULL_VLM_MODEL", "Salesforce/blip-image-captioning-base")
 
 _SCENE_WORDS = {
     "portrait": "人物特写", "event": "现场氛围", "wedding": "婚礼时刻",
@@ -99,19 +112,124 @@ def llm_caption(cand: dict) -> str | None:
         return None
 
 
-def caption(cand: dict) -> str:
-    """LLM caption if available, else the deterministic template."""
-    return llm_caption(cand) or template_caption(cand)
+# --------------------------------------------------------------------------
+# v2.4-P0-1 — true VLM caption (looks at the best frame's pixels)
+# --------------------------------------------------------------------------
+
+_vlm = None
+_vlm_probed = False
 
 
-def enrich(candidates: Sequence[dict]) -> list[dict]:
-    """Add a ``why_semantic`` field to each candidate dict (in place)."""
+def _try_vlm():
+    """Lazily load the optional captioning VLM (transformers).  Returns a
+    ``(processor, model)`` tuple or ``None``.  Cached; never raises."""
+    global _vlm, _vlm_probed
+    if not _VLM_ENABLED:
+        return None
+    if _vlm_probed:
+        return _vlm
+    _vlm_probed = True
+    try:
+        from transformers import BlipForConditionalGeneration, BlipProcessor
+        proc = BlipProcessor.from_pretrained(_VLM_MODEL)
+        model = BlipForConditionalGeneration.from_pretrained(_VLM_MODEL)
+        model.eval()
+        _vlm = (proc, model)
+    except Exception:
+        _vlm = None
+    return _vlm
+
+
+def _resolve_best_frame(cand: dict, frames_root) -> Path | None:
+    """Locate the best frame's extracted JPEG under a run's output dir.
+
+    Frames live at ``<output_dir>/video_frames/<video_id>/frame_NNNNNN.jpg``
+    (io/video.py).  ``frames_root`` may be the output dir, the
+    ``video_frames`` dir, or a direct frame dir — try each."""
+    fid = cand.get("best_frame_id")
+    if not fid or frames_root is None:
+        return None
+    root = Path(frames_root)
+    name = f"{fid}.jpg"
+    for p in (root / name, *root.glob(f"video_frames/*/{name}"),
+              *root.glob(f"*/{name}")):
+        if p.is_file():
+            return p
+    return None
+
+
+def _clean_caption(text: str) -> str:
+    text = " ".join((text or "").split()).strip(" .。")
+    for junk in ("araffe ", "arafed ", "there is ", "there are "):
+        if text.lower().startswith(junk):
+            text = text[len(junk):]
+    return (text[:1].upper() + text[1:]) if text else ""
+
+
+def vlm_caption_from_image(image_path) -> str | None:
+    """Caption a single image with the VLM; ``None`` when unavailable."""
+    vlm = _try_vlm()
+    if vlm is None:
+        return None
+    try:
+        import torch
+        from PIL import Image
+        proc, model = vlm
+        img = Image.open(image_path).convert("RGB")
+        with torch.no_grad():
+            inputs = proc(img, return_tensors="pt")
+            out = model.generate(**inputs, max_new_tokens=24, num_beams=3)
+        return _clean_caption(
+            proc.decode(out[0], skip_special_tokens=True)) or None
+    except Exception:
+        return None
+
+
+def vlm_caption(cand: dict, frames_root=None) -> str | None:
+    """Caption the candidate's best frame with the VLM, prefixed with its
+    time range.  ``None`` when the frame can't be found or no VLM."""
+    frame = _resolve_best_frame(cand, frames_root)
+    if frame is None:
+        return None
+    desc = vlm_caption_from_image(frame)
+    if not desc:
+        return None
+    start = float(cand.get("start_s", 0.0))
+    end = float(cand.get("end_s", start))
+    return f"{start:.1f}–{end:.1f}s:{desc}"
+
+
+def caption_with_source(cand: dict, frames_root=None) -> tuple[str, str]:
+    """``(caption, source)`` with source ∈ {vlm, llm, template} — the true
+    VLM (best frame) first, then the text-LLM-over-signals, then template."""
+    v = vlm_caption(cand, frames_root)
+    if v:
+        return v, "vlm"
+    lc = llm_caption(cand)
+    if lc:
+        return lc, "llm"
+    return template_caption(cand), "template"
+
+
+def caption(cand: dict, frames_root=None) -> str:
+    """VLM (best frame) if enabled+available, else text LLM, else template."""
+    return caption_with_source(cand, frames_root)[0]
+
+
+def enrich(candidates: Sequence[dict], frames_root=None) -> list[dict]:
+    """Add ``why_semantic`` (+ ``caption_source``) to each candidate dict.
+
+    ``frames_root`` (a run's output dir) lets the VLM path find the best
+    frame's image; omit it and captioning gracefully drops to LLM/template."""
     for c in candidates:
-        c["why_semantic"] = caption(c)
+        text, src = caption_with_source(c, frames_root)
+        c["why_semantic"] = text
+        c["caption_source"] = src
     return list(candidates)
 
 
 def reset() -> None:
-    """Test hook — clear the cached LLM probe."""
-    global _llm, _llm_probed
+    """Test hook — clear the cached LLM + VLM probes."""
+    global _llm, _llm_probed, _vlm, _vlm_probed
     _llm, _llm_probed = None, False
+    _vlm, _vlm_probed = None, False

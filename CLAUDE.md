@@ -134,8 +134,17 @@ live-DOM probe found), warmed the attribution heatmap (`_colorize_warm`),
 fixed the onboarding-coachmark/lightbox overlap, `unicode-range`-scoped
 the Geist `@font-face` (CJK-safe), mid-width toolbar density; gallery
 regenerated + synced.
-**Next: v2.4** — `docs/ROADMAP-v2.4-charter.md` (intelligence + workflow:
-VLM caption · personalisation-from-corrections · keyboard-first cull loop
-· burst best-of · NL search · audio-threshold calibration).  The audit's
-#1 ask: pull forward a Playwright **visual-regression smoke** (v2.5-P0-2)
-so a palette leak can't ship silently again.
+**v2.4 SHIPPED** — `docs/ROADMAP-v2.4-charter.md` (intelligence + workflow).
+All six slices done: **P0-2** personalisation-from-corrections (learn →
+`~/.pixcull/personal_profile.json` → orchestrator applies the threshold
+shift + "🎯 已按你调校" badge) · **P0-3** keyboard-first cull loop · **P1-2**
+NL semantic search (fixed two silent transformers-5 / np.savez bugs +
+real-CLIP integration test) · **P1-3** audio-threshold calibration (laughter
+recall 0.25→0.85, macro-F1 0.629→0.933; packaged `scoring/data/
+audio_tagger_thresholds.json`) · **P1-1** burst "折叠成堆" (peak hero + ⧉N
+stack badge → compare) · **P0-1** true VLM best-frame caption
+(`reel_caption.py`: opt-in `PIXCULL_REEL_VLM=on` → BLIP captions the actual
+best frame; template/text-LLM fallback unchanged).  Also pulled forward the
+Playwright **visual-regression smoke** (v2.5-P0-2).  Follow-ups noted in the
+charter: near-dup-by-CLIP collapse, bilingual VLM rewrite, self-hosted VLM
+ONNX export.  **Next: v2.5** (split the single-file frontend; reach).

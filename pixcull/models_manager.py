@@ -97,9 +97,11 @@ REGISTRY: dict[str, "ModelSpec"] = {
     "vlm-caption": ModelSpec(
         name="vlm-caption",
         filename="vlm_caption.onnx",
-        description="Small vision-language model for reel best-frame captions.",
+        description="Reserved: future self-hosted ONNX VLM for reel best-frame "
+                    "captions. The runnable default (v2.4-P0-1) is the "
+                    "transformers BLIP captioner, opt-in via PIXCULL_REEL_VLM=on.",
         used_by="pixcull video reel caption (else signal/template fallback)",
-        url="",      # published by v2.2-P0-3
+        url="",      # ONNX export not yet published; transformers path is default
     ),
 }
 

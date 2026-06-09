@@ -92,3 +92,57 @@ def test_reel_detection_writes_why_semantic(tmp_path):
     cands = R.run_reel_detection(tmp_path, n_min=1, n_max=4)
     data = json.loads((tmp_path / "reel_candidates.json").read_text())
     assert data and all("why_semantic" in c for c in data)
+
+
+# --------------------------------------------------------------------------
+# v2.4-P0-1 — true VLM best-frame caption
+# --------------------------------------------------------------------------
+
+def test_enrich_sets_caption_source(monkeypatch):
+    monkeypatch.setattr(C, "_try_llm", lambda: None)
+    monkeypatch.setattr(C, "_try_vlm", lambda: None)
+    out = C.enrich([_cand()])
+    assert out[0]["caption_source"] == "template"   # default → no regression
+    assert out[0]["why_semantic"]
+
+
+def test_caption_with_source_prefers_vlm(monkeypatch):
+    # VLM wins over LLM + template when it returns a caption.
+    monkeypatch.setattr(C, "vlm_caption",
+                        lambda cand, frames_root=None: "4.5–7.5s:A dog runs")
+    txt, src = C.caption_with_source(_cand(), frames_root="/x")
+    assert src == "vlm" and "dog" in txt
+
+
+def test_resolve_best_frame(tmp_path):
+    fd = tmp_path / "video_frames" / "vid1"
+    fd.mkdir(parents=True)
+    (fd / "frame_000005.jpg").write_bytes(b"x")
+    got = C._resolve_best_frame(_cand(best_frame_id="frame_000005"), tmp_path)
+    assert got is not None and got.name == "frame_000005.jpg"
+    # missing frame / missing id / no root → None (graceful)
+    assert C._resolve_best_frame(_cand(best_frame_id="frame_999999"), tmp_path) is None
+    assert C._resolve_best_frame(_cand(best_frame_id=None), tmp_path) is None
+    assert C._resolve_best_frame(_cand(best_frame_id="frame_000005"), None) is None
+
+
+def test_vlm_caption_real_model(tmp_path, monkeypatch):
+    """Integration: the real captioning VLM looks at the best frame.
+    Skips cleanly where transformers / the model can't load (CI)."""
+    pytest.importorskip("torch")
+    pytest.importorskip("transformers")
+    pytest.importorskip("PIL")
+    from PIL import Image
+    fd = tmp_path / "video_frames" / "v"
+    fd.mkdir(parents=True)
+    Image.new("RGB", (320, 240), (90, 140, 200)).save(fd / "frame_000003.jpg")
+    monkeypatch.setattr(C, "_VLM_ENABLED", True)
+    C.reset()
+    if C._try_vlm() is None:
+        pytest.skip("captioning VLM unavailable")
+    cand = _cand(best_frame_id="frame_000003", start_s=2.0, end_s=4.0)
+    out = C.vlm_caption(cand, frames_root=tmp_path)
+    assert out and out.startswith("2.0–4.0s:")
+    assert len(out) > len("2.0–4.0s:")              # a real description, not empty
+    _, src = C.caption_with_source(cand, frames_root=tmp_path)
+    assert src == "vlm"
