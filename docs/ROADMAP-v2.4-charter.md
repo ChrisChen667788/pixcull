@@ -237,8 +237,8 @@ inspection:
 
 ## 4. v2.5 — architecture + reach
 
-### v2.5-P0-1 · Split the single-file frontend
-- **Problem**: `results.html` (~14k lines) and `serve_demo.py` (~12k
+### v2.5-P0-1 · Split the single-file frontend — 🟡 IN PROGRESS (incremental)
+- **Problem**: `results.html` (~17k lines) and `serve_demo.py` (~18k
   lines) are monoliths — every change risks the kind of leaked-colour bug
   v2.3.1-A fixed.
 - **What**: extract `results.html` into ES modules (grid / lightbox /
@@ -246,6 +246,19 @@ inspection:
   handlers into a small package. Keep "no web framework".
 - **Accept**: no behaviour change; screenshot-identical; each module
   independently testable.
+- **Approach — incremental, not big-bang**: a 17k/18k-line rewrite under a
+  "screenshot-identical" bar is the riskiest item in the roadmap, so we
+  peel off one cohesive, independently-verified slice per pass.
+- **Slice 1 — DONE:** lifted the seven *pure* serialization/coercion
+  helpers (`_scrub_nan`, `_safe_dumps`, `_html_escape`, `_f`,
+  `_clean_csv_string`, `_opt_int`, `_parse_int_list`) out of the
+  serve_demo monolith into `pixcull/report/serve_util.py`, imported back
+  so every call site is unchanged.  Zero module state → zero behaviour
+  change; verified by loading serve_demo via importlib (all seven bound +
+  behaviour-identical) and the new `tests/test_serve_util.py` (the helpers
+  had *no* direct coverage before).  Next slices: the embedded HTML blobs
+  (`_VIDEO_REVIEW_HTML` / `_TIMELINE_HTML` → template files), then a
+  build-time CSS/JS extraction for `results.html`.
 
 ### v2.5-P0-2 · Playwright e2e smoke suite
 - **Why**: visual regressions (like the palette leak) ship silently today.
