@@ -110,6 +110,31 @@ def test_search_k_clamped_to_cache_size(monkeypatch):
 # model cache in CI).
 # --------------------------------------------------------------------------
 
+def test_feature_tensor_shim_handles_both_return_shapes():
+    """Hermetic guard for the transformers-5 compat shim — runs in CI with
+    NO model download, so dependency drift in the CLIP return type is
+    caught even though the real-model test below skips on the runner.
+
+    transformers < 5 returned the projected tensor directly; >= 5 wraps it
+    in a BaseModelOutputWithPooling whose ``pooler_output`` is that tensor.
+    """
+    torch = pytest.importorskip("torch")
+    from pixcull.scoring.semantic_search import _feature_tensor
+    t = torch.zeros(2, 512)
+    assert _feature_tensor(t) is t                       # tensor → identity
+
+    class _Out:                                          # mimics transformers ≥5
+        pooler_output = torch.ones(2, 512)
+    got = _feature_tensor(_Out())
+    assert torch.is_tensor(got) and tuple(got.shape) == (2, 512)
+    assert float(got.sum()) == 2 * 512                   # it's the pooler_output
+
+    class _Bad:                                          # neither tensor nor known attr
+        pass
+    with pytest.raises(TypeError):
+        _feature_tensor(_Bad())
+
+
 def _require_clip():
     pytest.importorskip("torch")
     pytest.importorskip("transformers")

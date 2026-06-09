@@ -51,10 +51,15 @@ dependencies = [
     # CV
     "opencv-python>=4.9",
     "rawpy>=0.19",
-    # DL
-    "torch>=2.2",
-    "torchvision>=0.17",
-    "transformers>=4.40",
+    # DL — upper bounds added after transformers 5.x silently changed
+    # CLIP get_image_features/get_text_features to return a
+    # BaseModelOutputWithPooling (not a tensor), which broke semantic
+    # search until `_feature_tensor` shimmed both shapes. Cap the majors
+    # so a future 6.x / torch 3.x can't drift in untested; bump
+    # deliberately once the real-model CI lane is green on the new major.
+    "torch>=2.2,<3",
+    "torchvision>=0.17,<1",
+    "transformers>=4.40,<6",
     "safetensors>=0.4",
     # subject segmentation (U^2-Net)
     "rembg>=2.0.57",

@@ -5,6 +5,12 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Weekly + on-demand: the real-model lane (below) downloads CLIP + BLIP
+  # to catch dependency drift the hermetic suite can't (e.g. transformers
+  # 5.x silently changing the CLIP return type). Too heavy for every PR.
+  schedule:
+    - cron: "0 6 * * 1"   # Mondays 06:00 UTC
+  workflow_dispatch: {}
 
 # CI notes
 # --------
@@ -104,3 +110,34 @@ jobs:
           pytest -q \
             --ignore=tests/test_v1_1_scripts.py \
             --ignore=tests/test_v1_2_rescorer_integration.py
+
+  realmodel:
+    name: real-model integration (CLIP + VLM)
+    runs-on: ubuntu-latest
+    # Only on the weekly schedule / manual dispatch — these download
+    # model weights, so they don't gate every PR. They assert the
+    # transformers/torch return-type contract the hermetic suite can't:
+    # the silent semantic-search break under transformers 5.x would have
+    # been caught here.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        env:
+          PIP_EXTRA_INDEX_URL: https://download.pytorch.org/whl/cpu
+        run: |
+          python -m pip install --upgrade pip
+          pip install --index-url https://download.pytorch.org/whl/cpu \
+                      --extra-index-url https://pypi.org/simple \
+                      "torch==2.4.1" "torchvision==0.19.1"
+          pip install -e ".[dev]"
+      - name: Real-model integration tests (downloads CLIP + BLIP)
+        run: |
+          pytest -q \
+            tests/test_semantic_search.py::test_build_search_real_clip_end_to_end \
+            tests/test_reel_caption.py::test_vlm_caption_real_model
