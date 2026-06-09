@@ -256,9 +256,18 @@ inspection:
   so every call site is unchanged.  Zero module state → zero behaviour
   change; verified by loading serve_demo via importlib (all seven bound +
   behaviour-identical) and the new `tests/test_serve_util.py` (the helpers
-  had *no* direct coverage before).  Next slices: the embedded HTML blobs
-  (`_VIDEO_REVIEW_HTML` / `_TIMELINE_HTML` → template files), then a
-  build-time CSS/JS extraction for `results.html`.
+  had *no* direct coverage before).
+- **Slice 2 — DONE:** lifted the two big embedded page blobs
+  (`_VIDEO_REVIEW_HTML` ~19.5 KB, `_TIMELINE_HTML` ~4.7 KB) out of
+  serve_demo into `pixcull/report/templates/{video_review,timeline}.html`,
+  loaded lazily by a new `_read_template()` (reuses the results.html
+  templates dir).  Substitution is the same brace-safe
+  `.replace("__RUN_ID__", rid)`, so output is byte-identical;
+  **serve_demo.py shrank 449 lines** (18 325 → 17 876).  Covered by the
+  existing `test_video_review.py::test_render_html_injects_runid` +
+  `test_endpoint_review_page` and `test_timeline.py::test_timeline_page_renders`
+  (live-server) — all green.  Next slice: build-time CSS/JS extraction for
+  `results.html` (needs a build step + golden-output guard).
 
 ### v2.5-P0-2 · Playwright e2e smoke suite
 - **Why**: visual regressions (like the palette leak) ship silently today.
