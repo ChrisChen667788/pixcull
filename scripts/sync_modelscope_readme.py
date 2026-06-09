@@ -154,6 +154,45 @@ _GITATTRIBUTES_TEXT = "\n".join([
 ]) + "\n"
 
 
+def _shallow_clone(repo_id: str, branch: str, dest: Path) -> bool:
+    """Depth-1, LFS-skipping clone via the cached git token.
+
+    The SDK ``Repository`` does a FULL clone of the whole LFS history,
+    which RPC-drops (``fetch-pack: early EOF``) on a large model repo or a
+    flaky link.  We only rewrite two text files, so the branch tip is
+    enough — depth-1 + ``GIT_LFS_SKIP_SMUDGE`` transfers a tiny pack and
+    survives.  Returns ``False`` (caller falls back to the SDK clone) when
+    the token is missing or the clone fails.  The tokenised URL is never
+    printed.
+    """
+    import json as _json
+    import os as _os
+    import subprocess as _sp
+    try:
+        raw = (Path.home() / ".modelscope" / "credentials"
+               / "git_token").read_text().strip()
+    except OSError:
+        return False
+    try:
+        parsed = _json.loads(raw)
+        tok = parsed.get("git_token") or parsed.get("token") or ""
+    except Exception:  # noqa: BLE001
+        tok = raw
+    tok = str(tok).strip().strip('"')
+    if not tok:
+        return False
+    url = f"https://oauth2:{tok}@www.modelscope.cn/{repo_id}.git"
+    env = {**_os.environ, "GIT_LFS_SKIP_SMUDGE": "1", "GIT_TERMINAL_PROMPT": "0"}
+    r = _sp.run(["git", "clone", "--depth", "1", "--branch", branch,
+                 "--single-branch", url, str(dest)],
+                capture_output=True, text=True, env=env)
+    if r.returncode != 0:
+        print("[modelscope-sync] shallow clone failed → falling back to SDK clone",
+              file=sys.stderr)
+        return False
+    return True
+
+
 def _git_push_readme(repo_id: str, branch: str, readme_text: str) -> bool:
     """Commit README.md + a correct .gitattributes via **git** (not
     HubApi.upload_file).
@@ -175,11 +214,14 @@ def _git_push_readme(repo_id: str, branch: str, readme_text: str) -> bool:
               file=sys.stderr)
         return False
     tmp = Path(tempfile.mkdtemp(prefix="ms_sync_")) / "repo"
-    try:
-        Repository(model_dir=str(tmp), clone_from=repo_id)
-    except Exception as exc:  # noqa: BLE001
-        print(f"[modelscope-sync] git clone failed: {exc}", file=sys.stderr)
-        return False
+    # Prefer a shallow token clone (survives the RPC drop a full SDK clone
+    # hits on this large LFS repo); fall back to the SDK Repository clone.
+    if not _shallow_clone(repo_id, branch, tmp):
+        try:
+            Repository(model_dir=str(tmp), clone_from=repo_id)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[modelscope-sync] git clone failed: {exc}", file=sys.stderr)
+            return False
     cfg = [("filter.lfs.required", "false"), ("filter.lfs.smudge", "cat"),
            ("filter.lfs.clean", "cat"), ("user.email", "noreply@anthropic.com"),
            ("user.name", "pixcull-sync")]
