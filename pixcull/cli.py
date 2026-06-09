@@ -72,6 +72,36 @@ def export(
     raise typer.Exit(code=1)  # TODO(V0.5)
 
 
+@app.command(name="contact-sheet")
+def contact_sheet(
+    run_dir: Path = typer.Argument(
+        ..., exists=True, file_okay=False,
+        help="Run output dir (contains scores.csv)"),
+    out: Path = typer.Option(Path("contact_sheet.pdf"), "--out", "-o",
+                             help="Output PDF path"),
+    decision: str = typer.Option("keep", "--decision", "-d",
+                                 help="keep | maybe | cull | all"),
+    cols: int = typer.Option(4, "--cols", help="Thumbnails per row"),
+    rows: int = typer.Option(5, "--rows", help="Rows per page"),
+    title: str = typer.Option(None, "--title",
+                              help="Sheet title (default: run name + count)"),
+    images_dir: Path = typer.Option(
+        None, "--images",
+        help="Where to find thumbnails (default: <run>/thumbs)"),
+) -> None:
+    """v2.5-P1 — export a client-ready contact-sheet PDF of a run's selects.
+
+    A printable grid (thumbnail + filename + score per cell) of the photos
+    with the chosen decision — the proof sheet you hand a client.
+    """
+    from pixcull.report.contact_sheet import contact_sheet_from_run
+    n_pages, n_photos = contact_sheet_from_run(
+        run_dir, out, decision=decision, cols=cols, rows_per_page=rows,
+        title=title, images_dir=images_dir)
+    typer.echo(
+        f"✓ {out}  ·  {n_photos} {decision} photo(s)  ·  {n_pages} page(s)")
+
+
 @app.command()
 def bench(
     folder: Path = typer.Argument(..., exists=True, file_okay=False),

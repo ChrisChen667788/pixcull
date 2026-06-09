@@ -279,6 +279,17 @@ inspection:
 ### v2.5-P1 · Reach
 - Contact-sheet / client-gallery PDF export; deeper Lr/C1 round-trip;
   cross-shoot dedup; on-device duplicate-frame video trimming.
+- **Contact-sheet PDF — ✅ DONE:** `pixcull/report/contact_sheet.py` +
+  `pixcull contact-sheet <run> -o sheet.pdf [-d keep|maybe|cull|all]`.
+  Renders a paginated grid (thumbnail + filename + score per cell, title
+  band, `n / total` footer) in the editorial-warm palette — the proof
+  sheet a photographer hands a client.  **Dependency-light**: pure Pillow
+  multi-page `save(save_all=True)`, no reportlab (keeps the vanilla
+  stack).  `render_contact_sheet` (pure layout) + `contact_sheet_from_run`
+  (reads `scores.csv`, filters by decision, resolves thumbs).  Verified
+  via a rendered sample (clean 4-col grid, no overlap) +
+  `tests/test_contact_sheet.py` (pagination, empty/missing-image graceful,
+  decision filter, output-subdir, CLI).  Remaining reach items unstarted.
 
 ---
 
