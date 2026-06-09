@@ -216,13 +216,14 @@ Heatmap PNG 缓存到 `output/attribution/<axis>/<sha>.png`。
 `pixcull video <片子.mp4>` 抽关键帧 → 跑 6 轴评分 → 加时间维评分
 (`score_temporal` = 动作连续性 + 时间稳定性 + 突发峰值)→ 找 reel
 候选,然后 `/video/<run_id>` 视频原生审片:时间轴画每帧
-`score_temporal` 山峰 + 候选靛蓝带,拖动播放头实时切帧,`J/K/L`
+`score_temporal` 山峰 + 候选暖色带,拖动播放头实时切帧,`J/K/L`
 倒退/暂停/前进(DaVinci 式),右栏候选像照片一样 Keep / Cull。
+(上图为真机跑一段 99s 实拍样片、聚焦 lightbox + 时间轴的实页。)
 头部 🎨 调色下拉(v2.0-P2-2)一键套用胶片预置(Fuji Eterna / Kodak
 Vision3 / Arri 709A / Teal-Orange / B&W),主画面 + 每个候选缩略图实时
 参数化预览(仅预览,不改原片)。
 
-![视频审片 · 🎨 调色预览 + 每候选 LUT 缩略图](docs/screenshots/19-video-grade.png)
+![视频审片 · 🎨 调色预览 — 整段套用 Kodak / Arri / Teal-Orange / B&W LUT,主画面实时预览(此处 B&W)](docs/screenshots/19-video-grade.png)
 
 ---
 
