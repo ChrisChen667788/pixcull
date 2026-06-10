@@ -269,6 +269,36 @@ inspection:
   (live-server) — all green.  Next slice: build-time CSS/JS extraction for
   `results.html` (needs a build step + golden-output guard).
 
+### v2.5 iteration sprint (2029-Q3 audit follow-through) — ✅ DONE
+Seven slices from the PM/designer/architect review, in priority order:
+1. **Dependency-drift hardening** — audited all 5 transformers feature
+   sites (only semantic_search was unsafe; fixed earlier), capped majors
+   (`torch<3, torchvision<1, transformers<6`), hermetic `_feature_tensor`
+   shim test, weekly `realmodel` CI lane (downloads CLIP+BLIP).
+2. **Hermetic visual smoke** — committed `tests/fixtures/smoke_run`
+   (6-photo synthetic run), `PIXCULL_DEMO_ROOT` env override; the
+   rendered-page regression net RUNS in every gate instead of silently
+   skipping when /tmp was clobbered.
+3. **Brand drift finished** — the README hero lockup SVGs + both brand
+   generators + badge colours still carried cosmic-indigo two quarters
+   after v2.3; mapped to editorial-warm (stone→graphite on espresso),
+   regenerated all four SVGs, extended the palette guard to brand
+   surfaces (`test_no_legacy_palette_in_brand_surfaces`).
+4. **Personalisation cold-start + ✨ feature tour** — profile endpoint
+   returns `min_annotations`; workspace badge shows "🎯 个性化 N/50"
+   progress; a ✨ tour modal fronts the six undiscoverable power
+   features (NL search / keyboard cull / burst collapse / personalise /
+   heatmap / contact sheet).
+5. **Bilingual VLM captions** — `_zh_rewrite` bridges BLIP English →
+   short natural Chinese via the local zh text-LLM, sanity-checked,
+   English fallback.
+6. **results.html → built artifact** (the de-monolith headline): sources
+   in `templates/src/` (1.2k-line shell + results.css 212 KB +
+   results.js 458 KB), `make results-html` splices byte-identically,
+   `test_results_build.py` golden-fails any artifact/source fork.
+7. **Branded contact sheet** — cover page (brand mark / studio / date),
+   vector 1–5 star ratings per cell, `--studio/--date/--no-cover`.
+
 ### v2.5-P0-2 · Playwright e2e smoke suite
 - **Why**: visual regressions (like the palette leak) ship silently today.
 - **What**: a tiny CI Playwright pass that loads grid/lightbox/video and
