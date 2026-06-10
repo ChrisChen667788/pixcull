@@ -4,13 +4,14 @@
 
 .PHONY: tokens tokens-check lint-design tests serve clean help \
         modelscope-dryrun modelscope-sync \
-        goldenset goldenset-dryrun
+        goldenset goldenset-dryrun results-html
 
 PYTHON ?= python
 
 help:
 	@echo "PixCull · convenience targets"
 	@echo
+	@echo "  make results-html   Rebuild templates/results.html from templates/src/ (edit src, never the artifact)"
 	@echo "  make tokens         Compile design-system/tokens.json → CSS + Swift + Python"
 	@echo "  make tokens-check   CI mode — verify on-disk outputs are in sync"
 	@echo "  make lint-design    Lint inline hex colors against the baseline"
@@ -20,6 +21,9 @@ help:
 	@echo
 	@echo "  make modelscope-dryrun   Preview the rewritten README (no upload)"
 	@echo "  make modelscope-sync     Push README to ModelScope (needs MODELSCOPE_API_TOKEN)"
+
+results-html:
+	$(PYTHON) scripts/build_results_html.py
 
 tokens:
 	$(PYTHON) scripts/build_design_tokens.py

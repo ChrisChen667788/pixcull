@@ -1,0 +1,1211 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <!-- P-UX-17 — mobile-responsive layout needs viewport meta -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#1a1c20" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f5f6f8" media="(prefers-color-scheme: light)">
+  <!-- v0.10-P2-1 — PWA install metadata.  manifest.json + service-worker
+       registration below.  When the user runs PixCull off a hosted URL
+       (pixcull.app eventually) Chrome / Edge / Safari offer "Install
+       PixCull"; the home-screen icon opens directly into /history. -->
+  <link rel="manifest" href="/manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="PixCull">
+  <title>PixCull — 分析结果</title>
+  <style>
+@@INLINE:results.css@@
+  </style>
+</head>
+<body>
+  <!-- ============================================================
+       v0.4 P1 (1/4) · SVG ICON SPRITE
+       ============================================================
+       Inline once at the top of <body>; reference anywhere via
+       <svg class="icon"><use href="#icon-NAME"/></svg>.
+
+       Lucide-style 24×24 outlined glyphs.  Inherit currentColor
+       so chips / buttons set their own color via class.  Browser-
+       cached after the first paint — total cost is the bytes
+       below (well under 4 KB gzipped).
+
+       Replaces the previous emoji-as-icon usage (🪣 / 🏆 / 💒 /
+       ♿ / ✨ / ⇆) which had inconsistent visual weight across
+       fonts + render targets (iOS Safari emoji ≠ macOS Chrome
+       emoji ≠ Windows Edge emoji).
+       ============================================================ -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <defs>
+      <!-- v0.9-P1-4 — brand gradient handles for the radial / sparkline.
+           Diagonal version drives 1-D stroke + dot fills; vertical drives
+           the area-under-the-curve fill in the inspector sparkline. -->
+      <linearGradient id="aiBrandGrad" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%"   stop-color="#c4b9a9"/>
+        <stop offset="55%"  stop-color="#988b78"/>
+        <stop offset="100%" stop-color="#6a6052"/>
+      </linearGradient>
+      <linearGradient id="aiBrandGradV" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%"   stop-color="#c4b9a9"/>
+        <stop offset="100%" stop-color="#6a6052"/>
+      </linearGradient>
+      <!-- Archive / bucket — for the P-UX-22 deliverable buckets toggle -->
+      <symbol id="icon-archive" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="1.8"
+              stroke-linecap="round" stroke-linejoin="round">
+        <rect x="2" y="4" width="20" height="5" rx="1"/>
+        <path d="M4 9v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9"/>
+        <path d="M10 13h4"/>
+      </symbol>
+      <!-- Trophy — for the P-AI-5.1 burst peak badge -->
+      <symbol id="icon-trophy" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="1.8"
+              stroke-linecap="round" stroke-linejoin="round">
+        <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/>
+        <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/>
+        <path d="M4 22h16"/>
+        <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/>
+        <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/>
+        <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>
+      </symbol>
+      <!-- Heart — for the P-PRO-4.1 wedding moment chip -->
+      <symbol id="icon-heart" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="1.8"
+              stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+      </symbol>
+      <!-- Contrast — for the P-UX-23 a11y toggle -->
+      <symbol id="icon-contrast" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="1.8"
+              stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M12 2a10 10 0 0 1 0 20Z" fill="currentColor"/>
+      </symbol>
+      <!-- Sparkles — for the P-UX-26 onboarding tip -->
+      <symbol id="icon-sparkles" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="1.8"
+              stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9.94 14.34 12 22l2.06-7.66L22 12.28l-7.94-2.06L12 2.55l-2.06 7.67L2 12.28l7.94 2.06Z"/>
+        <path d="M20 3v4"/>
+        <path d="M22 5h-4"/>
+        <path d="M4 17v2"/>
+        <path d="M5 18H3"/>
+      </symbol>
+      <!-- Swap / compare — for the card-cmp-btn -->
+      <symbol id="icon-swap" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+        <path d="M7 16V4M3 8l4-4 4 4"/>
+        <path d="M17 8v12M13 16l4 4 4-4"/>
+      </symbol>
+      <!-- Bar-chart-3 — for the P-CORE-3 scene anomaly banner -->
+      <symbol id="icon-chart" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="1.8"
+              stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 3v18h18"/>
+        <path d="M7 16V8"/>
+        <path d="M12 16v-5"/>
+        <path d="M17 16V5"/>
+      </symbol>
+      <!-- Alert-triangle — for P-UX-10 review-me + multi-tab banner -->
+      <symbol id="icon-alert" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="1.8"
+              stroke-linecap="round" stroke-linejoin="round">
+        <path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+        <path d="M12 9v4"/>
+        <path d="M12 17h.01"/>
+      </symbol>
+      <!-- Map-pin — for the location-best-only filter -->
+      <symbol id="icon-pin" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="1.8"
+              stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/>
+        <circle cx="12" cy="10" r="3"/>
+      </symbol>
+      <!-- v0.6 (4/5) — six-dot grip handle for drag-reorder
+           affordance on bucket items.  Echoes the canonical "drag
+           handle" gesture used by Linear, Notion, Trello, GitHub
+           Projects … users immediately recognise the dots = grab. -->
+      <symbol id="icon-grip" viewBox="0 0 24 24" fill="currentColor"
+              stroke="none">
+        <circle cx="9"  cy="6"  r="1.4"/>
+        <circle cx="15" cy="6"  r="1.4"/>
+        <circle cx="9"  cy="12" r="1.4"/>
+        <circle cx="15" cy="12" r="1.4"/>
+        <circle cx="9"  cy="18" r="1.4"/>
+        <circle cx="15" cy="18" r="1.4"/>
+      </symbol>
+      <!-- v0.13.16 — icon system unification.  The canonical inventory
+           below replaces ad-hoc emoji/Unicode glyphs scattered across
+           the surfaces.  Each icon is 24×24, stroke-based, intended to
+           be tinted via currentColor.  Mapping documented in
+           `design-system/ICON-GUIDE.md`. -->
+      <symbol id="icon-bookmark" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+        <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/>
+      </symbol>
+      <symbol id="icon-bookmark-filled" viewBox="0 0 24 24"
+              fill="currentColor" stroke="none">
+        <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/>
+      </symbol>
+      <symbol id="icon-camera" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+        <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/>
+        <circle cx="12" cy="13" r="4"/>
+      </symbol>
+      <symbol id="icon-image" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+        <circle cx="8.5" cy="8.5" r="1.5"/>
+        <polyline points="21 15 16 10 5 21"/>
+      </symbol>
+      <symbol id="icon-search" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"/>
+        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </symbol>
+      <symbol id="icon-settings" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+      </symbol>
+      <symbol id="icon-history" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 12a9 9 0 1 0 3-6.7"/>
+        <polyline points="3 4 3 9 8 9"/>
+        <polyline points="12 7 12 12 16 14"/>
+      </symbol>
+      <symbol id="icon-tether" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+        <path d="M5 12.55a11 11 0 0 1 14.08 0"/>
+        <path d="M1.42 9a16 16 0 0 1 21.16 0"/>
+        <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
+        <line x1="12" y1="20" x2="12.01" y2="20"/>
+      </symbol>
+      <symbol id="icon-bucket" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+        <path d="M5 8h14l-1 13H6L5 8z"/>
+        <path d="M9 8V5a3 3 0 0 1 6 0v3"/>
+      </symbol>
+      <symbol id="icon-share" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="18" cy="5" r="3"/>
+        <circle cx="6" cy="12" r="3"/>
+        <circle cx="18" cy="19" r="3"/>
+        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+        <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+      </symbol>
+      <symbol id="icon-undo" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="3 10 8 5 8 9 14 9 14 13 8 13 8 17"/>
+        <path d="M3 10h13a4 4 0 0 1 4 4v3a4 4 0 0 1-4 4h-5"/>
+      </symbol>
+
+      <!-- v0.4 P1 (3/4) · EMPTY-STATE ILLUSTRATIONS
+           Larger 160×120 SVGs used in the empty-state container
+           instead of 42px emoji.  Two-tone palette (accent + muted
+           outlines) so the illustration ties into the design system. -->
+
+      <!-- "Empty inbox" — for runs with zero rows -->
+      <symbol id="art-empty-inbox" viewBox="0 0 160 120" fill="none"
+              stroke-linecap="round" stroke-linejoin="round">
+        <!-- floor shadow -->
+        <ellipse cx="80" cy="103" rx="50" ry="5"
+                 fill="rgba(196,185,169,0.10)"/>
+        <!-- main inbox tray -->
+        <path d="M30 55l10-32a4 4 0 0 1 4-3h72a4 4 0 0 1 4 3l10 32"
+              stroke="var(--muted)" stroke-width="2"/>
+        <rect x="30" y="55" width="100" height="40" rx="4"
+              fill="var(--surface-2)" stroke="var(--muted)"
+              stroke-width="2"/>
+        <!-- inbox slot -->
+        <path d="M30 55h32l4 8h28l4-8h32"
+              stroke="var(--accent)" stroke-width="2.5"
+              fill="rgba(196,185,169,0.16)"/>
+        <!-- subtle "dust" — sparkles drifting in to show "nothing here yet" -->
+        <circle cx="48" cy="34" r="1.5" fill="var(--accent)" opacity="0.6"/>
+        <circle cx="112" cy="38" r="1.2" fill="var(--accent)" opacity="0.5"/>
+        <circle cx="80" cy="22" r="2" fill="var(--accent)" opacity="0.7"/>
+      </symbol>
+
+      <!-- "No filter match" — magnifier glass over empty result strip -->
+      <symbol id="art-no-match" viewBox="0 0 160 120" fill="none"
+              stroke-linecap="round" stroke-linejoin="round">
+        <ellipse cx="80" cy="103" rx="50" ry="5"
+                 fill="rgba(196,185,169,0.10)"/>
+        <!-- empty result strip (suggests photos that COULD match) -->
+        <rect x="22" y="48" width="22" height="22" rx="3"
+              stroke="var(--muted-soft)" stroke-width="1.5"
+              fill="var(--surface-2)" opacity="0.55"/>
+        <rect x="52" y="48" width="22" height="22" rx="3"
+              stroke="var(--muted-soft)" stroke-width="1.5"
+              fill="var(--surface-2)" opacity="0.55"/>
+        <rect x="82" y="48" width="22" height="22" rx="3"
+              stroke="var(--muted-soft)" stroke-width="1.5"
+              fill="var(--surface-2)" opacity="0.55"/>
+        <rect x="112" y="48" width="22" height="22" rx="3"
+              stroke="var(--muted-soft)" stroke-width="1.5"
+              fill="var(--surface-2)" opacity="0.55"/>
+        <!-- magnifier -->
+        <circle cx="80" cy="60" r="18"
+                fill="var(--bg-card)" stroke="var(--accent)"
+                stroke-width="2.5"/>
+        <path d="M94 74l10 10" stroke="var(--accent)" stroke-width="2.5"/>
+        <!-- subtle "no match" inside lens -->
+        <path d="M72 60h16" stroke="var(--muted)" stroke-width="2"/>
+      </symbol>
+
+      <!-- "Analyzing" — animated pulse rings around a small lens.
+           Used by the future loading-state placeholder. -->
+      <symbol id="art-analyzing" viewBox="0 0 160 120" fill="none"
+              stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="80" cy="60" r="36" stroke="var(--accent)"
+                stroke-width="1.5" opacity="0.18"/>
+        <circle cx="80" cy="60" r="24" stroke="var(--accent)"
+                stroke-width="2" opacity="0.45"/>
+        <circle cx="80" cy="60" r="12" fill="var(--accent-soft)"
+                stroke="var(--accent)" stroke-width="2"/>
+        <circle cx="80" cy="60" r="3" fill="var(--accent)"/>
+      </symbol>
+
+      <!-- ============================================================
+           v0.9-P2-3 · FIVE NEW EMPTY-STATE ILLUSTRATIONS
+           ============================================================
+           Same 160×120 viewport + two-tone palette (var(--muted) for
+           outlines, var(--accent) for the "this is the meaningful
+           thing" highlight, rgba(196,185,169,X) for soft wash) as the
+           v0.4 P1 (3/4) trio above, so the art system reads as a
+           single coherent family across all empty surfaces.
+           ============================================================ -->
+
+      <!-- 1. "Empty buckets" — three nested bucket silhouettes.
+           Used when /buckets has zero deliverable buckets defined. -->
+      <symbol id="art-empty-buckets" viewBox="0 0 160 120" fill="none"
+              stroke-linecap="round" stroke-linejoin="round">
+        <ellipse cx="80" cy="103" rx="50" ry="5"
+                 fill="rgba(196,185,169,0.10)"/>
+        <!-- Background buckets (muted, drift away to suggest "more await") -->
+        <path d="M28 50h28l-3 38a3 3 0 0 1-3 3H34a3 3 0 0 1-3-3z"
+              stroke="var(--muted-soft)" stroke-width="1.6"
+              fill="var(--surface-2)" opacity="0.55"/>
+        <path d="M104 50h28l-3 38a3 3 0 0 1-3 3h-19a3 3 0 0 1-3-3z"
+              stroke="var(--muted-soft)" stroke-width="1.6"
+              fill="var(--surface-2)" opacity="0.55"/>
+        <!-- Centre bucket (accent — the one the user would create) -->
+        <path d="M64 44h32l-4 46a4 4 0 0 1-4 4H72a4 4 0 0 1-4-4z"
+              stroke="var(--accent)" stroke-width="2.4"
+              fill="rgba(196,185,169,0.16)"/>
+        <path d="M64 48h32" stroke="var(--accent)" stroke-width="1.6" opacity="0.5"/>
+        <!-- Tiny "+" sign hovering above the centre bucket — implies "add one" -->
+        <path d="M80 28v10M75 33h10"
+              stroke="var(--accent)" stroke-width="2.4" opacity="0.85"/>
+      </symbol>
+
+      <!-- 2. "Empty history" — clock dial with no time markers + dust.
+           Used by /history when no archived runs exist. -->
+      <symbol id="art-empty-history" viewBox="0 0 160 120" fill="none"
+              stroke-linecap="round" stroke-linejoin="round">
+        <ellipse cx="80" cy="103" rx="50" ry="5"
+                 fill="rgba(196,185,169,0.10)"/>
+        <!-- Clock body -->
+        <circle cx="80" cy="58" r="32"
+                fill="var(--surface-2)" stroke="var(--muted)"
+                stroke-width="2"/>
+        <!-- Hands frozen at 12 — empty timeline, no progress -->
+        <path d="M80 58v-22" stroke="var(--accent)" stroke-width="2.6"/>
+        <path d="M80 58l14 6" stroke="var(--accent)" stroke-width="2"
+              opacity="0.6"/>
+        <circle cx="80" cy="58" r="3" fill="var(--accent)"/>
+        <!-- 12 marker only (the rest of the dial is unbuilt — "nothing logged yet") -->
+        <path d="M80 30v4" stroke="var(--accent)" stroke-width="2.4"/>
+        <!-- Dust particles drifting up to suggest "this is dormant" -->
+        <circle cx="36" cy="40" r="1.4" fill="var(--accent)" opacity="0.55"/>
+        <circle cx="124" cy="36" r="1.2" fill="var(--accent)" opacity="0.45"/>
+        <circle cx="48" cy="22" r="1.6" fill="var(--accent)" opacity="0.65"/>
+      </symbol>
+
+      <!-- 3. "No peer" — wifi-style ripples ending in an empty centre.
+           Used by the v0.9-P1-2 presence panel when no collaborators
+           are connected. -->
+      <symbol id="art-no-peer" viewBox="0 0 160 120" fill="none"
+              stroke-linecap="round" stroke-linejoin="round">
+        <ellipse cx="80" cy="103" rx="50" ry="5"
+                 fill="rgba(196,185,169,0.10)"/>
+        <!-- Three concentric arcs (signal ripples), outer two muted -->
+        <path d="M44 78a40 40 0 0 1 72 0"
+              stroke="var(--muted-soft)" stroke-width="2" opacity="0.45"/>
+        <path d="M54 78a30 30 0 0 1 52 0"
+              stroke="var(--muted)" stroke-width="2" opacity="0.65"/>
+        <path d="M64 78a20 20 0 0 1 32 0"
+              stroke="var(--accent)" stroke-width="2.4"/>
+        <!-- Dot at the centre — but with a subtle X over it to read "no signal" -->
+        <circle cx="80" cy="80" r="4" fill="var(--accent)"/>
+        <!-- Lone-figure silhouette beside the dot — "just you for now" -->
+        <circle cx="124" cy="56" r="6"
+                fill="var(--surface-2)" stroke="var(--accent)"
+                stroke-width="2"/>
+        <path d="M114 80c0-6 5-10 10-10s10 4 10 10"
+              stroke="var(--accent)" stroke-width="2"
+              fill="var(--surface-2)"/>
+      </symbol>
+
+      <!-- 4. "No annotations" — clipboard with a pencil sketching the
+           first row, but the page is otherwise blank.  Used by the
+           review queue / per-axis rubric panels when 0 rows are
+           human-labelled. -->
+      <symbol id="art-no-annotations" viewBox="0 0 160 120" fill="none"
+              stroke-linecap="round" stroke-linejoin="round">
+        <ellipse cx="80" cy="103" rx="50" ry="5"
+                 fill="rgba(196,185,169,0.10)"/>
+        <!-- Clipboard body -->
+        <rect x="48" y="20" width="64" height="74" rx="5"
+              fill="var(--surface-2)" stroke="var(--muted)"
+              stroke-width="2"/>
+        <!-- Clip on top -->
+        <rect x="68" y="14" width="24" height="10" rx="2"
+              fill="var(--muted)" stroke="var(--muted)" stroke-width="2"/>
+        <!-- Faint guide lines (would hold annotations) -->
+        <path d="M58 44h44M58 56h44M58 68h28"
+              stroke="var(--muted-soft)" stroke-width="1.6"
+              stroke-dasharray="3 4" opacity="0.7"/>
+        <!-- Pencil hovering over the third line (mid-thought, no ink yet) -->
+        <path d="M104 66l16-16 6 6-16 16zM118 52l4 4"
+              stroke="var(--accent)" stroke-width="2"
+              fill="rgba(196,185,169,0.16)"/>
+        <circle cx="100" cy="70" r="2" fill="var(--accent)"/>
+        <!-- Star outline — implies "ratings would go here" -->
+        <path d="M58 84l3 6 6 1-4 4 1 6-5-3-5 3 1-6-4-4 6-1z"
+              stroke="var(--accent)" stroke-width="1.4"
+              fill="none" opacity="0.55"/>
+      </symbol>
+
+      <!-- 5. "No search results" — input field with magnifier + a
+           drifting question mark.  Different from art-no-match
+           (which targets *filter* misses); this one's for keyword /
+           semantic search.  The visual difference matters: filter is
+           "you set criteria, refine", search is "phrase didn't land,
+           try synonyms". -->
+      <symbol id="art-no-search" viewBox="0 0 160 120" fill="none"
+              stroke-linecap="round" stroke-linejoin="round">
+        <ellipse cx="80" cy="103" rx="50" ry="5"
+                 fill="rgba(196,185,169,0.10)"/>
+        <!-- Search input rectangle (suggests the text field that fired) -->
+        <rect x="22" y="62" width="116" height="28" rx="14"
+              fill="var(--surface-2)" stroke="var(--muted)"
+              stroke-width="2"/>
+        <!-- Caret bar inside the input — "you typed something here" -->
+        <path d="M38 70v12" stroke="var(--accent)" stroke-width="2"
+              opacity="0.85"/>
+        <!-- Typed-text ghost (a few dashed lines, didn't resolve) -->
+        <path d="M46 76h44" stroke="var(--muted-soft)" stroke-width="1.8"
+              stroke-dasharray="2 3"/>
+        <!-- Magnifier on the right of the input -->
+        <circle cx="116" cy="76" r="6"
+                fill="var(--bg-card)" stroke="var(--accent)"
+                stroke-width="2"/>
+        <path d="M120 80l5 5" stroke="var(--accent)" stroke-width="2"/>
+        <!-- Floating question mark — "the system asked back, no match" -->
+        <path d="M76 32c0-5 4-9 9-9s9 4 9 9c0 5-9 6-9 11M85 50v3"
+              stroke="var(--accent)" stroke-width="2.4"
+              fill="none"/>
+      </symbol>
+
+      <!-- Sun + Moon — for the v0.4 P2 light-theme toggle -->
+      <symbol id="icon-sun" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="1.8"
+              stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="4"/>
+        <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+      </symbol>
+      <symbol id="icon-moon" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="1.8"
+              stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+      </symbol>
+    </defs>
+  </svg>
+
+  <header>
+    <!-- v0.5 — workspace bar (single dense row).  Replaces the
+         previous 3-row hero header.  LR-style chrome: brand mark
+         + back crumb + page title + run pill + stats slot, all
+         on one frosted-glass row.  Filter row sits as a second
+         row underneath. -->
+    <div class="workspace-bar">
+      <a href="/" class="brand-mark" title="返回上传">
+        <!-- v0.9-P0-3 — new logo mark.  "The spotlight on one in a
+             crowd" — the visual narrative of culling.  Four small
+             muted circles (the crowd) surround a large gradient
+             circle (the pick).  Replaces the generic wireframe star. -->
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <defs>
+            <linearGradient id="pcBrandGrad"
+                            x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%"   stop-color="#c4b9a9"/>
+              <stop offset="100%" stop-color="#6a6052"/>
+            </linearGradient>
+          </defs>
+          <!-- the crowd -->
+          <circle cx="4"  cy="5"  r="1.6" fill="currentColor" opacity="0.32"/>
+          <circle cx="20" cy="6"  r="1.4" fill="currentColor" opacity="0.28"/>
+          <circle cx="3"  cy="19" r="1.8" fill="currentColor" opacity="0.30"/>
+          <circle cx="21" cy="20" r="1.3" fill="currentColor" opacity="0.28"/>
+          <!-- the picked one — slightly larger ring + filled core
+               so even at 16px the silhouette stays readable -->
+          <circle cx="12" cy="12" r="7"  fill="url(#pcBrandGrad)"/>
+          <circle cx="12" cy="12" r="7.5" fill="none"
+                  stroke="url(#pcBrandGrad)" stroke-width="0.6"
+                  opacity="0.5"/>
+        </svg>
+        <span class="wordmark">Pix<span>Cull</span></span>
+      </a>
+      <span class="crumb-divider">/</span>
+      <a href="/" class="crumb-back" title="返回上传新一批"
+         data-i18n="workspace.crumb.upload_again">← 上传</a>
+      <span class="crumb-divider">/</span>
+      <span class="crumb-title">
+        <span data-i18n="workspace.crumb.results">分析结果</span>
+        <span id="runPill" class="run-pill" style="display:none"></span>
+      </span>
+      <span class="workspace-bar-spacer"></span>
+      <span id="tunedBadge" class="tuned-badge" style="display:none"
+            title="v2.4 · 决策阈值已按你历史的 keep/cull 校准 · 命令行 pixcull personalize reset 可还原"></span>
+      <div class="stats" id="stats"></div>
+      <!-- v0.8-P0-1 — language switcher.  Cycles zh_CN → en_US.
+           Persists pixcull_lang in localStorage; updates every
+           [data-i18n] element in place without a reload. -->
+      <button class="lang-switcher" id="langSwitcher" type="button"
+              data-i18n-attr-aria-label="lang.switcher.aria"
+              title="中文 / English">
+        <span class="lang-label" id="langSwitcherLabel">中</span>
+      </button>
+    </div>
+    <!-- legacy h1 kept (hidden) for any JS that probes #title -->
+    <h1 id="title">分析结果<span id="runTag" class="run-tag" style="display:none"></span></h1>
+  </header>
+
+  <!-- v0.6 — LR-style 2-column workspace.  Library panel on the
+       left holds all filter chip groups; main pane on the right
+       holds the (now tighter) tools bar + photo grid. -->
+  <div class="workspace-layout">
+    <div class="library-panel-backdrop" id="libraryPanelBackdrop"></div>
+    <aside class="library-panel" id="libraryPanel">
+      <div class="lp-header">
+        <span class="lp-title" data-i18n="library.title">Library</span>
+        <button class="lp-collapse" id="lpCollapseBtn"
+                type="button"
+                data-i18n-attr-aria-label="library.collapse.aria"
+                title="收起 / 展开筛选面板 (B)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2.2" stroke-linecap="round"
+               stroke-linejoin="round" aria-hidden="true">
+            <path d="m15 18-6-6 6-6"/>
+          </svg>
+        </button>
+      </div>
+      <div class="lp-scroll">
+        <details class="lp-group" open data-group="decision">
+          <summary data-i18n="library.group.decision">决定 · Decision</summary>
+          <div class="lp-content" id="decisionPills">
+            <span class="pill active" data-d="all" data-i18n="decision.all">全部</span>
+            <span class="pill" data-d="keep" data-i18n="decision.keep">keep</span>
+            <span class="pill" data-d="maybe" data-i18n="decision.maybe">maybe</span>
+            <span class="pill" data-d="cull" data-i18n="decision.cull">cull</span>
+          </div>
+        </details>
+        <details class="lp-group" open data-group="scene">
+          <summary data-i18n="library.group.scene">场景</summary>
+          <div class="lp-content">
+            <span class="filter-group" id="sceneFilters"></span>
+          </div>
+        </details>
+        <details class="lp-group" data-group="style">
+          <summary data-i18n="library.group.style">风格</summary>
+          <div class="lp-content">
+            <span class="filter-group" id="styleFilters"></span>
+          </div>
+        </details>
+        <details class="lp-group" data-group="face" id="lpFaceGroup" style="display:none">
+          <summary data-i18n="library.group.faces">人脸</summary>
+          <div class="lp-content">
+            <span class="filter-group" id="faceFilters"></span>
+          </div>
+        </details>
+        <details class="lp-group" data-group="location" id="lpLocationGroup" style="display:none">
+          <summary data-i18n="library.group.location">位置</summary>
+          <div class="lp-content">
+            <span class="filter-group" id="locationFilters"></span>
+          </div>
+        </details>
+        <details class="lp-group" data-group="burst" id="lpBurstGroup" style="display:none">
+          <summary data-i18n="library.group.bursts">连拍</summary>
+          <div class="lp-content">
+            <span class="filter-group" id="burstPeakFilter"></span>
+          </div>
+        </details>
+        <details class="lp-group" data-group="reason" id="lpReasonGroup" style="display:none">
+          <summary data-i18n="library.group.cull_reason">剔除原因</summary>
+          <div class="lp-content">
+            <span class="filter-group" id="cullReasonFilter"></span>
+          </div>
+        </details>
+        <details class="lp-group" data-group="al">
+          <summary data-i18n="library.group.al">主动学习</summary>
+          <div class="lp-content">
+            <span class="filter-group" id="activeLearningFilter"></span>
+          </div>
+        </details>
+      </div>
+    </aside>
+    <main class="grid-pane">
+
+    <div class="tools-bar" id="filters">
+      <span style="flex:1"></span>
+
+      <!-- V9.0: sort + group dropdowns -->
+      <select id="sortBy" class="sort-select" title="排序方式">
+        <option value="default">默认 (keep > maybe > cull)</option>
+        <option value="score_desc">总分高 → 低</option>
+        <option value="score_asc">总分低 → 高</option>
+        <option value="datetime_asc">拍摄时间(早→晚)</option>
+        <option value="datetime_desc">拍摄时间(晚→早)</option>
+        <option value="cluster">按连拍聚类</option>
+      </select>
+
+      <!-- P-UX-20: saved view presets. Persist the current
+           filter combo (decision + scenes + styles + cull-reason +
+           sort) to localStorage so power users don't rebuild the
+           same combo every time.
+           v0.7-P1-3: + JSON import/export buttons so presets
+           travel across runs / browsers / users. Built-in starter
+           presets auto-populate on first load. -->
+      <select id="viewPresetBy" class="sort-select"
+              title="视图预设 — 保存/加载常用筛选组合">
+        <option value="">视图预设 ▾</option>
+      </select>
+      <button class="export-btn" id="saveViewBtn"
+              title="把当前筛选 + 排序 + cull 原因 存为命名预设">★</button>
+      <button class="export-btn" id="exportPresetsBtn"
+              title="导出所有预设为 JSON 文件,可在别的 run / 浏览器导入">↓</button>
+      <button class="export-btn" id="importPresetsBtn"
+              title="从 JSON 文件导入预设">↑</button>
+      <input type="file" id="importPresetsInput" accept="application/json"
+             style="display:none">
+
+      <!-- P-AI-2: CLIP-backed semantic search. Type a query in
+           natural language (or a phrase like "飞鸟展翅" / "long-
+           exposure waterfall") and the grid filters to the top-K
+           photos by CLIP cosine similarity. First search lazily
+           builds embeddings.npz (~50 ms/photo on CPU) and caches
+           it under the run's output/ dir. -->
+      <input id="semSearchInput" class="sort-select" type="search"
+             placeholder="🔎 语义搜索 (自然语言)"
+             data-i18n-attr-placeholder="workspace.search.placeholder"
+             title="CLIP 语义搜索 · Enter 执行"
+             style="min-width:180px;font-size:11px" />
+      <button class="export-btn" id="semSearchClearBtn"
+              style="display:none" title="清除语义搜索过滤">✕</button>
+
+      <!-- v2.5 — feature-discovery tour. The power features (NL search,
+           keyboard culling, burst collapse, personalisation, heatmaps,
+           contact sheet) were all shipped but undiscoverable; this is
+           their single front door. -->
+      <button class="export-btn" id="tourBtn" title="功能巡览 — PixCull 的进阶能力一页看全">✨</button>
+      <button class="export-btn" id="kbdHelpBtn" title="键盘快捷键 (?)" style="font-family:ui-monospace,monospace">?</button>
+      <button class="export-btn" id="annNextBtn" title="按 active learning 优先级标注 — 优先暴露规则与 rescorer 不一致、概率临界、聚类分裂的图">▸ 标注下一张</button>
+      <button class="export-btn" id="batchBtn" title="按总分批量打 keep/cull 标签">批量打分</button>
+      <!-- P-UX-1 — five export actions consolidated into one anchored
+           dropdown so the filter row stays scannable instead of
+           wrapping to 3-4 lines. Each inner button keeps its
+           original ID; the existing event listeners further down
+           the script bind to them unmodified. The alongside button
+           remains hidden by inline style on non-scan runs (set
+           below) and the dropdown's CSS collapses it out of the
+           panel layout. -->
+      <div class="export-menu">
+        <button class="export-btn export-menu-trigger" id="exportMenuBtn"
+                type="button"
+                aria-haspopup="true" aria-expanded="false"
+                title="导出 / 下载 / 自动 Caption">📥 导出</button>
+        <div class="export-menu-panel" id="exportMenuPanel" role="menu">
+          <button class="export-btn" id="exportZipBtn" role="menuitem"
+                  title="导出 XMP 评级到 zip 包(Lightroom / Capture One)">下载 XMP</button>
+          <button class="export-btn" id="exportAlongsideBtn" role="menuitem"
+                  style="display:none"
+                  title="把 XMP sidecar 写到原图旁边">写到原图旁边</button>
+          <!-- P-PRO-5: in-file IPTC embedding via exiftool. Same
+               metadata as a sidecar but lives INSIDE the original
+               (single-file workflow for DNG / JPG / TIFF). Only
+               available in scan mode (we know where the original is).
+               Caveat: modifies the original file — irreversible
+               without --no-overwrite-original or a Time Machine. -->
+          <button class="export-btn" id="exportEmbeddedBtn" role="menuitem"
+                  style="display:none"
+                  title="把 XMP/IPTC 内嵌到原图(DNG/JPG/TIFF),不写 sidecar — 单文件工作流。需要 exiftool。会修改原图。">内嵌到原图(单文件)</button>
+          <a class="export-btn" id="csvBtn" role="menuitem"
+             title="下载完整 scores.csv (Excel/Numbers 友好)">下载 CSV</a>
+          <!-- v0.8-P2-2 — structured (annotations + style distance + scores) -->
+          <a class="export-btn" id="csvStructuredBtn" role="menuitem"
+             data-i18n="export.csv" data-i18n-attr-title="export.csv.title"
+             title="结构化 CSV — scores + 标注 + 风格距离合并">结构化 CSV</a>
+          <a class="export-btn" id="jsonStructuredBtn" role="menuitem"
+             data-i18n="export.json" data-i18n-attr-title="export.json.title"
+             title="结构化 JSON — 全部字段 + 标注 + 风格距离">下载 JSON</a>
+          <!-- V23.x: standalone HTML gallery export — self-contained
+               zip the user can email/upload as-is to clients.
+               Default = keep only; Shift-click for keep+maybe. -->
+          <a class="export-btn" id="galleryBtn" role="menuitem"
+             title="导出可发客户的 standalone HTML 相册(默认仅 keep;Shift-点 = keep+maybe)">📔 导出相册</a>
+          <!-- v0.7-P1-4 — token-gated shareable delivery link.
+               Unlike the gallery export (downloadable zip), this
+               generates an in-app URL the client can open in a
+               browser without any download. -->
+          <button class="export-btn" id="shareLinkBtn" role="menuitem"
+                  title="生成一个可分享给客户的只读链接,只展示 keep 的照片">🔗 客户分享链接</button>
+          <!-- v0.7-P2-1 — train a style-clone profile from the
+               currently-keep photos and show "风格距离" per row in
+               the Inspector / on each card. -->
+          <button class="export-btn" id="styleTrainBtn" role="menuitem"
+                  title="把当前所有 keep 当作风格参考,学一个个人偏好模型,然后给所有其它照片打 风格距离">🎨 训练风格模型</button>
+          <!-- v0.8-P0-2 — issue a multi-user sync event so a
+               second-shooter / editor can open the same run in
+               their browser and see / merge in your annotations
+               in real-time. -->
+          <button class="export-btn" id="syncEventBtn" role="menuitem"
+                  title="生成一个协作会话链接,让二摄 / 编辑加入同一 run,实时看到你的标注">📡 协作会话</button>
+          <!-- P2.5: auto-generate IPTC captions from structured data
+               (scene + face labels + location + advice). Free / offline
+               by default; Shift-click to enable LLM polish via DeepSeek
+               V4-Flash (INFRA-4-budgeted). Captions land in
+               auto_captions.json; next /export embeds them. -->
+          <button class="export-btn" id="captionBtn" role="menuitem"
+             title="自动生成 IPTC Caption-Abstract(场景+人物+地点+评价)。Shift-点 = LLM 润色(走 DeepSeek + INFRA-4 预算)">📝 自动 Caption</button>
+          <!-- P-UX-15 — round-trip from Lightroom/Capture One.
+               Reads each photo's XMP sidecar (after you've edited
+               in Lr/C1) and treats the xmp:Rating as authoritative
+               human verdict. Mapping: 5/4★→keep, 3★→maybe,
+               2/1★→cull, 0★→skip. Lets you cull in Lr if you
+               prefer that keyboard rhythm, then come back here
+               with the verdicts already merged. -->
+          <button class="export-btn" id="lrSyncBtn" role="menuitem"
+             title="从 Lr/C1 的 XMP sidecar 读回 rating(5/4★=keep,3★=maybe,2/1★=cull),合并为人工标注 — 让你在 Lr 里选完片回来 PixCull 也认得">↩ 从 Lr/C1 同步评分</button>
+        </div>
+      </div>
+      <span class="export-status" id="exportStatus"></span>
+      <!-- v0.5 LR-grade (2/3) — density toolbar (S / M / L thumbnail
+           size, mirrors LR Library's grid-size slider).  Persisted
+           in localStorage[pixcull_density]. -->
+      <div class="density-toolbar" role="group" aria-label="缩略图密度">
+        <button type="button" data-density="s" title="紧凑 (160px)">S</button>
+        <button type="button" data-density="m" title="标准 (240px)" class="active">M</button>
+        <button type="button" data-density="l" title="宽松 (340px)">L</button>
+      </div>
+      <!-- v2.2 soft-skill — VISUAL_DENSITY dial: 舒朗 (photo-hero, the
+           default) ⇄ 详尽 (every chip + reason + advice, the old view).
+           Persisted in localStorage[pixcull_calm]. -->
+      <div class="density-toolbar calm-toolbar" role="group" aria-label="信息密度">
+        <button type="button" data-calm="calm" title="舒朗 — 照片为主,轴/原因/建议进放大窗" class="active">舒朗</button>
+        <button type="button" data-calm="dense" title="详尽 — 网格内显示全部轴 / 原因 / 建议(旧版)">详尽</button>
+      </div>
+    </div>
+    <div class="grid density-m" id="grid"></div>
+    </main>
+  </div>
+  <!-- V14.2 — toast container; populated by ``toast(msg, kind)`` in JS -->
+  <div class="toast-stack" id="toastStack" aria-live="polite"></div>
+
+  <!-- v0.11-P1-2 — Marquee select bulk action bar.  Appears when ≥1
+       card is marquee-selected; floats at the bottom of the viewport.
+       Lightroom Library inspiration. -->
+  <div class="bulk-toolbar" id="bulkToolbar" role="toolbar"
+       aria-label="批量操作" aria-hidden="true">
+    <span class="bulk-count" id="bulkCount" aria-live="polite"></span>
+    <button type="button" class="bulk-btn" data-action="keep"
+            title="把全部选中标记为 Keep">✓ Keep</button>
+    <button type="button" class="bulk-btn" data-action="maybe"
+            title="把全部选中标记为 Maybe">? Maybe</button>
+    <button type="button" class="bulk-btn" data-action="cull"
+            title="把全部选中标记为 Cull">✗ Cull</button>
+    <button type="button" class="bulk-btn" data-action="bucket"
+            title="加入桶">📁 入桶…</button>
+    <span class="bulk-spacer"></span>
+    <button type="button" class="bulk-btn bulk-clear" data-action="clear"
+            title="取消选择 (Esc)">×</button>
+  </div>
+
+  <!-- P-UX-3 — free-pick A/B compare hint tray. Hidden until the
+       user pins a 1st photo for compare via the card ⇆ button or
+       Shift+click. Tells them what's selected and how to cancel. -->
+  <!-- P-UX-22 — deliverable buckets panel. Hidden by default;
+       opens via the floating "🪣 桶" pill in the top-right.
+       Drag any card from the grid into a bucket; bucket assignments
+       live in localStorage (no annotation pollution). Each bucket
+       has its own "下载 ZIP" + "复制文件名" + "清空" actions. -->
+  <!-- P-UX-23 — accessibility / color-blind toggle. Bottom-left so it
+       never collides with the buckets-toggle (top-right) or the
+       cull-reason tray (bottom-center). Click swaps the keep/maybe/cull
+       palette to a deuteranopia-safe one; preference persists via
+       localStorage. The always-on glyphs on .badge keep / maybe / cull
+       give the baseline a11y win even when this toggle is off. -->
+  <button class="a11y-toggle" id="a11yToggleBtn" type="button"
+          aria-pressed="false"
+          title="色盲友好配色 — 切换为蓝/橙/紫高对比方案(配合 ✓/?/✕ 形状标记)">
+    <svg class="icon"><use href="#icon-contrast"/></svg>
+    <span>配色</span>
+  </button>
+  <!-- v0.4 P2 (1/4) — theme toggle.  Cycles dark → light → system.
+       Persisted in localStorage[pixcull_theme].  Sun/moon glyph
+       reflects the *current* effective theme. -->
+  <button class="theme-toggle" id="themeToggleBtn" type="button"
+          aria-pressed="false"
+          title="切换深色 / 浅色主题(默认跟随系统)">
+    <svg id="themeToggleIcon"><use href="#icon-moon"/></svg>
+    <span id="themeToggleLabel">主题</span>
+  </button>
+  <button class="buckets-toggle" id="bucketsToggleBtn" type="button"
+          title="交付桶 — 拖卡片到桶里整理输出">
+    <svg class="icon"><use href="#icon-archive"/></svg>
+    <span>交付桶</span>
+    <span class="bk-pill" id="bucketsTotalPill" style="display:none">0</span>
+  </button>
+  <aside class="buckets-panel" id="bucketsPanel" aria-hidden="true">
+    <div class="bk-head">
+      <h3>交付桶</h3>
+      <span class="bk-close" id="bucketsCloseBtn" title="关闭 (Esc)">✕</span>
+    </div>
+    <div class="bk-list" id="bucketsList"></div>
+    <div class="bk-foot">
+      <input id="newBucketName" type="text"
+             placeholder="新桶名(回车创建)"
+             data-i18n-attr-placeholder="buckets.new.placeholder"
+             maxlength="32" />
+      <button class="bk-btn" id="newBucketBtn" type="button">+ 新建</button>
+    </div>
+  </aside>
+
+  <div class="cmp-pick-tray" id="cmpPickTray" role="status"
+       aria-live="polite">
+    <span>已选 <b>A</b>:</span>
+    <span class="cmp-pick-fn" id="cmpPickFn"></span>
+    <span style="opacity:0.85">· 点选第二张比较 (Esc 取消)</span>
+    <button class="cmp-pick-cancel" id="cmpPickCancel"
+            type="button" title="取消比较选择 (Esc)">×</button>
+  </div>
+
+  <!-- P-UX-4 — reject-reason quick picker. Appears after every cull
+       action; auto-dismisses in ~6 s if untouched. Pills are
+       populated dynamically from /api/v1/taxonomy so adding a new
+       reason on the server requires no client change. -->
+  <div class="cull-reason-tray" id="cullReasonTray" role="status"
+       aria-live="polite">
+    <span class="cull-reason-label">为什么 cull?</span>
+    <span id="cullReasonPills"></span>
+    <button class="reason-skip" id="cullReasonSkip"
+            type="button" title="跳过 (Esc)">跳过</button>
+  </div>
+  <div class="lightbox" id="lightbox">
+    <span class="close-btn" id="lbClose" title="关闭 (Esc)">×</span>
+    <!-- V14.2 — prev/next chevrons; keyboard ←→ also works -->
+    <span class="nav-btn nav-prev" id="lbPrev" title="上一张 (← / k)" aria-label="上一张">‹</span>
+    <span class="nav-btn nav-next" id="lbNext" title="下一张 (→ / j)" aria-label="下一张">›</span>
+    <!-- V16.1 — manual rotate buttons. Backend already runs
+         ImageOps.exif_transpose so most images come out right; these
+         are an override for the rare camera that wrote no EXIF tag,
+         or the user who specifically wants a different framing.
+         Override is persisted per (run_id, filename) in localStorage. -->
+    <div class="rotate-grp" role="group" aria-label="旋转">
+      <button class="rot-btn" id="lbRotL" type="button"
+              title="逆时针旋转 90°">↺</button>
+      <button class="rot-btn" id="lbRotR" type="button"
+              title="顺时针旋转 90°">↻</button>
+      <button class="rot-btn" id="lbRotReset" type="button"
+              title="恢复 EXIF 默认方向">⟲</button>
+    </div>
+    <!-- P-UX-2 — 1:1 focus check. The single feature pro photographers
+         ask for first: click the image to zoom to 100% (1 image pixel
+         = 1 screen pixel) centered on the click point, drag to pan,
+         mouse-wheel to fine-tune zoom, click again or press z to
+         return to fit. On entering 1:1 the lightbox swaps to a hi-res
+         image (w=3600 instead of the viewport-bucketed cap) so the
+         pixel-peeping is on real detail, not upscaled mush. -->
+    <div class="zoom-grp" role="group" aria-label="缩放">
+      <button class="zoom-btn" id="lbZoomToggle" type="button"
+              title="1:1 焦点检查 (z) — 点图片任意处可放大到该位置">🔍 1:1</button>
+      <span class="zoom-badge" id="lbZoomBadge"
+            aria-live="polite"></span>
+    </div>
+    <!-- v0.12-P0-2 — companion-window (second-monitor) lightbox.
+         Spawns a peer window via window.open + BroadcastChannel
+         sync; the active window steers, the companion mirrors.
+         Lightroom's "Second Window" inspiration. -->
+    <div class="companion-grp" role="group" aria-label="副屏">
+      <button class="zoom-btn" id="lbCompanionToggle" type="button"
+              title="第二屏 lightbox · BroadcastChannel 同步翻页
+(关闭副屏不破协作状态)">🪟 副屏</button>
+    </div>
+    <div class="img-pane"><img id="lbImg" alt=""></div>
+    <!-- v0.7-P1-1 — Loupe RGB readout. Visible only when lbImg is
+         in zoomed (1:1) mode + the cursor is over the image.
+         Same .cmp-rgb-readout styling, scoped via .lb-rgb-readout
+         so it doesn't conflict with the compare-modal one. -->
+    <div class="cmp-rgb-readout lb-rgb-readout" id="lbRgbReadout" aria-hidden="true"></div>
+    <div class="info-pane" id="lbInfo"></div>
+    <!-- v0.5 LR-grade (3/3) — LR Loupe-style filmstrip.  Populated
+         on lightbox open with the currently-visible (i.e. filtered)
+         grid photos.  Auto-scrolls to keep the current photo
+         centered as the user navigates ← / →. -->
+    <div class="filmstrip" id="lbFilmstrip" role="list"
+         aria-label="filmstrip — prev/next photos"></div>
+    <!-- v0.11-P1-1 — DaVinci Resolve-style timeline scrubber.  1 px
+         line at the very bottom of the lightbox; press + drag to
+         scrub through every visible photo, click to jump.  Preloads
+         ±5 photos around the playhead so scrubbing is buttery on
+         a fast SSD.  Hidden in 1:1 zoom mode (focus check). -->
+    <div class="lb-scrubber" id="lbScrubber" role="slider"
+         aria-label="timeline · drag to scrub"
+         aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+      <div class="lb-scrubber-fill" id="lbScrubberFill"></div>
+      <div class="lb-scrubber-thumb" id="lbScrubberThumb"></div>
+      <div class="lb-scrubber-readout" id="lbScrubberReadout"></div>
+    </div>
+  </div>
+
+  <!-- V9.2 cluster compare modal · P0.3 added next/prev burst nav -->
+  <!-- v0.9-P1-1 — .modal-detail = pure viewer (A/B compare, no save) -->
+  <div class="cmp-modal modal-detail" id="cmpModal">
+    <div class="cmp-header">
+      <h3 id="cmpTitle">连拍组比较</h3>
+      <span class="muted" id="cmpMeta"></span>
+      <!-- P-UX-7 — synced 1:1 zoom across compare cells. Click a
+           cell, drag, or wheel-scroll; the same scale + normalized
+           pan applies to every cell so the user can pixel-peep the
+           same region across all of them simultaneously. -->
+      <span class="cmp-zoom-controls">
+        <button class="cmp-zoom-btn" id="cmpZoomToggle" type="button"
+                title="点图片任意处放大到该位置 · 拖动平移 · 滚轮细调">🔍 1:1 同步</button>
+        <span class="cmp-zoom-badge" id="cmpZoomBadge"
+              aria-live="polite"></span>
+      </span>
+      <!-- P0.3 — prev/next walk across burst clusters without
+           leaving the modal. Keyboard: ← / → and j / k.
+           v0.7-P0-1: inline styles replaced by .cmp-nav-btn so they
+           inherit the design-token hover ramp + frosted hierarchy. -->
+      <span style="margin-left:auto;display:inline-flex;gap:6px">
+        <button id="cmpPrev" class="cmp-nav-btn" title="上一个连拍组 (←)">
+          ◀ 上一组
+        </button>
+        <button id="cmpNext" class="cmp-nav-btn" title="下一个连拍组 (→)">
+          下一组 ▶
+        </button>
+      </span>
+      <span class="close" id="cmpClose">关闭 (Esc)</span>
+    </div>
+    <div class="cmp-body" id="cmpBody"></div>
+    <!-- v0.7-P0-1 — floating pixel RGB readout overlay.  Visible
+         only inside the modal while .cmp-cell.zoomed is active and
+         the cursor is hovering an img-wrap. Populated by
+         _cmpUpdateRgbReadout(). -->
+    <div class="cmp-rgb-readout" id="cmpRgbReadout" aria-hidden="true"></div>
+  </div>
+
+  <!-- V2.0 annotation modal: rubric form + active-learning queue
+       v0.7-P0-2: progress bar at the top (6 axis cells lit as
+       rated), inline ann-cull-reasons picker (replaces the floating
+       cullReasonTray when overall=cull), full-page mobile layout. -->
+  <!-- v0.9-P1-1 — .modal-action = saves data (rubric annotation) -->
+  <div class="ann-modal" id="annModal">
+    <div class="ann-card modal-action">
+      <!-- v0.7-P0-2 progress bar (full width, 6 axis segments) -->
+      <div class="ann-progress" id="annProgress" aria-label="rubric 进度">
+        <span class="ann-progress-count" id="annProgressCount">0 / 6</span>
+        <div class="ann-progress-track" id="annProgressTrack">
+          <div class="ann-progress-cell" data-axis-idx="0"></div>
+          <div class="ann-progress-cell" data-axis-idx="1"></div>
+          <div class="ann-progress-cell" data-axis-idx="2"></div>
+          <div class="ann-progress-cell" data-axis-idx="3"></div>
+          <div class="ann-progress-cell" data-axis-idx="4"></div>
+          <div class="ann-progress-cell" data-axis-idx="5"></div>
+        </div>
+      </div>
+      <div>
+        <img class="ann-thumb" id="annThumb" alt="">
+        <div style="margin-top:10px;font-size:11px;color:var(--muted)" id="annMeta"></div>
+        <div class="why" id="annWhy" style="display:none;margin-top:10px"></div>
+      </div>
+      <div class="ann-side">
+        <h3 id="annTitle">标注</h3>
+        <div class="rubric-intro">
+          每个轴 1-5★ + 一句"为什么"。Tab 在轴间跳,1-5 直接给当前轴打星 — 一张全维度评分通常 &lt; 5 秒。
+        </div>
+        <div id="axesContainer"></div>
+        <!-- v0.7-P0-2 inline cull-reason picker (replaces the
+             floating cullReasonTray for the annotation flow). -->
+        <div class="ann-cull-reasons" id="annCullReasons" aria-hidden="true">
+          <span class="ann-cull-label">为什么 cull?</span>
+          <span id="annCullReasonPills"></span>
+        </div>
+        <div class="ann-foot">
+          <select id="annOverall">
+            <option value="">总体决策…</option>
+            <option value="keep">keep</option>
+            <option value="maybe">maybe</option>
+            <option value="cull">cull</option>
+          </select>
+          <input id="annOverallRationale" type="text" placeholder="一句话总结(可选)" maxlength="200">
+          <button class="skip" id="annClose">关闭</button>
+          <button class="skip" id="annNext">跳过 →</button>
+          <button class="primary" id="annSave">保存 + 下一张</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- v0.6 (5/5) — hold-Space cheat-sheet overlay (macOS Finder
+       pattern).  Lives outside the shortcuts modal — never modal,
+       never focus-trapping, owned by the keydown/keyup pair only.
+       Populated by _showKbdCheat(ctx) which reads _activeShortcutCtx()
+       and pulls a 4-6-pill subset from KBD_CHEAT_DATA below. -->
+  <div class="kbd-cheat" id="kbdCheat" aria-hidden="true"
+       role="status" aria-live="polite"></div>
+
+  <!-- v0.8-P1-3 — share-link modal (short URL + QR + copy).  Same
+       chassis used by /share/<run>/<token> AND /sync/event/<token>
+       URL surfacing — both call _openShareUrlModal(longUrl, title).
+       Replaces the native window.prompt() that was hard to read +
+       impossible to scan on a phone. -->
+  <!-- v0.9-P0-4 — Cmd+K command palette.  Linear / Notion / Raycast
+       pattern: ⌘K opens a centered input + fuzzy-matched action list.
+       Every meaningful product action callable from one keystroke.
+       Singleton at body root so it overlays everything. -->
+  <div class="cmdk-modal" id="cmdkModal" role="dialog"
+       aria-hidden="true" aria-labelledby="cmdkLabel">
+    <!-- v0.9-P1-1 — .modal-info = passive lookup, neutral border-top -->
+    <div class="cmdk-card modal-info">
+      <div class="cmdk-header">
+        <svg class="cmdk-search-icon" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+             stroke-linejoin="round" aria-hidden="true">
+          <circle cx="11" cy="11" r="8"/>
+          <path d="m21 21-4.35-4.35"/>
+        </svg>
+        <input class="cmdk-input" id="cmdkInput" type="text"
+               placeholder="搜索操作…  (中文 / English / Japanese)"
+               aria-label="Command palette" autocomplete="off"
+               spellcheck="false"/>
+        <kbd class="cmdk-esc">Esc</kbd>
+      </div>
+      <div class="cmdk-results" id="cmdkResults" role="listbox"></div>
+      <div class="cmdk-footer">
+        <span><kbd>↑↓</kbd> 浏览</span>
+        <span><kbd>↵</kbd> 执行</span>
+        <span><kbd>Esc</kbd> 关闭</span>
+        <span class="cmdk-foot-spacer"></span>
+        <span class="cmdk-foot-brand">PixCull · ⌘K</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="share-url-modal" id="shareUrlModal" role="dialog"
+       aria-hidden="true" aria-labelledby="shareUrlTitle">
+    <!-- v0.9-P1-1 — .modal-info = passive (share URL is just a copy target) -->
+    <div class="share-url-card modal-info">
+      <div class="share-url-header">
+        <h3 class="modal-title" id="shareUrlTitle">分享链接</h3>
+        <button class="close" id="shareUrlClose" type="button"
+                aria-label="关闭">✕</button>
+      </div>
+      <div class="share-url-body">
+        <div class="share-url-qr">
+          <img id="shareUrlQrImg" alt="QR 码"
+               loading="lazy" decoding="async"/>
+        </div>
+        <div class="share-url-meta">
+          <div class="share-url-label" id="shareUrlSubtitle">
+            扫描二维码,或复制下面的链接发给对方:
+          </div>
+          <div class="share-url-row">
+            <span class="share-url-row-label">短链</span>
+            <input class="share-url-input" id="shareUrlShort" readonly
+                   onclick="this.select()"/>
+            <button class="share-url-copy" id="shareUrlShortCopy"
+                    type="button">复制</button>
+          </div>
+          <details class="share-url-long">
+            <summary>展开完整 URL</summary>
+            <div class="share-url-row">
+              <input class="share-url-input" id="shareUrlLong" readonly
+                     onclick="this.select()"/>
+              <button class="share-url-copy" id="shareUrlLongCopy"
+                      type="button">复制</button>
+            </div>
+          </details>
+          <div class="share-url-footnote" id="shareUrlFootnote"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- V14.5 shortcuts overlay — opens with `?`. Replaces a native
+       alert() that was ugly + non-dismissible-on-Esc. Auto-discoverable
+       via the floating "? 快捷键" pill in the bottom-right corner. -->
+  <!-- v0.9-P1-2 — multiplayer presence popover. Opened by clicking
+       the .presence-pill in the workspace bar; closed by clicking
+       the backdrop or ✕. List-of-peers rendered from JS — sticks
+       to the brand-gradient border-top language we set up in
+       v0.9-P1-1 modal-action so the popover reads as actionable
+       (you can rename yourself, copy the share URL etc.). -->
+  <div id="presenceModal" role="dialog" aria-modal="true"
+       aria-labelledby="presenceTitle">
+    <div class="pp-card">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+        <h3 class="pp-title" id="presenceTitle">协作者 · live</h3>
+        <button class="close" id="presenceClose" aria-label="关闭协作面板">✕</button>
+      </div>
+      <div class="pp-list" id="presenceList">
+        <div class="pp-empty">连接中…</div>
+      </div>
+      <div class="pp-foot">
+        <span>你显示为 <span id="presenceMyName" style="color:#fff;">…</span></span>
+        <a id="presenceRename">改名</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="shortcuts-modal" id="shortcutsModal">
+    <!-- v0.9-P1-1 — .modal-info = passive lookup (just displays keys) -->
+    <div class="shortcuts-card modal-info">
+      <div class="shortcuts-header">
+        <h3 class="modal-title" data-i18n="shortcuts.title">键盘快捷键</h3>
+        <!-- P-UX-24 — context-aware label populated by showShortcuts():
+             "网格 / 放大窗 / A/B 比较". The active section above gets
+             a highlight ring + is reordered to the top so users with
+             an open lightbox don't scroll past 4 sections to find
+             the relevant keys. -->
+        <span class="shortcuts-ctx-badge" id="shortcutsCtxBadge" aria-live="polite"></span>
+        <button class="close" id="shortcutsClose" aria-label="关闭快捷键面板">✕</button>
+      </div>
+      <div class="shortcuts-body" id="shortcutsBody">
+        <div class="shortcut-section" data-ctx="grid">
+          <div class="shortcut-section-title">浏览</div>
+          <div class="shortcut-row"><span class="keys"><kbd>j</kbd> 或 <kbd>→</kbd></span><span class="desc">下一张</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>k</kbd> 或 <kbd>←</kbd></span><span class="desc">上一张</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>Space</kbd></span><span class="desc">放大查看完整评分</span></div>
+        </div>
+        <div class="shortcut-section" data-ctx="grid">
+          <div class="shortcut-section-title">快速标注</div>
+          <div class="shortcut-row"><span class="keys"><kbd>1</kbd></span><span class="desc">标 <span class="tag keep">keep</span></span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>2</kbd></span><span class="desc">标 <span class="tag maybe">maybe</span></span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>3</kbd></span><span class="desc">标 <span class="tag cull">cull</span>(可补充 cull 原因)</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>Shift</kbd>+<kbd>1/2/3</kbd></span><span class="desc">标 + 自动跳到下一张(Photo Mechanic 节奏)</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>F</kbd></span><span class="desc">单键 <span class="tag keep">keep</span>(flag for review)</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>[</kbd> / <kbd>]</kbd></span><span class="desc">verdict 降一档 / 升一档</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>Backspace</kbd></span><span class="desc">撤销最近标注 + 回到上一张</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>G</kbd></span><span class="desc">跳到下一个连拍组</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>Enter</kbd></span><span class="desc">打开 rubric 详细标注</span></div>
+        </div>
+        <div class="shortcut-section" data-ctx="universal">
+          <div class="shortcut-section-title">编辑</div>
+          <div class="shortcut-row"><span class="keys"><kbd>⌘</kbd>+<kbd>Z</kbd></span><span class="desc">撤销最近一次标注</span></div>
+        </div>
+        <div class="shortcut-section" data-ctx="grid">
+          <div class="shortcut-section-title">A/B 比较</div>
+          <div class="shortcut-row"><span class="keys"><kbd>c</kbd></span><span class="desc">选当前为 A;再按 <kbd>c</kbd> 另一张 = 打开 A/B 比较</span></div>
+          <div class="shortcut-row"><span class="keys">Shift+点击</span><span class="desc">缩略图直接进 A 槽(网格上的快捷手势)</span></div>
+          <div class="shortcut-row"><span class="keys">⇆ 按钮</span><span class="desc">卡片悬停可见;点一次选 A,点第二张开比较</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>Esc</kbd></span><span class="desc">取消 A 选择</span></div>
+        </div>
+        <div class="shortcut-section" data-ctx="compare">
+          <div class="shortcut-section-title">比较窗内(同步缩放)</div>
+          <div class="shortcut-row"><span class="keys"><kbd>z</kbd></span><span class="desc">所有照片同步 1:1 放大 / 复原</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>+</kbd> / <kbd>−</kbd></span><span class="desc">同步细调缩放</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>0</kbd></span><span class="desc">回到中心位置(保留缩放)</span></div>
+          <div class="shortcut-row"><span class="keys">点击图片</span><span class="desc">所有照片同步 1:1 缩放到该相对位置</span></div>
+          <div class="shortcut-row"><span class="keys">拖动 / 滚轮</span><span class="desc">所有照片同步平移 / 缩放</span></div>
+        </div>
+        <div class="shortcut-section" data-ctx="lightbox">
+          <div class="shortcut-section-title">放大窗内</div>
+          <div class="shortcut-row"><span class="keys"><kbd>r</kbd></span><span class="desc">顺时针旋转 90°</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>R</kbd></span><span class="desc">逆时针旋转 90°</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>z</kbd></span><span class="desc">1:1 焦点检查 (再按一次回到适配)</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>+</kbd> / <kbd>−</kbd></span><span class="desc">细调缩放</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>0</kbd></span><span class="desc">回到中心位置(保留缩放)</span></div>
+          <div class="shortcut-row"><span class="keys">点击图片</span><span class="desc">在该位置 1:1 放大 · 再点回适配</span></div>
+          <div class="shortcut-row"><span class="keys">拖动图片</span><span class="desc">在 1:1 模式下平移</span></div>
+          <div class="shortcut-row"><span class="keys">滚轮</span><span class="desc">以光标为中心放大/缩小</span></div>
+          <!-- v0.13.4 — surface v0.11-v0.13 new keys -->
+          <div class="shortcut-row"><span class="keys"><kbd>A</kbd></span><span class="desc"><span style="color:#c4b9a9">v0.13</span> · 6 轴 AI attribution heatmap</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>H</kbd></span><span class="desc"><span style="color:#c4b9a9">v0.12</span> · EXIF / 直方图 overlay</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>\</kbd></span><span class="desc"><span style="color:#c4b9a9">v0.12</span> · 一键打开同 burst 组 A/B 比较</span></div>
+          <div class="shortcut-row"><span class="keys">底部 1px 条</span><span class="desc"><span style="color:#c4b9a9">v0.11</span> · 拖动 scrub 所有可见照片(DaVinci-style)</span></div>
+        </div>
+        <!-- v0.13.4 — grid: marquee + v0.12 bulk -->
+        <div class="shortcut-section" data-ctx="grid">
+          <div class="shortcut-section-title">批量(v0.11+)</div>
+          <div class="shortcut-row"><span class="keys">网格空白处拖框</span><span class="desc"><span style="color:#c4b9a9">v0.11</span> · marquee 框选;底部弹出批量工具栏</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>⌘</kbd>+<kbd>A</kbd></span><span class="desc">全选当前可见</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>Esc</kbd></span><span class="desc">取消所有 marquee 选择</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>⌘</kbd>+<kbd>K</kbd></span><span class="desc">命令面板(模糊搜索动作)</span></div>
+        </div>
+        <div class="shortcut-section" data-ctx="universal">
+          <div class="shortcut-section-title">通用</div>
+          <div class="shortcut-row"><span class="keys"><kbd>Esc</kbd></span><span class="desc">关闭当前面板</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>?</kbd></span><span class="desc">显示本面板</span></div>
+        </div>
+      </div>
+      <div class="shortcuts-foot">
+        <span class="muted">在输入框中输入时,这些快捷键会自动让位 — 安全粘贴文本不会触发标注</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- v2.5 — feature-discovery tour modal. Reuses the shortcuts-modal
+       shell (same .show toggle, same registerModal escape/backdrop
+       handling) so it costs zero new CSS. One feature per row: what it
+       is + exactly where to find / trigger it. -->
+  <div class="shortcuts-modal" id="tourModal">
+    <div class="shortcuts-card modal-info">
+      <div class="shortcuts-header">
+        <h3 class="modal-title">✨ 功能巡览 — 进阶能力</h3>
+        <button class="close" id="tourClose" aria-label="关闭功能巡览">✕</button>
+      </div>
+      <div class="shortcuts-body">
+        <div class="shortcut-section">
+          <div class="shortcut-row"><span class="keys">🔎 语义搜索</span><span class="desc">顶栏搜索框输入自然语言(如"红衣服的人 / sharpest sunset"),<kbd>Enter</kbd> 用 CLIP 检索全场照片</span></div>
+          <div class="shortcut-row"><span class="keys">⌨️ 键盘选片</span><span class="desc"><kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> 标 keep/maybe/cull;放大窗开 <b>⏩自动</b> 后标完自动推进 — 200 张不碰鼠标</span></div>
+          <div class="shortcut-row"><span class="keys">⧉ 连拍折叠</span><span class="desc">工具栏"⧉ 折叠成堆"把每个连拍组收成最佳 1 张;点卡片角 <b>⧉N</b> 展开并排比较(<kbd>G</kbd> 跳组)</span></div>
+          <div class="shortcut-row"><span class="keys">🎯 个性化</span><span class="desc">每次纠正都在教 PixCull 你的口味;满 50 张后新批次自动按你的标准校准(<code>pixcull personalize</code> 查看/还原)</span></div>
+          <div class="shortcut-row"><span class="keys">🔥 归因热力图</span><span class="desc">放大窗按 <kbd>A</kbd> 选任意评分轴 — 看 AI 这一分到底在看照片的哪里</span></div>
+          <div class="shortcut-row"><span class="keys">📇 联系表导出</span><span class="desc"><code>pixcull contact-sheet &lt;run&gt;</code> 一键生成可交付客户的精选样片 PDF</span></div>
+        </div>
+      </div>
+      <div class="shortcuts-foot">
+        <span class="muted">键盘全清单见 <kbd>?</kbd> · 全部能力 100% 本地运行</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- V14.5 floating "? 快捷键" hint — discoverability. Hidden in
+       the bottom-right corner, low contrast so it doesn't compete
+       with the main UI. -->
+  <button class="shortcuts-hint" id="shortcutsHint" type="button"
+          aria-label="打开键盘快捷键面板">
+    <kbd>?</kbd> 快捷键
+  </button>
+
+<script>
+@@INLINE:results.js@@
+</script>
+</body>
+</html>

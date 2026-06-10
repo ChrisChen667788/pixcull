@@ -91,10 +91,15 @@ Audit the diff before any push (`git -C <repo> diff origin/main..main`):
 - Pipeline: `pixcull/pipeline/orchestrator.py::run_pipeline(folder,
   output, …)` → `scores.csv` + `rubric.jsonl` in the run dir.
 - Web demo: `scripts/serve_demo.py` (BaseHTTPRequestHandler;
-  `_DEMO_ROOT=/tmp/pixcull_demo`; routes via `if path.startswith(...)`
+  `_DEMO_ROOT=/tmp/pixcull_demo`, env-overridable via
+  `PIXCULL_DEMO_ROOT`; routes via `if path.startswith(...)`
   in `do_GET`/`do_POST`).  UI: `pixcull/report/templates/results.html`
-  (single-file vanilla JS) + the dedicated video surfaces
-  (`/video/<id>`, `/timeline/<id>`).
+  (single-file at *runtime*; since v2.5 it is a **built artifact** —
+  edit `templates/src/{results.src.html,results.css,results.js}` then
+  `make results-html`; `tests/test_results_build.py` golden-fails any
+  hand edit to the artifact) + the dedicated video surfaces
+  (`/video/<id>`, `/timeline/<id>`, templates `video_review.html` /
+  `timeline.html`).
 - v2.0 video stack: `io/video.py` (extract) → `scoring/temporal.py`
   (score_temporal + windows) → `scoring/reel.py` (reel candidates) →
   `io/reel_assembly.py` (cut + EDL); plus `scoring/video_quality.py`
