@@ -46,6 +46,66 @@ def _font(size: int):
     return ImageFont.load_default()
 
 
+_BRASS = (220, 184, 126)   # star fill / brand accent
+
+
+def _draw_star(d, cx: float, cy: float, r: float, *, filled: bool) -> None:
+    """Vector 5-point star — drawn, not a font glyph, so the rating row
+    renders identically even on the bitmap-font fallback path."""
+    import math
+    pts = []
+    for i in range(10):
+        ang = -math.pi / 2 + i * math.pi / 5
+        rad = r if i % 2 == 0 else r * 0.42
+        pts.append((cx + rad * math.cos(ang), cy + rad * math.sin(ang)))
+    if filled:
+        d.polygon(pts, fill=_BRASS)
+    else:
+        d.polygon(pts, outline=_MUTED)
+
+
+def _star_row(d, x_right: float, cy: float, stars: int, r: float = 6) -> None:
+    """Right-aligned 5-slot star rating ending at ``x_right``."""
+    stars = max(0, min(5, int(stars)))
+    step = r * 2.4
+    for i in range(5):
+        cx = x_right - (4 - i) * step - r
+        _draw_star(d, cx, cy, r, filled=(i < stars))
+
+
+def _cover_page(page: tuple[int, int], cover: dict, margin: int):
+    """The branded cover: spotlight mark, title, studio / date block."""
+    from PIL import Image, ImageDraw
+    W, H = page
+    canvas = Image.new("RGB", page, _BG)
+    d = ImageDraw.Draw(canvas)
+    cx, cy = W / 2, H * 0.30
+    # Brand mark — the "spotlight on one in a crowd" motif.
+    for dx, dy, rr in ((-120, -52, 9), (118, -64, 8), (-126, 60, 10), (122, 66, 7)):
+        d.ellipse((cx + dx - rr, cy + dy - rr, cx + dx + rr, cy + dy + rr),
+                  fill=(196, 185, 169))
+    d.ellipse((cx - 56, cy - 56, cx + 56, cy + 56), fill=_BRASS)
+    d.ellipse((cx - 64, cy - 64, cx + 64, cy + 64), outline=_BRASS, width=2)
+
+    def _centered(text, y, font, fill):
+        tw = d.textlength(text, font=font)
+        d.text((cx - tw / 2, y), text, font=font, fill=fill)
+
+    title = str(cover.get("title") or "Selects")
+    _centered(title, H * 0.46, _font(54), _INK)
+    d.line([(cx - 140, H * 0.46 + 86), (cx + 140, H * 0.46 + 86)],
+           fill=_BRASS, width=2)
+    y = H * 0.46 + 120
+    for key, size, fill in (("studio", 26, _INK), ("date", 20, _MUTED),
+                            ("count_line", 20, _MUTED)):
+        val = cover.get(key)
+        if val:
+            _centered(str(val), y, _font(size), fill)
+            y += size + 18
+    _centered("curated with PixCull", H - margin - 10, _font(14), _MUTED)
+    return canvas
+
+
 def render_contact_sheet(
     items: Sequence[tuple],
     out_pdf: Path | str,
@@ -56,8 +116,18 @@ def render_contact_sheet(
     page: tuple[int, int] = _A4_150DPI,
     margin: int = 60,
     gutter: int = 18,
+    cover: dict | None = None,
 ) -> int:
-    """Render ``items`` (``(image_path, caption)`` tuples) into a grid PDF.
+    """Render ``items`` into a grid PDF — the client-facing proof sheet.
+
+    Items are ``(image_path, caption)`` or ``(image_path, caption, stars)``
+    tuples; when ``stars`` (1–5) is present a brass star row is drawn
+    right-aligned on the caption line (vector-drawn, so it never depends
+    on a glyph the fallback bitmap font lacks).
+
+    ``cover`` (v2.5 branded deliverable) prepends a cover page —
+    ``{"title", "studio", "date", "count_line"}``, any subset — with the
+    spotlight brand mark, an editorial rule and the studio/date block.
 
     Lays out ``cols × rows_per_page`` cells per page (thumbnail fit into the
     cell, caption below), a title band on top and a ``n / total`` footer.
@@ -104,11 +174,19 @@ def render_contact_sheet(
                             outline=_MUTED, width=1)
                 d.text((x + 8, y + 8), "(image unavailable)",
                        font=cap_font, fill=_MUTED)
-            d.text((x, y + thumb_h + 6), str(caption)[:46],
+            stars = item[2] if len(item) > 2 else None
+            cap_max = 32 if stars else 46     # leave room for the star row
+            d.text((x, y + thumb_h + 6), str(caption)[:cap_max],
                    font=cap_font, fill=_MUTED)
+            if stars:
+                _star_row(d, x + cell_w, y + thumb_h + 15, stars)
         d.text((W - margin - 70, H - margin + 4),
                f"{pi + 1} / {n_pages}", font=foot_font, fill=_MUTED)
         pages.append(canvas)
+
+    if cover:
+        pages.insert(0, _cover_page(page, cover, margin))
+        n_pages += 1
 
     out_pdf = Path(out_pdf)
     out_pdf.parent.mkdir(parents=True, exist_ok=True)
@@ -148,11 +226,17 @@ def contact_sheet_from_run(
     decision: str = "keep",
     images_dir: Path | str | None = None,
     title: str | None = None,
+    studio: str | None = None,
+    date: str | None = None,
+    with_cover: bool = True,
     **kw,
 ) -> tuple[int, int]:
     """Build a contact-sheet PDF from a run's ``scores.csv``.
 
     ``decision`` filters rows (``keep`` / ``maybe`` / ``cull`` / ``all``).
+    v2.5: each cell carries a 1–5 brass star rating derived from
+    ``score_final`` and, unless ``with_cover=False``, a branded cover page
+    (``studio`` / ``date`` lines included when given) opens the deliverable.
     Returns ``(n_pages, n_photos)``.
     """
     run_dir = Path(run_dir)
@@ -173,10 +257,19 @@ def contact_sheet_from_run(
     for r in rows:
         fn = r.get("filename", "") or ""
         sc = r.get("score_final")
-        cap = f"{fn}   {float(sc):.2f}" if _is_num(sc) else fn
-        items.append((_resolve_thumb(img_dir, fn, r), cap))
+        if _is_num(sc):
+            # score_final is 0..1 → 1..5 brass stars on the cell.
+            stars = max(1, min(5, round(float(sc) * 5)))
+            items.append((_resolve_thumb(img_dir, fn, r), fn, stars))
+        else:
+            items.append((_resolve_thumb(img_dir, fn, r), fn))
 
     if title is None:
         title = f"PixCull — {run_dir.name} — {len(items)} {decision} selects"
-    n_pages = render_contact_sheet(items, out_pdf, title=title, **kw)
+    cover = None
+    if with_cover:
+        cover = {"title": title, "studio": studio, "date": date,
+                 "count_line": f"{len(items)} selects · {decision}"}
+    n_pages = render_contact_sheet(items, out_pdf, title=title,
+                                   cover=cover, **kw)
     return n_pages, len(items)

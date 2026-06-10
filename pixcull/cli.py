@@ -88,16 +88,24 @@ def contact_sheet(
     images_dir: Path = typer.Option(
         None, "--images",
         help="Where to find thumbnails (default: <run>/thumbs)"),
+    studio: str = typer.Option(
+        None, "--studio", help="Studio / photographer name on the cover"),
+    date: str = typer.Option(
+        None, "--date", help="Shoot date line on the cover"),
+    no_cover: bool = typer.Option(
+        False, "--no-cover", help="Skip the branded cover page"),
 ) -> None:
     """v2.5-P1 — export a client-ready contact-sheet PDF of a run's selects.
 
-    A printable grid (thumbnail + filename + score per cell) of the photos
-    with the chosen decision — the proof sheet you hand a client.
+    A branded deliverable: cover page (studio / date), then a printable
+    grid — thumbnail + filename + 1-5 star rating per cell — of the
+    photos with the chosen decision.
     """
     from pixcull.report.contact_sheet import contact_sheet_from_run
     n_pages, n_photos = contact_sheet_from_run(
         run_dir, out, decision=decision, cols=cols, rows_per_page=rows,
-        title=title, images_dir=images_dir)
+        title=title, images_dir=images_dir,
+        studio=studio, date=date, with_cover=not no_cover)
     typer.echo(
         f"✓ {out}  ·  {n_photos} {decision} photo(s)  ·  {n_pages} page(s)")
 

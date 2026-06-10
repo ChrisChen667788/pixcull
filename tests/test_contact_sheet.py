@@ -61,8 +61,13 @@ def test_from_run_filters_by_decision(tmp_path):
         for i in range(6):
             w.writerow([f"f{i}.jpg", "keep" if i < 4 else "cull", 0.7 + i * 0.01])
     out = run / "gallery.pdf"
+    # v2.5 default: branded cover page + 1 grid page
     n_pages, n_photos = contact_sheet_from_run(run, out, decision="keep")
-    assert n_photos == 4 and n_pages == 1 and _is_pdf(out)
+    assert n_photos == 4 and n_pages == 2 and _is_pdf(out)
+    # --no-cover path keeps the bare grid
+    n_pages2, _ = contact_sheet_from_run(run, run / "bare.pdf",
+                                         decision="keep", with_cover=False)
+    assert n_pages2 == 1
     # decision=all picks up everything
     _, n_all = contact_sheet_from_run(run, run / "all.pdf", decision="all")
     assert n_all == 6
@@ -78,6 +83,21 @@ def test_from_run_reads_output_subdir(tmp_path):
         w.writerow(["a.jpg", "keep", 0.91])
     n_pages, n_photos = contact_sheet_from_run(run, run / "g.pdf")
     assert n_photos == 1 and _is_pdf(run / "g.pdf")
+
+
+def test_render_cover_and_stars(tmp_path):
+    """v2.5 — cover adds exactly one page; 3-tuple items (with stars) and
+    legacy 2-tuples coexist on the same sheet."""
+    p = tmp_path / "a.jpg"; _swatch(p)
+    items = [(p, "a.jpg", 4), (p, "legacy-no-stars.jpg")]
+    out = tmp_path / "branded.pdf"
+    n = render_contact_sheet(
+        items, out,
+        cover={"title": "Wedding — selects", "studio": "Studio X",
+               "date": "2029-06-01", "count_line": "2 selects"})
+    assert n == 2 and _is_pdf(out)          # cover + 1 grid page
+    # cover off → same items, 1 page
+    assert render_contact_sheet(items, tmp_path / "plain.pdf") == 1
 
 
 def test_from_run_missing_csv_raises(tmp_path):
