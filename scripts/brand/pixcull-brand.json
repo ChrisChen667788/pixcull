@@ -6,12 +6,12 @@
   "subtitle": "LOCAL-FIRST AI PHOTO CULLING",
   "footerLine": "github.com/ChrisChen667788/pixcull",
   "palette": {
-    "wordmarkStart": "#6E56CF",
-    "wordmarkMid":   "#A855F7",
-    "wordmarkEnd":   "#EC4899",
-    "bgDeep":        "#0b0d10",
-    "bgMid":         "#1a1230",
-    "bgCosmic":      "#3d1b69"
+    "wordmarkStart": "#c4b9a9",
+    "wordmarkMid":   "#988b78",
+    "wordmarkEnd":   "#6a6052",
+    "bgDeep":        "#110e0b",
+    "bgMid":         "#1e1a14",
+    "bgCosmic":      "#33291a"
   },
   "outputDir": "docs/brand"
 }

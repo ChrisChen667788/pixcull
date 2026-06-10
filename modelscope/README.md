@@ -42,7 +42,7 @@ tasks:
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](https://github.com/ChrisChen667788/pixcull/blob/main/LICENSE)
 ![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-3776AB.svg?style=flat-square&logo=python&logoColor=white)
 ![本地优先](https://img.shields.io/badge/本地优先-照片永不上传-34d399.svg?style=flat-square)
-[![v0.7](https://img.shields.io/github/v/release/ChrisChen667788/pixcull?style=flat-square&color=6E56CF)](https://github.com/ChrisChen667788/pixcull/releases/latest)
+[![v0.7](https://img.shields.io/github/v/release/ChrisChen667788/pixcull?style=flat-square&color=dcb87e)](https://github.com/ChrisChen667788/pixcull/releases/latest)
 
 # PixCull · 摄影师专用的本地 AI 选片工具
 
@@ -206,7 +206,7 @@ aperture 分桶。红色高亮偏离均值 > 1.5σ 的桶,提示
 ![Lightbox 内构图轴 attribution 叠加 + 6 轴选择条](docs/screenshots/17-attribution-heatmap.png)
 
 Lightbox 按 `A` 弹 6 轴选择条 → 点轴名 → 该轴的 Integrated
-Gradients 显著度图叠在原图(0.5 alpha,indigo→pink 渐变)。
+Gradients 显著度图叠在原图(0.5 alpha,espresso→brass 暖色渐变)。
 Heatmap PNG 缓存到 `output/attribution/<axis>/<sha>.png`。
 
 ### 🎬 视频审片 · 时间线 scrubber V2(v2.0-P0-4)

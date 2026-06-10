@@ -63,3 +63,43 @@ def test_no_legacy_palette_in_ui_source():
         "Legacy pre-v2.3 palette reintroduced — use editorial-warm "
         "stone/brass (var(--accent) / #c4b9a9 / #dcb87e / #d8cebf) or the "
         "terracotta danger (#cf6f5b) instead:\n  " + "\n  ".join(offenders))
+
+
+# v2.5 — the leak the UI guard above can't see: the brand drifted in the
+# *public-facing* surfaces.  The v2.3 rebrand restyled the app but the
+# README hero lockup SVGs + the brand generators + badge colours kept the
+# old cosmic-indigo palette for two more quarters.  Guard them too.
+# Historical docs (docs/DESIGN-AUDIT-*, old charters) legitimately *name*
+# the purged colours, so they are deliberately NOT scanned.
+BRAND_FILES = (
+    [ROOT / "README.md", ROOT / "modelscope" / "README.md",
+     ROOT / "scripts" / "brand" / "gen_brand_svg.py",
+     ROOT / "scripts" / "brand" / "gen_animated_demo.py",
+     ROOT / "scripts" / "brand" / "pixcull-brand.json"]
+    + sorted((ROOT / "docs" / "brand").glob("*.svg"))
+    + sorted((ROOT / "docs" / "diagrams").glob("*.svg"))
+)
+
+
+def test_no_legacy_palette_in_brand_surfaces():
+    offenders = []
+    for f in BRAND_FILES:
+        if not f.exists():
+            continue
+        text = f.read_text("utf-8")
+        for m in _HEX.finditer(text):
+            h = m.group(1).lower()
+            if h in _CB_ALLOW or not _is_ai_family(h):
+                continue
+            line = text.count("\n", 0, m.start()) + 1
+            offenders.append(f"{f.name}:{line}  #{h}")
+        # shields.io badges encode the hex without '#'
+        for m in re.finditer(r"color=([0-9a-fA-F]{6})\b", text):
+            h = m.group(1).lower()
+            if h not in _CB_ALLOW and _is_ai_family(h):
+                line = text.count("\n", 0, m.start()) + 1
+                offenders.append(f"{f.name}:{line}  badge color={h}")
+    assert not offenders, (
+        "Old cosmic-indigo palette on a public brand surface (README / "
+        "brand SVG / generator) — rebrand to editorial-warm:\n  "
+        + "\n  ".join(offenders))

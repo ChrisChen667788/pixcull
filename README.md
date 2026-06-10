@@ -1,6 +1,7 @@
 <!-- v0.9-MARKETING — hero banner from scripts/brand/gen_brand_svg.py.
-     The signature gradient (#6E56CF → #EC4899) + the "spotlight on
-     one in a crowd" logo + serif wordmark.  Regenerate via:
+     Editorial-warm signature gradient (stone #c4b9a9 → graphite #6a6052
+     on espresso) + the "spotlight on one in a crowd" logo + serif
+     wordmark.  Regenerate via:
        python scripts/brand/gen_brand_svg.py -->
 <div align="center">
   <img src="docs/brand/pixcull-horizontal-lockup.svg"
@@ -25,7 +26,7 @@
   <img alt="Platform" src="https://img.shields.io/badge/macOS-Apple%20Silicon%20%26%20Intel-000.svg?style=flat-square&logo=apple" />
   <img alt="Local-first" src="https://img.shields.io/badge/local--first-photos%20never%20upload-34d399.svg?style=flat-square" />
   <a href="https://github.com/ChrisChen667788/pixcull/stargazers"><img alt="stars" src="https://img.shields.io/github/stars/ChrisChen667788/pixcull?style=flat-square" /></a>
-  <a href="https://github.com/ChrisChen667788/pixcull/releases/latest"><img alt="latest release" src="https://img.shields.io/github/v/release/ChrisChen667788/pixcull?style=flat-square&color=6E56CF" /></a>
+  <a href="https://github.com/ChrisChen667788/pixcull/releases/latest"><img alt="latest release" src="https://img.shields.io/github/v/release/ChrisChen667788/pixcull?style=flat-square&color=dcb87e" /></a>
 </p>
 
 <p align="center">
@@ -356,8 +357,8 @@ a small popover explaining "62% sure · top reason: 同组邻居高 0.04 ·
 Press `A` in the lightbox → 6-axis chip strip (技术/主体/构图/光线/
 时刻/美感) appears, click any axis → that axis's Integrated-Gradients
 heatmap (over the timm `mobilenetv3_small_100` backbone) overlays
-the photo at 0.5 alpha.  Indigo→pink colorize matches the brand
-gradient.  Per-axis cache at `output/attribution/<axis>/<sha>.png`.
+the photo at 0.5 alpha.  Espresso→brass warm colorize matches the
+editorial brand.  Per-axis cache at `output/attribution/<axis>/<sha>.png`.
 
 ### Every surface at a glance
 
@@ -838,7 +839,7 @@ per-run 关闭(v0.13-P0-3)。
 
 Lightbox 按 `A` 弹出 6 轴选择条(技术 / 主体 / 构图 / 光线 / 时刻
 / 美感),点任意轴 → 该轴的 Integrated Gradients 显著度图叠加在
-原图上(0.5 alpha),indigo→pink 渐变配色。Heatmap 缓存到
+原图上(0.5 alpha),espresso→brass 暖色渐变配色。Heatmap 缓存到
 `output/attribution/<axis>/<sha>.png`,后续打开秒级出图。
 
 ### 🎬 视频审片 · 时间线 scrubber V2(v2.0-P0-4)

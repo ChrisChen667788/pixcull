@@ -46,8 +46,8 @@ from typing import Tuple
 def _gradient_defs(palette: dict, gradient_id: str = "brandGrad") -> str:
     """Emit a <linearGradient> from palette wordmark stops.  Two-stop
     when no mid, three-stop with mid."""
-    start = palette.get("wordmarkStart", "#6E56CF")
-    end   = palette.get("wordmarkEnd",   "#EC4899")
+    start = palette.get("wordmarkStart", "#c4b9a9")
+    end   = palette.get("wordmarkEnd",   "#6a6052")
     mid   = palette.get("wordmarkMid")
     stops = [f'<stop offset="0%" stop-color="{start}"/>']
     if mid:
@@ -63,9 +63,9 @@ def _cosmic_bg_defs(palette: dict, w: int, h: int,
                     radial_id: str = "cosmicBg") -> str:
     """Emit a radial-gradient background — deep edge fading to cosmic
     center.  Cinematic look identical across all 3 variants."""
-    deep   = palette.get("bgDeep",   "#0b0d10")
-    mid    = palette.get("bgMid",    "#1a1230")
-    cosmic = palette.get("bgCosmic", "#3d1b69")
+    deep   = palette.get("bgDeep",   "#110e0b")
+    mid    = palette.get("bgMid",    "#1e1a14")
+    cosmic = palette.get("bgCosmic", "#33291a")
     # Radial centred at 30% width × 35% height (rule-of-thirds-ish
     # — keeps the bright spot off-centre, looks intentional).
     return (
@@ -154,15 +154,15 @@ def _horizontal_lockup(brand: dict) -> str:
   </text>
   <text x="600" y="380" font-family="{_SANS_STACK}"
         font-size="22" font-weight="600" letter-spacing="3"
-        fill="#aab3c1">
+        fill="#c4b9a9">
     {_esc(subtitle)}
   </text>
   <text x="600" y="440" font-family="{_SANS_STACK}"
-        font-size="24" font-weight="400" fill="#dbdfe7" opacity="0.92">
+        font-size="24" font-weight="400" fill="#e8e0d4" opacity="0.92">
     {_esc(tagline)}
   </text>
   <text x="600" y="640" font-family="{_SANS_STACK}"
-        font-size="14" font-weight="500" fill="#7b8597"
+        font-size="14" font-weight="500" fill="#8a7d6a"
         letter-spacing="1.5">
     {_esc(footer)}
   </text>
@@ -202,18 +202,18 @@ def _vertical_poster(brand: dict) -> str:
   </text>
   <text x="360" y="990" font-family="{_SANS_STACK}"
         font-size="20" font-weight="600" text-anchor="middle"
-        letter-spacing="4" fill="#aab3c1">
+        letter-spacing="4" fill="#c4b9a9">
     {_esc(subtitle)}
   </text>
   <!-- Tagline near bottom, broken if Chinese is long -->
   <text x="360" y="1130" font-family="{_SANS_STACK}"
         font-size="28" font-weight="500" text-anchor="middle"
-        fill="#dbdfe7" opacity="0.92">
+        fill="#e8e0d4" opacity="0.92">
     {_esc(tagline)}
   </text>
   <text x="360" y="1220" font-family="{_SANS_STACK}"
         font-size="13" font-weight="500" text-anchor="middle"
-        fill="#7b8597" letter-spacing="2">
+        fill="#8a7d6a" letter-spacing="2">
     {_esc(footer)}
   </text>
 </svg>

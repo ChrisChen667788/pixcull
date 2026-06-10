@@ -3,8 +3,8 @@
      width="720" height="1280" role="img"
      aria-label="PixCull — 本地 AI 帮你 6 秒挑出一晚要拍的全部精选。">
   <defs>
-    <linearGradient id="brandGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#6E56CF"/><stop offset="55%" stop-color="#A855F7"/><stop offset="100%" stop-color="#EC4899"/></linearGradient>
-    <radialGradient id="cosmicBg" cx="30%" cy="35%" r="80%"><stop offset="0%"  stop-color="#3d1b69"/><stop offset="55%" stop-color="#1a1230"/><stop offset="100%" stop-color="#0b0d10"/></radialGradient>
+    <linearGradient id="brandGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#c4b9a9"/><stop offset="55%" stop-color="#988b78"/><stop offset="100%" stop-color="#6a6052"/></linearGradient>
+    <radialGradient id="cosmicBg" cx="30%" cy="35%" r="80%"><stop offset="0%"  stop-color="#33291a"/><stop offset="55%" stop-color="#1e1a14"/><stop offset="100%" stop-color="#110e0b"/></radialGradient>
   </defs>
   <rect width="720" height="1280" fill="url(#cosmicBg)"/>
   <!-- Big centred glow behind the logo -->
@@ -31,18 +31,18 @@
   </text>
   <text x="360" y="990" font-family="-apple-system,'Inter','Segoe UI Variable','Segoe UI','PingFang SC','Microsoft Yahei UI',system-ui,sans-serif"
         font-size="20" font-weight="600" text-anchor="middle"
-        letter-spacing="4" fill="#aab3c1">
+        letter-spacing="4" fill="#c4b9a9">
     LOCAL-FIRST AI PHOTO CULLING
   </text>
   <!-- Tagline near bottom, broken if Chinese is long -->
   <text x="360" y="1130" font-family="-apple-system,'Inter','Segoe UI Variable','Segoe UI','PingFang SC','Microsoft Yahei UI',system-ui,sans-serif"
         font-size="28" font-weight="500" text-anchor="middle"
-        fill="#dbdfe7" opacity="0.92">
+        fill="#e8e0d4" opacity="0.92">
     本地 AI 帮你 6 秒挑出一晚要拍的全部精选。
   </text>
   <text x="360" y="1220" font-family="-apple-system,'Inter','Segoe UI Variable','Segoe UI','PingFang SC','Microsoft Yahei UI',system-ui,sans-serif"
         font-size="13" font-weight="500" text-anchor="middle"
-        fill="#7b8597" letter-spacing="2">
+        fill="#8a7d6a" letter-spacing="2">
     github.com/ChrisChen667788/pixcull
   </text>
 </svg>

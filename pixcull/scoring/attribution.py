@@ -233,7 +233,7 @@ def _get_axis_head(axis: str):
 
 
 # ---------------------------------------------------------------------------
-# Colorize helper — indigo brand gradient
+# Colorize helper — editorial-warm brand gradient (graphite → brass)
 # ---------------------------------------------------------------------------
 
 

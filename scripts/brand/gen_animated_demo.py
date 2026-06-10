@@ -47,11 +47,11 @@ def _demo_svg() -> str:
             cards_xml.append(f'''
     <g opacity="0" transform="translate({x},{y + 24})">
       <rect width="124" height="92" rx="8"
-            fill="#14171c" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
-      <rect x="6" y="6" width="112" height="60" rx="4" fill="#1c2028"/>
+            fill="#1a1611" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
+      <rect x="6" y="6" width="112" height="60" rx="4" fill="#241f17"/>
       <circle cx="116" cy="78" r="6" fill="{colour}"/>
       <text x="10" y="84" font-family="ui-monospace, monospace"
-            font-size="8.5" fill="#8a8e96">IMG_{i:04d}.jpg</text>
+            font-size="8.5" fill="#8a7d6a">IMG_{i:04d}.jpg</text>
       <animate attributeName="opacity"
                from="0" to="1" begin="{delay}s" dur="0.4s" fill="freeze"/>
       <animateTransform attributeName="transform" type="translate"
@@ -77,20 +77,20 @@ def _demo_svg() -> str:
   </desc>
   <defs>
     <linearGradient id="demoBrandGrad" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%"   stop-color="#6E56CF"/>
-      <stop offset="50%"  stop-color="#A855F7"/>
-      <stop offset="100%" stop-color="#EC4899"/>
+      <stop offset="0%"   stop-color="#c4b9a9"/>
+      <stop offset="50%"  stop-color="#988b78"/>
+      <stop offset="100%" stop-color="#6a6052"/>
     </linearGradient>
     <radialGradient id="demoBg" cx="30%" cy="35%" r="80%">
-      <stop offset="0%"  stop-color="#3d1b69"/>
-      <stop offset="55%" stop-color="#1a1230"/>
-      <stop offset="100%" stop-color="#0b0d10"/>
+      <stop offset="0%"  stop-color="#33291a"/>
+      <stop offset="55%" stop-color="#1e1a14"/>
+      <stop offset="100%" stop-color="#110e0b"/>
     </radialGradient>
   </defs>
 
   <!-- Background canvas -->
   <rect width="{_W}" height="{_H}" fill="url(#demoBg)"/>
-  <rect width="{_W}" height="{_H}" fill="#0b0d10" opacity="0.35"/>
+  <rect width="{_W}" height="{_H}" fill="#110e0b" opacity="0.35"/>
 
   <!-- =========== Workspace bar (slides down 0.3s) =========== -->
   <g opacity="0">
@@ -101,25 +101,25 @@ def _demo_svg() -> str:
     <!-- logo mark — same "spotlight on one in a crowd" as the
          real product workspace bar -->
     <g transform="translate(20,12) scale(1)">
-      <circle cx="4"  cy="5"  r="1.6" fill="#aab3c1" opacity="0.32"/>
-      <circle cx="20" cy="6"  r="1.4" fill="#aab3c1" opacity="0.28"/>
-      <circle cx="3"  cy="19" r="1.8" fill="#aab3c1" opacity="0.30"/>
-      <circle cx="21" cy="20" r="1.3" fill="#aab3c1" opacity="0.28"/>
+      <circle cx="4"  cy="5"  r="1.6" fill="#c4b9a9" opacity="0.32"/>
+      <circle cx="20" cy="6"  r="1.4" fill="#c4b9a9" opacity="0.28"/>
+      <circle cx="3"  cy="19" r="1.8" fill="#c4b9a9" opacity="0.30"/>
+      <circle cx="21" cy="20" r="1.3" fill="#c4b9a9" opacity="0.28"/>
       <circle cx="12" cy="12" r="7"  fill="url(#demoBrandGrad)"/>
     </g>
     <text x="56" y="30" font-family="Inter, -apple-system, sans-serif"
-          font-size="15" font-weight="700" fill="#e8eaed">
+          font-size="15" font-weight="700" fill="#efe9df">
       Pix<tspan fill="url(#demoBrandGrad)">Cull</tspan>
     </text>
     <text x="120" y="30" font-family="Inter, sans-serif"
-          font-size="12.5" font-weight="500" fill="#8a8e96"
+          font-size="12.5" font-weight="500" fill="#8a7d6a"
           letter-spacing="0.5">
       / 分析结果 · sample_a1b2
     </text>
     <!-- Stats group (counter animates 0→target) -->
     <g transform="translate(900,30)">
       <text x="0" y="0" font-family="Inter,sans-serif"
-            font-size="13" fill="#8a8e96">
+            font-size="13" fill="#8a7d6a">
         共 <tspan id="totN" font-family="Charter,Georgia,serif"
             font-weight="700" font-size="22"
             fill="url(#demoBrandGrad)">0</tspan> 张
@@ -152,25 +152,25 @@ def _demo_svg() -> str:
     <line x1="236" y1="48" x2="236" y2="{_H}"
           stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
     <text x="18" y="86" font-family="Inter,sans-serif"
-          font-size="11" font-weight="700" fill="#8a8e96"
+          font-size="11" font-weight="700" fill="#8a7d6a"
           letter-spacing="2">LIBRARY</text>
     <text x="18" y="130" font-family="Inter,sans-serif"
-          font-size="12.5" font-weight="600" fill="#dbdfe7">▾ 决定</text>
-    <g font-family="Inter,sans-serif" font-size="12" fill="#aab3c1">
+          font-size="12.5" font-weight="600" fill="#e8e0d4">▾ 决定</text>
+    <g font-family="Inter,sans-serif" font-size="12" fill="#c4b9a9">
       <text x="38" y="156">全部  •  keep  •  maybe  •  cull</text>
     </g>
     <text x="18" y="200" font-family="Inter,sans-serif"
-          font-size="12.5" font-weight="600" fill="#dbdfe7">▾ 场景</text>
+          font-size="12.5" font-weight="600" fill="#e8e0d4">▾ 场景</text>
     <text x="38" y="226" font-family="Inter,sans-serif" font-size="12"
-          fill="#aab3c1">portrait · landscape · wedding · …</text>
+          fill="#c4b9a9">portrait · landscape · wedding · …</text>
     <text x="18" y="270" font-family="Inter,sans-serif"
-          font-size="12.5" font-weight="600" fill="#dbdfe7">▸ 风格</text>
+          font-size="12.5" font-weight="600" fill="#e8e0d4">▸ 风格</text>
     <text x="18" y="310" font-family="Inter,sans-serif"
-          font-size="12.5" font-weight="600" fill="#dbdfe7">▸ 人脸</text>
+          font-size="12.5" font-weight="600" fill="#e8e0d4">▸ 人脸</text>
     <text x="18" y="350" font-family="Inter,sans-serif"
-          font-size="12.5" font-weight="600" fill="#dbdfe7">▸ 连拍</text>
+          font-size="12.5" font-weight="600" fill="#e8e0d4">▸ 连拍</text>
     <text x="18" y="390" font-family="Inter,sans-serif"
-          font-size="12.5" font-weight="600" fill="#dbdfe7">▸ Cull 原因</text>
+          font-size="12.5" font-weight="600" fill="#e8e0d4">▸ Cull 原因</text>
     <animate attributeName="opacity" from="0" to="1"
              begin="0.18s" dur="0.42s" fill="freeze"/>
     <animateTransform attributeName="transform" type="translate"

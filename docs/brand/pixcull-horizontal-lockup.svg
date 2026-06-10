@@ -3,8 +3,8 @@
      width="1280" height="720" role="img"
      aria-label="PixCull — LOCAL-FIRST AI PHOTO CULLING">
   <defs>
-    <linearGradient id="brandGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#6E56CF"/><stop offset="55%" stop-color="#A855F7"/><stop offset="100%" stop-color="#EC4899"/></linearGradient>
-    <radialGradient id="cosmicBg" cx="30%" cy="35%" r="80%"><stop offset="0%"  stop-color="#3d1b69"/><stop offset="55%" stop-color="#1a1230"/><stop offset="100%" stop-color="#0b0d10"/></radialGradient>
+    <linearGradient id="brandGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#c4b9a9"/><stop offset="55%" stop-color="#988b78"/><stop offset="100%" stop-color="#6a6052"/></linearGradient>
+    <radialGradient id="cosmicBg" cx="30%" cy="35%" r="80%"><stop offset="0%"  stop-color="#33291a"/><stop offset="55%" stop-color="#1e1a14"/><stop offset="100%" stop-color="#110e0b"/></radialGradient>
   </defs>
   <!-- Cosmic background -->
   <rect width="1280" height="720" fill="url(#cosmicBg)"/>
@@ -32,15 +32,15 @@
   </text>
   <text x="600" y="380" font-family="-apple-system,'Inter','Segoe UI Variable','Segoe UI','PingFang SC','Microsoft Yahei UI',system-ui,sans-serif"
         font-size="22" font-weight="600" letter-spacing="3"
-        fill="#aab3c1">
+        fill="#c4b9a9">
     LOCAL-FIRST AI PHOTO CULLING
   </text>
   <text x="600" y="440" font-family="-apple-system,'Inter','Segoe UI Variable','Segoe UI','PingFang SC','Microsoft Yahei UI',system-ui,sans-serif"
-        font-size="24" font-weight="400" fill="#dbdfe7" opacity="0.92">
+        font-size="24" font-weight="400" fill="#e8e0d4" opacity="0.92">
     本地 AI 帮你 6 秒挑出一晚要拍的全部精选。
   </text>
   <text x="600" y="640" font-family="-apple-system,'Inter','Segoe UI Variable','Segoe UI','PingFang SC','Microsoft Yahei UI',system-ui,sans-serif"
-        font-size="14" font-weight="500" fill="#7b8597"
+        font-size="14" font-weight="500" fill="#8a7d6a"
         letter-spacing="1.5">
     github.com/ChrisChen667788/pixcull
   </text>
