@@ -185,15 +185,42 @@ def vlm_caption_from_image(image_path) -> str | None:
         return None
 
 
+def _zh_rewrite(text: str) -> str | None:
+    """v2.5 — bilingual bridge: BLIP captions in English, but the product
+    speaks Chinese.  When the optional local text LLM (the same GGUF the
+    NL-explainer shares) is present, rewrite the English frame description
+    into a short natural Chinese line; ``None`` (→ keep English) when the
+    LLM is absent or misbehaves, so the VLM path never gets worse than the
+    English it already had."""
+    llm = _try_llm()
+    if llm is None:
+        return None
+    try:
+        out = llm(
+            "把下面这句英文镜头描述翻译成不超过 20 字的自然中文,"
+            "只输出译文本身:\n" + text + "\n译文:",
+            max_tokens=48, stop=["\n"], temperature=0.2)
+        zh = out["choices"][0]["text"].strip().strip("。「」\"'").strip()
+        # Sanity: a usable rewrite is short and actually contains CJK.
+        if zh and len(zh) <= 40 and any("一" <= c <= "鿿" for c in zh):
+            return zh
+    except Exception:
+        pass
+    return None
+
+
 def vlm_caption(cand: dict, frames_root=None) -> str | None:
     """Caption the candidate's best frame with the VLM, prefixed with its
-    time range.  ``None`` when the frame can't be found or no VLM."""
+    time range.  ``None`` when the frame can't be found or no VLM.
+    When the local zh text-LLM is installed the English BLIP description
+    is rewritten to Chinese (v2.5); else the English passes through."""
     frame = _resolve_best_frame(cand, frames_root)
     if frame is None:
         return None
     desc = vlm_caption_from_image(frame)
     if not desc:
         return None
+    desc = _zh_rewrite(desc) or desc
     start = float(cand.get("start_s", 0.0))
     end = float(cand.get("end_s", start))
     return f"{start:.1f}–{end:.1f}s:{desc}"

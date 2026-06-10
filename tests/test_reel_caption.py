@@ -126,6 +126,35 @@ def test_resolve_best_frame(tmp_path):
     assert C._resolve_best_frame(_cand(best_frame_id="frame_000005"), None) is None
 
 
+def test_vlm_caption_zh_rewrite(tmp_path, monkeypatch):
+    """v2.5 — with the local zh LLM present, the English BLIP description
+    is rewritten to Chinese; without it (or on garbage output) the
+    English passes through unchanged."""
+    fd = tmp_path / "video_frames" / "v"; fd.mkdir(parents=True)
+    (fd / "frame_000001.jpg").write_bytes(b"x")
+    monkeypatch.setattr(C, "vlm_caption_from_image",
+                        lambda p: "A dog runs on the beach")
+    cand = _cand(best_frame_id="frame_000001", start_s=1.0, end_s=2.0)
+
+    # no LLM → English passthrough
+    monkeypatch.setattr(C, "_try_llm", lambda: None)
+    assert C.vlm_caption(cand, tmp_path) == "1.0–2.0s:A dog runs on the beach"
+
+    # fake zh LLM → Chinese rewrite
+    monkeypatch.setattr(
+        C, "_try_llm",
+        lambda: (lambda prompt, **kw:
+                 {"choices": [{"text": "狗在海滩上奔跑"}]}))
+    assert C.vlm_caption(cand, tmp_path) == "1.0–2.0s:狗在海滩上奔跑"
+
+    # LLM returns non-CJK garbage → sanity check rejects, English kept
+    monkeypatch.setattr(
+        C, "_try_llm",
+        lambda: (lambda prompt, **kw:
+                 {"choices": [{"text": "I cannot translate that."}]}))
+    assert C.vlm_caption(cand, tmp_path) == "1.0–2.0s:A dog runs on the beach"
+
+
 def test_vlm_caption_real_model(tmp_path, monkeypatch):
     """Integration: the real captioning VLM looks at the best frame.
     Skips cleanly where transformers / the model can't load (CI)."""
