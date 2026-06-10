@@ -3139,7 +3139,8 @@ class _Handler(BaseHTTPRequestHandler):
 
         GET /api/v1/users/profile  → personalized.PersonalProfile json
         """
-        from pixcull.scoring.personalized import profile_from_preferences
+        from pixcull.scoring.personalized import (
+            MIN_ANNS_FOR_PERSONALIZATION, profile_from_preferences)
 
         prefs = self._aggregate_user_preferences()
         profile = profile_from_preferences(prefs)
@@ -3147,6 +3148,10 @@ class _Handler(BaseHTTPRequestHandler):
             "schema":  "pixcull.api.v1.user_profile.v1",
             "user_id": profile.user_id,
             "n_annotations":      profile.n_annotations,
+            # v2.5 — activation threshold, so the UI can render the
+            # cold-start progress ("距按你调校还差 N 张") instead of the
+            # personalisation moat staying invisible until 50 corrections.
+            "min_annotations":    MIN_ANNS_FOR_PERSONALIZATION,
             "is_active":          profile.is_active(),
             "keep_rate":          profile.keep_rate,
             "cull_rate":          profile.cull_rate,

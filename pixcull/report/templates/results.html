@@ -6004,6 +6004,11 @@
       <button class="export-btn" id="semSearchClearBtn"
               style="display:none" title="清除语义搜索过滤">✕</button>
 
+      <!-- v2.5 — feature-discovery tour. The power features (NL search,
+           keyboard culling, burst collapse, personalisation, heatmaps,
+           contact sheet) were all shipped but undiscoverable; this is
+           their single front door. -->
+      <button class="export-btn" id="tourBtn" title="功能巡览 — PixCull 的进阶能力一页看全">✨</button>
       <button class="export-btn" id="kbdHelpBtn" title="键盘快捷键 (?)" style="font-family:ui-monospace,monospace">?</button>
       <button class="export-btn" id="annNextBtn" title="按 active learning 优先级标注 — 优先暴露规则与 rescorer 不一致、概率临界、聚类分裂的图">▸ 标注下一张</button>
       <button class="export-btn" id="batchBtn" title="按总分批量打 keep/cull 标签">批量打分</button>
@@ -6547,6 +6552,32 @@
       </div>
       <div class="shortcuts-foot">
         <span class="muted">在输入框中输入时,这些快捷键会自动让位 — 安全粘贴文本不会触发标注</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- v2.5 — feature-discovery tour modal. Reuses the shortcuts-modal
+       shell (same .show toggle, same registerModal escape/backdrop
+       handling) so it costs zero new CSS. One feature per row: what it
+       is + exactly where to find / trigger it. -->
+  <div class="shortcuts-modal" id="tourModal">
+    <div class="shortcuts-card modal-info">
+      <div class="shortcuts-header">
+        <h3 class="modal-title">✨ 功能巡览 — 进阶能力</h3>
+        <button class="close" id="tourClose" aria-label="关闭功能巡览">✕</button>
+      </div>
+      <div class="shortcuts-body">
+        <div class="shortcut-section">
+          <div class="shortcut-row"><span class="keys">🔎 语义搜索</span><span class="desc">顶栏搜索框输入自然语言(如"红衣服的人 / sharpest sunset"),<kbd>Enter</kbd> 用 CLIP 检索全场照片</span></div>
+          <div class="shortcut-row"><span class="keys">⌨️ 键盘选片</span><span class="desc"><kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> 标 keep/maybe/cull;放大窗开 <b>⏩自动</b> 后标完自动推进 — 200 张不碰鼠标</span></div>
+          <div class="shortcut-row"><span class="keys">⧉ 连拍折叠</span><span class="desc">工具栏"⧉ 折叠成堆"把每个连拍组收成最佳 1 张;点卡片角 <b>⧉N</b> 展开并排比较(<kbd>G</kbd> 跳组)</span></div>
+          <div class="shortcut-row"><span class="keys">🎯 个性化</span><span class="desc">每次纠正都在教 PixCull 你的口味;满 50 张后新批次自动按你的标准校准(<code>pixcull personalize</code> 查看/还原)</span></div>
+          <div class="shortcut-row"><span class="keys">🔥 归因热力图</span><span class="desc">放大窗按 <kbd>A</kbd> 选任意评分轴 — 看 AI 这一分到底在看照片的哪里</span></div>
+          <div class="shortcut-row"><span class="keys">📇 联系表导出</span><span class="desc"><code>pixcull contact-sheet &lt;run&gt;</code> 一键生成可交付客户的精选样片 PDF</span></div>
+        </div>
+      </div>
+      <div class="shortcuts-foot">
+        <span class="muted">键盘全清单见 <kbd>?</kbd> · 全部能力 100% 本地运行</span>
       </div>
     </div>
   </div>
@@ -14439,13 +14470,59 @@
     fetch("/api/v1/users/profile")
       .then(r => r.ok ? r.json() : null)
       .then(d => {
-        if (d && d.is_active) {
+        if (!d) return;
+        if (d.is_active) {
           const axis = d.most_cared_axis || "";
           el.textContent = "🎯 已按你调校" + (axis ? (" · 重" + axis) : "");
+          el.style.display = "";
+          return;
+        }
+        // v2.5 — cold-start progress. The moat used to be invisible
+        // until 50 corrections; now any progress (≥3, so a first-time
+        // visitor isn't nagged) shows how close "tuned to you" is.
+        const n = d.n_annotations | 0, min = d.min_annotations | 0;
+        if (min > 0 && n >= 3 && n < min) {
+          el.textContent = "🎯 个性化 " + n + "/" + min;
+          el.title = "每次 keep/cull 纠正都在教 PixCull 你的口味 — 再标 "
+            + (min - n) + " 张,新批次就会自动按你的标准校准阈值";
+          el.style.opacity = "0.62";
           el.style.display = "";
         }
       })
       .catch(() => {});
+  })();
+
+  // v2.5 — feature-discovery tour. Open/close mirrors the shortcuts
+  // modal; a one-shot pulse on the ✨ button (same onboard-pulse the
+  // other affordances use, localStorage-gated) announces it exists
+  // without ever auto-opening a modal over the user's work.
+  (function _initTour() {
+    const btn = document.getElementById("tourBtn");
+    const modal = document.getElementById("tourModal");
+    if (!btn || !modal) return;
+    if (typeof registerModal === "function") registerModal(modal);
+    btn.addEventListener("click", () => modal.classList.add("show"));
+    const closeBtn = document.getElementById("tourClose");
+    if (closeBtn) closeBtn.addEventListener("click",
+      () => modal.classList.remove("show"));
+    modal.addEventListener("click", e => {
+      if (e.target === modal) modal.classList.remove("show");
+    });
+    // registerModal only wires the focus trap — Escape is per-modal.
+    document.addEventListener("keydown", e => {
+      if (e.key === "Escape" && modal.classList.contains("show")) {
+        modal.classList.remove("show");
+      }
+    });
+    try {
+      if (localStorage.getItem("pixcull_tour_pulse_v1") !== "1") {
+        setTimeout(() => {
+          btn.classList.add("onboard-pulse");
+          setTimeout(() => btn.classList.remove("onboard-pulse"), 5500);
+        }, 2200);
+        localStorage.setItem("pixcull_tour_pulse_v1", "1");
+      }
+    } catch (e) {}
   })();
 
   (function _initOnboarding() {
