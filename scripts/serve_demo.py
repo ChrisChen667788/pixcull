@@ -396,7 +396,9 @@ _CULL_REASONS: tuple[str, ...] = (
 
 _DEFAULT_PORT = 8770
 _FALLBACK_PORTS = (8770, 8771, 8772, 9322, 7799)
-_DEMO_ROOT = Path("/tmp/pixcull_demo")  # base dir for upload + output trees
+_DEMO_ROOT = Path(  # base dir for upload + output trees
+    os.environ.get("PIXCULL_DEMO_ROOT", "/tmp/pixcull_demo")
+)  # env override lets tests serve a hermetic fixture run (v2.5)
 # v0.13.10 — server boot time, surfaced by /healthz uptime_s field.
 _SERVER_BOOT_TIME = time.time()
 _THUMB_SIZE = 420

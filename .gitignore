@@ -38,6 +38,12 @@ v0_output/
 *.sqlite3
 thumbs/
 
+# v2.5 — the committed hermetic visual-smoke fixture run lives under an
+# output/ dir (serve_demo._reload_run_from_disk requires that layout), so
+# un-ignore just it (the broad output/ rule above would otherwise hide it).
+!tests/fixtures/smoke_run/output/
+!tests/fixtures/smoke_run/output/**
+
 # Internal / not for public repo
 MARKET_ANALYSIS_*.md
 .claude/

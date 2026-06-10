@@ -14,6 +14,7 @@ catches runtime-computed leaks the static guard can't see.
 """
 import json
 import os
+import shutil
 import socket
 import subprocess
 import sys
@@ -26,8 +27,13 @@ import pytest
 pytest.importorskip("playwright.sync_api")
 
 ROOT = Path(__file__).resolve().parent.parent
-DEMO_ROOT = Path(os.environ.get("PIXCULL_DEMO_ROOT", "/tmp/pixcull_demo"))
-RUN = os.environ.get("PIXCULL_SMOKE_RUN", "xiapu_demo")
+# Default to the committed hermetic fixture run so this smoke never depends
+# on the mutable / OS-reaped /tmp/pixcull_demo — a sibling test clobbering
+# that shared run was silently skipping this regression net.  Env overrides
+# let a maintainer point the server at a richer real run instead.
+_FIXTURE = ROOT / "tests" / "fixtures" / "smoke_run"
+_ENV_ROOT = os.environ.get("PIXCULL_DEMO_ROOT")
+RUN = os.environ.get("PIXCULL_SMOKE_RUN", "smoke_run")
 
 # JS: walk every element, flag any computed colour in the legacy family.
 # Editorial-warm colours never have blue-dominant-low-green or
@@ -68,14 +74,25 @@ def _free_port():
 
 
 @pytest.fixture(scope="module")
-def base_url():
-    if not (DEMO_ROOT / RUN).is_dir():
-        pytest.skip(f"no demo run at {DEMO_ROOT / RUN}")
+def base_url(tmp_path_factory):
+    env = dict(os.environ)
+    if _ENV_ROOT:
+        demo_root = Path(_ENV_ROOT)
+    else:
+        # Hermetic default: copy the committed fixture run into a private
+        # DEMO_ROOT and point the server at it via the env override.
+        if not (_FIXTURE / "output" / "scores.csv").is_file():
+            pytest.skip("smoke fixture missing")
+        demo_root = tmp_path_factory.mktemp("demo_root")
+        shutil.copytree(_FIXTURE, demo_root / RUN)
+        env["PIXCULL_DEMO_ROOT"] = str(demo_root)
+    if not (demo_root / RUN).is_dir():
+        pytest.skip(f"no demo run at {demo_root / RUN}")
     port = _free_port()
     proc = subprocess.Popen(
         [sys.executable, str(ROOT / "scripts" / "serve_demo.py"),
          "--port", str(port), "--host", "127.0.0.1", "--no-open"],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env)
     base = f"http://127.0.0.1:{port}"
     up = False
     for _ in range(40):
