@@ -4243,9 +4243,21 @@
       position: fixed; inset: 0; background: rgba(0,0,0,0.94);
       display: none; z-index: 9; backdrop-filter: blur(4px);
     }
-    .lightbox.show { display: grid; grid-template-columns: 1fr 380px; }
+    /* v2.5 hotfix — the two panes are PINNED to their grid cells.
+       They used to rely on auto-placement, so any direct child that
+       wasn't position:absolute (the unstyled .companion-grp, below)
+       silently claimed cell (1,1): image shoved into the 380px info
+       column, info-pane wrapped to a second row, page unusable. */
+    .lightbox.show {
+      display: grid; grid-template-columns: 1fr 380px;
+      grid-template-rows: 100%;
+    }
+    .lightbox.show .img-pane  { grid-row: 1; grid-column: 1; }
+    .lightbox.show .info-pane { grid-row: 1; grid-column: 2; }
     @media (max-width: 900px) {
-      .lightbox.show { grid-template-columns: 1fr; }
+      .lightbox.show { grid-template-columns: 1fr; grid-template-rows: 55% 45%; }
+      .lightbox.show .img-pane  { grid-row: 1; grid-column: 1; }
+      .lightbox.show .info-pane { grid-row: 2; grid-column: 1; }
     }
     .lightbox .img-pane {
       display: flex; align-items: center; justify-content: center;
@@ -4495,6 +4507,16 @@
       display: flex; gap: 6px; align-items: center;
       z-index: 11;
     }
+    /* v2.5 hotfix — .companion-grp (the v0.12 "副屏" second-window
+       toggle) lost its rule in an earlier refactor, so it rendered as
+       an unstyled static block that auto-flowed into the lightbox grid
+       and scrambled the whole layout. Pin it as top-bar chrome right
+       of the zoom group, like its sibling button groups. */
+    .lightbox .companion-grp {
+      position: absolute; top: 18px; left: 110px;
+      display: flex; gap: 6px; align-items: center;
+      z-index: 11;
+    }
     .lightbox .zoom-btn {
       height: 32px; padding: 0 12px; border-radius: 6px;
       background: rgba(0,0,0,0.6); color: #fff;
@@ -4632,9 +4654,16 @@
     .lightbox .fs-thumb .fs-dot.maybe { background: var(--c-warn); }
     .lightbox .fs-thumb .fs-dot.cull  { background: var(--c-danger); }
 
-    /* When the filmstrip is present, the img-pane reserves space
-       above it so the photo isn't covered. */
-    .lightbox.with-filmstrip .img-pane { bottom: 92px; }
+    /* When the filmstrip is present, the img-pane reserves space above
+       it so the photo isn't covered.  v2.5 hotfix: this used to be
+       `bottom: 92px`, but on a position:relative box that OFFSETS the
+       whole pane up 92px (it doesn't shrink it) — the pane poked 92px
+       above the viewport and the photo clipped off the top.  Shrinking
+       the content area with padding is what "reserve space" means. */
+    .lightbox.with-filmstrip .img-pane { padding-bottom: 120px; }
+    @media (max-width: 640px) {
+      .lightbox.with-filmstrip .img-pane { padding-bottom: 92px; }
+    }
 
     @media (max-width: 640px) {
       .lightbox .filmstrip { height: 64px; padding: 4px 8px; }

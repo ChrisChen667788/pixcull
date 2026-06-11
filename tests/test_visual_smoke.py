@@ -165,9 +165,29 @@ def test_grid_and_lightbox_have_no_legacy_palette(base_url):
         bad_lb = pg.evaluate(_SCAN)
         # v2.3.1-C: the grid coachmark must not survive into the lightbox.
         n_tips = pg.evaluate("() => document.querySelectorAll('.onboard-tip').length")
+        # v2.5 hotfix guard — the lightbox panes must hold their grid
+        # cells (image stage = the wide 1fr column starting at y=0, info
+        # panel = the right rail).  The unstyled .companion-grp once
+        # auto-flowed into cell (1,1) and shoved the image into the
+        # 380px column; this assertion is layout-driven (pane geometry,
+        # not image pixels) so it works on the imageless fixture too.
+        panes = pg.evaluate(
+            "() => {const g = s => {const e = document.querySelector(s);"
+            "  if (!e) return null; const r = e.getBoundingClientRect();"
+            "  return [Math.round(r.x), Math.round(r.y),"
+            "          Math.round(r.width), Math.round(r.height)];};"
+            "  return {img: g('.lightbox .img-pane'),"
+            "          info: g('.lightbox .info-pane'), vw: innerWidth};}")
         browser.close()
 
     assert not errs, f"console / page errors: {errs[:6]}"
     assert not bad_grid, f"legacy palette on grid: {bad_grid}"
     assert not bad_lb, f"legacy palette in lightbox: {bad_lb}"
     assert n_tips == 0, f"grid coachmark leaked into the lightbox: {n_tips} tip(s)"
+    img_pane, info_pane = panes["img"], panes["info"]
+    assert img_pane and info_pane, f"lightbox panes missing: {panes}"
+    assert img_pane[2] > panes["vw"] * 0.5, \
+        f"lightbox image stage collapsed (companion-grp regression?): {panes}"
+    assert img_pane[1] >= 0, f"image stage shoved above the viewport: {panes}"
+    assert info_pane[0] >= img_pane[2] - 5, \
+        f"info panel not in the right rail: {panes}"
