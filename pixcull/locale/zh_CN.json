@@ -168,5 +168,15 @@
   "toast.copy_failed": "剪贴板写入失败 — 浏览器可能未授权",
   "toast.sync.live": "📡 协作中 · 同步",
   "toast.sync.conflict": "📡 协作中 · {n} 处冲突",
-  "toast.sync.revoked": "协作会话已失效"
+  "toast.sync.revoked": "协作会话已失效",
+  "tour.title": "✨ 功能巡览 — 进阶能力",
+  "tour.btn.title": "功能巡览 — PixCull 的进阶能力一页看全",
+  "tour.close": "关闭功能巡览",
+  "tour.row.search": "🔎 语义搜索",
+  "tour.row.keys": "⌨️ 键盘选片",
+  "tour.row.burst": "⧉ 连拍折叠",
+  "tour.row.personal": "🎯 个性化",
+  "tour.row.heatmap": "🔥 归因热力图",
+  "tour.row.sheet": "📇 联系表导出",
+  "tour.foot": "键盘全清单见 ? · 全部能力 100% 本地运行"
 }

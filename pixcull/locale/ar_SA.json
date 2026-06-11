@@ -168,5 +168,15 @@
   "toast.copy_failed": "فشل النسخ إلى الحافظة",
   "toast.sync.live": "📡 مزامنة مباشرة",
   "toast.sync.conflict": "📡 مزامنة مباشرة · {n} تعارضات",
-  "toast.sync.revoked": "تم إلغاء جلسة التعاون"
+  "toast.sync.revoked": "تم إلغاء جلسة التعاون",
+  "tour.title": "✨ جولة الميزات المتقدمة",
+  "tour.btn.title": "جولة الميزات — نظرة شاملة على قدرات PixCull",
+  "tour.close": "إغلاق الجولة",
+  "tour.row.search": "🔎 بحث دلالي",
+  "tour.row.keys": "⌨️ فرز بلوحة المفاتيح",
+  "tour.row.burst": "⧉ طي اللقطات المتتابعة",
+  "tour.row.personal": "🎯 التخصيص",
+  "tour.row.heatmap": "🔥 خريطة الإسناد الحرارية",
+  "tour.row.sheet": "📇 ورقة اتصال",
+  "tour.foot": "قائمة الاختصارات تحت ? · كل شيء يعمل محلياً 100%"
 }

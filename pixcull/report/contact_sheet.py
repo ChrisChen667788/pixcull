@@ -196,9 +196,12 @@ def render_contact_sheet(
 
 
 def _is_num(v) -> bool:
+    """True for a finite number — NaN AND ±inf rejected (an "inf" cell in
+    scores.csv would otherwise reach ``round(inf*5)`` → OverflowError and
+    abort the whole sheet; found by the v2.5 adversarial review)."""
+    import math
     try:
-        x = float(v)
-        return x == x
+        return math.isfinite(float(v))
     except (TypeError, ValueError):
         return False
 

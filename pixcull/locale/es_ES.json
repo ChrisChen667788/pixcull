@@ -168,5 +168,15 @@
   "toast.copy_failed": "Falló la escritura del portapapeles — el navegador puede haberlo bloqueado",
   "toast.sync.live": "📡 Sincronización en vivo",
   "toast.sync.conflict": "📡 Sincronización en vivo · {n} conflictos",
-  "toast.sync.revoked": "Sesión colaborativa revocada"
+  "toast.sync.revoked": "Sesión colaborativa revocada",
+  "tour.title": "✨ Tour de funciones avanzadas",
+  "tour.btn.title": "Tour de funciones — todo de un vistazo",
+  "tour.close": "Cerrar el tour",
+  "tour.row.search": "🔎 Búsqueda semántica",
+  "tour.row.keys": "⌨️ Selección por teclado",
+  "tour.row.burst": "⧉ Ráfagas apiladas",
+  "tour.row.personal": "🎯 Personalización",
+  "tour.row.heatmap": "🔥 Mapa de atribución",
+  "tour.row.sheet": "📇 Hoja de contactos",
+  "tour.foot": "Atajos completos en ? · todo se ejecuta 100 % en local"
 }

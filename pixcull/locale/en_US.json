@@ -168,5 +168,15 @@
   "toast.copy_failed": "Clipboard write failed — browser may have blocked it",
   "toast.sync.live": "📡 Live sync",
   "toast.sync.conflict": "📡 Live sync · {n} conflicts",
-  "toast.sync.revoked": "Collaboration session revoked"
+  "toast.sync.revoked": "Collaboration session revoked",
+  "tour.title": "✨ Feature tour — power features",
+  "tour.btn.title": "Feature tour — PixCull's power features at a glance",
+  "tour.close": "Close feature tour",
+  "tour.row.search": "🔎 Semantic search",
+  "tour.row.keys": "⌨️ Keyboard culling",
+  "tour.row.burst": "⧉ Burst collapse",
+  "tour.row.personal": "🎯 Personalisation",
+  "tour.row.heatmap": "🔥 Attribution heatmap",
+  "tour.row.sheet": "📇 Contact sheet",
+  "tour.foot": "Full shortcut list under ? · everything runs 100% locally"
 }

@@ -7926,8 +7926,11 @@
         setTimeout(() => {
           btn.classList.add("onboard-pulse");
           setTimeout(() => btn.classList.remove("onboard-pulse"), 5500);
+          // Persist only once the pulse actually rendered — setting it
+          // eagerly meant a reload inside the 2.2 s delay suppressed the
+          // one-shot hint forever (adversarial-review finding).
+          try { localStorage.setItem("pixcull_tour_pulse_v1", "1"); } catch (e) {}
         }, 2200);
-        localStorage.setItem("pixcull_tour_pulse_v1", "1");
       }
     } catch (e) {}
   })();

@@ -168,5 +168,15 @@
   "toast.copy_failed": "Panoya yazma başarısız",
   "toast.sync.live": "📡 Canlı senkron",
   "toast.sync.conflict": "📡 Canlı senkron · {n} çakışma",
-  "toast.sync.revoked": "İşbirliği oturumu iptal edildi"
+  "toast.sync.revoked": "İşbirliği oturumu iptal edildi",
+  "tour.title": "✨ Özellik turu — gelişmiş özellikler",
+  "tour.btn.title": "Özellik turu — tek bakışta",
+  "tour.close": "Turu kapat",
+  "tour.row.search": "🔎 Anlamsal arama",
+  "tour.row.keys": "⌨️ Klavyeyle eleme",
+  "tour.row.burst": "⧉ Seri çekim yığını",
+  "tour.row.personal": "🎯 Kişiselleştirme",
+  "tour.row.heatmap": "🔥 Atıf ısı haritası",
+  "tour.row.sheet": "📇 Kontak baskı",
+  "tour.foot": "Tüm kısayollar ? altında · her şey %100 yerel çalışır"
 }

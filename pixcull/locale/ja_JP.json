@@ -168,5 +168,15 @@
   "toast.copy_failed": "クリップボード書き込み失敗 — ブラウザがブロックした可能性",
   "toast.sync.live": "📡 ライブ同期",
   "toast.sync.conflict": "📡 ライブ同期 · {n} 件の競合",
-  "toast.sync.revoked": "コラボセッションが取り消されました"
+  "toast.sync.revoked": "コラボセッションが取り消されました",
+  "tour.title": "✨ 機能ツアー — 上級機能",
+  "tour.btn.title": "機能ツアー — PixCull の上級機能を一覧で",
+  "tour.close": "機能ツアーを閉じる",
+  "tour.row.search": "🔎 セマンティック検索",
+  "tour.row.keys": "⌨️ キーボード選別",
+  "tour.row.burst": "⧉ 連写スタック",
+  "tour.row.personal": "🎯 パーソナライズ",
+  "tour.row.heatmap": "🔥 帰属ヒートマップ",
+  "tour.row.sheet": "📇 コンタクトシート",
+  "tour.foot": "ショートカット一覧は ? · すべて 100% ローカル実行"
 }

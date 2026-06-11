@@ -168,5 +168,15 @@
   "toast.copy_failed": "Не удалось скопировать в буфер",
   "toast.sync.live": "📡 Live-синхронизация",
   "toast.sync.conflict": "📡 Live-синхронизация · {n} конфликтов",
-  "toast.sync.revoked": "Сессия совместной работы отозвана"
+  "toast.sync.revoked": "Сессия совместной работы отозвана",
+  "tour.title": "✨ Обзор возможностей",
+  "tour.btn.title": "Обзор возможностей PixCull — всё на одной странице",
+  "tour.close": "Закрыть обзор",
+  "tour.row.search": "🔎 Семантический поиск",
+  "tour.row.keys": "⌨️ Отбор с клавиатуры",
+  "tour.row.burst": "⧉ Серии в стопку",
+  "tour.row.personal": "🎯 Персонализация",
+  "tour.row.heatmap": "🔥 Тепловая карта",
+  "tour.row.sheet": "📇 Контактный лист",
+  "tour.foot": "Все горячие клавиши — ? · всё работает 100% локально"
 }

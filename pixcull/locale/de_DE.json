@@ -168,5 +168,15 @@
   "toast.copy_failed": "Schreiben in Zwischenablage fehlgeschlagen — Browser hat es möglicherweise blockiert",
   "toast.sync.live": "📡 Live-Sync",
   "toast.sync.conflict": "📡 Live-Sync · {n} Konflikte",
-  "toast.sync.revoked": "Kollaborations-Sitzung widerrufen"
+  "toast.sync.revoked": "Kollaborations-Sitzung widerrufen",
+  "tour.title": "✨ Funktionstour — Profi-Funktionen",
+  "tour.btn.title": "Funktionstour — Profi-Funktionen auf einen Blick",
+  "tour.close": "Funktionstour schließen",
+  "tour.row.search": "🔎 Semantische Suche",
+  "tour.row.keys": "⌨️ Tastatur-Culling",
+  "tour.row.burst": "⧉ Serien-Stapel",
+  "tour.row.personal": "🎯 Personalisierung",
+  "tour.row.heatmap": "🔥 Attributions-Heatmap",
+  "tour.row.sheet": "📇 Kontaktbogen",
+  "tour.foot": "Alle Tastenkürzel unter ? · alles läuft 100 % lokal"
 }

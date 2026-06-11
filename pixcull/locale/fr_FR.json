@@ -168,5 +168,15 @@
   "toast.copy_failed": "Échec de l'écriture dans le presse-papiers — le navigateur l'a peut-être bloquée",
   "toast.sync.live": "📡 Sync en direct",
   "toast.sync.conflict": "📡 Sync en direct · {n} conflits",
-  "toast.sync.revoked": "Session de collaboration révoquée"
+  "toast.sync.revoked": "Session de collaboration révoquée",
+  "tour.title": "✨ Visite des fonctions avancées",
+  "tour.btn.title": "Visite des fonctions — l'essentiel en un coup d'œil",
+  "tour.close": "Fermer la visite",
+  "tour.row.search": "🔎 Recherche sémantique",
+  "tour.row.keys": "⌨️ Tri au clavier",
+  "tour.row.burst": "⧉ Rafales empilées",
+  "tour.row.personal": "🎯 Personnalisation",
+  "tour.row.heatmap": "🔥 Carte d'attribution",
+  "tour.row.sheet": "📇 Planche contact",
+  "tour.foot": "Raccourcis complets sous ? · tout fonctionne 100 % en local"
 }

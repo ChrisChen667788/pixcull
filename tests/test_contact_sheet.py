@@ -82,7 +82,26 @@ def test_from_run_reads_output_subdir(tmp_path):
         w.writerow(["filename", "decision", "score_final"])
         w.writerow(["a.jpg", "keep", 0.91])
     n_pages, n_photos = contact_sheet_from_run(run, run / "g.pdf")
-    assert n_photos == 1 and _is_pdf(run / "g.pdf")
+    assert n_photos == 1 and n_pages == 2 and _is_pdf(run / "g.pdf")
+
+
+def test_from_run_survives_inf_and_nan_scores(tmp_path):
+    """Adversarial-review regression: an "inf" / "nan" / blank score_final
+    cell must degrade to a star-less cell, not OverflowError the sheet."""
+    run = tmp_path / "run3"
+    (run / "thumbs").mkdir(parents=True)
+    for i in range(4):
+        _swatch(run / "thumbs" / f"x{i}.jpg")
+    with open(run / "scores.csv", "w", newline="", encoding="utf-8") as fh:
+        w = csv.writer(fh)
+        w.writerow(["filename", "decision", "score_final"])
+        w.writerow(["x0.jpg", "keep", "inf"])
+        w.writerow(["x1.jpg", "keep", "-inf"])
+        w.writerow(["x2.jpg", "keep", "nan"])
+        w.writerow(["x3.jpg", "keep", 0.8])
+    out = run / "g.pdf"
+    n_pages, n_photos = contact_sheet_from_run(run, out)
+    assert n_photos == 4 and n_pages == 2 and _is_pdf(out)
 
 
 def test_render_cover_and_stars(tmp_path):

@@ -168,5 +168,15 @@
   "toast.copy_failed": "Scrittura negli appunti fallita — il browser potrebbe averla bloccata",
   "toast.sync.live": "📡 Sync dal vivo",
   "toast.sync.conflict": "📡 Sync dal vivo · {n} conflitti",
-  "toast.sync.revoked": "Sessione di collaborazione revocata"
+  "toast.sync.revoked": "Sessione di collaborazione revocata",
+  "tour.title": "✨ Tour delle funzioni avanzate",
+  "tour.btn.title": "Tour delle funzioni — tutto a colpo d'occhio",
+  "tour.close": "Chiudi il tour",
+  "tour.row.search": "🔎 Ricerca semantica",
+  "tour.row.keys": "⌨️ Selezione da tastiera",
+  "tour.row.burst": "⧉ Raffiche impilate",
+  "tour.row.personal": "🎯 Personalizzazione",
+  "tour.row.heatmap": "🔥 Mappa di attribuzione",
+  "tour.row.sheet": "📇 Provino a contatto",
+  "tour.foot": "Scorciatoie complete in ? · tutto gira 100% in locale"
 }

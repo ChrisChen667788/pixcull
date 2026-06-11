@@ -168,5 +168,15 @@
   "toast.copy_failed": "클립보드 쓰기 실패 — 브라우저가 차단했을 수 있음",
   "toast.sync.live": "📡 실시간 동기화",
   "toast.sync.conflict": "📡 실시간 동기화 · {n}개 충돌",
-  "toast.sync.revoked": "협업 세션 취소됨"
+  "toast.sync.revoked": "협업 세션 취소됨",
+  "tour.title": "✨ 기능 투어 — 고급 기능",
+  "tour.btn.title": "기능 투어 — PixCull 고급 기능 한눈에",
+  "tour.close": "기능 투어 닫기",
+  "tour.row.search": "🔎 시맨틱 검색",
+  "tour.row.keys": "⌨️ 키보드 셀렉트",
+  "tour.row.burst": "⧉ 연사 스택",
+  "tour.row.personal": "🎯 개인화",
+  "tour.row.heatmap": "🔥 어트리뷰션 히트맵",
+  "tour.row.sheet": "📇 콘택트 시트",
+  "tour.foot": "전체 단축키는 ? · 모든 기능 100% 로컬 실행"
 }

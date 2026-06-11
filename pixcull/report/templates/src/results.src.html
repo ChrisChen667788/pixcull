@@ -622,7 +622,8 @@
            keyboard culling, burst collapse, personalisation, heatmaps,
            contact sheet) were all shipped but undiscoverable; this is
            their single front door. -->
-      <button class="export-btn" id="tourBtn" title="功能巡览 — PixCull 的进阶能力一页看全">✨</button>
+      <button class="export-btn" id="tourBtn" title="功能巡览 — PixCull 的进阶能力一页看全"
+              data-i18n-attr-title="tour.btn.title">✨</button>
       <button class="export-btn" id="kbdHelpBtn" title="键盘快捷键 (?)" style="font-family:ui-monospace,monospace">?</button>
       <button class="export-btn" id="annNextBtn" title="按 active learning 优先级标注 — 优先暴露规则与 rescorer 不一致、概率临界、聚类分裂的图">▸ 标注下一张</button>
       <button class="export-btn" id="batchBtn" title="按总分批量打 keep/cull 标签">批量打分</button>
@@ -1177,21 +1178,26 @@
   <div class="shortcuts-modal" id="tourModal">
     <div class="shortcuts-card modal-info">
       <div class="shortcuts-header">
-        <h3 class="modal-title">✨ 功能巡览 — 进阶能力</h3>
-        <button class="close" id="tourClose" aria-label="关闭功能巡览">✕</button>
+        <h3 class="modal-title" data-i18n="tour.title">✨ 功能巡览 — 进阶能力</h3>
+        <button class="close" id="tourClose" aria-label="关闭功能巡览"
+                data-i18n-attr-aria-label="tour.close">✕</button>
       </div>
+      <!-- i18n depth matches the shortcuts modal: titles + the plain-text
+           row LABELS translate via data-i18n; the rich desc cells (inline
+           <kbd>/<code>) stay zh like the shortcuts body — textContent
+           replacement would strip their markup. -->
       <div class="shortcuts-body">
         <div class="shortcut-section">
-          <div class="shortcut-row"><span class="keys">🔎 语义搜索</span><span class="desc">顶栏搜索框输入自然语言(如"红衣服的人 / sharpest sunset"),<kbd>Enter</kbd> 用 CLIP 检索全场照片</span></div>
-          <div class="shortcut-row"><span class="keys">⌨️ 键盘选片</span><span class="desc"><kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> 标 keep/maybe/cull;放大窗开 <b>⏩自动</b> 后标完自动推进 — 200 张不碰鼠标</span></div>
-          <div class="shortcut-row"><span class="keys">⧉ 连拍折叠</span><span class="desc">工具栏"⧉ 折叠成堆"把每个连拍组收成最佳 1 张;点卡片角 <b>⧉N</b> 展开并排比较(<kbd>G</kbd> 跳组)</span></div>
-          <div class="shortcut-row"><span class="keys">🎯 个性化</span><span class="desc">每次纠正都在教 PixCull 你的口味;满 50 张后新批次自动按你的标准校准(<code>pixcull personalize</code> 查看/还原)</span></div>
-          <div class="shortcut-row"><span class="keys">🔥 归因热力图</span><span class="desc">放大窗按 <kbd>A</kbd> 选任意评分轴 — 看 AI 这一分到底在看照片的哪里</span></div>
-          <div class="shortcut-row"><span class="keys">📇 联系表导出</span><span class="desc"><code>pixcull contact-sheet &lt;run&gt;</code> 一键生成可交付客户的精选样片 PDF</span></div>
+          <div class="shortcut-row"><span class="keys" data-i18n="tour.row.search">🔎 语义搜索</span><span class="desc">顶栏搜索框输入自然语言(如"红衣服的人 / sharpest sunset"),<kbd>Enter</kbd> 用 CLIP 检索全场照片</span></div>
+          <div class="shortcut-row"><span class="keys" data-i18n="tour.row.keys">⌨️ 键盘选片</span><span class="desc"><kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> 标 keep/maybe/cull;放大窗开 <b>⏩自动</b> 后标完自动推进 — 200 张不碰鼠标</span></div>
+          <div class="shortcut-row"><span class="keys" data-i18n="tour.row.burst">⧉ 连拍折叠</span><span class="desc">工具栏"⧉ 折叠成堆"把每个连拍组收成最佳 1 张;点卡片角 <b>⧉N</b> 展开并排比较(<kbd>G</kbd> 跳组)</span></div>
+          <div class="shortcut-row"><span class="keys" data-i18n="tour.row.personal">🎯 个性化</span><span class="desc">每次纠正都在教 PixCull 你的口味;满 50 张后新批次自动按你的标准校准(<code>pixcull personalize</code> 查看/还原)</span></div>
+          <div class="shortcut-row"><span class="keys" data-i18n="tour.row.heatmap">🔥 归因热力图</span><span class="desc">放大窗按 <kbd>A</kbd> 选任意评分轴 — 看 AI 这一分到底在看照片的哪里</span></div>
+          <div class="shortcut-row"><span class="keys" data-i18n="tour.row.sheet">📇 联系表导出</span><span class="desc"><code>pixcull contact-sheet &lt;run&gt;</code> 一键生成可交付客户的精选样片 PDF</span></div>
         </div>
       </div>
       <div class="shortcuts-foot">
-        <span class="muted">键盘全清单见 <kbd>?</kbd> · 全部能力 100% 本地运行</span>
+        <span class="muted" data-i18n="tour.foot">键盘全清单见 ? · 全部能力 100% 本地运行</span>
       </div>
     </div>
   </div>

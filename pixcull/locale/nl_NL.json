@@ -168,5 +168,15 @@
   "toast.copy_failed": "Klembord-schrijven mislukt — browser heeft het mogelijk geblokkeerd",
   "toast.sync.live": "📡 Live sync",
   "toast.sync.conflict": "📡 Live sync · {n} conflicten",
-  "toast.sync.revoked": "Samenwerksessie ingetrokken"
+  "toast.sync.revoked": "Samenwerksessie ingetrokken",
+  "tour.title": "✨ Functietour — geavanceerde functies",
+  "tour.btn.title": "Functietour — alles in één oogopslag",
+  "tour.close": "Functietour sluiten",
+  "tour.row.search": "🔎 Semantisch zoeken",
+  "tour.row.keys": "⌨️ Selecteren met toetsenbord",
+  "tour.row.burst": "⧉ Burst-stapels",
+  "tour.row.personal": "🎯 Personalisatie",
+  "tour.row.heatmap": "🔥 Attributie-heatmap",
+  "tour.row.sheet": "📇 Contactvel",
+  "tour.foot": "Volledige sneltoetslijst onder ? · alles draait 100% lokaal"
 }
