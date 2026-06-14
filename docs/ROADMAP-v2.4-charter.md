@@ -299,6 +299,42 @@ Seven slices from the PM/designer/architect review, in priority order:
 7. **Branded contact sheet** — cover page (brand mark / studio / date),
    vector 1–5 star ratings per cell, `--studio/--date/--no-cover`.
 
+### v2.6 — live-test fallout + the deferred near-dup half — ✅ DONE
+Dogfooding the real-photo build surfaced a hard lightbox freeze, then the
+last v2.4 deferral landed:
+- **Lightbox freeze fixed (stability sweep).** The first-open rubric-intro
+  veil registered its Escape handler with `{once:true}` — any keystroke
+  (a keyboard-flow user mid-cull) consumed it, Escape went dead and the
+  veil read as a frozen UI. Now a persistent **capture-phase** key handler
+  dismisses on Esc/Enter/Space and swallows every other key so shortcuts
+  can't silently annotate the photos behind the veil. Also reordered the
+  global Escape chain (annotation modal → lightbox, was inverted) and gave
+  the annotation modal + tour their own capture-phase Esc (focus-immune,
+  `stopPropagation` so they don't also close the layer underneath).
+- **v2.6-P1 — CLIP near-duplicate fold** (the deferred half of v2.4-P1-1):
+  `scoring/near_dup.py` (blocked cosine + union-find connected components;
+  5 unit tests incl. blocked==unblocked), endpoint
+  `GET /api/v1/runs/<id>/near_dups?threshold=0.92` reusing the
+  semantic-search `embeddings.npz` cache, hero = top `score_final` (3
+  live-server tests on a synthetic npz, no model). UI: a toolbar
+  **"≈ 近重复折叠"** pill (decoupled from bursts — shows even on a
+  burst-less run; first toggle lazily builds the index) folds each group
+  to its hero with an **≈N** badge that opens the compare modal; coexists
+  with the ⧉ burst badge (auto-offset).
+- **Grid-starvation freeze fixed (stability sweep, found while wiring the
+  near-dup e2e).** `_resolve_image_source` resolved a missing scan-mode
+  original via `Path(source_dir or origin_folder or "")` — but `Path("")`
+  collapses to `Path(".")`, whose `.is_dir()` is `True`, so an unrecorded
+  source `rglob`'d the **entire server CWD** on *every* missing thumbnail
+  (~2s each, serialised). Six thumbnails against the browser's
+  6-connections-per-host cap starved any user-initiated XHR (the near-dup
+  toggle sat frozen at "≈ 建索引中…" forever). This also hit any real run
+  whose originals were moved or live on an unmounted drive. Now the empty
+  source is guarded — missing-image resolution went 2s → 0.0000s, missing
+  thumbs 404 instantly, and the near-dup fold works with no warm-up.
+  Covered by `tests/test_lightbox_stability.py` (real-chromium e2e on the
+  committed fixture + a synthetic `embeddings.npz`).
+
 ### v2.5-P0-2 · Playwright e2e smoke suite
 - **Why**: visual regressions (like the palette leak) ship silently today.
 - **What**: a tiny CI Playwright pass that loads grid/lightbox/video and

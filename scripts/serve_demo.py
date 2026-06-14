@@ -2069,11 +2069,20 @@ def _resolve_image_source(run: dict, filename: str) -> Path | None:
             p = manifest.get(filename)
             if p:
                 return Path(p)
-        # Last resort: walk source_dir looking for the filename
-        src_dir = Path(run.get("source_dir") or run.get("origin_folder") or "")
-        if src_dir.is_dir():
-            for f in src_dir.rglob(filename):
-                return f
+        # Last resort: walk source_dir looking for the filename. Guard the
+        # empty case explicitly: ``Path("")`` equals ``Path(".")``, whose
+        # ``.is_dir()`` is True, so an empty source would ``rglob`` the
+        # entire server CWD (the whole repo) on EVERY missing thumbnail —
+        # ~2s each, serialized under the lock, enough to saturate the
+        # browser's 6-connection-per-host pool and freeze the grid (a run
+        # whose originals were moved/deleted hit exactly this). A run with
+        # no recorded source simply has no resolvable originals.
+        src_raw = run.get("source_dir") or run.get("origin_folder")
+        if src_raw:
+            src_dir = Path(src_raw)
+            if src_dir.is_dir():
+                for f in src_dir.rglob(filename):
+                    return f
         return None
     # upload mode (default)
     input_dir = run.get("input_dir") or ""
@@ -2321,6 +2330,10 @@ class _Handler(BaseHTTPRequestHandler):
             if rest == "semantic_search":
                 qs = urlparse(self.path).query
                 return self._serve_api_v1_semantic_search(run_id, qs)
+            # v2.6-P1 — CLIP near-duplicate groups for the grid fold.
+            if rest == "near_dups":
+                qs = urlparse(self.path).query
+                return self._serve_api_v1_near_dups(run_id, qs)
             # P-UX-5 — composite-similarity nearest-neighbor lookup
             # ("show me photos like this one") for the lightbox's
             # similar-photos row. Returns up to k=5 by default.
@@ -2742,6 +2755,78 @@ class _Handler(BaseHTTPRequestHandler):
             "build_ms":    round(build_ms, 1),
             "n_photos":    int(cache["vectors"].shape[0]),
             "results":     results,
+        }).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+        return True
+
+    def _serve_api_v1_near_dups(self, run_id: str, qs: str) -> bool:
+        """v2.6-P1 — CLIP near-duplicate groups for the grid fold.
+
+        URL: GET /api/v1/runs/<run_id>/near_dups?threshold=0.92
+
+        The deferred half of v2.4-P1-1: burst collapse folds
+        time-bucketed clusters; this folds *visual* near-dups regardless
+        of capture time (the re-shot composition minutes later).  Reuses
+        the semantic-search ``embeddings.npz`` cache — lazily built on
+        first call, same contract as ``/semantic_search`` — then groups
+        connected components of cosine ≥ threshold and picks the
+        highest-``score_final`` member as each group's hero.
+        """
+        from urllib.parse import parse_qs
+
+        result = _build_results(run_id)
+        if result is None:
+            self.send_error(404, "no such run"); return True
+        rows, _ = result
+        qp = parse_qs(qs) if qs else {}
+        try:
+            thr = float(qp.get("threshold", ["0.92"])[0])
+        except (TypeError, ValueError):
+            thr = 0.92
+        thr = max(0.5, min(0.999, thr))
+
+        run = _get_run(run_id) or _reload_run_from_disk(run_id)
+        if run is None:
+            self.send_error(404, "no such run"); return True
+        cache_path = Path(run["output_dir"]) / "embeddings.npz"
+        from pixcull.scoring.near_dup import group_near_dups, pick_heroes
+        from pixcull.scoring.semantic_search import (
+            build_embeddings_cache, load_embeddings_cache)
+        cache = load_embeddings_cache(cache_path)
+        was_cached = cache is not None
+        if cache is None:
+            paths: list[Path] = []
+            for r in rows:
+                fn = r.get("filename")
+                src = r.get("src_path")
+                if src and Path(src).is_file():
+                    paths.append(Path(src))
+                else:
+                    p = _resolve_image_source(run, fn) if fn else None
+                    if p and p.is_file():
+                        paths.append(p)
+            if not paths:
+                self._reject_upload(425,
+                    "no reachable photos to build embeddings cache"); return True
+            cache = build_embeddings_cache(paths, cache_path)
+
+        groups = group_near_dups(
+            [str(f) for f in cache["filenames"]], cache["vectors"],
+            threshold=thr)
+        scores = {r.get("filename"): r.get("score_final") for r in rows
+                  if isinstance(r.get("score_final"), (int, float))}
+        body = _safe_dumps({
+            "schema":    "pixcull.api.v1.near_dups.v1",
+            "run_id":    run_id,
+            "threshold": thr,
+            "cached":    was_cached,
+            "n_photos":  int(cache["vectors"].shape[0]),
+            "groups":    pick_heroes(groups, scores),
         }).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json; charset=utf-8")

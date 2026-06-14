@@ -7325,6 +7325,8 @@
     // we store the result filenames as a Set so the grid filter can
     // intersect against it. {q: string, filenames: Set} or null.
     semSearch: null,
+    // v2.6-P1 — fold CLIP near-dup groups to their hero (data in _NEARDUP).
+    nearDupFold: false,
     // P-UX-27 — wedding-moment filter.  Set of moment keys (e.g.
     // {"first_kiss", "ring_exchange"}).  Empty = no filter.
     // Populated by clicking the 💒 chip on any grid card.
@@ -7698,31 +7700,43 @@
     const divider = document.getElementById("burstPeakDivider");
     const lpGroup = document.getElementById("lpBurstGroup");
     const el = document.getElementById("burstPeakFilter");
-    if (_REAL_BURSTS.length === 0) {
-      if (divider) divider.style.display = "none";
-      if (lpGroup) lpGroup.style.display = "none";
-      el.innerHTML = "";
-      return;
-    }
-    if (lpGroup) lpGroup.style.display = "";
-    if (divider) divider.style.display = "block";
     if (!el) return;
-    const totalBurstPhotos = _REAL_BURSTS.reduce((s, [_, n]) => s + n, 0);
-    el.innerHTML =
-      `<span class="pill burst-peak-toggle${filterState.burstPeakOnly ? ' active' : ''}" ` +
-      `title="${_REAL_BURSTS.length} 个连拍组,共 ${totalBurstPhotos} 张 — ` +
-      `打开后只保留每组的最佳一张">` +
-      `🎯 每连拍峰值 <span style="opacity:0.5">${_REAL_BURSTS.length}</span></span>` +
-      // v2.4-P1-1 — collapse each burst into a single peak "hero" card
-      // carrying a ⧉N stack badge (click it to expand → compare modal).
-      `<span class="pill burst-collapse-toggle${filterState.collapseBursts ? ' active' : ''}" ` +
-      `title="把每个连拍组折叠成一张峰值代表 + ⧉计数;点卡片角的 ⧉N 展开并排比较">` +
-      `⧉ 折叠成堆</span>` +
-      // P0.3 — direct entry to the V9.2 compare modal without
-      // having to switch to sort=cluster first.
-      `<span class="pill burst-compare-jump" ` +
-      `title="打开并排比较 — 从第一个连拍组开始,←/→ 翻页">` +
-      `⊞ 并排比较</span>`;
+    const hasBursts = _REAL_BURSTS.length > 0;
+    // Sidebar burst group stays tied to actual bursts; the toolbar row
+    // now ALSO hosts the time-independent near-dup fold, so it renders
+    // even on a burst-less run (v2.6-P1).
+    if (lpGroup) lpGroup.style.display = hasBursts ? "" : "none";
+    if (divider) divider.style.display = hasBursts ? "block" : "none";
+    let html = "";
+    if (hasBursts) {
+      const totalBurstPhotos = _REAL_BURSTS.reduce((s, [_, n]) => s + n, 0);
+      html +=
+        `<span class="pill burst-peak-toggle${filterState.burstPeakOnly ? ' active' : ''}" ` +
+        `title="${_REAL_BURSTS.length} 个连拍组,共 ${totalBurstPhotos} 张 — ` +
+        `打开后只保留每组的最佳一张">` +
+        `🎯 每连拍峰值 <span style="opacity:0.5">${_REAL_BURSTS.length}</span></span>` +
+        // v2.4-P1-1 — collapse each burst into a single peak "hero" card
+        // carrying a ⧉N stack badge (click it to expand → compare modal).
+        `<span class="pill burst-collapse-toggle${filterState.collapseBursts ? ' active' : ''}" ` +
+        `title="把每个连拍组折叠成一张峰值代表 + ⧉计数;点卡片角的 ⧉N 展开并排比较">` +
+        `⧉ 折叠成堆</span>` +
+        // P0.3 — direct entry to the V9.2 compare modal without
+        // having to switch to sort=cluster first.
+        `<span class="pill burst-compare-jump" ` +
+        `title="打开并排比较 — 从第一个连拍组开始,←/→ 翻页">` +
+        `⊞ 并排比较</span>`;
+    }
+    // v2.6-P1 — visual near-duplicate fold. CLIP-based, so it also
+    // catches the re-shot composition minutes later that time-bucketed
+    // bursts can't. First toggle lazily builds the embeddings cache.
+    html +=
+      `<span class="pill neardup-toggle${filterState.nearDupFold ? ' active' : ''}" ` +
+      `title="按视觉相似度(CLIP)把近重复折成一张代表;点卡片角的 ≈N 并排比较 — 首次开启需建索引,稍慢">` +
+      `≈ 近重复折叠</span>`;
+    el.innerHTML = html;
+    el.querySelectorAll(".neardup-toggle").forEach(b => {
+      b.addEventListener("click", () => _toggleNearDupFold(b));
+    });
     el.querySelectorAll(".burst-collapse-toggle").forEach(b => {
       b.addEventListener("click", () => {
         filterState.collapseBursts = !filterState.collapseBursts;
@@ -7745,6 +7759,50 @@
         }
       });
     });
+  }
+
+  // v2.6-P1 — near-dup fold state. byHero maps a group's representative
+  // (highest score_final, server-picked) to ALL group members; hidden is
+  // the flat set of folded-away non-heroes.
+  let _NEARDUP = null;
+  function _toggleNearDupFold(btn) {
+    if (filterState.nearDupFold) {
+      filterState.nearDupFold = false;
+      btn.classList.remove("active");
+      render();
+      return;
+    }
+    if (_NEARDUP) {                       // already fetched → instant fold
+      filterState.nearDupFold = true;
+      btn.classList.add("active");
+      render();
+      return;
+    }
+    btn.style.opacity = "0.55";
+    btn.textContent = "≈ 建索引中…";
+    fetch(`/api/v1/runs/${run_id}/near_dups`)
+      .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+      .then(d => {
+        const byHero = new Map(), hidden = new Set();
+        (d.groups || []).forEach(g => {
+          byHero.set(g.hero, g.members);
+          g.members.forEach(fn => { if (fn !== g.hero) hidden.add(fn); });
+        });
+        _NEARDUP = { byHero, hidden };
+        filterState.nearDupFold = true;
+        btn.classList.add("active");
+        btn.textContent = `≈ 近重复折叠 `;
+        const n = document.createElement("span");
+        n.style.opacity = "0.5"; n.textContent = String(byHero.size);
+        btn.appendChild(n);
+        if (!byHero.size) showToast("未发现视觉近重复组(阈值 0.92)");
+        render();
+      })
+      .catch(err => {
+        showToast("近重复索引失败: " + err.message, "error");
+        btn.textContent = "≈ 近重复折叠";
+      })
+      .finally(() => { btn.style.opacity = ""; });
   }
 
   // P2.4 — active-learning filter. Click → fetch top-N queue from
@@ -8137,6 +8195,11 @@
         return r.is_burst_peak === true;
       });
     }
+    // v2.6-P1 — visual near-dup fold: hide every non-hero member of a
+    // CLIP near-dup group (the hero carries the ≈N badge to expand).
+    if (filterState.nearDupFold && _NEARDUP) {
+      filtered = filtered.filter(r => !_NEARDUP.hidden.has(r.filename));
+    }
     // P2.4 — active-learning filter. When the queue map is set, only
     // photos in it pass; subsequent sortRows respects rank order via
     // a custom sort key further down.
@@ -8249,10 +8312,25 @@
       // frames the card stands in for and opens the side-by-side compare
       // modal for that cluster (the "expand" affordance).
       let burstStackBadge = "";
+      // v2.6-P1 — ≈N visual near-dup badge on the group's hero. Rendered
+      // first so a card that is BOTH a burst peak and a near-dup hero
+      // shows ⧉ at the default top-right and ≈ offset below it.
+      if (filterState.nearDupFold && _NEARDUP
+          && _NEARDUP.byHero.has(r.filename)) {
+        const members = _NEARDUP.byHero.get(r.filename);
+        const bothBadges = filterState.collapseBursts && r.is_burst_peak
+          && (_BURST_CLUSTER_SIZES.get(r.cluster_id) || 0) >= 2;
+        burstStackBadge +=
+          `<button type="button" class="burst-stack-badge" `
+          + `data-neardup="${esc(r.filename)}" `
+          + (bothBadges ? `style="top:40px" ` : "")
+          + `title="视觉近重复 ${members.length} 张(CLIP)— 点击并排比较">`
+          + `≈ ${members.length}</button>`;
+      }
       if (filterState.collapseBursts && r.is_burst_peak) {
         const _stackN = _BURST_CLUSTER_SIZES.get(r.cluster_id) || 0;
         if (_stackN >= 2) {
-          burstStackBadge =
+          burstStackBadge +=                 // += so the ≈ near-dup badge coexists
             `<button type="button" class="burst-stack-badge" `
             + `data-cluster="c${esc(String(r.cluster_id))}" `
             + `title="此连拍组共 ${_stackN} 张 — 点击展开并排比较">`
@@ -10222,6 +10300,17 @@
     // into the side-by-side compare modal.  Stop propagation so the
     // underlying thumb click (open lightbox) doesn't also fire.
     const stackBadge = t.closest(".burst-stack-badge");
+    // v2.6-P1 — ≈N near-dup badge expands its group via the free-pick
+    // compare flow (the group spans arbitrary times, not one cluster id).
+    if (stackBadge && stackBadge.dataset.neardup) {
+      e.stopPropagation();
+      e.preventDefault();
+      const members = _NEARDUP && _NEARDUP.byHero.get(stackBadge.dataset.neardup);
+      if (members && typeof openCompareCustom === "function") {
+        openCompareCustom(members);
+      }
+      return;
+    }
     if (stackBadge && stackBadge.dataset.cluster) {
       e.stopPropagation();
       e.preventDefault();
@@ -11155,9 +11244,13 @@
       if (shortcutsModal && shortcutsModal.classList.contains("show")) {
         hideShortcuts(); return;
       }
-      if (lb.classList.contains("show")) { lb.classList.remove("show"); return; }
+      // Topmost layer first: the annotation modal stacks OVER the
+      // lightbox, so it must close before the lightbox — the old order
+      // closed the lightbox UNDERNEATH and left the modal floating over
+      // the grid (v2.5 stability sweep).
       const am = document.getElementById("annModal");
       if (am && am.classList.contains("show")) { am.classList.remove("show"); return; }
+      if (lb.classList.contains("show")) { lb.classList.remove("show"); return; }
       const bm = document.getElementById("browserModal");
       if (bm && bm.classList.contains("show")) { bm.classList.remove("show"); return; }
       // P-UX-3 — Esc also cancels a pending A/B compare pick. This
@@ -12084,6 +12177,25 @@
     }
   });
   annClose.addEventListener("click", () => annModal.classList.remove("show"));
+  // Escape must close the annotation modal even while focus sits in one
+  // of its inputs (the modal autofocuses the star/rationale fields). The
+  // global shortcut handler bails on INPUT/TEXTAREA before its Escape
+  // chain, which made the open modal a keyboard dead-end — the "frozen
+  // UI" of the v2.5 stability sweep. Capture phase = focus-immune;
+  // stopPropagation = the global chain can't also close the lightbox
+  // underneath on the same keypress. Skips when the tour modal is
+  // stacked on top (its own capture handler owns that Escape).
+  document.addEventListener("keydown", e => {
+    if (e.key !== "Escape" || !annModal.classList.contains("show")) return;
+    const tour = document.getElementById("tourModal");
+    if (tour && tour.classList.contains("show")) return;
+    // The first-open rubric-intro veil stacks over this modal and owns
+    // Escape while present (its capture handler registers later → would
+    // otherwise never see the event).
+    if (document.getElementById("rubricIntroLayer")) return;
+    e.preventDefault(); e.stopPropagation();
+    annModal.classList.remove("show");
+  }, true);
   annNext.addEventListener("click", () => openNextToLabel());
   annSave.addEventListener("click", () => saveAnnotation(true));
   annModal.addEventListener("click", e => {
@@ -14544,11 +14656,15 @@
       if (e.target === modal) modal.classList.remove("show");
     });
     // registerModal only wires the focus trap — Escape is per-modal.
+    // CAPTURE phase + stopPropagation: the global Escape chain would
+    // otherwise ALSO fire on the same keypress and close the lightbox
+    // underneath the tour (v2.5 stability sweep).
     document.addEventListener("keydown", e => {
       if (e.key === "Escape" && modal.classList.contains("show")) {
+        e.preventDefault(); e.stopPropagation();
         modal.classList.remove("show");
       }
-    });
+    }, true);
     try {
       if (localStorage.getItem("pixcull_tour_pulse_v1") !== "1") {
         setTimeout(() => {
@@ -16984,20 +17100,36 @@
       });
       function _dismiss() {
         _markSeen();
+        document.removeEventListener("keydown", _onKey, true);
         layer.style.opacity = "0";
         card.style.transform = "perspective(700px) rotateY(-70deg)";
         setTimeout(() => layer.remove(), 360);
+      }
+      // Persistent CAPTURE-phase key handling. The old `{ once:true }`
+      // Escape listener was consumed by the FIRST keypress of ANY key —
+      // a keyboard-flow user (1/2/3/Tab mid-cull) burned it instantly,
+      // Escape went dead and the veil read as a frozen UI. While the
+      // veil is up we also swallow every other shortcut, so keys can't
+      // silently annotate/navigate the photos behind it.
+      function _onKey(ev) {
+        if (!document.body.contains(layer)) {
+          document.removeEventListener("keydown", _onKey, true);
+          return;
+        }
+        if (ev.key === "Escape" || ev.key === "Enter" || ev.key === " ") {
+          ev.preventDefault(); ev.stopPropagation();
+          _dismiss();
+          return;
+        }
+        if (ev.key === "Tab") return;       // keep the dismiss button reachable
+        ev.stopPropagation();               // veil up → no shortcuts behind it
       }
       document.getElementById("rubricIntroDismiss")
               .addEventListener("click", _dismiss);
       layer.addEventListener("click", ev => {
         if (ev.target === layer) _dismiss();
       });
-      document.addEventListener("keydown", ev => {
-        if (ev.key === "Escape" && document.body.contains(layer)) {
-          _dismiss();
-        }
-      }, { once: true });
+      document.addEventListener("keydown", _onKey, true);
     }
     // Hook: watch for .ann-modal getting .show — that's the "first open"
     // trigger.  Mutation observer keeps us decoupled from the existing
