@@ -562,14 +562,14 @@
     `<span class="keep">keep <b data-stat="keep">${summary.n_keep}</b></span>`,
     `<span class="maybe">maybe <b data-stat="maybe">${summary.n_maybe}</b></span>`,
     `<span class="cull">cull <b data-stat="cull">${summary.n_cull}</b></span>`,
-    `<span>耗时 <b>${ela}</b></span>`,
+    `<span class="stat-aux">耗时 <b>${ela}</b></span>`,
   ];
   if (summary.rescorer_active) {
-    stats.push(`<span title="V1.1 学习重打分器:在 ${summary.rescorer_n_scored} 张非 cull 图上给出 keep/maybe 预测">rescorer <b>${summary.rescorer_n_scored}</b> 评分 / <b>${summary.rescorer_n_disagrees}</b> 与规则不一致</span>`);
+    stats.push(`<span class="stat-aux" title="V1.1 学习重打分器:在 ${summary.rescorer_n_scored} 张非 cull 图上给出 keep/maybe 预测">rescorer <b>${summary.rescorer_n_scored}</b> 评分 / <b>${summary.rescorer_n_disagrees}</b> 与规则不一致</span>`);
   }
   // V2.0 rubric annotation progress
   if (summary.n_human_labeled != null) {
-    stats.push(`<span title="人工 rubric 标注进度,这些标注会喂入下一轮 rescorer 训练">人工标注 <b>${summary.n_human_labeled}</b>/${summary.n_total}</span>`);
+    stats.push(`<span class="stat-aux" title="人工 rubric 标注进度,这些标注会喂入下一轮 rescorer 训练">人工标注 <b>${summary.n_human_labeled}</b>/${summary.n_total}</span>`);
   }
   // V17.2 — vertical policy badge. Tells the user "you tagged this
   // batch as <vertical>; here's how the thresholds were shifted vs
@@ -4644,6 +4644,10 @@
     // closing and re-opening. Falls back to card focus only when the
     // lightbox is closed.
     if (lb.classList.contains("show")) {
+      // v2.8-DESIGN P0-1 — Tab toggles "zen" mode: hide the info inspector
+      // so the photo claims the full viewport (content-first). Tab again
+      // brings it back. Tab isn't otherwise used inside the lightbox.
+      if (e.key === "Tab") { e.preventDefault(); lb.classList.toggle("lb-zen"); return; }
       if (e.key === "j" || e.key === "ArrowRight" || e.key === "PageDown") {
         e.preventDefault(); lightboxStep(+1); return;
       }

@@ -1164,7 +1164,10 @@
     h1#title { display: none; }
     /* Legacy .brand-row hidden too — replaced by .workspace-bar */
     .brand-row { display: none; }
-    .stats { display: flex; gap: 18px; color: var(--muted); font-size: 12px; flex-wrap: wrap; }
+    .stats { display: flex; gap: 18px; color: var(--muted); font-size: 12px; flex-wrap: wrap; align-items: baseline; }
+    /* v2.8-DESIGN P1-1 — 顶栏渐进披露: 次要统计 (耗时/rescorer/人工标注)
+       降权, 让核心 总数 + keep/maybe/cull 立住, 顶栏安静下来. */
+    .stats .stat-aux { opacity: 0.5; font-size: 11px; }
     /* V17.2 — vertical policy badge: small accent pill that hovers
        to reveal the policy notes ("风光提高 keep 门槛 +3pp..."). */
     .stats .vertical-badge {
@@ -2118,9 +2121,12 @@
       z-index: 2;
       pointer-events: none;
     }
-    .card .thumb-decision-glyph.dg-keep  { background: rgba(52,211,153,0.85);  color: #052e1f; }
-    .card .thumb-decision-glyph.dg-maybe { background: rgba(251,191,36,0.85);  color: #2a1d05; }
-    .card .thumb-decision-glyph.dg-cull  { background: rgba(239,99,99,0.85);   color: #2a0606; }
+    /* v2.8-DESIGN P0-3 — 收敛强调色: 决策字形不再用大色块, 统一深色玻璃底
+       (继承上面的 rgba(0,0,0,0.45)) + 克制的决策色字形. ✓/?/✕ 形状本身
+       已足够区分 (含色盲), 不需要整块填色去抢缩略图的视觉. */
+    .card .thumb-decision-glyph.dg-keep  { color: #6ee7b7; }
+    .card .thumb-decision-glyph.dg-maybe { color: #fcd34d; }
+    .card .thumb-decision-glyph.dg-cull  { color: #fca5a5; }
     /* v2.4-P1-1 — burst-stack "⧉N" badge.  Top-right (clear of the
        top-left AL badge + the decision glyph).  The layered offset
        shadow reads as a literal stack of cards behind it. */
@@ -2264,9 +2270,26 @@
     .badge.keep::before  { content: "✓ "; }
     .badge.maybe::before { content: "? "; }
     .badge.cull::before  { content: "✕ "; }
-    .badge.keep { background: var(--keep); color: white; }
-    .badge.maybe { background: var(--maybe); color: white; }
-    .badge.cull { background: var(--cull); color: white; }
+    /* v2.8-DESIGN P0-3 — 决策徽章改描边式 (透明底 + 细色边 + 色字),
+       不再大面积实心填色, 让强调色回归"强调"本职, 网格立刻安静下来. */
+    .badge.keep  { background: transparent; color: var(--keep);
+                   border: 1px solid color-mix(in srgb, var(--keep) 50%, transparent); box-shadow: none; }
+    .badge.maybe { background: transparent; color: var(--maybe);
+                   border: 1px solid color-mix(in srgb, var(--maybe) 50%, transparent); box-shadow: none; }
+    .badge.cull  { background: transparent; color: var(--cull);
+                   border: 1px solid color-mix(in srgb, var(--cull) 50%, transparent); box-shadow: none; }
+    /* v2.8-DESIGN P0-2 — 卡片减法: 默认收起长尾噪音 (rescorer/meta/style/
+       cull-reason/moment/review/exposure 徽章墙 + reason/advice 文字行).
+       这些细节移交 lightbox inspector 按需查看; 网格常态只保留 缩略图 +
+       决策色 + 文件名 + 综合分 + 六维度. 所有卡等高, 不跳动. */
+    .card .row4,
+    .card .row5,
+    .card .row1 .rs,
+    .card .row1 .style-chip,
+    .card .row1 .cull-reason-chip,
+    .card .row1 .moment-chip,
+    .card .row1 .review-me-chip,
+    .card .row1 .exposure-chip { display: none; }
     /* P-UX-23 — when the user enables color-blind mode (body.a11y-cb),
        remap keep/maybe/cull to a deuteranopia-safe palette + add a
        diagonal-stripe texture to .badge.cull so even a fully
@@ -4273,6 +4296,11 @@
     }
     .lightbox.show .img-pane  { grid-row: 1; grid-column: 1; }
     .lightbox.show .info-pane { grid-row: 1; grid-column: 2; }
+    /* v2.8-DESIGN P0-1 — content-first "zen" toggle (Tab): collapse the
+       380px inspector so the photo claims the full viewport. Tab again
+       restores it. */
+    .lightbox.show.lb-zen { grid-template-columns: 1fr; }
+    .lightbox.show.lb-zen .info-pane { display: none; }
     @media (max-width: 900px) {
       .lightbox.show { grid-template-columns: 1fr; grid-template-rows: 55% 45%; }
       .lightbox.show .img-pane  { grid-row: 1; grid-column: 1; }
@@ -4326,9 +4354,13 @@
       padding: 2px 7px; font-size: 10px; border-radius: 3px;
       font-weight: 600; text-transform: uppercase;
     }
-    .lightbox .info-pane .meta-line .badge.keep { background: var(--keep); color: #fff; }
-    .lightbox .info-pane .meta-line .badge.maybe { background: var(--maybe); color: #fff; }
-    .lightbox .info-pane .meta-line .badge.cull { background: var(--cull); color: #fff; }
+    /* v2.8-DESIGN P0-3 — 描边式, 与网格徽章一致, 收敛 lightbox 内的实心色块. */
+    .lightbox .info-pane .meta-line .badge.keep  { background: transparent; color: var(--keep);
+      border: 1px solid color-mix(in srgb, var(--keep) 50%, transparent); }
+    .lightbox .info-pane .meta-line .badge.maybe { background: transparent; color: var(--maybe);
+      border: 1px solid color-mix(in srgb, var(--maybe) 50%, transparent); }
+    .lightbox .info-pane .meta-line .badge.cull  { background: transparent; color: var(--cull);
+      border: 1px solid color-mix(in srgb, var(--cull) 50%, transparent); }
     .lightbox .info-pane .section {
       margin-bottom: 14px; padding-bottom: 14px;
       border-bottom: 1px solid var(--border);
@@ -7190,14 +7222,14 @@
     `<span class="keep">keep <b data-stat="keep">${summary.n_keep}</b></span>`,
     `<span class="maybe">maybe <b data-stat="maybe">${summary.n_maybe}</b></span>`,
     `<span class="cull">cull <b data-stat="cull">${summary.n_cull}</b></span>`,
-    `<span>耗时 <b>${ela}</b></span>`,
+    `<span class="stat-aux">耗时 <b>${ela}</b></span>`,
   ];
   if (summary.rescorer_active) {
-    stats.push(`<span title="V1.1 学习重打分器:在 ${summary.rescorer_n_scored} 张非 cull 图上给出 keep/maybe 预测">rescorer <b>${summary.rescorer_n_scored}</b> 评分 / <b>${summary.rescorer_n_disagrees}</b> 与规则不一致</span>`);
+    stats.push(`<span class="stat-aux" title="V1.1 学习重打分器:在 ${summary.rescorer_n_scored} 张非 cull 图上给出 keep/maybe 预测">rescorer <b>${summary.rescorer_n_scored}</b> 评分 / <b>${summary.rescorer_n_disagrees}</b> 与规则不一致</span>`);
   }
   // V2.0 rubric annotation progress
   if (summary.n_human_labeled != null) {
-    stats.push(`<span title="人工 rubric 标注进度,这些标注会喂入下一轮 rescorer 训练">人工标注 <b>${summary.n_human_labeled}</b>/${summary.n_total}</span>`);
+    stats.push(`<span class="stat-aux" title="人工 rubric 标注进度,这些标注会喂入下一轮 rescorer 训练">人工标注 <b>${summary.n_human_labeled}</b>/${summary.n_total}</span>`);
   }
   // V17.2 — vertical policy badge. Tells the user "you tagged this
   // batch as <vertical>; here's how the thresholds were shifted vs
@@ -11272,6 +11304,10 @@
     // closing and re-opening. Falls back to card focus only when the
     // lightbox is closed.
     if (lb.classList.contains("show")) {
+      // v2.8-DESIGN P0-1 — Tab toggles "zen" mode: hide the info inspector
+      // so the photo claims the full viewport (content-first). Tab again
+      // brings it back. Tab isn't otherwise used inside the lightbox.
+      if (e.key === "Tab") { e.preventDefault(); lb.classList.toggle("lb-zen"); return; }
       if (e.key === "j" || e.key === "ArrowRight" || e.key === "PageDown") {
         e.preventDefault(); lightboxStep(+1); return;
       }
