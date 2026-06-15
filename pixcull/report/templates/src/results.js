@@ -3823,6 +3823,14 @@
     e.stopPropagation();
     _lbZoomToggleAt(null, null);
   });
+  // v2.8.1 — zen toggle button mirrors the "i" key (hide inspector → photo
+  // fills the viewport). CSS keys the active look off .lb-zen, so the button
+  // stays in sync whether zen was toggled by key or by click.
+  const lbZenToggle = document.getElementById("lbZenToggle");
+  if (lbZenToggle) lbZenToggle.addEventListener("click", e => {
+    e.stopPropagation();
+    lb.classList.toggle("lb-zen");
+  });
 
   // Track mousedown so we can distinguish a click (toggle) from a
   // drag (pan). Only count motion > _LB_CLICK_DRAG_THRESH as a drag.

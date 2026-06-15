@@ -4549,6 +4549,18 @@
       display: flex; gap: 6px; align-items: center;
       z-index: 11;
     }
+    /* v2.8.1 — zen toggle, right of the companion group. The active look is
+       keyed off .lb-zen (not a JS-toggled class) so the "i" key and this
+       button stay visually in sync. */
+    .lightbox .zen-grp {
+      position: absolute; top: 18px; left: 196px;
+      display: flex; gap: 6px; align-items: center;
+      z-index: 11;
+    }
+    .lightbox.lb-zen #lbZenToggle {
+      background: rgba(196,185,169,0.85);
+      border-color: var(--accent); color: #161310;
+    }
     .lightbox .zoom-btn {
       height: 32px; padding: 0 12px; border-radius: 6px;
       background: rgba(0,0,0,0.6); color: #fff;

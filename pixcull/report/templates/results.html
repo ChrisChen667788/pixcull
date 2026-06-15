@@ -4568,6 +4568,18 @@
       display: flex; gap: 6px; align-items: center;
       z-index: 11;
     }
+    /* v2.8.1 — zen toggle, right of the companion group. The active look is
+       keyed off .lb-zen (not a JS-toggled class) so the "i" key and this
+       button stay visually in sync. */
+    .lightbox .zen-grp {
+      position: absolute; top: 18px; left: 196px;
+      display: flex; gap: 6px; align-items: center;
+      z-index: 11;
+    }
+    .lightbox.lb-zen #lbZenToggle {
+      background: rgba(196,185,169,0.85);
+      border-color: var(--accent); color: #161310;
+    }
     .lightbox .zoom-btn {
       height: 32px; padding: 0 12px; border-radius: 6px;
       background: rgba(0,0,0,0.6); color: #fff;
@@ -6302,6 +6314,14 @@
       <button class="zoom-btn" id="lbCompanionToggle" type="button"
               title="第二屏 lightbox · BroadcastChannel 同步翻页
 (关闭副屏不破协作状态)">🪟 副屏</button>
+    </div>
+    <!-- v2.8.1 — discoverable "zen" toggle: hide the inspector so the photo
+         fills the viewport. Mirrors the "i" keyboard shortcut (which replaced
+         the freeze-causing Tab binding). CSS lights it up when .lb-zen is on,
+         so it stays in sync whether toggled by key or click. -->
+    <div class="zen-grp" role="group" aria-label="专注">
+      <button class="zoom-btn" id="lbZenToggle" type="button"
+              title="专注模式 — 隐藏右侧信息栏, 让照片占满视口 (快捷键 i)">⊟ 专注</button>
     </div>
     <div class="img-pane"><img id="lbImg" alt=""></div>
     <!-- v0.7-P1-1 — Loupe RGB readout. Visible only when lbImg is
@@ -10482,6 +10502,14 @@
   if (lbZoomToggle) lbZoomToggle.addEventListener("click", e => {
     e.stopPropagation();
     _lbZoomToggleAt(null, null);
+  });
+  // v2.8.1 — zen toggle button mirrors the "i" key (hide inspector → photo
+  // fills the viewport). CSS keys the active look off .lb-zen, so the button
+  // stays in sync whether zen was toggled by key or by click.
+  const lbZenToggle = document.getElementById("lbZenToggle");
+  if (lbZenToggle) lbZenToggle.addEventListener("click", e => {
+    e.stopPropagation();
+    lb.classList.toggle("lb-zen");
   });
 
   // Track mousedown so we can distinguish a click (toggle) from a
