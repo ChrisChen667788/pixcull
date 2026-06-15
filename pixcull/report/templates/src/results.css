@@ -5385,6 +5385,19 @@
       position: sticky; top: 48px;
       z-index: 3;
     }
+    /* v2.8-DESIGN P1-1 — toolbar grouping. The icon wall is split by function
+       into 排序/视图 · 搜索 · 操作 · 导出 · 密度: each later group's first
+       element gets a hairline divider + extra space so a single flat row of
+       selects/buttons reads as scannable clusters (Linear-style chrome
+       grouping). Pure CSS — no DOM move, no event rebinding. */
+    .tools-bar #semSearchInput,
+    .tools-bar #tourBtn,
+    .tools-bar .export-menu,
+    .tools-bar .density-toolbar {
+      margin-left: var(--space-3);
+      padding-left: var(--space-3);
+      border-left: 1px solid var(--border);
+    }
     /* When the workspace-layout takes over, the legacy .filters
        row gets repurposed as the tools-bar (id="filters" carries
        a class="tools-bar" now).  Direct-child decision pills
