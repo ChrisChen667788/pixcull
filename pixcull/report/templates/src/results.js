@@ -4644,10 +4644,14 @@
     // closing and re-opening. Falls back to card focus only when the
     // lightbox is closed.
     if (lb.classList.contains("show")) {
-      // v2.8-DESIGN P0-1 — Tab toggles "zen" mode: hide the info inspector
-      // so the photo claims the full viewport (content-first). Tab again
-      // brings it back. Tab isn't otherwise used inside the lightbox.
-      if (e.key === "Tab") { e.preventDefault(); lb.classList.toggle("lb-zen"); return; }
+      // v2.8-DESIGN P0-1 (v2.8.1 freeze fix) — "i" toggles zen mode: hide the
+      // info inspector so the photo claims the full viewport (content-first).
+      // MUST NOT bind Tab here: registerModal(lb) installs a focus-trap
+      // _trapHandler on Tab (line ~2521 / 486). A second Tab handler raced it —
+      // toggling lb-zen mid-cycle hid the just-focused element (offsetParent
+      // null) so focus escaped the lightbox to <body>; thereafter ESC/j/k
+      // landed on body and the lightbox read as frozen. Use a non-trap key.
+      if (e.key === "i" || e.key === "I") { e.preventDefault(); lb.classList.toggle("lb-zen"); return; }
       if (e.key === "j" || e.key === "ArrowRight" || e.key === "PageDown") {
         e.preventDefault(); lightboxStep(+1); return;
       }
