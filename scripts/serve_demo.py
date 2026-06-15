@@ -725,6 +725,11 @@ def _build_video_payload(run_id: str) -> dict | None:
                     "rank": c.get("rank"), "start_s": c.get("start_s"),
                     "end_s": c.get("end_s"), "score": c.get("score"),
                     "why": c.get("why_semantic") or c.get("why"),
+                    # v2.7 — bilingual caption; the frontend picks zh/en by
+                    # the active locale. en falls back to zh→why so the field
+                    # is always present for older runs without why_semantic_en.
+                    "why_en": (c.get("why_semantic_en")
+                               or c.get("why_semantic") or c.get("why")),
                     "best_filename": id2fn.get(c.get("best_frame_id")),
                 })
         except (OSError, ValueError):

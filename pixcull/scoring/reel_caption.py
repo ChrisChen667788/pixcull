@@ -39,6 +39,14 @@ _SCENE_WORDS = {
     "sports": "动感", "food": "美食", "architecture": "建筑",
 }
 
+# v2.7 — English counterparts for the bilingual caption. Mirrors the zh map
+# so the English template line never leaks a Chinese scene word.
+_SCENE_WORDS_EN = {
+    "portrait": "portrait", "event": "the scene", "wedding": "wedding moment",
+    "landscape": "landscape", "street": "street scene", "documentary": "documentary",
+    "sports": "action", "food": "food", "architecture": "architecture",
+}
+
 
 def _fragments(cand: dict) -> list[str]:
     why = str(cand.get("why") or "").strip()
@@ -64,6 +72,21 @@ def template_caption(cand: dict) -> str:
     bf = cand.get("best_frame_score")
     tail = f"(最佳帧 {float(bf):.2f})" if isinstance(bf, (int, float)) else ""
     return f"{start:.1f}–{end:.1f}s:{body}{tail}"
+
+
+def template_caption_en(cand: dict) -> str:
+    """v2.7 — deterministic English caption (time range + scene word +
+    best-frame score). The ``why`` signals are Chinese, so the EN line
+    intentionally carries only language-neutral atoms, never a translated
+    fragment list. Always returns a usable string."""
+    start = float(cand.get("start_s", 0.0))
+    end = float(cand.get("end_s", start))
+    scene = cand.get("scene")
+    scene_word = _SCENE_WORDS_EN.get(scene) if scene else None
+    body = scene_word or "stable usable clip"
+    bf = cand.get("best_frame_score")
+    tail = f" (best frame {float(bf):.2f})" if isinstance(bf, (int, float)) else ""
+    return f"{start:.1f}–{end:.1f}s: {body}{tail}"
 
 
 _llm = None
@@ -209,33 +232,51 @@ def _zh_rewrite(text: str) -> str | None:
     return None
 
 
-def vlm_caption(cand: dict, frames_root=None) -> str | None:
-    """Caption the candidate's best frame with the VLM, prefixed with its
-    time range.  ``None`` when the frame can't be found or no VLM.
-    When the local zh text-LLM is installed the English BLIP description
-    is rewritten to Chinese (v2.5); else the English passes through."""
+def vlm_caption_bilingual(cand: dict, frames_root=None) -> tuple[str, str] | None:
+    """v2.7 — caption the best frame in BOTH languages: ``(zh, en)``, each
+    prefixed with the time range.  ``en`` is the raw BLIP English; ``zh`` is
+    the local-LLM rewrite of it, or the English itself when no LLM is present
+    (so zh is never worse than the English we already had).  ``None`` when the
+    frame can't be found or the VLM produced nothing."""
     frame = _resolve_best_frame(cand, frames_root)
     if frame is None:
         return None
-    desc = vlm_caption_from_image(frame)
-    if not desc:
+    en_desc = vlm_caption_from_image(frame)
+    if not en_desc:
         return None
-    desc = _zh_rewrite(desc) or desc
+    zh_desc = _zh_rewrite(en_desc) or en_desc
     start = float(cand.get("start_s", 0.0))
     end = float(cand.get("end_s", start))
-    return f"{start:.1f}–{end:.1f}s:{desc}"
+    prefix = f"{start:.1f}–{end:.1f}s:"
+    return prefix + zh_desc, prefix + en_desc
+
+
+def vlm_caption(cand: dict, frames_root=None) -> str | None:
+    """Backward-compatible single-language (zh-preferred) VLM caption — the
+    ``zh`` half of :func:`vlm_caption_bilingual`.  ``None`` when no frame/VLM."""
+    pair = vlm_caption_bilingual(cand, frames_root)
+    return pair[0] if pair else None
+
+
+def caption_bilingual(cand: dict, frames_root=None) -> tuple[str, str, str]:
+    """v2.7 — ``(zh, en, source)`` with source ∈ {vlm, llm, template}.
+    The VLM (best frame) yields a genuine bilingual pair; the text-LLM path is
+    zh-only so its English falls back to the deterministic EN template; the
+    template path renders both deterministically.  ``en`` is always present."""
+    pair = vlm_caption_bilingual(cand, frames_root)
+    if pair:
+        return pair[0], pair[1], "vlm"
+    lc = llm_caption(cand)
+    if lc:
+        return lc, template_caption_en(cand), "llm"
+    return template_caption(cand), template_caption_en(cand), "template"
 
 
 def caption_with_source(cand: dict, frames_root=None) -> tuple[str, str]:
-    """``(caption, source)`` with source ∈ {vlm, llm, template} — the true
-    VLM (best frame) first, then the text-LLM-over-signals, then template."""
-    v = vlm_caption(cand, frames_root)
-    if v:
-        return v, "vlm"
-    lc = llm_caption(cand)
-    if lc:
-        return lc, "llm"
-    return template_caption(cand), "template"
+    """Backward-compatible ``(zh_caption, source)`` — wraps
+    :func:`caption_bilingual` and drops the English half."""
+    zh, _en, src = caption_bilingual(cand, frames_root)
+    return zh, src
 
 
 def caption(cand: dict, frames_root=None) -> str:
@@ -249,8 +290,9 @@ def enrich(candidates: Sequence[dict], frames_root=None) -> list[dict]:
     ``frames_root`` (a run's output dir) lets the VLM path find the best
     frame's image; omit it and captioning gracefully drops to LLM/template."""
     for c in candidates:
-        text, src = caption_with_source(c, frames_root)
-        c["why_semantic"] = text
+        zh, en, src = caption_bilingual(c, frames_root)
+        c["why_semantic"] = zh
+        c["why_semantic_en"] = en
         c["caption_source"] = src
     return list(candidates)
 

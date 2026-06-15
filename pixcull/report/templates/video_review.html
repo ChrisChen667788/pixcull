@@ -293,13 +293,17 @@ function getDec(rank){ try{return localStorage.getItem(decKey(rank))||'';}catch(
 function setDec(rank,d){ try{ const cur=getDec(rank); localStorage.setItem(decKey(rank), cur===d?'':d);}catch(e){} renderReel(); }
 function renderReel(){
   const box=$('reelList'); if(!REEL.length){ box.innerHTML='<div class="err">无候选片段</div>'; return; }
+  // v2.7 — pick the bilingual reel caption by the active locale. Anything
+  // not starting with "zh" gets the English half (why_en); re-read on each
+  // render so a language switch + re-render takes effect immediately.
+  const _useEn = (()=>{ try{ return !((localStorage.getItem('pixcull_lang')||'zh_CN').startsWith('zh')); }catch(e){ return false; } })();
   box.innerHTML = REEL.map(c=>{
     const d=getDec(c.rank);
     return '<div class="cand'+(d==='cull'?' culled':'')+'" data-rank="'+c.rank+'" data-frame="'+(c.best_frame_id||'')+'" data-start="'+c.start_s+'">'+
       '<div class="row1"><span class="rank">#'+c.rank+'</span>'+
       '<span class="span">'+(+c.start_s).toFixed(1)+'–'+(+c.end_s).toFixed(1)+'s</span>'+
       '<span class="sc">'+(+c.score).toFixed(2)+'</span></div>'+
-      '<div class="why">'+(c.why||'')+'</div>'+
+      '<div class="why">'+((_useEn && c.why_en)?c.why_en:(c.why||''))+'</div>'+
       (c.best_frame_id?('<img class="thumb" loading="lazy" src="'+frameURLById(c.best_frame_id,240)+'" alt="preview">'):'')+
       '<div class="acts"><button class="keep'+(d==='keep'?' on':'')+'" data-act="keep" data-rank="'+c.rank+'">✓ Keep</button>'+
       '<button class="cull'+(d==='cull'?' on':'')+'" data-act="cull" data-rank="'+c.rank+'">✕ Cull</button></div></div>';

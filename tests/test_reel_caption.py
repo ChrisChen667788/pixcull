@@ -107,11 +107,14 @@ def test_enrich_sets_caption_source(monkeypatch):
 
 
 def test_caption_with_source_prefers_vlm(monkeypatch):
-    # VLM wins over LLM + template when it returns a caption.
-    monkeypatch.setattr(C, "vlm_caption",
-                        lambda cand, frames_root=None: "4.5–7.5s:A dog runs")
+    # VLM wins over LLM + template when it returns a caption. v2.7 — the real
+    # path is vlm_caption_bilingual (zh, en); caption_with_source returns the
+    # zh half + source.
+    monkeypatch.setattr(
+        C, "vlm_caption_bilingual",
+        lambda cand, frames_root=None: ("4.5–7.5s:狗在奔跑", "4.5–7.5s:A dog runs"))
     txt, src = C.caption_with_source(_cand(), frames_root="/x")
-    assert src == "vlm" and "dog" in txt
+    assert src == "vlm" and "狗" in txt
 
 
 def test_resolve_best_frame(tmp_path):
@@ -175,3 +178,62 @@ def test_vlm_caption_real_model(tmp_path, monkeypatch):
     assert len(out) > len("2.0–4.0s:")              # a real description, not empty
     _, src = C.caption_with_source(cand, frames_root=tmp_path)
     assert src == "vlm"
+
+
+# ── v2.7 bilingual caption ──────────────────────────────────────────────
+
+def test_template_caption_en_is_english_only():
+    """v2.7 — the EN template carries only language-neutral atoms (time +
+    scene word + best frame), never a translated zh fragment."""
+    cap = C.template_caption_en(
+        {"start_s": 1.0, "end_s": 3.0, "scene": "landscape",
+         "best_frame_score": 0.82, "why": "构图稳 + 主体清晰"})
+    assert cap.startswith("1.0–3.0s:")
+    assert "landscape" in cap and "best frame 0.82" in cap
+    assert not any("一" <= c <= "鿿" for c in cap)        # no CJK leaked
+
+
+def test_caption_bilingual_three_tuple():
+    """caption_bilingual returns (zh, en, source); en is always present."""
+    zh, en, src = C.caption_bilingual(
+        {"start_s": 0.0, "end_s": 2.0, "scene": "food"})
+    assert src == "template"
+    assert zh and en
+    assert "food" in en                                   # EN template scene word
+
+
+def test_vlm_bilingual_returns_zh_and_en(tmp_path, monkeypatch):
+    """vlm_caption_bilingual: en = raw BLIP, zh = local-LLM rewrite of it."""
+    fd = tmp_path / "video_frames" / "v"; fd.mkdir(parents=True)
+    (fd / "frame_000001.jpg").write_bytes(b"x")
+    monkeypatch.setattr(C, "vlm_caption_from_image",
+                        lambda p: "A bride looks back")
+    monkeypatch.setattr(
+        C, "_try_llm",
+        lambda: (lambda prompt, **kw: {"choices": [{"text": "新娘回眸"}]}))
+    cand = _cand(best_frame_id="frame_000001", start_s=1.0, end_s=2.0)
+    pair = C.vlm_caption_bilingual(cand, tmp_path)
+    assert pair is not None
+    zh, en = pair
+    assert "新娘" in zh and "bride" in en                  # zh translated, en raw
+    assert zh.startswith("1.0–2.0s:") and en.startswith("1.0–2.0s:")
+
+
+def test_vlm_bilingual_no_llm_en_passthrough(tmp_path, monkeypatch):
+    """No LLM → the zh half falls back to the English (never worse)."""
+    fd = tmp_path / "video_frames" / "v"; fd.mkdir(parents=True)
+    (fd / "frame_000001.jpg").write_bytes(b"x")
+    monkeypatch.setattr(C, "vlm_caption_from_image", lambda p: "A dog runs")
+    monkeypatch.setattr(C, "_try_llm", lambda: None)
+    cand = _cand(best_frame_id="frame_000001", start_s=1.0, end_s=2.0)
+    zh, en = C.vlm_caption_bilingual(cand, tmp_path)
+    assert zh == en == "1.0–2.0s:A dog runs"
+
+
+def test_enrich_adds_why_semantic_en():
+    """v2.7 — enrich writes both why_semantic (zh) and why_semantic_en (en)."""
+    out = C.enrich([_cand()])            # no frames_root → template path
+    c = out[0]
+    assert c["why_semantic"] and c["why_semantic_en"]
+    assert c["caption_source"] == "template"
+    assert not any("一" <= ch <= "鿿" for ch in c["why_semantic_en"])  # en is English
