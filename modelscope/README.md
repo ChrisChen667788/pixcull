@@ -54,8 +54,20 @@ tasks:
 完整源码 + iOS 伴侣 App + Lightroom 插件,均在 GitHub:
 **[github.com/ChrisChen667788/pixcull](https://github.com/ChrisChen667788/pixcull)**
 
-## v0.7 → v0.9 主要更新
+## v0.7 → v2.8 主要更新
 
+- **v2.8**:UI/UX **减法重构** — 网格卡片去徽章墙 · 决策徽章**描边化**(不再
+  实心色块)· lightbox **`i` 键 zen** 全宽看图 · 顶栏渐进披露(对标 Linear /
+  Narrative Select 克制美学)
+- **v2.6**:CLIP **视觉近重复折叠**(跨连拍时间的"重拍同构图"也能折成一张代表
+  + ≈N 并排比较)· lightbox 卡死 + 缩略图饥饿冻结修复
+- **v2.5**:单文件前端拆为**构建产物** · **联系表 / 客户样片 PDF 导出**
+- **v2.4**:从纠正中学习的**个性化阈值** · 键盘优先选片闭环 · **自然语言语义
+  搜索**(CLIP)· 音频阈值校准(笑声召回 0.25→0.85)· 连拍**折叠成堆** + ⧉N ·
+  真 **VLM 最佳帧字幕**(opt-in BLIP)
+- **v2.0–v2.3**:**视频审片 + reel 选段流水线**(时序评分 / shake-blur / 音频
+  事件标注 / GoPro·DJI GPMF / reel 自动拼装 + 导出预置)· editorial-warm 重塑
+- **v1.0**:学习**重打分器** · **偏见审计 dashboard** · 每轴**归因热力图**
 - **v0.9**(进行中):全产品 signature soft-bounce 动效 · `/results` 2 秒
   hero reveal · brand identity 重做(渐变 + 新 logo + Charter serif accent)
   · ⌘K 命令面板(27 actions + fuzzy match)

@@ -52,6 +52,33 @@
 
 ## What's new
 
+**v2.8** — UI/UX **subtraction** pass: grid cards shed the badge wall, decision
+badges go **outline** (not solid colour fills), the lightbox gains an **`i`
+"zen" toggle** (photo claims the full viewport), header stats use progressive
+disclosure. Editorial restraint after Linear / Narrative Select. See
+[`docs/DESIGN-REFLECTION-v2.8.md`](docs/DESIGN-REFLECTION-v2.8.md).
+
+**v2.6** — CLIP **visual near-duplicate fold** (catches the re-shot composition
+that time-bucketed bursts miss; ≈N badge → side-by-side compare) + lightbox-
+freeze & thumbnail-starvation stability fixes.
+
+**v2.5** — single-file frontend split into a **build artifact**
+(`templates/src` + `make results-html`) · **contact-sheet / client-proof PDF**
+export (`pixcull contact-sheet`).
+
+**v2.4** — intelligence + workflow: **personalisation-from-corrections**
+(threshold shift learned from your edits) · keyboard-first cull loop ·
+**natural-language semantic search** (CLIP) · audio-threshold calibration
+(laughter recall 0.25→0.85) · burst **"collapse to peak"** + ⧉N stack · true
+**VLM best-frame caption** (opt-in BLIP).
+
+**v2.0–v2.3** — **video culling + reel pipeline** (temporal scoring / shake-blur
+cull / audio-event tagging / GoPro·DJI GPMF / reel auto-assembly + export
+presets) · **editorial-warm** rebrand (espresso + brass, vendored Geist).
+
+**v1.0** — learned **rescorer** · **bias-audit dashboard** · per-axis
+**attribution heatmap**.
+
 **v0.9** *(in flight)* — Brand identity refresh (signature gradient
 + logo redo + serif accent) · Hero reveal "first 2 seconds" signature
 moment · soft-bounce motion curve project-wide · ⌘K command palette
