@@ -52,11 +52,22 @@
 
 ## What's new
 
-**v2.8** — UI/UX **subtraction** pass: grid cards shed the badge wall, decision
-badges go **outline** (not solid colour fills), the lightbox gains an **`i`
-"zen" toggle** (photo claims the full viewport), header stats use progressive
-disclosure. Editorial restraint after Linear / Narrative Select. See
+**v2.8** — UI/UX **subtraction** + colour-system pass: grid cards shed the badge
+wall, decision badges go **outline** (not solid fills), the lightbox gains a
+discoverable **"zen" toggle** (`i` key / button → photo claims the full
+viewport), header stats + toolbar move to **progressive disclosure / grouping**,
+and the palette becomes an **OKLCH three-variable system** (base / accent /
+contrast → relative-colour-derived surfaces, with a hex fallback for older
+engines). Two lightbox **freeze** root-causes fixed. Editorial restraint after
+Linear / Narrative Select — see
 [`docs/DESIGN-REFLECTION-v2.8.md`](docs/DESIGN-REFLECTION-v2.8.md).
+
+**v2.7** — four intelligence slices: **bilingual reel captions** (zh + en,
+locale-selected) · **cross-shoot dedup** (`pixcull dedup-across` — the same
+frame recurring across separate sessions) · **video duplicate-frame trimming**
+(`pixcull trim-dupes` — dHash near-static runs) · **self-hosted VLM ONNX**
+(BLIP → onnxruntime; real-export captions match transformers, no transformers
+needed at inference).
 
 **v2.6** — CLIP **visual near-duplicate fold** (catches the re-shot composition
 that time-bucketed bursts miss; ≈N badge → side-by-side compare) + lightbox-
@@ -590,7 +601,7 @@ pixcull/
 ├── mobile/PixCullCompanion/    # SwiftUI iOS app (Swift Package)
 ├── lr_plugin/PixCull.lrplugin/ # Lightroom plugin (Lua)
 ├── app/                        # PyInstaller spec for the .app bundle
-├── tests/                      # pytest suite (240+ tests)
+├── tests/                      # pytest suite (1,200+ tests across 88 files)
 ├── training.csv                # sanitized rubric ground truth (130 rows)
 ├── training_axis.csv           # sanitized per-axis ground truth (3,000 rows)
 ├── ROADMAP.md                  # the next ~12 months of work

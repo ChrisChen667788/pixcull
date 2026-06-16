@@ -56,9 +56,15 @@ tasks:
 
 ## v0.7 → v2.8 主要更新
 
-- **v2.8**:UI/UX **减法重构** — 网格卡片去徽章墙 · 决策徽章**描边化**(不再
-  实心色块)· lightbox **`i` 键 zen** 全宽看图 · 顶栏渐进披露(对标 Linear /
-  Narrative Select 克制美学)
+- **v2.8**:UI/UX **减法重构 + 配色系统** — 网格去徽章墙 · 决策徽章**描边化**
+  · lightbox **可发现的 zen 切换**(`i` 键 / 按钮全宽看图)· 顶栏 + 工具栏渐进
+  披露 / 分组 · 调色板升级为 **OKLCH 三变量系统**(base/accent/contrast →
+  relative-color 派生层级 + 旧浏览器 hex fallback)· 两处 lightbox **卡死**根因
+  修复(对标 Linear / Narrative Select 克制美学)
+- **v2.7**:四个智能切片 — **双语 reel 字幕**(中英,按 locale 显示)·
+  **跨拍摄去重**(`pixcull dedup-across`,跨场次复现的同一帧)· **视频重复帧
+  裁剪**(`pixcull trim-dupes`,dHash 近静止段)· **自托管 VLM ONNX**(BLIP →
+  onnxruntime,真机导出字幕与 transformers 一致,推理不需 transformers)
 - **v2.6**:CLIP **视觉近重复折叠**(跨连拍时间的"重拍同构图"也能折成一张代表
   + ≈N 并排比较)· lightbox 卡死 + 缩略图饥饿冻结修复
 - **v2.5**:单文件前端拆为**构建产物** · **联系表 / 客户样片 PDF 导出**
