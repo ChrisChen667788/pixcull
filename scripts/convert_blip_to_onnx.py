@@ -120,7 +120,10 @@ def _export_with_torch(model_id: str, out_dir: Path) -> None:
     enc_seq = 577  # ViT-base 384px patch grid + CLS
     dummy_ids = torch.zeros(1, seq_len, dtype=torch.long)
     dummy_enc = torch.zeros(1, enc_seq, hidden)
-    dummy_mask = torch.ones(1, enc_seq, dtype=torch.long)
+    # attention_mask is the DECODER input-ids mask (length seq_len), NOT the
+    # encoder length — passing enc_seq (577) here collapsed the cross-attention
+    # batch2 dims (577 vs the dynamic decoder seq) and failed the export.
+    dummy_mask = torch.ones(1, seq_len, dtype=torch.long)
 
     dec_step = _DecoderStep(model)
     td_path = out_dir / "text_decoder.onnx"
@@ -133,11 +136,14 @@ def _export_with_torch(model_id: str, out_dir: Path) -> None:
         dynamic_axes={
             "input_ids": {0: "batch", 1: "seq"},
             "encoder_hidden_states": {0: "batch"},
-            "attention_mask": {0: "batch"},
+            "attention_mask": {0: "batch", 1: "seq"},
             "logits": {0: "batch", 1: "seq"},
         },
         opset_version=14,
         do_constant_folding=True,
+        dynamo=False,  # legacy TorchScript exporter — the dynamo path chokes
+                       # on BLIP's single-step cross-attention decoder; the
+                       # legacy path handles the fixed-shape graph fine.
     )
     print(f"  text decoder   → {td_path} ({td_path.stat().st_size:,} bytes)")
 
@@ -158,6 +164,20 @@ def _export_with_torch(model_id: str, out_dir: Path) -> None:
     print(f"  config         → {cfg_path}")
 
 
+def _save_tokenizer(model_id: str, out_dir: Path) -> None:
+    """v2.8.1 — bundle the tokenizer (tokenizer.json) next to the ONNX so
+    ``_caption_with_onnx`` can de-tokenize at inference time with onnxruntime
+    only (no transformers).  Best-effort: detokenisation falls back to
+    id-strings if this is skipped."""
+    try:
+        from transformers import AutoTokenizer
+        tok = AutoTokenizer.from_pretrained(model_id)   # fast → tokenizer.json
+        tok.save_pretrained(str(out_dir))
+        print(f"  tokenizer      → {out_dir / 'tokenizer.json'}")
+    except Exception as exc:  # noqa: BLE001
+        print(f"  [tokenizer] skipped ({exc}) — detokenisation = id-strings")
+
+
 def convert(model_id: str, out_dir: Path, *,
             use_optimum: bool = True, force: bool = False) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -166,16 +186,20 @@ def convert(model_id: str, out_dir: Path, *,
         print(f"Already exported at {out_dir}  (pass --force to overwrite)")
         return
 
+    exported = False
     if use_optimum:
         try:
             _export_with_optimum(model_id, out_dir)
-            return
+            exported = True
         except ImportError:
             print("[optimum] not installed — falling back to torch.onnx")
         except Exception as exc:
             print(f"[optimum] failed ({exc}) — falling back to torch.onnx")
 
-    _export_with_torch(model_id, out_dir)
+    if not exported:
+        _export_with_torch(model_id, out_dir)
+
+    _save_tokenizer(model_id, out_dir)
 
 
 def main() -> int:

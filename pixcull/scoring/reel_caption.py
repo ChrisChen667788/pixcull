@@ -232,11 +232,14 @@ def _caption_with_onnx(image_path) -> str | None:
         # enc_hidden: [1, seq, hidden]
 
         # Greedy text decoder.
-        enc_seq = enc_hidden.shape[1]
-        attention_mask = np.ones((1, enc_seq), dtype=np.int64)
         input_ids = np.array([[bos_id]], dtype=np.int64)
         generated: list[int] = []
         for _ in range(max_len):
+            # attention_mask is the DECODER input-ids mask (grows with
+            # input_ids each step), NOT the encoder length — it must match how
+            # the text_decoder was exported, else the cross-attention MatMul
+            # dims mismatch at runtime (577 vs the decoder seq).
+            attention_mask = np.ones((1, input_ids.shape[1]), dtype=np.int64)
             dec_inputs = {
                 "input_ids": input_ids,
                 "encoder_hidden_states": enc_hidden,
