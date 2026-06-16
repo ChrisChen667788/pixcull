@@ -708,5 +708,63 @@ def dedup_across(
         console.print(f"[dim]report → {output}[/dim]")
 
 
+@app.command(name="trim-dupes")
+def trim_dupes(
+    frames_dir: Path = typer.Argument(
+        ..., exists=True, file_okay=False,
+        help="Dir of extracted video frames (frame_*.jpg)"),
+    max_distance: int = typer.Option(
+        6, "--max-distance", "-d", help="dHash Hamming floor for 'same frame'"),
+    min_run: int = typer.Option(
+        2, "--min-run", help="Min consecutive frames to call a static run"),
+    keep: str = typer.Option(
+        "first", "--keep", help="first | middle | last — frame kept per run"),
+    output: Optional[Path] = typer.Option(
+        None, "--output", "-o", help="Write the JSON trim plan"),
+) -> None:
+    """Find near-static / duplicate frame runs in an extracted-frames dir.
+
+    A locked-off or paused stretch leaves a run of near-identical frames;
+    each run collapses to one representative and the rest are reported as
+    trim candidates (reported, never deleted — review before acting).
+    """
+    import json
+
+    from pixcull.scoring.dup_frames import dhash, trim_plan
+
+    exts = {".jpg", ".jpeg", ".png"}
+    frames = sorted(p for p in frames_dir.iterdir() if p.suffix.lower() in exts)
+    if not frames:
+        console.print(f"[red]no frames in {frames_dir}[/red]")
+        raise typer.Exit(1)
+    ids = [p.name for p in frames]
+    hashes = [dhash(p) for p in frames]
+    plan = trim_plan(ids, hashes, max_distance=max_distance,
+                     min_run=min_run, keep=keep)
+    n_drop = len(plan["drop_ids"])
+    if not plan["runs"]:
+        console.print(
+            f"[green]No near-static runs in {len(frames)} frames.[/green]")
+        return
+    table = Table(title=f"Near-static runs — {len(plan['runs'])} run(s), "
+                        f"{n_drop} trimmable / {len(frames)} frames")
+    table.add_column("run", justify="right")
+    table.add_column("frames")
+    table.add_column("keep")
+    for i, r in enumerate(plan["runs"], 1):
+        span = f"{r['start']}–{r['end']} ({r['end'] - r['start'] + 1})"
+        table.add_row(str(i), span, r["keep"])
+    console.print(table)
+    console.print(
+        f"[bold]{n_drop} duplicate frame(s) trimmable[/bold] "
+        f"({100 * n_drop // max(1, len(frames))}% of {len(frames)})")
+    if output:
+        output.write_text(json.dumps(
+            {"schema": "pixcull.trim_dupes.v1", "max_distance": max_distance,
+             "min_run": min_run, "keep": keep, "n_frames": len(frames), **plan},
+            ensure_ascii=False, indent=2), encoding="utf-8")
+        console.print(f"[dim]plan → {output}[/dim]")
+
+
 if __name__ == "__main__":
     app()
