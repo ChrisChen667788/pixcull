@@ -355,6 +355,27 @@
       --weight-emph:    600;     /* h2 / section heads */
       --weight-body:    450;     /* body — gets 50g over the default 400 */
     }
+
+    /* v2.8.1 — pre-relative-color fallback. oklch(from ...) needs Chrome 111+
+       / Safari 16.4+ / Firefox 128+; older engines drop those declarations,
+       leaving the derived surface/accent tokens unset (no background). Restore
+       the hand-tuned hex the OKLCH derivations were calibrated to match, so the
+       UI still renders. @supports-not means modern engines skip this block
+       entirely and keep the live OKLCH derivation. */
+    @supports not (background: oklch(from red l c h)) {
+      :root {
+        --bg-card: #1e1a14; --bg-card-hi: #272118; --surface-2: #272118;
+        --surface-3: #322a1e; --chrome: #100d0a; --fg: #f3ede1;
+        --accent-hi: #d8cebf; --accent-soft: rgba(196,185,169,0.16);
+        --accent-glow: rgba(196,185,169,0.40); --focus-ring: rgba(216,206,191,0.55);
+      }
+      html[data-theme="light"] {
+        --bg-card: #ffffff; --bg-card-hi: #f4eee4; --surface-2: #f0ebe1;
+        --surface-3: #e6dfd2; --chrome: #ffffff; --fg: #1a1d24;
+        --accent-hi: #62513a; --accent-soft: rgba(71,58,41,0.10);
+        --accent-glow: rgba(71,58,41,0.30); --focus-ring: rgba(71,58,41,0.45);
+      }
+    }
     /* Apply the V2 weight bumps only in light mode.  Wrapping in a
        single selector keeps the dark theme exactly as-shipped (so
        we're additive, not destructive). */
