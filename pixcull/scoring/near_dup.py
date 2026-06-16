@@ -95,3 +95,67 @@ def pick_heroes(
         hero = max(g, key=lambda fn: (scores.get(fn) or 0.0))
         out.append({"hero": hero, "members": list(g)})
     return out
+
+
+def group_cross_shoot(
+    shoots: Sequence[tuple[str, Sequence[str], np.ndarray]],
+    *,
+    threshold: float = DEFAULT_THRESHOLD,
+    min_shoots: int = 2,
+    block: int = 1024,
+) -> list[list[tuple[str, str]]]:
+    """v2.7 — visual near-duplicates that recur ACROSS shoots.
+
+    ``shoots`` is ``[(shoot_id, filenames, vectors), ...]`` — one entry per
+    run/folder, ``vectors`` shaped ``[N_i, D]``.  Every photo is stacked into
+    one global index space and grouped by the same connected-components rule
+    as :func:`group_near_dups`; then only groups whose members span
+    ``>= min_shoots`` DISTINCT shoots are kept — i.e. the same frame the
+    photographer re-delivered across sessions (single-shoot dups are already
+    handled by :func:`group_near_dups`).  Each member is ``(shoot_id,
+    filename)``; groups largest first.
+    """
+    keys: list[tuple[str, str]] = []
+    mats: list[np.ndarray] = []
+    for sid, fns, vecs in shoots:
+        vecs = np.asarray(vecs, dtype=np.float32)
+        if vecs.ndim != 2 or vecs.shape[0] != len(fns):
+            continue                              # skip malformed shoot
+        keys.extend((str(sid), str(fn)) for fn in fns)
+        mats.append(vecs)
+    if not keys:
+        return []
+    vectors = np.vstack(mats)
+    # Reuse the single-run grouping over a synthetic global index, then map
+    # the index strings back to (shoot_id, filename).
+    idx_groups = group_near_dups(
+        [str(i) for i in range(len(keys))], vectors,
+        threshold=threshold, min_group=2, block=block)
+    out: list[list[tuple[str, str]]] = []
+    for g in idx_groups:
+        members = [keys[int(i)] for i in g]
+        if len({sid for sid, _ in members}) >= min_shoots:
+            out.append(members)
+    out.sort(key=len, reverse=True)
+    return out
+
+
+def pick_cross_shoot_heroes(
+    groups: Sequence[Sequence[tuple[str, str]]],
+    scores: dict[tuple[str, str], float] | None = None,
+) -> list[dict]:
+    """Per cross-shoot group: hero = highest ``score_final`` (``scores`` keyed
+    by ``(shoot_id, filename)``; ties / missing → first member).  The other
+    members are the cross-shoot duplicates safe to cull.  Returns
+    ``[{"hero": (sid, fn), "members": [...], "duplicates": [...]}, ...]``.
+    """
+    scores = scores or {}
+    out = []
+    for g in groups:
+        hero = max(g, key=lambda k: (scores.get(k) or 0.0))
+        out.append({
+            "hero": hero,
+            "members": list(g),
+            "duplicates": [m for m in g if m != hero],
+        })
+    return out

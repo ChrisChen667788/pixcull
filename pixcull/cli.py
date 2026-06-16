@@ -623,5 +623,90 @@ def personalize_reset() -> None:
         console.print("[dim]No profile to reset.[/dim]")
 
 
+@app.command(name="dedup-across")
+def dedup_across(
+    runs: list[Path] = typer.Argument(
+        ..., help="Run output dirs, each with embeddings.npz + scores.csv"),
+    threshold: float = typer.Option(
+        0.92, "--threshold", "-t", help="Cosine floor (0.5–0.999)"),
+    output: Optional[Path] = typer.Option(
+        None, "--output", "-o", help="Write a JSON report"),
+) -> None:
+    """Find visually near-duplicate photos that recur ACROSS shoots.
+
+    The cross-session cull: a frame delivered in one shoot that reappears in
+    another. Each run dir needs an ``embeddings.npz`` (built by semantic
+    search or the near-dup fold); runs without one are skipped with a note.
+    """
+    import csv
+    import json
+
+    import numpy as np
+
+    from pixcull.scoring.near_dup import (
+        group_cross_shoot, pick_cross_shoot_heroes)
+
+    shoots: list[tuple[str, list[str], np.ndarray]] = []
+    scores: dict[tuple[str, str], float] = {}
+    for rd in runs:
+        npz = rd / "embeddings.npz"
+        if not npz.exists():
+            console.print(
+                f"[yellow]skip {rd} — no embeddings.npz "
+                f"(run semantic search / near-dup first)[/yellow]")
+            continue
+        data = np.load(npz, allow_pickle=True)
+        fns = [str(x) for x in data["filenames"]]
+        vecs = np.asarray(data["vectors"], dtype=np.float32)
+        sid = rd.parent.name if rd.name == "output" else rd.name
+        shoots.append((sid, fns, vecs))
+        sc = rd / "scores.csv"
+        if sc.exists():
+            with open(sc, encoding="utf-8") as fh:
+                for row in csv.DictReader(fh):
+                    try:
+                        scores[(sid, row["filename"])] = float(
+                            row.get("score_final") or 0.0)
+                    except (ValueError, KeyError, TypeError):
+                        pass
+    if len(shoots) < 2:
+        console.print(
+            "[red]Need >=2 runs with embeddings.npz for cross-shoot dedup.[/red]")
+        raise typer.Exit(1)
+
+    groups = group_cross_shoot(shoots, threshold=threshold)
+    if not groups:
+        console.print(
+            f"[green]No cross-shoot visual near-dups (threshold {threshold}).[/green]")
+        return
+    heroes = pick_cross_shoot_heroes(groups, scores)
+    table = Table(title=f"Cross-shoot near-dups — {len(groups)} group(s) "
+                        f"@ threshold {threshold}")
+    table.add_column("#", justify="right")
+    table.add_column("keep (hero)")
+    table.add_column("duplicates (safe to cull)")
+    for i, h in enumerate(heroes, 1):
+        hero = f"{h['hero'][0]} / {h['hero'][1]}"
+        dups = "\n".join(f"{s} / {f}" for s, f in h["duplicates"])
+        table.add_row(str(i), hero, dups)
+    console.print(table)
+    n_dups = sum(len(h["duplicates"]) for h in heroes)
+    console.print(f"[bold]{n_dups} cross-shoot duplicate(s) can be cleaned.[/bold]")
+
+    if output:
+        rep = {
+            "schema": "pixcull.dedup_across.v1",
+            "threshold": threshold,
+            "groups": [
+                {"hero": list(h["hero"]),
+                 "members": [list(m) for m in h["members"]],
+                 "duplicates": [list(d) for d in h["duplicates"]]}
+                for h in heroes],
+        }
+        output.write_text(json.dumps(rep, ensure_ascii=False, indent=2),
+                          encoding="utf-8")
+        console.print(f"[dim]report → {output}[/dim]")
+
+
 if __name__ == "__main__":
     app()
