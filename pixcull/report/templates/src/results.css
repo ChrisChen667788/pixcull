@@ -9,28 +9,55 @@
        Charter: docs/ROADMAP-v0.4-charter.md
        ============================================================ */
     :root {
-      /* —— SURFACES ——————————————————————————————————————————
-         v0.5 — refined workspace palette inspired by LR / PS
-         Library modules.  Slightly warmer + lighter than v0.4's
-         #0b0d10 pure black so the grid reads as "workspace" not
-         "void", and decision color chips stay readable against
-         the chrome.  Three explicit elevation tiers + a chrome
-         color used for sticky headers / inspector panes. */
-      /* v2.2 "Taste" overhaul — gallery-grade calm ground so the
-         photos are the hero (Apple Photos / CapCut dark), with clear
-         elevation tiers instead of a flat workspace gray. */
-      /* v2.3 Editorial-Luxury — warm espresso ground (photos pop on a
-         warm dark, not a cold black) replacing the cool #0d0e12 family. */
-      --bg:           #161310;     /* warm espresso ground */
-      --bg-card:      #1e1a14;     /* warm raised tile */
-      --bg-card-hi:   #272118;     /* hover / raised */
-      --surface-2:    #272118;
-      --surface-3:    #322a1e;     /* inset blocks (inspector cells) */
-      --chrome:       #100d0a;     /* sticky chrome recedes */
+      /* ============================================================
+         v2.8-DESIGN P2 · LCH/OKLCH THREE-VARIABLE COLOR SYSTEM
+         ============================================================
+         Each theme defines exactly three root variables:
+
+           --base     the ground surface color (darkest in dark, lightest in light)
+           --accent   the brand brass / brass-dark tone
+           --contrast the primary text color
+
+         Surface elevation layers are derived via CSS OKLCH relative-color
+         syntax:  oklch(from var(--base) calc(l + δ) c h)
+         Accent variants are similarly derived from --accent.
+
+         This replaces the old per-theme hard-coded hex cascade for
+         --bg-card / --bg-card-hi / --surface-2 / --surface-3 /
+         --accent-hi / --accent-soft.
+
+         Two rules keep the visuals stable:
+           • δ values are tuned to match the previous hex values within
+             a few OKLCH lightness units (visual diff imperceptible).
+           • editorial-warm hue family (~74-85°, warm yellows/ochres)
+             is preserved; the hue channel h is inherited from --base.
+
+         Chromium supports oklch() + relative-color since Chrome 111.
+         ============================================================ */
+
+      /* —— THREE ROOT VARIABLES (dark / espresso theme) ————————— */
+      --base:     oklch(0.189 0.0077 77);   /* warm espresso ground  #161310 */
+      --accent:   oklch(0.791 0.0254 77);   /* brass / film ochre    #c4b9a9 */
+      --contrast: oklch(0.937 0.0135 80);   /* warm cream primary    #f3ede1 */
+
+      /* —— SURFACES: derived from --base via relative-color ————————
+         Each elevation step lifts L by ~0.031 (matches previous hexes):
+           --bg         = --base itself           (#161310  L≈0.189)
+           --bg-card    = base + 0.031            (#1e1a14  L≈0.220)
+           --bg-card-hi = base + 0.062            (#272118  L≈0.252)
+           --surface-2  = base + 0.062            (#272118  L≈0.252)
+           --surface-3  = base + 0.101            (#322a1e  L≈0.290)
+           --chrome     = base - 0.030            (#100d0a  L≈0.159) */
+      --bg:           var(--base);
+      --bg-card:      oklch(from var(--base) calc(l + 0.031) c h);
+      --bg-card-hi:   oklch(from var(--base) calc(l + 0.062) c h);
+      --surface-2:    oklch(from var(--base) calc(l + 0.062) c h);
+      --surface-3:    oklch(from var(--base) calc(l + 0.101) c h);
+      --chrome:       oklch(from var(--base) calc(l - 0.030) c h);
 
       /* —— TEXT —— warm cream on espresso ————————————————————— */
-      --fg:           #f3ede1;     /* warm cream primary */
-      --fg-2:         #d3c9b6;     /* secondary (chip labels) */
+      --fg:           var(--contrast);  /* warm cream primary  #f3ede1 */
+      --fg-2:         #d3c9b6;          /* secondary (chip labels) */
       --muted:        #a89d88;
       --muted-soft:   #7d7361;
 
@@ -42,12 +69,19 @@
          v2.3 Editorial-Luxury — ONE restrained warm accent (brass /
          film ochre), replacing the violet + the purple→pink gradient
          that redesign-skill names as "the AI design fingerprint".
-         Paper-and-ink / film register, not bootstrap indigo. */
-      --accent:       #c4b9a9;       /* brass / film ochre */
-      --accent-hi:    #d8cebf;       /* hover / active (lighter brass) */
-      --accent-soft:  rgba(196,185,169,0.16);
-      --accent-glow:  rgba(196,185,169,0.40);
-      --focus-ring:   rgba(216,206,191,0.55);
+         Paper-and-ink / film register, not bootstrap indigo.
+
+         v2.8 — accent variants derived from --accent via relative-color:
+           --accent-hi  = accent + 0.064 L  (#d8cebf  L≈0.855)
+           --accent-soft = accent at 16% alpha
+           --accent-glow = accent at 40% alpha
+           --focus-ring  = accent-hi at 55% alpha
+      */
+      /* --accent is already declared above as the root oklch value */
+      --accent-hi:    oklch(from var(--accent) calc(l + 0.064) c h);
+      --accent-soft:  oklch(from var(--accent) l c h / 0.16);
+      --accent-glow:  oklch(from var(--accent) l c h / 0.40);
+      --focus-ring:   oklch(from var(--accent) calc(l + 0.064) c h / 0.55);
 
       /* —— SEMANTIC COLOR PALETTE ————————————————————————————
          5 states for the unified `.chip` system.  Each state has
@@ -218,32 +252,54 @@
        neutral) — only the tint + border alphas shift.
        ============================================================ */
     html[data-theme="light"] {
-      /* —— SURFACES (V2 — sand-cream gradient, not cold grey) —— */
-      --bg:           #fbf9f5;    /* warm off-white, like 90 gsm paper */
-      --bg-card:      #ffffff;
-      --bg-card-hi:   #f4eee4;    /* hover state, hint of vanilla */
-      --surface-2:    #f0ebe1;    /* sand chip 1 — buckets, panels */
-      --surface-3:    #e6dfd2;    /* sand chip 2 — inset cells */
-      --chrome:       #ffffff;    /* sticky chrome reads as white card */
+      /* —— THREE ROOT VARIABLES (light / paper theme) ——————————
+         v2.8 — same three-variable system as dark; only base/accent/
+         contrast differ.  All surface and accent derivatives are re-
+         computed automatically via the same relative-color rules.
+
+           --base     = warm off-white paper  (#fbf9f5  L≈0.982)
+           --accent   = deep espresso brass   (#473a29  L≈0.358)
+           --contrast = near-black editorial  (#1a1d24  L≈0.155)
+
+         Surface derivation (inverted — each step DECREASES L):
+           --bg         = --base itself       (#fbf9f5  L≈0.982)
+           --bg-card    = base − 0.000 → white (we keep #ffffff, so base + 0.018)
+           --bg-card-hi = base − 0.032        (#f4eee4  L≈0.951)
+           --surface-2  = base − 0.042        (#f0ebe1  L≈0.941)
+           --surface-3  = base − 0.077        (#e6dfd2  L≈0.906)
+           --chrome     = base + 0.018        (#ffffff  L≈1.000)
+      */
+      --base:     oklch(0.982 0.0056 85);   /* warm paper  #fbf9f5 */
+      --accent:   oklch(0.358 0.0330 74);   /* deep brass  #473a29 */
+      --contrast: oklch(0.155 0.0130 265);  /* near-black  #1a1d24 */
+
+      /* —— SURFACES: derived from --base ——————————————————————— */
+      --bg:           var(--base);
+      --bg-card:      oklch(from var(--base) calc(l + 0.018) c h);   /* #ffffff */
+      --bg-card-hi:   oklch(from var(--base) calc(l - 0.032) c h);   /* #f4eee4 */
+      --surface-2:    oklch(from var(--base) calc(l - 0.042) c h);   /* #f0ebe1 */
+      --surface-3:    oklch(from var(--base) calc(l - 0.077) c h);   /* #e6dfd2 */
+      --chrome:       oklch(from var(--base) calc(l + 0.018) c h);   /* #ffffff */
+
       /* —— TEXT —— */
-      --fg:           #1a1d24;
+      --fg:           var(--contrast);   /* near-black  #1a1d24 */
       --fg-2:         #3c4250;
       --muted:        #5b6473;
       --muted-soft:   #8c95a3;
       /* —— BORDERS (slightly warmer; muted khaki not steel) —— */
       --border:       #e3ddcf;
       --border-hi:    #c9c0ad;
-      /* —— ACCENT (v2.2 — brand violet, not bootstrap indigo) ——
-         Parity with the dark theme's #c4b9a9 family.  Base is a deeper
-         violet (#473a29, ~5.7:1 on white — AA body text); --accent-hi
-         lifts to the exact dark-theme accent so hover / borders / hero
-         gradient read as the same brand hue in both themes.  Was a
-         stock indigo afterthought before. */
-      --accent:       #473a29;
-      --accent-hi:    #62513a;
-      --accent-soft:  rgba(71,58,41,0.10);
-      --accent-glow:  rgba(71,58,41,0.30);
-      --focus-ring:   rgba(71,58,41,0.45);
+      /* —— ACCENT variants: derived from --accent ——————————————
+         Same rules as dark theme; --accent is deeper so +L lifts:
+           --accent-hi  = accent + 0.088 L  (#62513a  L≈0.446)
+           --accent-soft = accent at 10% alpha
+           --accent-glow = accent at 30% alpha
+           --focus-ring  = accent at 45% alpha
+      */
+      --accent-hi:    oklch(from var(--accent) calc(l + 0.088) c h);
+      --accent-soft:  oklch(from var(--accent) l c h / 0.10);
+      --accent-glow:  oklch(from var(--accent) l c h / 0.30);
+      --focus-ring:   oklch(from var(--accent) l c h / 0.45);
       /* —— SEMANTIC TINTS (lighter alpha to read on white) —— */
       --c-success-tint:   rgba(16,185,129,0.10);
       --c-success-border: rgba(16,185,129,0.30);
