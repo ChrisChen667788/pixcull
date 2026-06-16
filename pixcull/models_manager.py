@@ -103,6 +103,29 @@ REGISTRY: dict[str, "ModelSpec"] = {
         used_by="pixcull video reel caption (else signal/template fallback)",
         url="",      # ONNX export not yet published; transformers path is default
     ),
+    # v2.7 — self-hosted BLIP ONNX (produced by scripts/convert_blip_to_onnx.py).
+    # Stored as a *directory* (visual_encoder.onnx + text_decoder.onnx +
+    # config.json) rather than a single file; the filename here is the sentinel
+    # that marks the directory as present (config.json lives inside the dir).
+    # There is no published download URL — the user runs the conversion script
+    # locally.  resolve_path() points to the directory itself; _try_vlm_onnx()
+    # inside reel_caption.py discovers the directory via PIXCULL_HOME.
+    "blip-onnx": ModelSpec(
+        name="blip-onnx",
+        filename="blip-onnx",      # directory name under ~/.pixcull/models/
+        description=(
+            "Self-hosted BLIP image-captioning ONNX export "
+            "(Salesforce/blip-image-captioning-base, Apache-2.0). "
+            "Produced locally by scripts/convert_blip_to_onnx.py — "
+            "no download URL; run the script once then PixCull auto-detects it."
+        ),
+        used_by=(
+            "pixcull video reel caption · scoring/reel_caption.py "
+            "(ONNX path; else transformers BLIP or template fallback)"
+        ),
+        url="",      # local-only; no hosted download
+        sha256="",   # directory — no single checksum
+    ),
 }
 
 
