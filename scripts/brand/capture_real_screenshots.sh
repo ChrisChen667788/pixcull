@@ -155,8 +155,8 @@ TARGETS = [
             "const gridRect = grid.getBoundingClientRect(); "
             "const pop = document.createElement('div'); "
             "pop.className = 'confidence-popover'; "
-            "pop.style.cssText = 'position:absolute;z-index:30;background:rgba(20,22,28,0.96);color:#fff;padding:9px 12px;border-radius:8px;font:11.5px/1.5 system-ui;max-width:230px;box-shadow:0 6px 20px rgba(0,0,0,0.40);border:1px solid rgba(99,102,241,0.30);'; "
-            "pop.innerHTML = '<div style=\"font-weight:600;color:#a3a5f5;margin-bottom:4px\">⌬ model 不确定</div><div>62% sure</div><div style=\"color:#aaa\">· 同组邻居高 0.04</div><div style=\"color:#aaa\">· 最弱轴 · light 2.5★</div>'; "
+            "pop.style.cssText = 'position:absolute;z-index:30;background:rgba(30,26,20,0.97);color:#f3ede1;padding:9px 12px;border-radius:8px;font:11.5px/1.5 system-ui;max-width:230px;box-shadow:0 6px 20px rgba(20,12,4,0.45);border:1px solid rgba(220,184,126,0.35);'; "
+            "pop.innerHTML = '<div style=\"font-weight:600;color:#dcb87e;margin-bottom:4px\">⌬ model 不确定</div><div>62% sure</div><div style=\"color:#a89d88\">· 同组邻居高 0.04</div><div style=\"color:#a89d88\">· 最弱轴 · light 2.5★</div>'; "
             "pop.style.left = (rect.left - gridRect.left + grid.scrollLeft + rect.width + 8) + 'px'; "
             "pop.style.top = (rect.top - gridRect.top + grid.scrollTop) + 'px'; "
             "grid.appendChild(pop); }"),
@@ -173,14 +173,14 @@ TARGETS = [
             "const lb = document.getElementById('lightbox'); "
             "if (lb) { "
             "const overlay = document.createElement('div'); "
-            "overlay.style.cssText = 'position:absolute;top:14%;left:30%;width:40%;height:50%;border-radius:16px;pointer-events:none;z-index:4;background:radial-gradient(circle at 40% 35%,rgba(99,102,241,0.55) 0%,rgba(236,72,153,0.40) 35%,rgba(236,72,153,0.0) 70%);mix-blend-mode:screen;filter:blur(8px);'; "
+            "overlay.style.cssText = 'position:absolute;top:14%;left:30%;width:40%;height:50%;border-radius:16px;pointer-events:none;z-index:4;background:radial-gradient(circle at 40% 35%,rgba(220,184,126,0.55) 0%,rgba(192,120,60,0.38) 35%,rgba(192,120,60,0.0) 70%);mix-blend-mode:screen;filter:blur(8px);'; "
             "lb.appendChild(overlay); "
             "const tabs = document.createElement('div'); "
             "tabs.style.cssText = 'position:absolute;top:78px;left:50%;transform:translateX(-50%);z-index:7;display:flex;gap:6px;background:rgba(20,22,28,0.92);padding:4px 8px;border-radius:999px;font:11px/1 system-ui;'; "
             "['技术','主体','构图','光线','时刻','美感'].forEach((label, i) => { "
             "const t = document.createElement('button'); "
             "t.textContent = label; "
-            "t.style.cssText = 'background:' + (i===2 ? 'rgba(99,102,241,0.30)' : 'transparent') + ';color:#fff;border:1px solid rgba(255,255,255,0.18);border-radius:999px;padding:5px 12px;font:inherit;cursor:pointer;'; "
+            "t.style.cssText = 'background:' + (i===2 ? 'rgba(220,184,126,0.30)' : 'transparent') + ';color:#f3ede1;border:1px solid rgba(255,255,255,0.18);border-radius:999px;padding:5px 12px;font:inherit;cursor:pointer;'; "
             "tabs.appendChild(t); }); "
             "lb.appendChild(tabs); }"),
         ("wait", "200"),
