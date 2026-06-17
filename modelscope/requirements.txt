@@ -1,9 +1,10 @@
-# PixCull ModelScope Studio · single-image demo deps
+# PixCull ModelScope Studio · v2.8 demo deps
 #
 # This is a TRIMMED dependency set for the Gradio Studio:
 # we only need the auto-rubric scoring pipeline (no rescorer
-# joblibs, no Lr export, no tether). Roughly half the install
-# weight of the full pyproject `dependencies` block.
+# joblibs, no Lr export, no tether) plus the bilingual VLM
+# caption path. Roughly half the install weight of the full
+# pyproject `dependencies` block.
 
 gradio>=4.0,<5
 numpy>=1.26,<2
@@ -22,6 +23,13 @@ torch>=2.2
 torchvision>=0.17
 transformers>=4.40
 safetensors>=0.4
+
+# Bilingual VLM caption (Tab 2): BLIP captions the frame in English,
+# opus-mt-en-zh rewrites it to Chinese when no local GGUF LLM is mounted.
+# Marian (opus-mt) needs sentencepiece + sacremoses; both are small and
+# the path is lazy + fail-soft (absence → Chinese degrades to English).
+sentencepiece>=0.2
+sacremoses>=0.1,<0.2
 
 # subject segmentation + aesthetic
 rembg>=2.0.57

@@ -74,7 +74,7 @@ tasks:
 - **v2.0–v2.3**:**视频审片 + reel 选段流水线**(时序评分 / shake-blur / 音频
   事件标注 / GoPro·DJI GPMF / reel 自动拼装 + 导出预置)· editorial-warm 重塑
 - **v1.0**:学习**重打分器** · **偏见审计 dashboard** · 每轴**归因热力图**
-- **v0.9**(进行中):全产品 signature soft-bounce 动效 · `/results` 2 秒
+- **v0.9**:全产品 signature soft-bounce 动效 · `/results` 2 秒
   hero reveal · brand identity 重做(渐变 + 新 logo + Charter serif accent)
   · ⌘K 命令面板(27 actions + fuzzy match)
 - **v0.8**:i18n 中 / EN / 日 · LAN 协作(token + 5s 增量同步 + 冲突标记)
@@ -359,13 +359,17 @@ python scripts/serve_demo.py
 
 ## 在线体验
 
-ModelScope Studio 演示版本正在开发中,届时您可以:
+ModelScope Studio 在线 demo(v2.8 · 编辑暖 OKLCH 配色),不必先安装即可:
 
-- 上传 1 张照片
-- 30 秒内得到 6 维评分 + V20 建议
-- 体验我们的评分逻辑,不必先安装
+- **单张评分** — 上传 1 张照片,得到 6 维评分 + 建议
+- **双语镜头字幕 (VLM)** — BLIP 描述这一帧,中英双语输出
+  - EN = BLIP(自托管 ONNX 优先,否则 transformers)
+  - ZH = 本地 GGUF LLM 改写 → opus-mt-en-zh 机器翻译 → 英文原文(三级兜底,
+    页面如实标注当前后端;免费 CPU Studio 通常落在 opus-mt 这一级)
+- 整页采用 v2.8 **OKLCH 三变量配色**(base/accent/contrast 派生全部表面),
+  旧浏览器自动 hex 兜底
 
-完整版本(批量 + Lr 同步 + iOS 伴侣)请到 GitHub 部署。
+完整版本(批量 + 视频选片 / reel 剪辑 + Lr 同步 + iOS 伴侣)请到 GitHub 部署。
 
 ## 协议
 
