@@ -2097,6 +2097,69 @@ def _resolve_image_source(run: dict, filename: str) -> Path | None:
     return None
 
 
+# ── v2.9-P0-1 — face Close-ups (Narrative Select) ────────────────────────────
+# Lazily detect faces on the full image at serve time and cache the bboxes
+# (normalized, resolution-independent) so the lightbox close-ups rail can show a
+# zoomed crop of every face without re-detecting per crop. Reuses the pipeline's
+# MediaPipe FaceDetector; degrades to "no faces" when the optional weights /
+# mediapipe are absent — the rail simply doesn't render.
+_FACE_DETECTOR = None
+_FACE_DETECTOR_FAILED = False
+_FACE_BBOX_CACHE: dict[tuple, list] = {}   # (src, mtime) → [(nx1,ny1,nx2,ny2,conf), ...]
+
+
+def _get_face_detector():
+    global _FACE_DETECTOR, _FACE_DETECTOR_FAILED
+    if _FACE_DETECTOR is not None:
+        return _FACE_DETECTOR
+    if _FACE_DETECTOR_FAILED:
+        return None
+    try:
+        from pixcull.detectors.face import FaceDetector
+        _FACE_DETECTOR = FaceDetector()
+    except Exception:
+        _FACE_DETECTOR_FAILED = True
+        _FACE_DETECTOR = None
+    return _FACE_DETECTOR
+
+
+def _detect_faces_for_src(src: Path) -> list:
+    """Return meaningful face boxes for ``src`` as normalized tuples
+    ``(nx1, ny1, nx2, ny2, conf)`` (fractions of width/height, so they map onto
+    any display size), largest-first. Cached by (path, mtime); empty list when
+    no faces / no detector."""
+    try:
+        mtime = src.stat().st_mtime
+    except OSError:
+        return []
+    key = (str(src), mtime)
+    cached = _FACE_BBOX_CACHE.get(key)
+    if cached is not None:
+        return cached
+    det = _get_face_detector()
+    if det is None:
+        _FACE_BBOX_CACHE[key] = []
+        return []
+    boxes: list = []
+    try:
+        from pixcull.io.loader import load_image
+        img = load_image(src, max_side=1600)
+        if img is not None:
+            res = det.analyze(img)
+            W, H = img.size
+            for b in (res.extras.get("face_bboxes") or []):
+                x1, y1, x2, y2 = b[0], b[1], b[2], b[3]
+                conf = float(b[4]) if len(b) > 4 else 0.0
+                if W > 0 and H > 0:
+                    boxes.append((x1 / W, y1 / H, x2 / W, y2 / H, conf))
+    except Exception:
+        boxes = []
+    # Largest face first so the rail leads with the dominant subject.
+    boxes.sort(key=lambda b: (b[2] - b[0]) * (b[3] - b[1]), reverse=True)
+    _FACE_BBOX_CACHE[key] = boxes
+    return boxes
+
+
 def _delete_run(run_id: str) -> tuple[bool, str]:
     """Best-effort delete of a single run dir. Returns (ok, message).
 
@@ -2339,6 +2402,10 @@ class _Handler(BaseHTTPRequestHandler):
             if rest == "near_dups":
                 qs = urlparse(self.path).query
                 return self._serve_api_v1_near_dups(run_id, qs)
+            # v2.9-P1-1 — chronological Scenes (capture-time segmentation).
+            if rest == "scenes":
+                qs = urlparse(self.path).query
+                return self._serve_api_v1_scenes(run_id, qs)
             # P-UX-5 — composite-similarity nearest-neighbor lookup
             # ("show me photos like this one") for the lightbox's
             # similar-photos row. Returns up to k=5 by default.
@@ -2346,6 +2413,10 @@ class _Handler(BaseHTTPRequestHandler):
                 fn = rest[len("similar/"):]
                 qs = urlparse(self.path).query
                 return self._serve_api_v1_similar(run_id, fn, qs)
+            # v2.9-P0-1 — detected faces for the lightbox close-ups rail.
+            if rest.startswith("faces/"):
+                fn = rest[len("faces/"):]
+                return self._serve_api_v1_faces(run_id, fn)
             # P2.4 — active-learning queue (batch). Accepts ?n=N.
             # urlparse already stripped the query string from ``path``
             # in the caller; read it back off ``self.path`` so we
@@ -2840,6 +2911,170 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
         return True
+
+    def _serve_api_v1_scenes(self, run_id: str, qs: str) -> bool:
+        """v2.9-P1-1 — chronological Scenes for the narrative view.
+
+        URL: GET /api/v1/runs/<run_id>/scenes[?k=3&min_gap=120]
+
+        Segments the run into capture-time scenes (``scoring/scenes.py``) and
+        returns each with its frame list, time range, and keep count so the
+        Scenes view can render time-grouped sections instead of a flat grid.
+        """
+        from urllib.parse import parse_qs
+        from datetime import datetime as _dt
+        result = _build_results(run_id)
+        if result is None:
+            self.send_error(404, "no such run"); return True
+        rows, _ = result
+        qp = parse_qs(qs) if qs else {}
+        try:
+            k = float(qp.get("k", ["3.0"])[0])
+        except (TypeError, ValueError):
+            k = 3.0
+        try:
+            min_gap = float(qp.get("min_gap", ["120"])[0])
+        except (TypeError, ValueError):
+            min_gap = 120.0
+        from pixcull.scoring.scenes import segment_scenes
+        items = [{"filename": r.get("filename"), "timestamp": r.get("datetime")}
+                 for r in rows if r.get("filename")]
+        scenes = segment_scenes(items, k=max(0.0, k), min_gap_s=max(1.0, min_gap))
+        keep_by_fn = {
+            r.get("filename"): (str(r.get("decision") or "").lower() == "keep")
+            for r in rows
+        }
+
+        def _iso(ts):
+            return _dt.fromtimestamp(ts).isoformat(timespec="seconds") if ts else None
+
+        out = [{
+            "index":     s.index,
+            "n":         s.n,
+            "n_keep":    sum(1 for fn in s.filenames if keep_by_fn.get(fn)),
+            "start":     _iso(s.start_ts),
+            "end":       _iso(s.end_ts),
+            "filenames": s.filenames,
+        } for s in scenes]
+        body = _safe_dumps({
+            "schema":    "pixcull.api.v1.scenes.v1",
+            "run_id":    run_id,
+            "n_scenes":  len(out),
+            "k":         k,
+            "min_gap_s": min_gap,
+            "scenes":    out,
+        }).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+        return True
+
+    def _serve_api_v1_faces(self, run_id: str, filename: str) -> bool:
+        """v2.9-P0-1 — detected faces for the lightbox close-ups rail.
+
+        URL: GET /api/v1/runs/<run_id>/faces/<filename>
+
+        Lazily runs MediaPipe face detection on the full image (cached by
+        path+mtime) and returns each meaningful face as a normalized bbox plus
+        a crop URL.  ``faces: []`` when none / no detector — the rail then
+        simply doesn't render (content-first; no empty chrome).
+        """
+        filename = unquote(filename)
+        run = _get_run(run_id) or _reload_run_from_disk(run_id)
+        if run is None:
+            self.send_error(404, "no such run"); return True
+        src = _resolve_image_source(run, Path(filename).name)
+        if src is None or not src.exists():
+            self.send_error(404, f"not found: {filename}"); return True
+        boxes = _detect_faces_for_src(src)
+        fn = Path(filename).name
+        faces = [{
+            "i": i,
+            "bbox": [round(b[0], 5), round(b[1], 5), round(b[2], 5), round(b[3], 5)],
+            "conf": round(float(b[4]), 3),
+            "crop": f"/face_crop/{quote(run_id)}/{quote(fn)}/{i}?w=256",
+        } for i, b in enumerate(boxes)]
+        body = _safe_dumps({
+            "schema":   "pixcull.api.v1.faces.v1",
+            "run_id":   run_id,
+            "filename": fn,
+            "n_faces":  len(faces),
+            "faces":    faces,
+        }).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+        return True
+
+    def _serve_face_crop(self, rel: str) -> None:
+        """v2.9-P0-1 — square close-up crop of one detected face.
+
+        Format: /face_crop/<run_id>/<filename>/<index>[?w=N].  Crops a square
+        around the i-th face bbox (60% context margin), resizes to ``w`` (96–512,
+        default 256), caches on disk under ``<output>/face_crops/``.
+        """
+        from urllib.parse import parse_qs, urlsplit
+        rel = unquote(rel)
+        sp = urlsplit("/" + rel)
+        parts = sp.path.lstrip("/").split("/")
+        if len(parts) < 3:
+            self.send_error(400, "expected run_id/filename/index"); return
+        run_id, idx_s = parts[0], parts[-1]
+        fn = "/".join(parts[1:-1])
+        try:
+            idx = int(idx_s)
+        except ValueError:
+            self.send_error(400, "bad face index"); return
+        qs = parse_qs(sp.query) if sp.query else {}
+        try:
+            req_w = int(qs.get("w", ["256"])[0])
+        except (TypeError, ValueError):
+            req_w = 256
+        req_w = max(96, min(512, req_w))
+        run = _get_run(run_id) or _reload_run_from_disk(run_id)
+        if run is None:
+            self.send_error(404, "no such run"); return
+        src = _resolve_image_source(run, Path(fn).name)
+        if src is None or not src.exists():
+            self.send_error(404, f"not found: {fn}"); return
+        boxes = _detect_faces_for_src(src)
+        if idx < 0 or idx >= len(boxes):
+            self.send_error(404, "no such face"); return
+        cache_dir = Path(run["output_dir"]) / "face_crops"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        cache_path = cache_dir / f"{src.name}.f{idx}.{req_w}.v1.jpg"
+        if not cache_path.exists():
+            from pixcull.io.loader import load_image
+            img = load_image(src, max_side=1600)
+            if img is None:
+                self.send_error(500, "image decode failed"); return
+            W, H = img.size
+            nx1, ny1, nx2, ny2 = boxes[idx][:4]
+            x1, y1, x2, y2 = nx1 * W, ny1 * H, nx2 * W, ny2 * H
+            cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
+            half = max(x2 - x1, y2 - y1) * 0.8   # 60% margin → some context
+            left, top = max(0, int(cx - half)), max(0, int(cy - half))
+            right, bot = min(W, int(cx + half)), min(H, int(cy + half))
+            if right - left < 16 or bot - top < 16:
+                self.send_error(404, "face too small"); return
+            crop = img.crop((left, top, right, bot)).convert("RGB")
+            if crop.width != req_w:
+                ratio = req_w / crop.width
+                crop = crop.resize((req_w, max(1, int(crop.height * ratio))))
+            crop.save(cache_path, "JPEG", quality=82)
+        data = cache_path.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", "image/jpeg")
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "public, max-age=86400")
+        self.end_headers()
+        self.wfile.write(data)
 
     def _serve_api_v1_similar(self, run_id: str, filename: str, qs: str) -> bool:
         """P-UX-5 — "show me photos like this one" for the lightbox.
@@ -3986,6 +4221,10 @@ class _Handler(BaseHTTPRequestHandler):
             return self._serve_image(
                 self.path[len("/full/"):], _FULL_SIZE
             )
+        # v2.9-P0-1 — square close-up crop of one detected face (query intact
+        # so the ?w= bucket reaches the handler).
+        if path.startswith("/face_crop/"):
+            return self._serve_face_crop(self.path[len("/face_crop/"):])
         # v2.0-P0-4 — video review surface.  Non-/api/v1 paths so the
         # same-origin review page can fetch without the API-key gate.
         #   GET /video/data/<run_id>             → {manifest, temporal, reel}

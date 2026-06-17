@@ -1336,6 +1336,82 @@
       background: var(--accent);
       box-shadow: 0 0 0 4px var(--accent-soft);
     }
+    /* v2.9-P0-2 — near-dup similarity slider (Peakto-style transparency).
+       Shown beside the fold pill while folding; lets the user SEE the AI's
+       grouping respond to the threshold. Editorial-warm: brass thumb, muted
+       readout, no loud chrome (restraint per the v2.8 reflection). */
+    .filters .neardup-sim {
+      display: inline-flex; align-items: center; gap: 7px;
+      padding: 2px 10px; border: 1px solid var(--border);
+      border-radius: 999px; background: var(--bg-card);
+      font-size: 10.5px; color: var(--muted);
+    }
+    .filters .neardup-sim-label { color: var(--fg-2); letter-spacing: .02em; }
+    .filters .neardup-sim-val {
+      min-width: 2.4em; text-align: right; color: var(--accent-hi);
+      font-variant-numeric: tabular-nums; font-weight: 600;
+    }
+    .filters .neardup-sim-stat {
+      color: var(--muted-soft); padding-left: 7px;
+      border-left: 1px solid var(--border); font-variant-numeric: tabular-nums;
+    }
+    .filters .neardup-sim-range {
+      -webkit-appearance: none; appearance: none;
+      width: 96px; height: 3px; border-radius: 999px;
+      background: var(--surface-3); outline: none; cursor: pointer;
+    }
+    .filters .neardup-sim-range::-webkit-slider-thumb {
+      -webkit-appearance: none; appearance: none;
+      width: 13px; height: 13px; border-radius: 50%;
+      background: var(--accent); border: 2px solid var(--bg-card);
+      box-shadow: 0 0 0 1px var(--accent-hi);
+    }
+    .filters .neardup-sim-range::-moz-range-thumb {
+      width: 13px; height: 13px; border-radius: 50%;
+      background: var(--accent); border: 2px solid var(--bg-card);
+      box-shadow: 0 0 0 1px var(--accent-hi);
+    }
+    .filters .neardup-sim-range:focus-visible {
+      box-shadow: 0 0 0 3px var(--focus-ring);
+    }
+    /* v2.9-P1-1 — Scenes 时序叙事导航条 (Narrative Select's Scenes View).
+       A horizontal band of capture-time scene chips above the grid; clicking
+       one filters to that segment. Editorial-warm, scannable, restrained. */
+    .scene-nav {
+      display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch;
+      padding: 10px 4px 2px; margin: 0 0 4px;
+    }
+    .scene-nav .scene-nav-label {
+      display: inline-flex; align-items: center; padding: 0 6px;
+      font-size: 11px; letter-spacing: .04em; color: var(--muted);
+      align-self: center;
+    }
+    .scene-nav .scene-chip {
+      display: flex; flex-direction: column; gap: 1px;
+      padding: 6px 12px; border-radius: 10px;
+      border: 1px solid var(--border); background: var(--bg-card);
+      color: var(--fg); cursor: pointer; text-align: left;
+      transition: border-color 120ms, background 120ms, transform 120ms;
+    }
+    .scene-nav .scene-chip:hover {
+      border-color: var(--border-hi); background: var(--surface-2);
+      transform: translateY(-1px);
+    }
+    .scene-nav .scene-chip.active {
+      border-color: var(--accent-hi); background: var(--accent-soft);
+    }
+    .scene-nav .scene-chip-t {
+      font-size: 12px; font-weight: 600; color: var(--fg);
+    }
+    .scene-nav .scene-chip-r {
+      font-size: 11px; color: var(--fg-2); font-variant-numeric: tabular-nums;
+    }
+    .scene-nav .scene-chip-n {
+      font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums;
+    }
+    .scene-nav .scene-chip-all {
+      justify-content: center; align-self: center; color: var(--muted);
+    }
     /* V9.0 sort + filter UI */
     .filters .filter-divider {
       width: 1px; align-self: stretch; background: var(--border);
@@ -4492,6 +4568,34 @@
       .lightbox .info-pane .info-section > summary::after,
       .lightbox .info-pane .info-section > .lb-body { animation: none; transition: none; }
     }
+    /* v2.9-P1-2 — verdict glass box: the always-visible one-line "why",
+       promoted above the small-caps diagnostic sections. The <summary> is the
+       default read (decision badge + reason); expanding reveals per-axis +
+       signals + AI rationale (progressive disclosure). */
+    .lightbox .info-pane .info-section.verdict-glass {
+      border-top: 0; border: 1px solid var(--border-hi);
+      border-radius: 12px; background: var(--bg-card);
+      padding: 10px 12px; margin-bottom: 10px;
+    }
+    .lightbox .info-pane .info-section.verdict-glass > summary {
+      font-size: 13px; text-transform: none; letter-spacing: 0;
+      color: var(--fg); font-weight: 500; gap: 10px; padding: 0;
+      flex-wrap: wrap;
+    }
+    .lightbox .info-pane .info-section.verdict-glass > summary .glass-dec {
+      flex: 0 0 auto;
+    }
+    .lightbox .info-pane .info-section.verdict-glass > summary .glass-why {
+      flex: 1 1 6em; min-width: 0; color: var(--fg-2);
+      font-size: 12.5px; line-height: 1.45;
+    }
+    .lightbox .glass-sig {
+      list-style: none; margin: 8px 0 0; padding: 0;
+      font-size: 12px; line-height: 1.55;
+    }
+    .lightbox .glass-sig.good li { color: var(--c-success, #6faa78); }
+    .lightbox .glass-sig.warn li { color: var(--fg-2); }
+    .lightbox .glass-ai { margin-top: 8px; }
     .lightbox .axis-grid {
       display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px;
       margin-bottom: 8px;
@@ -4637,6 +4741,43 @@
     .lightbox.lb-zen #lbZenToggle {
       background: rgba(196,185,169,0.85);
       border-color: var(--accent); color: #161310;
+    }
+    /* v2.9-P0-1 — face Close-ups (Narrative Select). Toggle sits right of the
+       zen group; the rail clips to the image pane's right edge and slides in
+       only when opened (content-first: the photo keeps the stage by default). */
+    .lightbox .faces-grp {
+      position: absolute; top: 18px; left: 282px;
+      display: flex; gap: 6px; align-items: center; z-index: 11;
+    }
+    .lightbox.lb-faces-open #lbFacesToggle {
+      background: rgba(196,185,169,0.85);
+      border-color: var(--accent); color: #161310;
+    }
+    .lightbox .lb-faces {
+      position: absolute; top: 0; right: 0; bottom: 0;
+      width: 132px; padding: 14px 12px;
+      display: none; flex-direction: column; gap: 10px;
+      overflow-y: auto; z-index: 9;
+      background: linear-gradient(to left,
+        rgba(16,13,10,0.86) 0%, rgba(16,13,10,0.62) 70%, rgba(16,13,10,0) 100%);
+      -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+    }
+    .lightbox.lb-faces-open .lb-faces { display: flex; }
+    /* Never show an empty rail (a faceless photo while the open-pref persists). */
+    .lightbox .lb-faces:empty { display: none; }
+    .lightbox .lb-faces .face-crop {
+      width: 108px; height: 108px; border-radius: 10px;
+      object-fit: cover; flex: 0 0 auto;
+      border: 1px solid var(--border-hi);
+      box-shadow: 0 4px 14px rgba(0,0,0,0.5);
+      background: var(--bg-card);
+    }
+    .lightbox .lb-faces .face-conf {
+      font-size: 10px; color: var(--muted); text-align: center;
+      margin-top: -6px; font-variant-numeric: tabular-nums;
+    }
+    @media (max-width: 900px) {
+      .lightbox .faces-grp { display: none; }   /* rail not useful in stacked layout */
     }
     .lightbox .zoom-btn {
       height: 32px; padding: 0 12px; border-radius: 6px;

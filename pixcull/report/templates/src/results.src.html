@@ -721,6 +721,9 @@
         <button type="button" data-calm="dense" title="详尽 — 网格内显示全部轴 / 原因 / 建议(旧版)">详尽</button>
       </div>
     </div>
+    <!-- v2.9-P1-1 — Scenes 时序叙事导航条. Hidden until the 🎬 时序场景 toggle
+         is on; populated from /api/v1/runs/<id>/scenes. -->
+    <div class="scene-nav" id="sceneNav" role="group" aria-label="时序场景" hidden></div>
     <div class="grid density-m" id="grid"></div>
     </main>
   </div>
@@ -864,7 +867,19 @@
       <button class="zoom-btn" id="lbZenToggle" type="button"
               title="专注模式 — 隐藏右侧信息栏, 让照片占满视口 (快捷键 i)">⊟ 专注</button>
     </div>
-    <div class="img-pane"><img id="lbImg" alt=""></div>
+    <!-- v2.9-P0-1 — face Close-ups toggle (Narrative Select). Hidden until
+         faces are detected on the open photo; click reveals the right-edge
+         close-ups rail. Default collapsed (content-first). -->
+    <div class="faces-grp" id="lbFacesGrp" role="group" aria-label="人脸特写" hidden>
+      <button class="zoom-btn" id="lbFacesToggle" type="button" aria-pressed="false"
+              title="人脸特写 — 显示这张照片里每张脸的放大裁切, 无需手动放大">👤 <span id="lbFacesCount">0</span></button>
+    </div>
+    <div class="img-pane">
+      <img id="lbImg" alt="">
+      <!-- v2.9-P0-1 — face Close-ups rail. Populated on lightbox open from
+           /api/v1/runs/<id>/faces/<fn>; clips to the image pane's right edge. -->
+      <div class="lb-faces" id="lbFaces" role="list" aria-label="人脸特写"></div>
+    </div>
     <!-- v0.7-P1-1 — Loupe RGB readout. Visible only when lbImg is
          in zoomed (1:1) mode + the cursor is over the image.
          Same .cmp-rgb-readout styling, scoped via .lb-rgb-readout

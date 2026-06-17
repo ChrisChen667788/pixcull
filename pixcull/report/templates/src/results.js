@@ -699,6 +699,17 @@
     semSearch: null,
     // v2.6-P1 — fold CLIP near-dup groups to their hero (data in _NEARDUP).
     nearDupFold: false,
+    // v2.9-P0-2 — user-tunable similarity threshold for the near-dup fold
+    // (Peakto-style transparency). Default matches the backend's 0.92; the
+    // slider restores any saved per-run value when it mounts, and the
+    // /near_dups endpoint clamps to [0.5, 0.999] server-side.
+    nearDupThreshold: 0.92,
+    // v2.9-P1-1 — Scenes 时序叙事视图. scenesView toggles the scene navigator
+    // strip; sceneFilter (when a chip is picked) restricts the grid to one
+    // scene's frames — {index, filenames:Set} | null. Composes with the other
+    // filters via the same filename-set intersection as semSearch.
+    scenesView: false,
+    sceneFilter: null,
     // P-UX-27 — wedding-moment filter.  Set of moment keys (e.g.
     // {"first_kiss", "ring_exchange"}).  Empty = no filter.
     // Populated by clicking the 💒 chip on any grid card.
@@ -1105,10 +1116,64 @@
       `<span class="pill neardup-toggle${filterState.nearDupFold ? ' active' : ''}" ` +
       `title="按视觉相似度(CLIP)把近重复折成一张代表;点卡片角的 ≈N 并排比较 — 首次开启需建索引,稍慢">` +
       `≈ 近重复折叠</span>`;
+    // v2.9-P1-1 — Scenes 时序叙事视图 toggle (Narrative Select's Scenes View).
+    // Reveals a navigator strip of capture-time scenes; clicking a scene chip
+    // restricts the grid to that segment.
+    html +=
+      `<span class="pill scenes-toggle${filterState.scenesView ? ' active' : ''}" ` +
+      `title="按拍摄时间把这次拍摄切成时序场景, 点场景跳到那一段 — 叙事流, 而非一格格扁平网格">` +
+      `🎬 时序场景</span>`;
+    // v2.9-P0-2 — similarity slider (Peakto-style transparency). Visible only
+    // while the fold is active; dragging re-groups live so the user SEES the
+    // AI's grouping respond — black box → glass box.
+    if (filterState.nearDupFold) {
+      const thr = filterState.nearDupThreshold;
+      const nG = (_NEARDUP && _NEARDUP.byHero) ? _NEARDUP.byHero.size : 0;
+      const nH = (_NEARDUP && _NEARDUP.hidden) ? _NEARDUP.hidden.size : 0;
+      html +=
+        `<span class="neardup-sim" ` +
+        `title="相似度阈值 — 越高越严格(只折叠几乎相同的);越低越宽松(把相似构图也归一组)">` +
+          `<span class="neardup-sim-label">相似度</span>` +
+          `<input type="range" class="neardup-sim-range" min="0.80" max="0.99" step="0.01" ` +
+            `value="${thr.toFixed(2)}" aria-label="近重复相似度阈值">` +
+          `<span class="neardup-sim-val">${thr.toFixed(2)}</span>` +
+          `<span class="neardup-sim-stat">${nG} 组 · 折叠 ${nH} 张</span>` +
+        `</span>`;
+    }
     el.innerHTML = html;
     el.querySelectorAll(".neardup-toggle").forEach(b => {
       b.addEventListener("click", () => _toggleNearDupFold(b));
     });
+    // v2.9-P1-1 — Scenes view toggle binding.
+    el.querySelectorAll(".scenes-toggle").forEach(b => {
+      b.addEventListener("click", () => _toggleScenesView(b));
+    });
+    // v2.9-P0-2 — restore saved threshold + wire the slider (debounced re-group).
+    const simRange = el.querySelector(".neardup-sim-range");
+    if (simRange) {
+      const valEl = el.querySelector(".neardup-sim-val");
+      const statEl = el.querySelector(".neardup-sim-stat");
+      let _simTimer = null;
+      simRange.addEventListener("input", () => {
+        const t = parseFloat(simRange.value);
+        filterState.nearDupThreshold = t;
+        if (valEl) valEl.textContent = t.toFixed(2);
+        try { localStorage.setItem(`pixcull_neardup_threshold:${run_id}`, String(t)); } catch (_) {}
+        if (statEl) statEl.textContent = "重新分组…";
+        clearTimeout(_simTimer);
+        _simTimer = setTimeout(() => {
+          _loadNearDup(t)
+            .then(({ nGroups, nHidden }) => {
+              if (statEl) statEl.textContent = `${nGroups} 组 · 折叠 ${nHidden} 张`;
+              render();   // re-fold the grid at the new threshold
+            })
+            .catch(err => {
+              if (statEl) statEl.textContent = "重算失败";
+              showToast("近重复重算失败: " + err.message, "error");
+            });
+        }, 250);
+      });
+    }
     el.querySelectorAll(".burst-collapse-toggle").forEach(b => {
       b.addEventListener("click", () => {
         filterState.collapseBursts = !filterState.collapseBursts;
@@ -1137,6 +1202,26 @@
   // (highest score_final, server-picked) to ALL group members; hidden is
   // the flat set of folded-away non-heroes.
   let _NEARDUP = null;
+
+  // v2.9-P0-2 — fetch near-dup groups at a given similarity threshold and
+  // rebuild the _NEARDUP fold maps. Returns Promise<{nGroups, nHidden}>.
+  // Shared by the fold toggle (first build) and the similarity slider
+  // (live re-group). The endpoint already accepts ?threshold= and clamps.
+  function _loadNearDup(threshold) {
+    const t = Math.max(0.5, Math.min(0.999, threshold || 0.92));
+    return fetch(`/api/v1/runs/${run_id}/near_dups?threshold=${t.toFixed(3)}`)
+      .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+      .then(d => {
+        const byHero = new Map(), hidden = new Set();
+        (d.groups || []).forEach(g => {
+          byHero.set(g.hero, g.members);
+          g.members.forEach(fn => { if (fn !== g.hero) hidden.add(fn); });
+        });
+        _NEARDUP = { byHero, hidden };
+        return { nGroups: byHero.size, nHidden: hidden.size };
+      });
+  }
+
   function _toggleNearDupFold(btn) {
     if (filterState.nearDupFold) {
       filterState.nearDupFold = false;
@@ -1150,30 +1235,105 @@
       render();
       return;
     }
+    // Restore any per-run saved threshold before the first index build, so
+    // the initial fold honours the user's last choice (slider mounts with it).
+    try {
+      const saved = parseFloat(localStorage.getItem(`pixcull_neardup_threshold:${run_id}`));
+      if (saved >= 0.5 && saved <= 0.999) filterState.nearDupThreshold = saved;
+    } catch (_) {}
     btn.style.opacity = "0.55";
     btn.textContent = "≈ 建索引中…";
-    fetch(`/api/v1/runs/${run_id}/near_dups`)
-      .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
-      .then(d => {
-        const byHero = new Map(), hidden = new Set();
-        (d.groups || []).forEach(g => {
-          byHero.set(g.hero, g.members);
-          g.members.forEach(fn => { if (fn !== g.hero) hidden.add(fn); });
-        });
-        _NEARDUP = { byHero, hidden };
+    _loadNearDup(filterState.nearDupThreshold)
+      .then(({ nGroups }) => {
         filterState.nearDupFold = true;
-        btn.classList.add("active");
-        btn.textContent = `≈ 近重复折叠 `;
-        const n = document.createElement("span");
-        n.style.opacity = "0.5"; n.textContent = String(byHero.size);
-        btn.appendChild(n);
-        if (!byHero.size) showToast("未发现视觉近重复组(阈值 0.92)");
-        render();
+        if (!nGroups) {
+          showToast(`未发现视觉近重复组(阈值 ${filterState.nearDupThreshold.toFixed(2)})`);
+        }
+        render();   // re-renders the toolbar (now showing the slider) + grid
       })
       .catch(err => {
         showToast("近重复索引失败: " + err.message, "error");
         btn.textContent = "≈ 近重复折叠";
       })
+      .finally(() => { btn.style.opacity = ""; });
+  }
+
+  // ── v2.9-P1-1 — Scenes 时序叙事视图 (Narrative Select's Scenes View) ────────
+  // Fetch capture-time scenes once, render a navigator strip of scene chips;
+  // clicking a chip filters the grid to that scene (transparent time-grouping,
+  // not a flat grid). The segmentation itself is the server's adaptive
+  // median+MAD gap split (scoring/scenes.py) — surfaced for the user to steer.
+  let _SCENES = null;   // [{index, n, n_keep, start, end, filenames}]
+  function _fmtSceneClock(iso) {
+    if (!iso) return null;
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return null;
+    const p = n => String(n).padStart(2, "0");
+    return { date: `${p(d.getMonth() + 1)}-${p(d.getDate())}`,
+             time: `${p(d.getHours())}:${p(d.getMinutes())}` };
+  }
+  function _sceneRangeLabel(s) {
+    const a = _fmtSceneClock(s.start), b = _fmtSceneClock(s.end);
+    if (!a) return "未记录时间";
+    if (!b || (a.date === b.date && a.time === b.time)) return `${a.date} ${a.time}`;
+    return a.date === b.date
+      ? `${a.date} ${a.time}–${b.time}` : `${a.date} ${a.time} → ${b.date} ${b.time}`;
+  }
+  function _renderSceneNav() {
+    const nav = document.getElementById("sceneNav");
+    if (!nav) return;
+    if (!filterState.scenesView || !_SCENES) { nav.innerHTML = ""; nav.hidden = true; return; }
+    nav.hidden = false;
+    const selIdx = filterState.sceneFilter ? filterState.sceneFilter.index : null;
+    let html = `<span class="scene-nav-label">🎬 时序场景 · ${_SCENES.length}</span>`;
+    html += _SCENES.map(s => {
+      const active = selIdx === s.index;
+      return `<button class="scene-chip${active ? " active" : ""}" type="button" ` +
+        `data-scene="${s.index}" title="${esc(_sceneRangeLabel(s))} · ${s.n} 张 · keep ${s.n_keep}">` +
+        `<span class="scene-chip-t">场景 ${s.index + 1}</span>` +
+        `<span class="scene-chip-r">${esc(_sceneRangeLabel(s))}</span>` +
+        `<span class="scene-chip-n">${s.n} 张 · keep ${s.n_keep}</span></button>`;
+    }).join("");
+    if (filterState.sceneFilter) {
+      html += `<button class="scene-chip scene-chip-all" type="button" data-scene="-1" ` +
+        `title="清除场景筛选, 显示全部">↺ 全部</button>`;
+    }
+    nav.innerHTML = html;
+    nav.querySelectorAll(".scene-chip").forEach(b => {
+      b.addEventListener("click", () => {
+        const idx = parseInt(b.dataset.scene, 10);
+        if (idx < 0 || (filterState.sceneFilter && filterState.sceneFilter.index === idx)) {
+          filterState.sceneFilter = null;             // toggle off → show all
+        } else {
+          const s = _SCENES.find(x => x.index === idx);
+          filterState.sceneFilter = s ? { index: idx, filenames: new Set(s.filenames) } : null;
+        }
+        _renderSceneNav();
+        render();
+      });
+    });
+  }
+  function _toggleScenesView(btn) {
+    if (filterState.scenesView) {
+      filterState.scenesView = false;
+      filterState.sceneFilter = null;
+      btn.classList.remove("active");
+      _renderSceneNav();
+      render();
+      return;
+    }
+    const finish = () => {
+      filterState.scenesView = true;
+      btn.classList.add("active");
+      _renderSceneNav();
+      if (!(_SCENES && _SCENES.length)) showToast("未能按时间分出场景(可能缺少 EXIF 拍摄时间)");
+    };
+    if (_SCENES) { finish(); return; }
+    btn.style.opacity = "0.55";
+    fetch(`/api/v1/runs/${run_id}/scenes`)
+      .then(r => r.ok ? r.json() : Promise.reject(new Error("HTTP " + r.status)))
+      .then(d => { _SCENES = d.scenes || []; finish(); })
+      .catch(err => showToast("场景加载失败: " + err.message, "error"))
       .finally(() => { btn.style.opacity = ""; });
   }
 
@@ -1524,6 +1684,13 @@
     if (filterState.semSearch && filterState.semSearch.filenames) {
       filtered = filtered.filter(r =>
         filterState.semSearch.filenames.has(r.filename)
+      );
+    }
+    // v2.9-P1-1 — Scenes navigator: a selected scene chip restricts the grid
+    // to that scene's frames. Composes with every other filter above.
+    if (filterState.sceneFilter && filterState.sceneFilter.filenames) {
+      filtered = filtered.filter(r =>
+        filterState.sceneFilter.filenames.has(r.filename)
       );
     }
     // V22.1 — face cluster filter. A row passes if any of its face
@@ -2529,6 +2696,44 @@
     return Array.from(grid.querySelectorAll(".card")).map(c => c.dataset.fn);
   }
 
+  // v2.9-P0-1 — face Close-ups (Narrative Select). Fetch the detected faces
+  // for the open photo and populate the right-edge rail. Per-photo result is
+  // cached so flipping back/forth doesn't re-hit the endpoint. The rail stays
+  // collapsed until the 👤 toggle is pressed (content-first); the open/closed
+  // preference (lb.lb-faces-open) then persists as the user navigates, and the
+  // `.lb-faces:empty` CSS rule keeps a faceless photo from showing an empty rail.
+  const _lbFacesCache = new Map();   // fn → faces[]
+  function _renderLbFaces(fn, faces) {
+    if (_lbCurrentFn !== fn) return;   // user already flipped away
+    const grp = document.getElementById("lbFacesGrp");
+    const rail = document.getElementById("lbFaces");
+    const countEl = document.getElementById("lbFacesCount");
+    if (!grp || !rail) return;
+    rail.innerHTML = (faces || []).map(f =>
+      `<img class="face-crop" role="listitem" loading="lazy" src="${f.crop}" ` +
+      `alt="人脸特写 ${f.i + 1}" title="人脸 ${f.i + 1} · 置信度 ${Math.round((f.conf || 0) * 100)}%">`
+    ).join("");
+    const has = !!(faces && faces.length);
+    grp.hidden = !has;
+    if (has && countEl) countEl.textContent = String(faces.length);
+  }
+  function _loadLbFaces(fn) {
+    if (_lbFacesCache.has(fn)) { _renderLbFaces(fn, _lbFacesCache.get(fn)); return; }
+    // Hide the toggle until we know whether this photo has faces.
+    const grp = document.getElementById("lbFacesGrp");
+    if (grp) grp.hidden = true;
+    const rail = document.getElementById("lbFaces");
+    if (rail) rail.innerHTML = "";
+    fetch(`/api/v1/runs/${run_id}/faces/${encodeURIComponent(fn)}`)
+      .then(r => r.ok ? r.json() : Promise.reject(new Error("HTTP " + r.status)))
+      .then(d => {
+        const faces = (d && d.faces) || [];
+        _lbFacesCache.set(fn, faces);
+        _renderLbFaces(fn, faces);
+      })
+      .catch(() => { _lbFacesCache.set(fn, []); /* silent — rail just stays hidden */ });
+  }
+
   function openLightbox(fn) {
     const r = rows.find(x => x.filename === fn);
     if (!r) return;
@@ -2585,6 +2790,8 @@
     // this returns. Each photo's result is cached so flipping back
     // and forth doesn't re-hit the endpoint.
     _loadLbSimilar(fn);
+    // v2.9-P0-1 — load this photo's face close-ups for the right-edge rail.
+    _loadLbFaces(fn);
     // v2.2-P0-2 — keep the video scrubber's playhead in sync when this
     // run is a video run (no-op for photo runs).
     if (window._videoScrubSync) window._videoScrubSync(fn);
@@ -3258,16 +3465,23 @@
   // is keyed by section id and persisted across lightbox opens so
   // the user's "I never look at Raw Flags" choice sticks.  Defaults
   // bias toward "show useful stuff, hide diagnostics".
+  // v2.9-P1-2 — progressive disclosure (v2.8 reflection 病症 B): the inspector
+  // used to default SIX sections open at once. Now the verdict glass box's
+  // one-line "why" (its always-visible summary) carries the default read, and
+  // the detailed sections collapse to one tap. Only the glass box + warnings
+  // (a key safety state) + similar (navigation) lead; raw axis bars, AI-judge
+  // paragraphs, strengths/weaknesses fold away until asked for.
   const _INSPECTOR_DEFAULTS = {
-    scores:     true,    // 评分
+    verdict:    false,   // 为什么 glass box — summary one-liner always shows
+    scores:     false,   // 评分 (raw per-source bars; glass box has the gist)
     similar:    true,    // 类似照片
-    "ai-judge": true,    // AI judgment (DeepSeek + VLM)
-    rationale:  true,    // 为何 maybe
-    warnings:   true,    // 矛盾警示
-    strengths:  true,    // 优点
-    weaknesses: true,    // 改进建议
-    flags:      false,   // 检测器旗标 (closed by default)
-    reason:     false,   // 规则栈说明 (closed by default)
+    "ai-judge": false,   // AI judgment (DeepSeek + VLM)
+    rationale:  false,   // 为何 maybe
+    warnings:   true,    // 矛盾警示 (key state — show when present)
+    strengths:  false,   // 优点
+    weaknesses: false,   // 改进建议
+    flags:      false,   // 检测器旗标
+    reason:     false,   // 规则栈说明
   };
   const _INSPECTOR_KEY = `pixcull_inspector_state:${run_id}`;
   function _readInspectorState() {
@@ -3555,6 +3769,45 @@
     }
     const aiJudgeBody = aiJudgeParts.join("");
 
+    // v2.9-P1-2 — verdict glass box. One-line "why this decision" (the always-
+    // visible <summary>), expand for the per-axis breakdown + the strongest
+    // signals + the AI rationale. The one-liner picks the most decision-
+    // relevant signal available; a deterministic fallback guarantees a line.
+    const _firstSentence = (t) => {
+      const s = String(t || "").trim();
+      if (!s) return "";
+      const head = s.split(/[。．.!?！？\n]/)[0].trim();
+      return head.length > 46 ? head.slice(0, 45) + "…" : head;
+    };
+    let oneLineReason =
+      _firstSentence(rationale) ||
+      (dec === "keep"
+        ? _firstSentence(strengths[0])
+        : _firstSentence(suggestions[0] || weaknesses[0])) ||
+      _firstSentence(r.meta_overall_rationale) ||
+      _firstSentence(r.vlm_overall_rationale);
+    if (!oneLineReason) {
+      oneLineReason = dec === "keep" ? "各轴均衡,整体可保留"
+        : dec === "cull" ? "无明显亮点,建议丢弃"
+        : "接近 keep / cull 边界,看你的偏好";
+    }
+    const _topStrengths = strengths.slice(0, 2).filter(Boolean);
+    const _topWeak = [...suggestions, ...weaknesses].filter(Boolean).slice(0, 2);
+    const verdictSignals =
+      (_topStrengths.length
+        ? `<ul class="glass-sig good">${_topStrengths.map(s => `<li>✓ ${esc(s)}</li>`).join("")}</ul>` : "") +
+      (_topWeak.length
+        ? `<ul class="glass-sig warn">${_topWeak.map(s => `<li>→ ${esc(s)}</li>`).join("")}</ul>` : "");
+    const verdictBody = `${sparklineSvg}${sparklineLab}
+        <div class="axis-grid">${finalStars}</div>
+        ${verdictSignals}
+        ${aiJudgeBody ? `<div class="glass-ai">${aiJudgeBody}</div>` : ""}`;
+    const _verdictOpen = _sectionOpen("verdict") ? " open" : "";
+    const verdictGlass = `<details class="info-section verdict-glass" data-sec="verdict"${_verdictOpen}>
+        <summary><span class="glass-dec badge ${dec}">${esc(decLabel)}</span><span class="glass-why">${esc(oneLineReason)}</span></summary>
+        <div class="lb-body">${verdictBody}</div>
+      </details>`;
+
     const warningsBody = inconsistencies.length
       ? `<div class="rationale warn">${inconsistencies.map(esc).join('<br>')}</div>`
       : "";
@@ -3616,6 +3869,7 @@
       </div>
 
       <div class="inspector-sections">
+        ${verdictGlass}
         ${_sec("scores", "★ 评分 · 人工 → DeepSeek → VLM → 模型 → 自动", scoresBody)}
         <div id="lbSimilarSection">
           ${_sec("similar", "↳ 类似照片", similarBody)}
@@ -3830,6 +4084,13 @@
   if (lbZenToggle) lbZenToggle.addEventListener("click", e => {
     e.stopPropagation();
     lb.classList.toggle("lb-zen");
+  });
+  // v2.9-P0-1 — face Close-ups toggle: reveal/hide the right-edge rail.
+  const lbFacesToggle = document.getElementById("lbFacesToggle");
+  if (lbFacesToggle) lbFacesToggle.addEventListener("click", e => {
+    e.stopPropagation();
+    const open = lb.classList.toggle("lb-faces-open");
+    lbFacesToggle.setAttribute("aria-pressed", open ? "true" : "false");
   });
 
   // Track mousedown so we can distinguish a click (toggle) from a
