@@ -52,6 +52,18 @@
 
 ## What's new
 
+**v2.9** — **transparency + content-first viewing** (the deferred competitor
+patterns from the v2.8 reflection — see [`docs/ROADMAP-v2.9-charter.md`](docs/ROADMAP-v2.9-charter.md)
+and [`docs/DESIGN-AUDIT-2029Q3.md`](docs/DESIGN-AUDIT-2029Q3.md)): a
+**similarity slider** turns the near-dup fold from a fixed-threshold black box
+into a glass box — drag 0.80–0.99 and the grouping re-folds live (Peakto-style) ·
+a **face Close-ups rail** in the lightbox shows a zoomed crop of every detected
+face so you can check eyes / expression without manual zoom (Narrative Select) ·
+a **Scenes** navigator segments a shoot by capture-time gaps (adaptive median+MAD)
+into a time-grouped narrative · a **verdict glass box** makes the inspector's
+default read a single line — "why this decision" — and folds the per-axis
+breakdown behind one tap (progressive disclosure).
+
 **v2.8** — UI/UX **subtraction** + colour-system pass: grid cards shed the badge
 wall, decision badges go **outline** (not solid fills), the lightbox gains a
 discoverable **"zen" toggle** (`i` key / button → photo claims the full
@@ -897,6 +909,27 @@ Kodak Vision3 / Arri 709A / Teal-Orange / B&W),主画面 + 每个 reel
 候选缩略图实时套用 ASC-CDL 参数化预览(仅预览,不改原片)。
 
 ![视频审片 · 🎨 调色预览 — 整段套用 Kodak / Arri / Teal-Orange / B&W LUT,主画面实时预览(此处 B&W)](docs/screenshots/19-video-grade.png)
+
+### v2.9 · 智能透明 + 内容优先观看
+
+**🎬 Scenes 时序叙事导航(v2.9-P1-1) — 按拍摄时间自适应切段,点场景跳到那一段。**
+
+`scoring/scenes.py` 用 median+MAD 自适应间隙阈值把一次拍摄切成时序场景,导航条
+显示每段时间范围 · 张数 · keep 数;点 chip 即把网格筛到那一段(叙事流,而非一格
+格扁平网格)。
+
+![Scenes 时序导航条 — 真机博物馆 run 切成多个时序场景, 每段显示时间范围/张数/keep](docs/screenshots/20-scenes-navigator.png)
+
+**🔍 判定 glass box(v2.9-P1-2) — 默认一行「为什么是这个判定」,展开看逐轴。**
+
+lightbox inspector 顶部的玻璃箱:默认只显判定徽标 + 一句话理由(渐进披露,取代
+过去默认 6 个展开区);展开才看逐轴评分 + 最强信号(✓优点 / →改进)+ AI 判读。
+
+![判定 glass box — 展开后显示判定 + 一句话理由 + 6 轴评分 + 信号 + AI 判读](docs/screenshots/21-verdict-glassbox.png)
+
+> 另两个 v2.9 切片——**相似度滑块**(Peakto 式可调近重复阈值)与 **人脸 Close-ups
+> 轨**(Narrative 式 lightbox 人脸特写)——见
+> [`docs/ROADMAP-v2.9-charter.md`](docs/ROADMAP-v2.9-charter.md)。
 
 ## 快速开始
 

@@ -46,8 +46,9 @@ script now strips `README.md`/`*.md`/`docs/` LFS rules and pins
 `README.md text` before each upload.  Never use `--github-links` unless
 you specifically want CDN-linked images instead of ModelScope-hosted.
 
-New screenshots: next free number is **20** (01–19 used; 17 =
-attribution-heatmap, 18 = video-review, 19 = video-grade).  The
+New screenshots: next free number is **22** (01–21 used; 17 =
+attribution-heatmap, 18 = video-review, 19 = video-grade, 20 =
+scenes-navigator, 21 = verdict-glassbox).  The
 animated architecture / sequence / data-flow diagrams live separately in
 `docs/diagrams/` (SVG for GitHub, GIF for ModelScope).
 

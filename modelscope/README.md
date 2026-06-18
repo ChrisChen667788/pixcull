@@ -54,8 +54,14 @@ tasks:
 完整源码 + iOS 伴侣 App + Lightroom 插件,均在 GitHub:
 **[github.com/ChrisChen667788/pixcull](https://github.com/ChrisChen667788/pixcull)**
 
-## v0.7 → v2.8 主要更新
+## v0.7 → v2.9 主要更新
 
+- **v2.9**:**智能透明 + 内容优先观看**(承接 v2.8 反思搁置的竞品模式) —
+  **相似度滑块**把近重复折叠从固定阈值黑箱变玻璃箱(拖 0.80–0.99 实时重组,
+  对标 Peakto)· lightbox **人脸 Close-ups 轨**显示每张脸的放大裁切,无需手动
+  放大就看清表情/闭眼(对标 Narrative Select)· **Scenes** 按拍摄时间自适应
+  切段(median+MAD)成时序叙事 · **判定 glass box** 让 inspector 默认只显一行
+  「为什么是这个判定」,逐轴细节折进一键展开(渐进披露)
 - **v2.8**:UI/UX **减法重构 + 配色系统** — 网格去徽章墙 · 决策徽章**描边化**
   · lightbox **可发现的 zen 切换**(`i` 键 / 按钮全宽看图)· 顶栏 + 工具栏渐进
   披露 / 分组 · 调色板升级为 **OKLCH 三变量系统**(base/accent/contrast →
@@ -242,6 +248,18 @@ Vision3 / Arri 709A / Teal-Orange / B&W),主画面 + 每个候选缩略图实时
 参数化预览(仅预览,不改原片)。
 
 ![视频审片 · 🎨 调色预览 — 整段套用 Kodak / Arri / Teal-Orange / B&W LUT,主画面实时预览(此处 B&W)](docs/screenshots/19-video-grade.png)
+
+### v2.9 · 智能透明 + 内容优先观看
+
+**🎬 Scenes 时序导航** — 按拍摄时间(median+MAD 自适应间隙)把一次拍摄切成时序
+场景,每段显示时间范围 · 张数 · keep;点 chip 跳到那一段。
+
+![Scenes 时序导航条 — 真机博物馆 run 切成多个时序场景, 每段显示时间范围/张数/keep](docs/screenshots/20-scenes-navigator.png)
+
+**🔍 判定 glass box** — lightbox inspector 顶部默认只显「为什么是这个判定」一行,
+展开看逐轴评分 + 信号 + AI 判读(渐进披露)。
+
+![判定 glass box — 展开后显示判定 + 一句话理由 + 6 轴评分 + 信号 + AI 判读](docs/screenshots/21-verdict-glassbox.png)
 
 ---
 
