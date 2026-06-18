@@ -52,6 +52,12 @@
 
 ## What's new
 
+**v2.10** — polish on the v2.9 transparency slices: **Scenes** now also renders
+**inline section headers** in the grid (time-ordered, header per scene — not just
+the navigator strip), and a **face Close-up click locates that face on the main
+photo** (a pulsing box maps the crop back onto the full frame). Small-batch grids
+(≤200) get the inline sections; larger keep the navigator.
+
 **v2.9** — **transparency + content-first viewing** (the deferred competitor
 patterns from the v2.8 reflection — see [`docs/ROADMAP-v2.9-charter.md`](docs/ROADMAP-v2.9-charter.md)
 and [`docs/DESIGN-AUDIT-2029Q3.md`](docs/DESIGN-AUDIT-2029Q3.md)): a

@@ -54,8 +54,11 @@ tasks:
 完整源码 + iOS 伴侣 App + Lightroom 插件,均在 GitHub:
 **[github.com/ChrisChen667788/pixcull](https://github.com/ChrisChen667788/pixcull)**
 
-## v0.7 → v2.9 主要更新
+## v0.7 → v2.10 主要更新
 
+- **v2.10**:v2.9 透明切片的打磨 —— **Scenes 网格内联分段 header**(时序、每段
+  一个 header,不止顶部导航条;小批量 ≤200 张走内联,更大保留导航条)· **人脸
+  Close-up 点击在主图上定位**(脉冲框把裁切映射回全幅画面)
 - **v2.9**:**智能透明 + 内容优先观看**(承接 v2.8 反思搁置的竞品模式) —
   **相似度滑块**把近重复折叠从固定阈值黑箱变玻璃箱(拖 0.80–0.99 实时重组,
   对标 Peakto)· lightbox **人脸 Close-ups 轨**显示每张脸的放大裁切,无需手动

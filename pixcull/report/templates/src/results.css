@@ -2082,6 +2082,25 @@
       gap: var(--space-3);
       padding: var(--space-5) var(--space-6) var(--space-8);
     }
+    /* v2.10-P0-1 — inline Scenes section header: spans the full grid row,
+       introduces each time-ordered scene. Editorial-warm, restrained. */
+    #grid .scene-section-header {
+      grid-column: 1 / -1;
+      display: flex; align-items: baseline; gap: 12px;
+      padding: 16px 2px 4px; margin-top: 6px;
+      border-top: 1px solid var(--border);
+    }
+    #grid .scene-section-header:first-child { border-top: 0; margin-top: 0; padding-top: 2px; }
+    #grid .scene-section-header .ssh-i {
+      font-size: 13px; font-weight: 600; color: var(--fg); letter-spacing: .02em;
+    }
+    #grid .scene-section-header .ssh-r {
+      font-size: 12px; color: var(--fg-2); font-variant-numeric: tabular-nums;
+    }
+    #grid .scene-section-header .ssh-n {
+      margin-left: auto; font-size: 11px; color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
     /* v0.4 — refreshed card visual.  Bigger radius for a softer
        feel, fuller shadow ramp on hover (matching elevation
        hierarchy from the new shadow tokens), and the decision-
@@ -4771,6 +4790,27 @@
       border: 1px solid var(--border-hi);
       box-shadow: 0 4px 14px rgba(0,0,0,0.5);
       background: var(--bg-card);
+      cursor: pointer; transition: border-color 120ms, transform 120ms;
+    }
+    .lightbox .lb-faces .face-crop:hover,
+    .lightbox .lb-faces .face-crop:focus-visible {
+      border-color: var(--accent-hi); transform: translateY(-1px); outline: none;
+    }
+    /* v2.10-P0-2 — face locator: a pulsing box drawn over the main image at the
+       clicked face's region, mapping the normalized bbox onto the display rect. */
+    .face-locator {
+      position: fixed; z-index: 50; pointer-events: none; opacity: 0;
+      border: 2px solid var(--accent-hi); border-radius: 8px;
+    }
+    .face-locator.pulse { animation: face-locate 1.4s var(--ease-out, ease-out) 1; }
+    @keyframes face-locate {
+      0%   { opacity: 0; transform: scale(1.18); }
+      18%  { opacity: 1; transform: scale(1); box-shadow: 0 0 0 3px var(--accent-soft); }
+      70%  { opacity: 1; box-shadow: 0 0 0 3px var(--accent-soft); }
+      100% { opacity: 0; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .face-locator.pulse { animation: none; opacity: 0; }
     }
     .lightbox .lb-faces .face-conf {
       font-size: 10px; color: var(--muted); text-align: center;

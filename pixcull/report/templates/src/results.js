@@ -1325,7 +1325,8 @@
     const finish = () => {
       filterState.scenesView = true;
       btn.classList.add("active");
-      _renderSceneNav();
+      render();          // v2.10-P0-1 — repaint so _applySceneSections inserts the inline headers
+      _renderSceneNav(); // navigator strip (separate element, survives the grid repaint)
       if (!(_SCENES && _SCENES.length)) showToast("未能按时间分出场景(可能缺少 EXIF 拍摄时间)");
     };
     if (_SCENES) { finish(); return; }
@@ -1335,6 +1336,50 @@
       .then(d => { _SCENES = d.scenes || []; finish(); })
       .catch(err => showToast("场景加载失败: " + err.message, "error"))
       .finally(() => { btn.style.opacity = ""; });
+  }
+
+  // v2.10-P0-1 — Scenes INLINE section headers. The v2.9 navigator filters to
+  // one scene; this groups the whole grid into time-ordered sections with a
+  // header per scene (the deferred "in-grid sections" from the v2.9 audit).
+  // Runs only on the synchronous small-batch paint (<=200 cards, fully
+  // materialized); larger batches keep the navigator-only behaviour (this is a
+  // no-op when card placeholders exist). Cards are MOVED (not recreated), so
+  // their listeners survive.
+  function _applySceneSections() {
+    grid.classList.remove("grid--scenes");
+    if (!filterState.scenesView || filterState.sceneFilter) return;
+    if (!_SCENES || _SCENES.length < 2) return;
+    if (grid.querySelector(".card-placeholder")) return;   // huge batch → navigator only
+    const cards = Array.from(grid.querySelectorAll(".card"));
+    if (!cards.length) return;
+    const byFn = new Map(cards.map(c => [c.dataset.fn, c]));
+    const placed = new Set();
+    const frag = document.createDocumentFragment();
+    let made = 0;
+    const _hdr = (idx, range, n) => {
+      const h = document.createElement("div");
+      h.className = "scene-section-header";
+      h.innerHTML =
+        `<span class="ssh-i">${idx}</span>` +
+        (range ? `<span class="ssh-r">${esc(range)}</span>` : "") +
+        `<span class="ssh-n">${n} 张</span>`;
+      return h;
+    };
+    for (const s of _SCENES) {
+      const sceneCards = (s.filenames || []).map(fn => byFn.get(fn)).filter(Boolean);
+      if (!sceneCards.length) continue;            // all of this scene filtered out
+      frag.appendChild(_hdr(`场景 ${s.index + 1}`, _sceneRangeLabel(s), sceneCards.length));
+      sceneCards.forEach(c => { frag.appendChild(c); placed.add(c.dataset.fn); });
+      made++;
+    }
+    const leftover = cards.filter(c => !placed.has(c.dataset.fn));
+    if (leftover.length) {
+      frag.appendChild(_hdr("其他", null, leftover.length));
+      leftover.forEach(c => frag.appendChild(c));
+    }
+    if (!made) return;
+    grid.appendChild(frag);          // moves cards into scene order + inserts headers
+    grid.classList.add("grid--scenes");
   }
 
   // P2.4 — active-learning filter. Click → fetch top-N queue from
@@ -2225,6 +2270,7 @@
     } else if (segments.length <= BATCH_THRESHOLD) {
       // Small batch: one shot, fastest path.
       grid.innerHTML = html;
+      _applySceneSections();   // v2.10-P0-1 — inline time-grouped sections (small batch only)
     } else if (segments.length <= HUGE_THRESHOLD) {
       // Mid batch: paint the above-fold portion, then stream the rest
       // in chunks so the user can scroll/click immediately.
@@ -2710,12 +2756,61 @@
     const countEl = document.getElementById("lbFacesCount");
     if (!grp || !rail) return;
     rail.innerHTML = (faces || []).map(f =>
-      `<img class="face-crop" role="listitem" loading="lazy" src="${f.crop}" ` +
-      `alt="人脸特写 ${f.i + 1}" title="人脸 ${f.i + 1} · 置信度 ${Math.round((f.conf || 0) * 100)}%">`
+      `<img class="face-crop" role="listitem" tabindex="0" loading="lazy" src="${f.crop}" ` +
+      `data-bbox="${(f.bbox || []).join(',')}" ` +
+      `alt="人脸特写 ${f.i + 1}" title="人脸 ${f.i + 1} · 置信度 ${Math.round((f.conf || 0) * 100)}% — 点击在主图上定位">`
     ).join("");
     const has = !!(faces && faces.length);
     grp.hidden = !has;
     if (has && countEl) countEl.textContent = String(faces.length);
+  }
+
+  // v2.10-P0-2 — click a face crop → pulse a locator box over that face on the
+  // main image (Narrative-style "find this face"). Maps the normalized bbox
+  // onto the object-fit:contain display rect. Only in fit mode (zoom/rotate
+  // change the mapping); silently no-ops otherwise.
+  function _locateFace(bboxStr) {
+    const img = lbImg;
+    if (!img || !img.naturalWidth) return;
+    if (typeof _lbZoom !== "undefined" && _lbZoom && _lbZoom.mode !== "fit") return;
+    const bb = String(bboxStr || "").split(",").map(parseFloat);
+    if (bb.length < 4 || bb.some(v => Number.isNaN(v))) return;
+    const rect = img.getBoundingClientRect();
+    const nW = img.naturalWidth, nH = img.naturalHeight;
+    const scale = Math.min(rect.width / nW, rect.height / nH);
+    const dispW = nW * scale, dispH = nH * scale;
+    const offX = rect.left + (rect.width - dispW) / 2;
+    const offY = rect.top + (rect.height - dispH) / 2;
+    const [x1, y1, x2, y2] = bb;
+    let box = document.getElementById("lbFaceLocator");
+    if (!box) {
+      box = document.createElement("div");
+      box.id = "lbFaceLocator";
+      box.className = "face-locator";
+      document.body.appendChild(box);
+    }
+    box.style.left = (offX + x1 * dispW) + "px";
+    box.style.top = (offY + y1 * dispH) + "px";
+    box.style.width = ((x2 - x1) * dispW) + "px";
+    box.style.height = ((y2 - y1) * dispH) + "px";
+    box.classList.remove("pulse");
+    void box.offsetWidth;            // reflow → restart the pulse animation
+    box.classList.add("pulse");
+  }
+  {
+    const _rail = document.getElementById("lbFaces");
+    if (_rail) {
+      _rail.addEventListener("click", e => {
+        const crop = e.target.closest(".face-crop");
+        if (crop) _locateFace(crop.dataset.bbox);
+      });
+      _rail.addEventListener("keydown", e => {
+        if ((e.key === "Enter" || e.key === " ") && e.target.classList.contains("face-crop")) {
+          e.preventDefault();
+          _locateFace(e.target.dataset.bbox);
+        }
+      });
+    }
   }
   function _loadLbFaces(fn) {
     if (_lbFacesCache.has(fn)) { _renderLbFaces(fn, _lbFacesCache.get(fn)); return; }
