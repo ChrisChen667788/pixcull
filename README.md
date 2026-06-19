@@ -52,6 +52,16 @@
 
 ## What's new
 
+**v2.12** — explanation goes one level deeper + local discoverability metrics
+(see [`docs/ROADMAP-v2.12-charter.md`](docs/ROADMAP-v2.12-charter.md)). The verdict
+glass box no longer just *names* the weakest axis — it says **why it's low**,
+mapped from the row's own signals ("光线偏低 · 高光过曝 12%", "构图偏低 · 地平线倾斜
+5°", "主体偏低 · 无明确主体"). And the transparency tools now record **local-only**
+usage counts (`localStorage.pixcull_metrics`, never sent anywhere) so you can see
+whether near-dup / Scenes / glass box actually get used. (The deferred
+slider/face-Close-ups screenshots are best captured locally — the headless
+capture is killed by the dev host; the features themselves are verified.)
+
 **v2.11** — **discoverability + explanation** for the v2.9/v2.10 transparency
 features (see [`docs/ROADMAP-v2.11-charter.md`](docs/ROADMAP-v2.11-charter.md) /
 [`docs/DESIGN-AUDIT-2030Q1.md`](docs/DESIGN-AUDIT-2030Q1.md)). The near-dup fold +

@@ -4616,6 +4616,13 @@
     .lightbox .glass-sig.good li { color: var(--c-success, #6faa78); }
     .lightbox .glass-sig.warn li { color: var(--fg-2); }
     .lightbox .glass-ai { margin-top: 8px; }
+    /* v2.12-② — "why the weakest axis is low" micro-line. */
+    .lightbox .glass-whylow {
+      margin-top: 8px; padding: 6px 9px; border-radius: 8px;
+      background: var(--surface-2); border-left: 3px solid var(--c-warn, #d6a443);
+      font-size: 12px; color: var(--fg-2);
+    }
+    .lightbox .glass-whylow b { color: var(--fg); }
     .lightbox .axis-grid {
       display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px;
       margin-bottom: 8px;

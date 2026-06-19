@@ -1208,6 +1208,24 @@
     }
   }
 
+  // v2.12-③ — LOCAL-ONLY discoverability metric. Counts first + total uses of
+  // the transparency tools into localStorage.pixcull_metrics. NEVER sent over
+  // the network (this is a local-first tool); the owner reads it from the
+  // console to see whether these features actually get discovered/used.
+  function _track(name) {
+    try {
+      const KEY = "pixcull_metrics";
+      const m = JSON.parse(localStorage.getItem(KEY) || "{}");
+      const e = m[name] || { n: 0, first: null };
+      e.n += 1;
+      const now = new Date().toISOString();
+      if (!e.first) e.first = now;
+      e.last = now;
+      m[name] = e;
+      localStorage.setItem(KEY, JSON.stringify(m));
+    } catch (_) { /* localStorage disabled — metrics are best-effort, never block */ }
+  }
+
   // v2.6-P1 — near-dup fold state. byHero maps a group's representative
   // (highest score_final, server-picked) to ALL group members; hidden is
   // the flat set of folded-away non-heroes.
@@ -1241,6 +1259,7 @@
     }
     if (_NEARDUP) {                       // already fetched → instant fold
       filterState.nearDupFold = true;
+      _track("neardup_fold");
       btn.classList.add("active");
       render();
       return;
@@ -1256,6 +1275,7 @@
     _loadNearDup(filterState.nearDupThreshold)
       .then(({ nGroups }) => {
         filterState.nearDupFold = true;
+        _track("neardup_fold");
         if (!nGroups) {
           showToast(`未发现视觉近重复组(阈值 ${filterState.nearDupThreshold.toFixed(2)})`);
         }
@@ -1334,6 +1354,7 @@
     }
     const finish = () => {
       filterState.scenesView = true;
+      _track("scenes_view");
       btn.classList.add("active");
       render();          // v2.10-P0-1 — repaint so _applySceneSections inserts the inline headers
       _renderSceneNav(); // navigator strip (separate element, survives the grid repaint)
@@ -2709,6 +2730,7 @@
       const st = _readInspectorState();
       st[sec] = !!det.open;
       _writeInspectorState(st);
+      if (sec === "verdict" && det.open) _track("verdict_expand");   // v2.12-③
     }, true);  // capture — <details> toggle doesn't bubble in some engines
 
     // v0.8-P1-1 — λ-cycling chip click handler.  Cycles through
@@ -3903,21 +3925,54 @@
     // ("构图 4.8★ 撑分,光线 2.5★ 拖后腿") straight from rubric_stars. The most
     // decision-relevant, glanceable "why" — it leads the glass-box one-liner;
     // the prose signals (rationale / strengths) stay in the expandable body.
+    // Rank the scored axes once; the one-liner names strongest + weakest, and
+    // (v2.12-②) the body explains WHY the weakest is low from raw signals.
+    const _axisRank = axisNames
+      .map(n => ({ key: n, abbr: axisAbbr[n], v: (r.rubric_stars || {})[n] }))
+      .filter(a => typeof a.v === "number")
+      .sort((a, b) => b.v - a.v);
+    let _weakAxis = null;   // set when there is a clear weakest axis (spread ≥ 0.8)
     const _axisDriverReason = () => {
-      const stars = r.rubric_stars || {};
-      const vals = axisNames
-        .map(n => [axisAbbr[n], stars[n]])
-        .filter(([, v]) => typeof v === "number");
-      if (vals.length < 2) return "";
-      vals.sort((a, b) => b[1] - a[1]);
-      const [hiAbbr, hi] = vals[0];
-      const [loAbbr, lo] = vals[vals.length - 1];
-      if (hi - lo >= 0.8) {
-        return `${hiAbbr} ${hi.toFixed(1)}★ 撑分,${loAbbr} ${lo.toFixed(1)}★ 拖后腿`;
+      if (_axisRank.length < 2) return "";
+      const hi = _axisRank[0], lo = _axisRank[_axisRank.length - 1];
+      if (hi.v - lo.v >= 0.8) {
+        _weakAxis = lo;
+        return `${hi.abbr} ${hi.v.toFixed(1)}★ 撑分,${lo.abbr} ${lo.v.toFixed(1)}★ 拖后腿`;
       }
-      const avg = vals.reduce((s, [, v]) => s + v, 0) / vals.length;
+      const avg = _axisRank.reduce((s, a) => s + a.v, 0) / _axisRank.length;
       const tag = avg >= 3.5 ? "各轴均衡偏强" : avg <= 2.3 ? "各轴普遍偏弱" : "各轴均衡";
       return `${tag}(约 ${avg.toFixed(1)}★)`;
+    };
+    // v2.12-② — micro-explanation for the weakest axis, mapped from the row's
+    // deterministic signals (flags + raw metrics). Generic fallback otherwise.
+    const _axisWhyLow = (key) => {
+      const flags = String(r.flags || "");
+      const has = s => flags.indexOf(s) !== -1;
+      const num = v => typeof v === "number";
+      switch (key) {
+        case "technical":
+          if (has("motion_blur")) return "运动模糊";
+          if (num(r.laplacian_global) && r.laplacian_global < 60) return "锐度不足";
+          return "清晰度/技术指标偏低";
+        case "light":
+          if (num(r.highlight_clip_pct) && r.highlight_clip_pct > 5) return `高光过曝 ${r.highlight_clip_pct.toFixed(0)}%`;
+          if (num(r.shadow_clip_pct) && r.shadow_clip_pct > 5) return `暗部欠曝 ${r.shadow_clip_pct.toFixed(0)}%`;
+          if (num(r.mean_luma) && r.mean_luma < 60) return "整体偏暗";
+          if (num(r.mean_luma) && r.mean_luma > 200) return "整体偏亮";
+          return "曝光/影调偏弱";
+        case "composition":
+          if (num(r.horizon_tilt_deg) && Math.abs(r.horizon_tilt_deg) > 3) return `地平线倾斜 ${Math.abs(r.horizon_tilt_deg).toFixed(1)}°`;
+          return "构图结构偏弱";
+        case "subject":
+          if (has("no_clear_subject")) return "无明确主体";
+          if (has("closed_eyes")) return "主体闭眼";
+          if (has("face_occluded")) return "主体被遮挡";
+          if (num(r.subject_fraction) && r.subject_fraction < 0.05) return "主体占比过小";
+          return "主体不够突出";
+        case "moment": return "瞬间/表情一般";
+        case "aesthetic": return "整体美感偏弱";
+        default: return "该轴评分偏低";
+      }
     };
     let oneLineReason =
       _axisDriverReason() ||
@@ -3939,8 +3994,14 @@
         ? `<ul class="glass-sig good">${_topStrengths.map(s => `<li>✓ ${esc(s)}</li>`).join("")}</ul>` : "") +
       (_topWeak.length
         ? `<ul class="glass-sig warn">${_topWeak.map(s => `<li>→ ${esc(s)}</li>`).join("")}</ul>` : "");
+    // v2.12-② — "why is the weakest axis low" micro-line (only when there is a
+    // clear weakest axis; _weakAxis was set by _axisDriverReason above).
+    const verdictWhyLow = _weakAxis
+      ? `<div class="glass-whylow"><b>${esc(_weakAxis.abbr)}偏低</b> · ${esc(_axisWhyLow(_weakAxis.key))}</div>`
+      : "";
     const verdictBody = `${sparklineSvg}${sparklineLab}
         <div class="axis-grid">${finalStars}</div>
+        ${verdictWhyLow}
         ${verdictSignals}
         ${aiJudgeBody ? `<div class="glass-ai">${aiJudgeBody}</div>` : ""}`;
     const _verdictOpen = _sectionOpen("verdict") ? " open" : "";
@@ -4232,6 +4293,7 @@
     e.stopPropagation();
     const open = lb.classList.toggle("lb-faces-open");
     lbFacesToggle.setAttribute("aria-pressed", open ? "true" : "false");
+    if (open) _track("closeups_open");   // v2.12-③
   });
 
   // Track mousedown so we can distinguish a click (toggle) from a
