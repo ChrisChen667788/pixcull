@@ -52,6 +52,16 @@
 
 ## What's new
 
+**v2.11** — **discoverability + explanation** for the v2.9/v2.10 transparency
+features (see [`docs/ROADMAP-v2.11-charter.md`](docs/ROADMAP-v2.11-charter.md) /
+[`docs/DESIGN-AUDIT-2030Q1.md`](docs/DESIGN-AUDIT-2030Q1.md)). The near-dup fold +
+Scenes toggles were buried in a burst-only sidebar group that **vanished on
+burst-less runs** — they now live in an always-visible **「整理 · 折叠」** group, so
+the tools are findable on every run (this also un-broke the similarity slider,
+whose CSS had been mis-scoped since v2.9). A one-time **coachmark** introduces the
+transparency trio, and the verdict glass box's one-liner is now a **per-axis
+driver** — "构图 4.8★ 撑分,光线 2.5★ 拖后腿" straight from the rubric.
+
 **v2.10** — polish on the v2.9 transparency slices: **Scenes** now also renders
 **inline section headers** in the grid (time-ordered, header per scene — not just
 the navigator strip), and a **face Close-up click locates that face on the main
@@ -936,6 +946,15 @@ lightbox inspector 顶部的玻璃箱:默认只显判定徽标 + 一句话理由
 > 另两个 v2.9 切片——**相似度滑块**(Peakto 式可调近重复阈值)与 **人脸 Close-ups
 > 轨**(Narrative 式 lightbox 人脸特写)——见
 > [`docs/ROADMAP-v2.9-charter.md`](docs/ROADMAP-v2.9-charter.md)。
+
+### v2.11 · 透明度的可发现性
+
+**整理 · 折叠 组 + 首次 coachmark — 透明度工具不再藏起来,每个 run 都看得到入口。**
+
+近重复折叠(+ 相似度滑块)和 🎬 时序场景 从默认隐藏的「连拍」组迁到常显的
+**「整理 · 折叠」** 侧栏组;首次进入用一次性 coachmark 把透明度三件套指出来。
+
+![整理·折叠 组常显 + 透明度首次 coachmark](docs/screenshots/22-transparency-tools.png)
 
 ## 快速开始
 

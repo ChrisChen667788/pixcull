@@ -54,8 +54,13 @@ tasks:
 完整源码 + iOS 伴侣 App + Lightroom 插件,均在 GitHub:
 **[github.com/ChrisChen667788/pixcull](https://github.com/ChrisChen667788/pixcull)**
 
-## v0.7 → v2.10 主要更新
+## v0.7 → v2.11 主要更新
 
+- **v2.11**:**透明度的可发现性 + 解释深化** —— 近重复折叠 + 🎬 时序场景 原来埋在
+  默认隐藏的「连拍」侧栏组里(无连拍的 run 整组消失、入口找不到),现迁到**常显的
+  「整理 · 折叠」组**,每个 run 都看得到(顺带修好自 v2.9 起作用域写错、一直没样式
+  的相似度滑块)· 首次进入用一次性 **coachmark** 介绍透明度三件套 · 判定 glass box
+  的一句话理由升级为**逐轴驱动**(「构图 4.8★ 撑分,光线 2.5★ 拖后腿」,取自 rubric)
 - **v2.10**:v2.9 透明切片的打磨 —— **Scenes 网格内联分段 header**(时序、每段
   一个 header,不止顶部导航条;小批量 ≤200 张走内联,更大保留导航条)· **人脸
   Close-up 点击在主图上定位**(脉冲框把裁切映射回全幅画面)
@@ -263,6 +268,13 @@ Vision3 / Arri 709A / Teal-Orange / B&W),主画面 + 每个候选缩略图实时
 展开看逐轴评分 + 信号 + AI 判读(渐进披露)。
 
 ![判定 glass box — 展开后显示判定 + 一句话理由 + 6 轴评分 + 信号 + AI 判读](docs/screenshots/21-verdict-glassbox.png)
+
+### v2.11 · 透明度的可发现性
+
+**整理 · 折叠 组常显 + 首次 coachmark** —— 近重复折叠 / 时序场景 不再藏在连拍组里,
+每个 run 都看得到入口;首次进入一次性引导透明度三件套。
+
+![整理·折叠 组常显 + 透明度首次 coachmark](docs/screenshots/22-transparency-tools.png)
 
 ---
 

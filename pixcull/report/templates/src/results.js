@@ -764,6 +764,9 @@
     buildLocationFilters();
     // V27 — burst peak toggle (sports/event "THE shot" picker).
     buildBurstPeakFilter();
+    // v2.11-P0-1 — general view/organise toggles (near-dup fold + Scenes),
+    // in their own always-visible sidebar group (discoverable on every run).
+    buildViewToggles();
     // P2.4 — active-learning toggle (label the highest-info-gain
     // photos first).
     buildActiveLearningFilter();
@@ -1109,71 +1112,14 @@
         `title="打开并排比较 — 从第一个连拍组开始,←/→ 翻页">` +
         `⊞ 并排比较</span>`;
     }
-    // v2.6-P1 — visual near-duplicate fold. CLIP-based, so it also
-    // catches the re-shot composition minutes later that time-bucketed
-    // bursts can't. First toggle lazily builds the embeddings cache.
-    html +=
-      `<span class="pill neardup-toggle${filterState.nearDupFold ? ' active' : ''}" ` +
-      `title="按视觉相似度(CLIP)把近重复折成一张代表;点卡片角的 ≈N 并排比较 — 首次开启需建索引,稍慢">` +
-      `≈ 近重复折叠</span>`;
-    // v2.9-P1-1 — Scenes 时序叙事视图 toggle (Narrative Select's Scenes View).
-    // Reveals a navigator strip of capture-time scenes; clicking a scene chip
-    // restricts the grid to that segment.
-    html +=
-      `<span class="pill scenes-toggle${filterState.scenesView ? ' active' : ''}" ` +
-      `title="按拍摄时间把这次拍摄切成时序场景, 点场景跳到那一段 — 叙事流, 而非一格格扁平网格">` +
-      `🎬 时序场景</span>`;
-    // v2.9-P0-2 — similarity slider (Peakto-style transparency). Visible only
-    // while the fold is active; dragging re-groups live so the user SEES the
-    // AI's grouping respond — black box → glass box.
-    if (filterState.nearDupFold) {
-      const thr = filterState.nearDupThreshold;
-      const nG = (_NEARDUP && _NEARDUP.byHero) ? _NEARDUP.byHero.size : 0;
-      const nH = (_NEARDUP && _NEARDUP.hidden) ? _NEARDUP.hidden.size : 0;
-      html +=
-        `<span class="neardup-sim" ` +
-        `title="相似度阈值 — 越高越严格(只折叠几乎相同的);越低越宽松(把相似构图也归一组)">` +
-          `<span class="neardup-sim-label">相似度</span>` +
-          `<input type="range" class="neardup-sim-range" min="0.80" max="0.99" step="0.01" ` +
-            `value="${thr.toFixed(2)}" aria-label="近重复相似度阈值">` +
-          `<span class="neardup-sim-val">${thr.toFixed(2)}</span>` +
-          `<span class="neardup-sim-stat">${nG} 组 · 折叠 ${nH} 张</span>` +
-        `</span>`;
-    }
+    // v2.11-P0-1 — the near-dup fold + Scenes toggles (general "organise the
+    // grid" tools, not burst-specific) moved OUT of this burst-gated sidebar
+    // group into the always-visible "整理 · 折叠" group (buildViewToggles).
+    // This group now hosts ONLY the burst pills, which is why it can stay tied
+    // to hasBursts. (Before v2.11 the near-dup/Scenes toggles were collateral-
+    // hidden on burst-less runs — they lived here and the whole group went
+    // display:none when _REAL_BURSTS was empty.)
     el.innerHTML = html;
-    el.querySelectorAll(".neardup-toggle").forEach(b => {
-      b.addEventListener("click", () => _toggleNearDupFold(b));
-    });
-    // v2.9-P1-1 — Scenes view toggle binding.
-    el.querySelectorAll(".scenes-toggle").forEach(b => {
-      b.addEventListener("click", () => _toggleScenesView(b));
-    });
-    // v2.9-P0-2 — restore saved threshold + wire the slider (debounced re-group).
-    const simRange = el.querySelector(".neardup-sim-range");
-    if (simRange) {
-      const valEl = el.querySelector(".neardup-sim-val");
-      const statEl = el.querySelector(".neardup-sim-stat");
-      let _simTimer = null;
-      simRange.addEventListener("input", () => {
-        const t = parseFloat(simRange.value);
-        filterState.nearDupThreshold = t;
-        if (valEl) valEl.textContent = t.toFixed(2);
-        try { localStorage.setItem(`pixcull_neardup_threshold:${run_id}`, String(t)); } catch (_) {}
-        if (statEl) statEl.textContent = "重新分组…";
-        clearTimeout(_simTimer);
-        _simTimer = setTimeout(() => {
-          _loadNearDup(t)
-            .then(({ nGroups, nHidden }) => {
-              if (statEl) statEl.textContent = `${nGroups} 组 · 折叠 ${nHidden} 张`;
-              render();   // re-fold the grid at the new threshold
-            })
-            .catch(err => {
-              if (statEl) statEl.textContent = "重算失败";
-              showToast("近重复重算失败: " + err.message, "error");
-            });
-        }, 250);
-      });
-    }
     el.querySelectorAll(".burst-collapse-toggle").forEach(b => {
       b.addEventListener("click", () => {
         filterState.collapseBursts = !filterState.collapseBursts;
@@ -1196,6 +1142,70 @@
         }
       });
     });
+  }
+
+  // v2.11-P0-1 — general "organise the grid" toggles (near-dup fold + Scenes).
+  // These are NOT burst-specific, so they live in the always-visible + open
+  // "整理 · 折叠" sidebar group (#viewToggles) and render on every run — fixing
+  // the v2.9/2.10 discoverability bug where they were hidden inside the
+  // burst-only group on burst-less runs. Builds the similarity slider (with its
+  // debounced live re-group) when the fold is active.
+  function buildViewToggles() {
+    const el = document.getElementById("viewToggles");
+    if (!el) return;
+    let html =
+      `<span class="pill neardup-toggle${filterState.nearDupFold ? ' active' : ''}" ` +
+      `title="按视觉相似度(CLIP)把近重复折成一张代表;点卡片角的 ≈N 并排比较 — 首次开启需建索引,稍慢">` +
+      `≈ 近重复折叠</span>` +
+      `<span class="pill scenes-toggle${filterState.scenesView ? ' active' : ''}" ` +
+      `title="按拍摄时间把这次拍摄切成时序场景, 点场景跳到那一段 — 叙事流, 而非一格格扁平网格">` +
+      `🎬 时序场景</span>`;
+    if (filterState.nearDupFold) {
+      const thr = filterState.nearDupThreshold;
+      const nG = (_NEARDUP && _NEARDUP.byHero) ? _NEARDUP.byHero.size : 0;
+      const nH = (_NEARDUP && _NEARDUP.hidden) ? _NEARDUP.hidden.size : 0;
+      html +=
+        `<span class="neardup-sim" ` +
+        `title="相似度阈值 — 越高越严格(只折叠几乎相同的);越低越宽松(把相似构图也归一组)">` +
+          `<span class="neardup-sim-label">相似度</span>` +
+          `<input type="range" class="neardup-sim-range" min="0.80" max="0.99" step="0.01" ` +
+            `value="${thr.toFixed(2)}" aria-label="近重复相似度阈值">` +
+          `<span class="neardup-sim-val">${thr.toFixed(2)}</span>` +
+          `<span class="neardup-sim-stat">${nG} 组 · 折叠 ${nH} 张</span>` +
+        `</span>`;
+    }
+    el.innerHTML = html;
+    el.querySelectorAll(".neardup-toggle").forEach(b => {
+      b.addEventListener("click", () => _toggleNearDupFold(b));
+    });
+    el.querySelectorAll(".scenes-toggle").forEach(b => {
+      b.addEventListener("click", () => _toggleScenesView(b));
+    });
+    const simRange = el.querySelector(".neardup-sim-range");
+    if (simRange) {
+      const valEl = el.querySelector(".neardup-sim-val");
+      const statEl = el.querySelector(".neardup-sim-stat");
+      let _simTimer = null;
+      simRange.addEventListener("input", () => {
+        const t = parseFloat(simRange.value);
+        filterState.nearDupThreshold = t;
+        if (valEl) valEl.textContent = t.toFixed(2);
+        try { localStorage.setItem(`pixcull_neardup_threshold:${run_id}`, String(t)); } catch (_) {}
+        if (statEl) statEl.textContent = "重新分组…";
+        clearTimeout(_simTimer);
+        _simTimer = setTimeout(() => {
+          _loadNearDup(t)
+            .then(({ nGroups, nHidden }) => {
+              if (statEl) statEl.textContent = `${nGroups} 组 · 折叠 ${nHidden} 张`;
+              render();
+            })
+            .catch(err => {
+              if (statEl) statEl.textContent = "重算失败";
+              showToast("近重复重算失败: " + err.message, "error");
+            });
+        }, 250);
+      });
+    }
   }
 
   // v2.6-P1 — near-dup fold state. byHero maps a group's representative
@@ -2763,6 +2773,21 @@
     const has = !!(faces && faces.length);
     grp.hidden = !has;
     if (has && countEl) countEl.textContent = String(faces.length);
+    // v2.11-P1-2 — first time the 👤 close-ups toggle appears (a faces photo
+    // opened), pulse it once so users discover the face close-ups rail.
+    // One-time, own key — never nags after the first faces photo.
+    if (has) {
+      try {
+        if (localStorage.getItem("pixcull_seen_closeups_v1") !== "1") {
+          const tog = document.getElementById("lbFacesToggle");
+          if (tog) {
+            tog.classList.add("onboard-pulse");
+            setTimeout(() => tog.classList.remove("onboard-pulse"), 5000);
+          }
+          localStorage.setItem("pixcull_seen_closeups_v1", "1");
+        }
+      } catch (e) { /* localStorage disabled — skip the hint */ }
+    }
   }
 
   // v2.10-P0-2 — click a face crop → pulse a locator box over that face on the
@@ -3874,7 +3899,28 @@
       const head = s.split(/[。．.!?！？\n]/)[0].trim();
       return head.length > 46 ? head.slice(0, 45) + "…" : head;
     };
+    // v2.11-P1-1 — per-axis driver: name the strongest + weakest scoring axis
+    // ("构图 4.8★ 撑分,光线 2.5★ 拖后腿") straight from rubric_stars. The most
+    // decision-relevant, glanceable "why" — it leads the glass-box one-liner;
+    // the prose signals (rationale / strengths) stay in the expandable body.
+    const _axisDriverReason = () => {
+      const stars = r.rubric_stars || {};
+      const vals = axisNames
+        .map(n => [axisAbbr[n], stars[n]])
+        .filter(([, v]) => typeof v === "number");
+      if (vals.length < 2) return "";
+      vals.sort((a, b) => b[1] - a[1]);
+      const [hiAbbr, hi] = vals[0];
+      const [loAbbr, lo] = vals[vals.length - 1];
+      if (hi - lo >= 0.8) {
+        return `${hiAbbr} ${hi.toFixed(1)}★ 撑分,${loAbbr} ${lo.toFixed(1)}★ 拖后腿`;
+      }
+      const avg = vals.reduce((s, [, v]) => s + v, 0) / vals.length;
+      const tag = avg >= 3.5 ? "各轴均衡偏强" : avg <= 2.3 ? "各轴普遍偏弱" : "各轴均衡";
+      return `${tag}(约 ${avg.toFixed(1)}★)`;
+    };
     let oneLineReason =
+      _axisDriverReason() ||
       _firstSentence(rationale) ||
       (dec === "keep"
         ? _firstSentence(strengths[0])
@@ -8494,6 +8540,55 @@
       }
     }
     document.addEventListener("keydown", _onFirstAction, true);
+  })();
+
+  // v2.11-P0-2 — one-time coachmark for the transparency trio (near-dup
+  // fold + similarity slider · Scenes · verdict glass box). Powerful but
+  // previously undiscoverable (the toggles were buried; see v2.11-P0-1).
+  // Gated so it never overlaps the main onboarding card: it only fires once
+  // the user has already dismissed onboarding (returning + existing users),
+  // and only once ever (its own key). Pulses the new "整理 · 折叠" group +
+  // shows a compact tip.
+  (function _initTransparencyHint() {
+    const KEY = "pixcull_seen_transparency_v1";
+    try {
+      if (localStorage.getItem(KEY) === "1") return;
+      if (localStorage.getItem("pixcull_onboarded_v1") !== "1") return; // wait until main onboarding done
+    } catch (e) { return; }
+    setTimeout(() => {
+      const grp = document.querySelector('.lp-group[data-group="view"]');
+      if (!grp || document.querySelector(".transparency-hint")) return;
+      grp.classList.add("onboard-pulse");
+      setTimeout(() => grp.classList.remove("onboard-pulse"), 5500);
+      const tip = document.createElement("div");
+      tip.className = "onboard-tip transparency-hint";
+      tip.setAttribute("role", "complementary");
+      tip.setAttribute("aria-label", "透明度功能提示");
+      tip.innerHTML = `
+        <div class="onb-head">
+          <span class="onb-icon"><svg class="icon"><use href="#icon-sparkles"/></svg></span>
+          <span class="onb-title">看得见的 AI</span>
+          <button class="onb-close" type="button" aria-label="关闭提示">✕</button>
+        </div>
+        <ul class="onb-list">
+          <li>左栏 <b>整理 · 折叠</b> 里 <b>≈ 近重复折叠</b> + 相似度滑块:拖一拖,看 AI 怎么把近似画面归组(可调,不是黑箱)</li>
+          <li><b>🎬 时序场景</b>:按拍摄时间把这次拍摄切成叙事段落</li>
+          <li>点开任意照片,顶部 <b>🔍 为什么</b> 一行讲清这张为何 keep / maybe / cull</li>
+        </ul>
+        <button class="onb-dismiss" type="button">知道了</button>`;
+      document.body.appendChild(tip);
+      requestAnimationFrame(() => tip.classList.add("show"));
+      let dismissed = false;
+      function dismiss() {
+        if (dismissed) return;
+        dismissed = true;
+        tip.classList.remove("show");
+        setTimeout(() => tip.remove(), 400);
+        try { localStorage.setItem(KEY, "1"); } catch (e) {}
+      }
+      tip.querySelector(".onb-close").addEventListener("click", dismiss);
+      tip.querySelector(".onb-dismiss").addEventListener("click", dismiss);
+    }, 1600);   // let render() + buildViewToggles() populate the group first
   })();
 
   // ==================================================================

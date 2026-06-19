@@ -46,9 +46,12 @@ script now strips `README.md`/`*.md`/`docs/` LFS rules and pins
 `README.md text` before each upload.  Never use `--github-links` unless
 you specifically want CDN-linked images instead of ModelScope-hosted.
 
-New screenshots: next free number is **22** (01–21 used; 17 =
+New screenshots: next free number is **23** (01–22 used; 17 =
 attribution-heatmap, 18 = video-review, 19 = video-grade, 20 =
-scenes-navigator, 21 = verdict-glassbox).  The
+scenes-navigator, 21 = verdict-glassbox, 22 = transparency-tools).  23 is
+reserved for the deferred baby face-Close-ups shot (feature verified; the
+headless capture is killed by this host — capture it locally via
+`scripts/brand/capture_real_screenshots.sh`).  The
 animated architecture / sequence / data-flow diagrams live separately in
 `docs/diagrams/` (SVG for GitHub, GIF for ModelScope).
 

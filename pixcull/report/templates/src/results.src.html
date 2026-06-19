@@ -525,6 +525,16 @@
             <span class="pill" data-d="cull" data-i18n="decision.cull">cull</span>
           </div>
         </details>
+        <!-- v2.11-P0-1 — always-visible "organise the grid" group: near-dup
+             fold (+ similarity slider) and Scenes. Lives here (not the
+             burst-only group) so the transparency tools are discoverable on
+             every run. Populated by buildViewToggles(). -->
+        <details class="lp-group" open data-group="view">
+          <summary data-i18n="library.group.view">整理 · 折叠</summary>
+          <div class="lp-content">
+            <span class="filter-group" id="viewToggles"></span>
+          </div>
+        </details>
         <details class="lp-group" open data-group="scene">
           <summary data-i18n="library.group.scene">场景</summary>
           <div class="lp-content">

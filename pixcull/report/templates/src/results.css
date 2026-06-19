@@ -1340,38 +1340,39 @@
        Shown beside the fold pill while folding; lets the user SEE the AI's
        grouping respond to the threshold. Editorial-warm: brass thumb, muted
        readout, no loud chrome (restraint per the v2.8 reflection). */
-    .filters .neardup-sim {
-      display: inline-flex; align-items: center; gap: 7px;
-      padding: 2px 10px; border: 1px solid var(--border);
-      border-radius: 999px; background: var(--bg-card);
+    .neardup-sim {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 5px 8px;
+      margin-top: 6px; padding: 5px 10px; border: 1px solid var(--border);
+      border-radius: 12px; background: var(--bg-card);
       font-size: 10.5px; color: var(--muted);
     }
-    .filters .neardup-sim-label { color: var(--fg-2); letter-spacing: .02em; }
-    .filters .neardup-sim-val {
+    .neardup-sim-label { color: var(--fg-2); letter-spacing: .02em; }
+    .neardup-sim-val {
       min-width: 2.4em; text-align: right; color: var(--accent-hi);
       font-variant-numeric: tabular-nums; font-weight: 600;
     }
-    .filters .neardup-sim-stat {
-      color: var(--muted-soft); padding-left: 7px;
-      border-left: 1px solid var(--border); font-variant-numeric: tabular-nums;
+    .neardup-sim-stat {
+      flex: 1 1 100%; color: var(--muted-soft);
+      font-variant-numeric: tabular-nums;
     }
-    .filters .neardup-sim-range {
+    .neardup-sim-range {
       -webkit-appearance: none; appearance: none;
-      width: 96px; height: 3px; border-radius: 999px;
+      flex: 1 1 80px; min-width: 80px; max-width: 130px;
+      height: 3px; border-radius: 999px;
       background: var(--surface-3); outline: none; cursor: pointer;
     }
-    .filters .neardup-sim-range::-webkit-slider-thumb {
+    .neardup-sim-range::-webkit-slider-thumb {
       -webkit-appearance: none; appearance: none;
       width: 13px; height: 13px; border-radius: 50%;
       background: var(--accent); border: 2px solid var(--bg-card);
       box-shadow: 0 0 0 1px var(--accent-hi);
     }
-    .filters .neardup-sim-range::-moz-range-thumb {
+    .neardup-sim-range::-moz-range-thumb {
       width: 13px; height: 13px; border-radius: 50%;
       background: var(--accent); border: 2px solid var(--bg-card);
       box-shadow: 0 0 0 1px var(--accent-hi);
     }
-    .filters .neardup-sim-range:focus-visible {
+    .neardup-sim-range:focus-visible {
       box-shadow: 0 0 0 3px var(--focus-ring);
     }
     /* v2.9-P1-1 — Scenes 时序叙事导航条 (Narrative Select's Scenes View).
