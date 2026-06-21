@@ -1153,6 +1153,7 @@
   function buildViewToggles() {
     const el = document.getElementById("viewToggles");
     if (!el) return;
+    clearTimeout(_simTimer);   // cancel any in-flight slider re-group debounce
     let html =
       `<span class="pill neardup-toggle${filterState.nearDupFold ? ' active' : ''}" ` +
       `title="按视觉相似度(CLIP)把近重复折成一张代表;点卡片角的 ≈N 并排比较 — 首次开启需建索引,稍慢">` +
@@ -1185,7 +1186,6 @@
     if (simRange) {
       const valEl = el.querySelector(".neardup-sim-val");
       const statEl = el.querySelector(".neardup-sim-stat");
-      let _simTimer = null;
       simRange.addEventListener("input", () => {
         const t = parseFloat(simRange.value);
         filterState.nearDupThreshold = t;
@@ -1196,6 +1196,9 @@
         _simTimer = setTimeout(() => {
           _loadNearDup(t)
             .then(({ nGroups, nHidden }) => {
+              // Fold may have been toggled off (and the toolbar rebuilt) while
+              // this debounce was in flight — statEl is then a detached node.
+              if (!filterState.nearDupFold) return;
               if (statEl) statEl.textContent = `${nGroups} 组 · 折叠 ${nHidden} 张`;
               render();
             })
@@ -1206,6 +1209,22 @@
         }, 250);
       });
     }
+  }
+
+  // v2.13 — rebuild ALL sidebar filter controls from the current filterState.
+  // render() repaints only the GRID; the sidebar pill groups (#burstPeakFilter,
+  // #locationFilters, #faceFilters, #viewToggles) are each produced by a
+  // separate build*() called once at init and NOT by render().  Any code path
+  // that mutates filterState in BULK (preset apply, ⌘K reset, empty-state
+  // reset, Smart-Collection restore) must call this so the pills' .active
+  // states track the new filterState — otherwise the grid filters correctly
+  // but the toggles are left visually stale (the same bug class as the
+  // near-dup slider that never mounted).
+  function _rebuildFilterControls() {
+    buildBurstPeakFilter();
+    buildLocationFilters();
+    buildFaceFilters();
+    buildViewToggles();
   }
 
   // v2.12-③ — LOCAL-ONLY discoverability metric. Counts first + total uses of
@@ -1230,6 +1249,12 @@
   // (highest score_final, server-picked) to ALL group members; hidden is
   // the flat set of folded-away non-heroes.
   let _NEARDUP = null;
+  // v2.13 — slider re-group debounce handle, MODULE-LEVEL so a buildViewToggles()
+  // rebuild (which recreates the slider) can cancel any in-flight debounce.  When
+  // it lived inside buildViewToggles()'s closure, each rebuild forgot the prior
+  // handle and a stale timer could fire and clobber _NEARDUP with old-threshold
+  // data after the user had already toggled fold off / re-grouped.
+  let _simTimer = null;
 
   // v2.9-P0-2 — fetch near-dup groups at a given similarity threshold and
   // rebuild the _NEARDUP fold maps. Returns Promise<{nGroups, nHidden}>.
@@ -1251,16 +1276,23 @@
   }
 
   function _toggleNearDupFold(btn) {
+    // IMPORTANT: the similarity slider + the toggle's own label/active state
+    // live in the #viewToggles group, which is built ONLY by
+    // buildViewToggles().  render() repaints the GRID, not the sidebar
+    // toolbars — so after flipping nearDupFold we MUST call buildViewToggles()
+    // for the slider to mount and the button text to reset.  (Pre-v2.13 these
+    // branches relied on render() to "re-render the toolbar"; it never did, so
+    // the slider never appeared and the toggle stayed stuck on "≈ 建索引中…".)
     if (filterState.nearDupFold) {
       filterState.nearDupFold = false;
-      btn.classList.remove("active");
+      buildViewToggles();   // drop the slider, reset the toggle label
       render();
       return;
     }
     if (_NEARDUP) {                       // already fetched → instant fold
       filterState.nearDupFold = true;
       _track("neardup_fold");
-      btn.classList.add("active");
+      buildViewToggles();   // mount the slider, mark the toggle active
       render();
       return;
     }
@@ -1279,13 +1311,14 @@
         if (!nGroups) {
           showToast(`未发现视觉近重复组(阈值 ${filterState.nearDupThreshold.toFixed(2)})`);
         }
-        render();   // re-renders the toolbar (now showing the slider) + grid
+        buildViewToggles();   // rebuild the group → mounts slider + resets label
+        render();
       })
       .catch(err => {
         showToast("近重复索引失败: " + err.message, "error");
         btn.textContent = "≈ 近重复折叠";
       })
-      .finally(() => { btn.style.opacity = ""; });
+      .finally(() => { if (btn.isConnected) btn.style.opacity = ""; });
   }
 
   // ── v2.9-P1-1 — Scenes 时序叙事视图 (Narrative Select's Scenes View) ────────
@@ -1355,7 +1388,11 @@
     const finish = () => {
       filterState.scenesView = true;
       _track("scenes_view");
-      btn.classList.add("active");
+      // Rebuild #viewToggles rather than poking btn directly: a concurrent
+      // near-dup toggle (which calls buildViewToggles) may have detached btn
+      // while this scenes fetch was in flight.  Rebuilding reads scenesView=true
+      // and marks the LIVE .scenes-toggle active.
+      buildViewToggles();
       render();          // v2.10-P0-1 — repaint so _applySceneSections inserts the inline headers
       _renderSceneNav(); // navigator strip (separate element, survives the grid repaint)
       if (!(_SCENES && _SCENES.length)) showToast("未能按时间分出场景(可能缺少 EXIF 拍摄时间)");
@@ -1366,7 +1403,7 @@
       .then(r => r.ok ? r.json() : Promise.reject(new Error("HTTP " + r.status)))
       .then(d => { _SCENES = d.scenes || []; finish(); })
       .catch(err => showToast("场景加载失败: " + err.message, "error"))
-      .finally(() => { btn.style.opacity = ""; });
+      .finally(() => { if (btn.isConnected) btn.style.opacity = ""; });
   }
 
   // v2.10-P0-1 — Scenes INLINE section headers. The v2.9 navigator filters to
@@ -2281,9 +2318,17 @@
         filterState.cullReason = null;
         // P-UX-27 — same for the wedding-moment filter
         filterState.weddingMoments.clear();
+        // v2.13 — "重置所有筛选" previously left face / location / burst filters
+        // ACTIVE, so the grid stayed silently filtered after a "reset all".
+        // Clear them too, then rebuild their sidebar pills below.
+        filterState.faceClusters.clear();
+        filterState.locationClusters.clear();
+        filterState.burstPeakOnly = false;
+        filterState.locationBestOnly = false;
         document.querySelectorAll("#decisionPills .pill, #sceneFilters .pill, #styleFilters .pill, #cullReasonFilter .pill")
           .forEach(el => el.classList.remove("active"));
         document.querySelector('#decisionPills .pill[data-d="all"]')?.classList.add("active");
+        _rebuildFilterControls();
         render();
       });
       // v0.9-P2-3 — search-empty CTA: clear just the semantic search,
@@ -2488,6 +2533,7 @@
     });
     document.getElementById("sortBy").value = filterState.sort;
     _rebuildPresetDropdown();
+    _rebuildFilterControls();   // sync burst/location/face/view pill active states
     render();
   }
   function _rebuildPresetDropdown() {
@@ -5603,6 +5649,7 @@
       filterState.semSearch = null;
       document.querySelectorAll("#decisionPills .pill").forEach(el =>
         el.classList.toggle("active", el.dataset.d === "all"));
+      _rebuildFilterControls();   // clear burst/location/face/view pill highlights too
       render();
     }
   }
@@ -10446,7 +10493,18 @@
       if (item.sort && typeof window.sortBy !== "undefined") {
         window.sortBy = item.sort;
       }
-      if (typeof window.render === "function") window.render();
+      // v2.13 — `window.render` is NEVER exposed, so the old
+      // `window.render()` here was a dead no-op: restoring a collection
+      // re-wrote filterState but never repainted.  render()/_rebuildFilterControls()
+      // are in lexical scope (this nested IIFE lives inside the main one), so
+      // call them directly — repaint the grid AND rebuild the sidebar pills +
+      // decision/sort controls from the freshly Object.assign-ed filterState.
+      document.querySelectorAll("#decisionPills .pill").forEach(el =>
+        el.classList.toggle("active", el.dataset.d === filterState.decision));
+      const _sortSel = document.getElementById("sortBy");
+      if (_sortSel && typeof filterState.sort === "string") _sortSel.value = filterState.sort;
+      if (typeof _rebuildFilterControls === "function") _rebuildFilterControls();
+      if (typeof render === "function") render();
       if (typeof window.toast === "function") {
         window.toast(`✦ 已恢复收藏:${item.name}`, "info");
       }

@@ -52,6 +52,20 @@
 
 ## What's new
 
+**v2.13** — **root-caused the "screenshot hang" and fixed a real UI bug**
+(see [`docs/ROADMAP-v2.13-charter.md`](docs/ROADMAP-v2.13-charter.md)). The v2.12
+"body-not-delivered to headless chromium" theory was **wrong**: the similarity
+**slider simply never mounted** — `render()` only repaints the grid, never the
+sidebar `#viewToggles` group that the slider lives in, and nothing called
+`buildViewToggles()` after the fold toggle (this reproduces in a real browser, not
+just headless). Fixed, then an adversarial review pass swept the **same bug class**
+across the frontend and fixed **8 more**: preset-apply / ⌘K-reset / "reset all
+filters" / Smart-Collection restore all left sidebar pills visually stale (and
+"reset all" was silently *keeping* face/location/burst filters active; Smart-
+Collection restore's `window.render()` was a dead no-op that never repainted at
+all). Plus a module-level debounce fix + detached-node guards. A new DRY helper
+`_rebuildFilterControls()` keeps the sidebar in sync with `filterState`.
+
 **v2.12** — explanation goes one level deeper + local discoverability metrics
 (see [`docs/ROADMAP-v2.12-charter.md`](docs/ROADMAP-v2.12-charter.md)). The verdict
 glass box no longer just *names* the weakest axis — it says **why it's low**,
