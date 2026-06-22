@@ -62,8 +62,10 @@ tasks:
   复现)· 修掉后一轮对抗式 review 把**同类 bug** 一网打尽:预设恢复 / ⌘K 重置 /
   「重置所有筛选」/ 收藏恢复 都让侧栏药丸 active 错乱(「重置所有筛选」更是**没清
   face/location/burst,网格被静默继续过滤**;收藏恢复的 `window.render()` 是死 no-op、
-  根本没重渲染)· 另修防抖闭包写脏 + 脱离节点守卫,抽出 `_rebuildFilterControls()`
-  统一同步(详见 `docs/ROADMAP-v2.13-charter.md`)
+  根本没重渲染)· **Selects 模式(⌘1)同款死 no-op,且 keep+maybe 过滤从未接进
+  render(),整个失效**(此前只弹 toast、网格纹丝不动),现真过滤 + brass 提示条 ·
+  另修防抖闭包写脏 + 脱离节点守卫,抽出 `_rebuildFilterControls()` 统一同步(详见
+  `docs/ROADMAP-v2.13-charter.md`)
 - **v2.12**:**解释再深一层 + 本地发现率埋点** —— 判定 glass box 不止点名最弱轴,
   还说**它为什么低**(从该行自身信号映射:「光线偏低 · 高光过曝 12%」「构图偏低 ·
   地平线倾斜 5°」「主体偏低 · 无明确主体」)· 透明度功能加**纯本地**使用计数

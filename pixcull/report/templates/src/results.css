@@ -2083,6 +2083,12 @@
       gap: var(--space-3);
       padding: var(--space-5) var(--space-6) var(--space-8);
     }
+    /* v2.13 — Selects mode (Cmd+1 → keep + maybe only) persistent cue: a soft
+       brass top rule so the filtered state stays obvious after the toast fades.
+       box-shadow (not border) avoids any grid-layout shift. */
+    #grid.selects-mode {
+      box-shadow: inset 0 3px 0 0 var(--accent-soft);
+    }
     /* v2.10-P0-1 — inline Scenes section header: spans the full grid row,
        introduces each time-ordered scene. Editorial-warm, restrained. */
     #grid .scene-section-header {

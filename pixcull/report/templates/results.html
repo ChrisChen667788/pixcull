@@ -2102,6 +2102,12 @@
       gap: var(--space-3);
       padding: var(--space-5) var(--space-6) var(--space-8);
     }
+    /* v2.13 — Selects mode (Cmd+1 → keep + maybe only) persistent cue: a soft
+       brass top rule so the filtered state stays obvious after the toast fades.
+       box-shadow (not border) avoids any grid-layout shift. */
+    #grid.selects-mode {
+      box-shadow: inset 0 3px 0 0 var(--accent-soft);
+    }
     /* v2.10-P0-1 — inline Scenes section header: spans the full grid row,
        introduces each time-ordered scene. Editorial-warm, restrained. */
     #grid .scene-section-header {
@@ -8749,7 +8755,12 @@
 
   function render() {
     let filtered = rows;
-    if (filterState.decision !== "all") {
+    // v0.13.12 Selects mode sentinel (v2.13 fix — was never actually wired):
+    // decision === "selects" means "keep + maybe only" (hide cull). Handled
+    // here rather than monkey-patching render() from setupSelectsMode's closure.
+    if (filterState.decision === "selects") {
+      filtered = filtered.filter(r => r.decision === "keep" || r.decision === "maybe");
+    } else if (filterState.decision !== "all") {
       filtered = filtered.filter(r => r.decision === filterState.decision);
     }
     if (filterState.scenes.size > 0) {
@@ -17383,7 +17394,14 @@
           filterState.decision = filterState._prevDecision || "all";
           delete filterState._prevDecision;
         }
-        if (typeof window.render === "function") window.render();
+        // v2.13 — `window.render` is never assigned (dead no-op); render() is
+        // in lexical scope here (setupSelectsMode is nested in the main IIFE),
+        // so call it directly — entering/leaving Selects mode now actually
+        // re-filters the grid.  Sync the decision pills too (none matches the
+        // "selects" sentinel, so they all deactivate while in Selects mode).
+        document.querySelectorAll("#decisionPills .pill").forEach(el =>
+          el.classList.toggle("active", el.dataset.d === filterState.decision));
+        if (typeof render === "function") render();
       }
       // Visual indicator on the grid root
       const grid = document.getElementById("grid");

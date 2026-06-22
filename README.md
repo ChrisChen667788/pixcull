@@ -63,8 +63,12 @@ across the frontend and fixed **8 more**: preset-apply / ⌘K-reset / "reset all
 filters" / Smart-Collection restore all left sidebar pills visually stale (and
 "reset all" was silently *keeping* face/location/burst filters active; Smart-
 Collection restore's `window.render()` was a dead no-op that never repainted at
-all). Plus a module-level debounce fix + detached-node guards. A new DRY helper
-`_rebuildFilterControls()` keeps the sidebar in sync with `filterState`.
+all). The same dead-`window.render()` pattern also left **Selects mode (⌘1)**
+completely inert — it set the filter sentinel but never re-rendered, and the
+"keep + maybe only" filter was never actually wired into `render()`; it now
+filters for real, with a brass top-rule cue. Plus a module-level debounce fix +
+detached-node guards. A new DRY helper `_rebuildFilterControls()` keeps the
+sidebar in sync with `filterState`.
 
 **v2.12** — explanation goes one level deeper + local discoverability metrics
 (see [`docs/ROADMAP-v2.12-charter.md`](docs/ROADMAP-v2.12-charter.md)). The verdict

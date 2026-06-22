@@ -1765,7 +1765,12 @@
 
   function render() {
     let filtered = rows;
-    if (filterState.decision !== "all") {
+    // v0.13.12 Selects mode sentinel (v2.13 fix — was never actually wired):
+    // decision === "selects" means "keep + maybe only" (hide cull). Handled
+    // here rather than monkey-patching render() from setupSelectsMode's closure.
+    if (filterState.decision === "selects") {
+      filtered = filtered.filter(r => r.decision === "keep" || r.decision === "maybe");
+    } else if (filterState.decision !== "all") {
       filtered = filtered.filter(r => r.decision === filterState.decision);
     }
     if (filterState.scenes.size > 0) {
@@ -10399,7 +10404,14 @@
           filterState.decision = filterState._prevDecision || "all";
           delete filterState._prevDecision;
         }
-        if (typeof window.render === "function") window.render();
+        // v2.13 — `window.render` is never assigned (dead no-op); render() is
+        // in lexical scope here (setupSelectsMode is nested in the main IIFE),
+        // so call it directly — entering/leaving Selects mode now actually
+        // re-filters the grid.  Sync the decision pills too (none matches the
+        // "selects" sentinel, so they all deactivate while in Selects mode).
+        document.querySelectorAll("#decisionPills .pill").forEach(el =>
+          el.classList.toggle("active", el.dataset.d === filterState.decision));
+        if (typeof render === "function") render();
       }
       // Visual indicator on the grid root
       const grid = document.getElementById("grid");
