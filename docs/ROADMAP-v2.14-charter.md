@@ -50,15 +50,37 @@
 的 maybe 短板),跑 check_v1_2_trigger;若三门绿,把 rescorer 配置从 `off` 翻到
 `adjudicate`(一行)。我可在你标完后协助跑门 + 翻配置 + golden-CSV 回归。
 
-## P1(后续,纯代码、我可做)
+## P1 — axis_weights 轴级个性化接线(已交付)
 
-- **axis_weights 接进 orchestrator**:`personal_learn.py` 已算逐轴权重(keep-cull 分歧),
-  但 orchestrator 只用 `personalized.py` 的标量 `keep_threshold_shift`。把逐轴重加权接进
-  per-row fusion(≥50 纠正才激活),让「重视构图胜于技术」的用户得到轴级个性化而非全局
-  阈值微移。**注意**:动 fusion 热路径,上线前必须 golden-CSV 回归(就像本轮 moment)。
+**问题**:`personal_learn.py` 已算逐轴权重(各轴 keep-mean−cull-mean 差),但 orchestrator
+只用 `personalized.py` 的**标量** `keep_threshold_shift`——「重视构图胜于技术」的用户和
+其他人拿到完全一样的轴权融合。
+
+**做了什么**:
+- `fusion.py`:`fuse_score` 加可选 `axis_pref` + `_personalize_weights()` 助手——把 rubric
+  轴偏好映射到 5 个 fusion 维(sharpness←technical / exposure←light / 其余 1:1;subject 无
+  对应维),按夹紧倍率 **[0.5, 2.0]** 倾斜每维权重、再**重归一化保持权重总和不变**(只改
+  分布不改尺度)。`axis_pref=None`(默认,所有其它调用方)→ **完全不变**。
+- `orchestrator.py`:profile 激活(≥50 纠正)时算 `_axis_pref = axis_weights(_pp)` 传入
+  fuse_score,并在 banner 打印「axis-weighted toward <最重轴>」。
+- 设计哲学与 ±0.08 阈值上限一致:**轻度倾斜而非覆盖**;退化/等权 profile 是 no-op。
+
+**验证**(严格遵循 [[评分热路径]] 纪律):
+- 单测 `tests/test_personal_axis_weights.py` 7 项(无 pref 兼容 / 等权 no-op / 倾斜方向 /
+  夹紧不塌缩 / 总和守恒 / axis_weights→fuse_score 真接线)。
+- **无 profile 端到端 A/B**:samples 逐帧 score_final **字节级一致**(axis_pref=None no-op
+  成立,默认用户零影响)。
+- **激活路径**(合成 composition-lover profile、keep_threshold_shift=0 隔离纯轴效应,用完
+  即删不污染本机):构图强帧提分、构图弱的 eagle keep→maybe——倾斜方向正确。
+- 完整门禁全绿。
+
+## 后续
+
 - **moment 轴深化**:若标注后 moment 仍弱,考虑把 `wedding_moment_confidence` 推广到
   非婚礼场景的表情/峰值代理,或接一个轻量表情检测器(让 `action_at_peak`/非婚礼
   `emotion_present` 不再 None)。
+- **P0-2 标注 session 仍待 owner**:axis_weights 现在真接进了热路径,但它要等你的真实纠正
+  (≥50)才激活——这又一次指向「真实标注是激活智能栈的总开关」。
 
 ## 方法论延续
 

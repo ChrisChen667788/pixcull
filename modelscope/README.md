@@ -64,7 +64,10 @@ tasks:
   回归**揪出一个 NaN→1.0 的真 bug**(pandas 把 None 转成 NaN、绕过 `is None` 检查,把
   score_final clamp 成 1.0 = 每张无信号照片恒 keep)——已修 + 加守卫测试。400 样本真实
   标注训练 + 翻到 adjudicate 由 owner 把关(伪造标注会毒化模型——RESCORER-V3 的教训)。
-  详见 `docs/ROADMAP-v2.14-charter.md`。
+  · 并接入**轴级个性化**:累计 ≥50 条纠正后,融合的逐轴权重会**倾斜**到你真正看重的轴
+  (重视构图的人,构图强的片子提分、弱的降级),而非只是全局阈值微移——夹紧在温和的
+  ±2× 内、无 profile 时完全不变(默认用户字节级一致,A/B 回归已验)。详见
+  `docs/ROADMAP-v2.14-charter.md`。
 - **v2.13**:**「抓图卡死」根因推翻 + 侧栏控件重建一致性** —— v2.12 那套「body 不
   送达无头 chromium」诊断**是错的**:真因是相似度**滑块从不挂载**(`render()` 只重绘
   网格、不重建侧栏 `#viewToggles`,折叠开启后没人调 `buildViewToggles()`;真浏览器也

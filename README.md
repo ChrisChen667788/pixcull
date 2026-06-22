@@ -66,7 +66,12 @@ from wedding-moment confidence. An end-to-end A/B regression caught a latent
 `score_final` to 1.0 = always-keep for every no-signal frame) — now fixed and
 guarded by a test. The 400-sample real-label training session + flipping the
 rescorer to adjudicate mode is owner-gated (fabricated labels poison the model —
-the RESCORER-V3 lesson).
+the RESCORER-V3 lesson). Also wires **axis-aware personalization**: once you have
+≥50 corrections, fusion's per-axis weights now *tilt* toward the axes you
+demonstrably value (a composition-lover's runs reward composition-strong frames
+and demote weak ones), not just a global threshold nudge — clamped to a gentle
+±2× and a no-op without a profile (generic runs stay byte-identical, verified by
+an A/B regression).
 
 **v2.13** — **root-caused the "screenshot hang" and fixed a real UI bug**
 (see [`docs/ROADMAP-v2.13-charter.md`](docs/ROADMAP-v2.13-charter.md)). The v2.12

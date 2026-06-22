@@ -59,11 +59,57 @@ def _aesthetic_blend(laion_aes: float, clipiqa_v: float) -> float:
     return 0.5 * aes_laion + 0.5 * aes_clip
 
 
+# v2.14-P1 — map each fusion dim to its closest rubric axis (the axes
+# personal_learn learns weights over). "subject" has no fusion dim, so it does
+# not reweight anything; the other five line up 1:1.
+_DIM_RUBRIC_AXIS = {
+    "sharpness":   "technical",
+    "composition": "composition",
+    "exposure":    "light",
+    "aesthetic":   "aesthetic",
+    "moment":      "moment",
+}
+_N_RUBRIC_AXES = 6  # technical, subject, composition, light, moment, aesthetic
+
+
+def _personalize_weights(
+    w: dict[str, float], axis_pref: dict[str, float]
+) -> dict[str, float]:
+    """Tilt the per-dim fusion weights toward the rubric axes THIS user values.
+
+    ``axis_pref`` is ``personal_learn.axis_weights(profile)`` — normalised over
+    the 6 rubric axes (sum 1).  Each fusion dim's weight is scaled by how much
+    its rubric axis exceeds the equal-weight baseline (1/6), clamped to
+    [0.5, 2.0] so a noisy profile nudges rather than overrides (mirrors the
+    ±0.08 threshold-shift cap's "gentle calibration").  The total weight budget
+    is PRESERVED (re-normalised), so only the score's emphasis shifts, not its
+    scale.  An uninformative profile (equal axis_pref) is a no-op by
+    construction; a missing/empty axis_pref returns ``w`` unchanged.
+    """
+    base_total = sum(w.values())
+    if base_total <= 0 or not axis_pref:
+        return w
+    eq = 1.0 / _N_RUBRIC_AXES
+    tilted: dict[str, float] = {}
+    for dim, wk in w.items():
+        ax = _DIM_RUBRIC_AXIS.get(dim)
+        rel = 1.0
+        if ax is not None and axis_pref.get(ax) is not None:
+            rel = max(0.5, min(2.0, axis_pref[ax] / eq))
+        tilted[dim] = wk * rel
+    t_total = sum(tilted.values())
+    if t_total <= 0:
+        return w
+    scale = base_total / t_total
+    return {dim: v * scale for dim, v in tilted.items()}
+
+
 def fuse_score(
     raw: dict[str, Any],
     flags: list[str],
     scene: str,
     config: PixCullConfig,
+    axis_pref: dict[str, float] | None = None,
 ) -> dict[str, float]:
     """Compute per-dimension scores + final weighted score.
 
@@ -79,6 +125,12 @@ def fuse_score(
     """
     tpl = config.template_for(scene)
     w = tpl.weights or config.defaults.get("weights", {})
+    # v2.14-P1 — axis-aware personalization: tilt the per-dim weights toward
+    # the axes this user demonstrably values. No-op when axis_pref is None
+    # (the default — every caller except the personalized orchestrator path),
+    # so generic runs are byte-identical.
+    if axis_pref:
+        w = _personalize_weights(w, axis_pref)
 
     sharp = _normalize_sharpness(
         raw.get("laplacian_subject"), raw.get("laplacian_global", 0), tpl

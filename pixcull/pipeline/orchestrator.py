@@ -165,25 +165,36 @@ def run_pipeline(
         progress_cb(total, total, "评分与决策…")
     # v2.4-P0-2b — apply the user's learned taste profile (no-op until they
     # have ≥ MIN_ANNS_FOR_PERSONALIZATION corrections). Shifts the keep/cull
-    # boundary inside decide(); the generic fusion score is unchanged.
+    # boundary inside decide().
+    # v2.14-P1 — ALSO tilt the per-axis fusion weights toward the axes the user
+    # demonstrably values (axis_weights from their keep-vs-cull gap), passed
+    # into fuse_score. Both are no-ops without an active profile, so generic
+    # runs are byte-identical (verified by an A/B regression).
     _personal_shift = 0.0
+    _axis_pref: dict[str, float] | None = None
     try:
         from pixcull.scoring.personalized import load_profile
         _pp = load_profile(Path.home() / ".pixcull" / "personal_profile.json")
         if _pp is not None and _pp.is_active():
+            from pixcull.scoring.personal_learn import axis_weights
             _personal_shift = float(_pp.keep_threshold_shift)
+            _axis_pref = axis_weights(_pp)
+            _top = max(_axis_pref, key=lambda a: _axis_pref[a]) if _axis_pref else "—"
             console.print(
                 f"[cyan]Personalized[/] keep/cull boundary shifted "
-                f"{_personal_shift:+.3f} (from {_pp.n_annotations} of your "
-                f"corrections; cares most about {_pp.most_cared_axis or '—'})")
+                f"{_personal_shift:+.3f} + axis-weighted toward [b]{_top}[/] "
+                f"(from {_pp.n_annotations} of your corrections; cares most "
+                f"about {_pp.most_cared_axis or '—'})")
     except Exception:
         _personal_shift = 0.0
+        _axis_pref = None
     decisions, dim_scores, reasons_all = [], [], []
     rescorer_preds: list[str | None] = []
     rescorer_probs: list[float | None] = []
     for _, row in df.iterrows():
         row_dict = row.to_dict()
-        dims = fuse_score(row_dict, row["flags"], row["scene"], config)
+        dims = fuse_score(row_dict, row["flags"], row["scene"], config,
+                          axis_pref=_axis_pref)
 
         # Score the rescorer *before* decide() so adjudicate mode can consume
         # its output. We pass dims' fusion scores back into row_dict since the
