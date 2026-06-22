@@ -18,18 +18,23 @@ pixcull/.venv/bin/python -m pixcull run /path/to/your/photos \
 
 ## 1. 标注(你的主观判断)
 
-两条路任选:
-- **Web UI**(推荐):`PYTHONPATH=. pixcull/.venv/bin/python scripts/serve_demo.py` →
-  打开 run,键盘 1/2/3 标 keep/maybe/cull;写入该 run 的 `annotations.jsonl`。
-- **ground_truth.csv**:在 `scores.csv` 旁建 `ground_truth.csv`,加 `manual_label` 列
-  (keep/maybe/cull)。
-
-**标哪些优先**——用不确定性优先队列(按场景补齐短板,偏 maybe 边界):
+**最省事:CSV 表格法(推荐)**——把 scores.csv 转成一张可直接填的表:
 ```bash
-pixcull/.venv/bin/python scripts/pick_next_to_label.py \
-  out/scores.csv ground_truth.csv --n 50 --out-csv next_to_label.csv
+pixcull/.venv/bin/python scripts/make_label_sheet.py out/scores.csv -o label_sheet.csv
 ```
-目标:**≥400 条**,按场景分层,重点补 landscape / portrait 的 maybe(审计 §V1.1 的短板)。
+用 Excel/Numbers 打开 `label_sheet.csv`(已按**不确定性优先**排序——模型最拿不准的
+maybe/keep 边界排最前,你的判断最值钱),在 **`manual_label`** 列填 `keep`/`maybe`/`cull`
+(留空=跳过),存回 CSV。表里带模型当前判定 + score_final + 各轴星做参考。
+> 样例:仓库根的 `label_sheet_DEMO.csv`(由 6 张样例生成)就是这个格式,可先打开看看。
+
+或两条传统路:
+- **Web UI**:`PYTHONPATH=. pixcull/.venv/bin/python scripts/serve_demo.py` → 打开 run,
+  键盘 1/2/3 标;写入 `annotations.jsonl`。
+- **`pick_next_to_label.py`**(已有 gt 时,挑下一批补场景短板):
+  `... scripts/pick_next_to_label.py out/scores.csv ground_truth.csv --n 50 --out-csv next.csv`
+
+目标:**≥400 条**,按场景分层,重点补 landscape / portrait 的 maybe(审计 §V1.1 短板)。
+填好的 `label_sheet.csv`(`filename` + `manual_label`)就是 ground-truth,交给第 2 步。
 
 ## 2. 导出训练集 + 跑「能不能发」门禁
 

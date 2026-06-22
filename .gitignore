@@ -83,3 +83,6 @@ goldenset/v0.11/training.csv
 
 # modelscope upload cache (transient)
 docs/screenshots/.ms_upload_cache
+
+# v2.14 — local labeling sheets (may contain real photo filenames; keep private)
+label_sheet*.csv
