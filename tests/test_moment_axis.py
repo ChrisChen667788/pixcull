@@ -81,15 +81,28 @@ def test_emotion_present_from_wedding_confidence():
     ev = rubric_decompose._check_eval
     assert ev("emotion_present", {"wedding_moment_confidence": 0.8}) is True
     assert ev("emotion_present", {"wedding_moment_confidence": 0.3}) is False
-    assert ev("emotion_present", {"wedding_moment_confidence": None}) is None
-    assert ev("emotion_present", {}) is None  # non-wedding frame → skip, not faked
+    assert ev("emotion_present", {"wedding_moment_confidence": None, "face_count": 0}) is None
 
 
-def test_action_at_peak_stays_unmodelled():
-    # No honest signal exists for stills — must stay None (skipped from the
-    # denominator) rather than fabricate a value.
+def test_emotion_present_from_smile_non_wedding():
+    # v2.14-P1.1 — non-wedding faces: a smiling face is real emotion present.
     ev = rubric_decompose._check_eval
-    assert ev("action_at_peak", {"wedding_moment_confidence": 0.9}) is None
+    assert ev("emotion_present", {"face_count": 1, "face_max_smile": 0.7}) is True
+    assert ev("emotion_present", {"face_count": 1, "face_max_smile": 0.05}) is False
+    assert ev("emotion_present", {"face_count": 1}) is None          # no smile signal → skip
+    assert ev("emotion_present", {"face_count": 0}) is None          # faceless → skip
+
+
+def test_action_at_peak_from_real_burst_only():
+    # v2.14-P1.1 — only a REAL burst's crowned frame is the action peak.
+    ev = rubric_decompose._check_eval
+    # real burst winner: is_burst_peak True + a non-empty reason
+    assert ev("action_at_peak", {"is_burst_peak": True, "burst_peak_reason": "最锐 +1.6σ"}) is True
+    # real burst, lost the race
+    assert ev("action_at_peak", {"is_burst_peak": False, "burst_peak_reason": ""}) is False
+    # singleton: trivially is_burst_peak True but no reason → no sequence → skip
+    assert ev("action_at_peak", {"is_burst_peak": True, "burst_peak_reason": ""}) is None
+    # no burst info at all → skip
     assert ev("action_at_peak", {}) is None
 
 

@@ -59,8 +59,10 @@ tasks:
 - **v2.14**:**真实标注 + 激活智能栈:把 moment 轴去 stub,让它真能被学到** —— 审计
   (`docs/DESIGN-AUDIT-2030Q2.md`,3/5)发现产品最响亮的「决定性瞬间」轴在融合里对**每张
   照片恒等于 0.5**、rubric 三个 check 有两个永远返回 None。常数特征零信息 → rescorer
-  **永远学不动这条轴**。现在有真信号时写真值(wedding moment 置信度 / 人脸睁眼-眨眼),
-  无信号时保留中性(风光不变),`emotion_present` 在婚礼场景从置信度真评估。端到端 A/B
+  **永远学不动这条轴**。现在有真信号时写真值(wedding moment 置信度 / 人脸微笑·睁眼),
+  无信号时保留中性(风光不变);`emotion_present` 用 wedding 置信度+人脸微笑 blendshape 评估、
+  `action_at_peak` 接连拍峰值排名器(真连拍加冕的那帧=捕捉到的动作峰值,单张诚实不评)——
+  曾经恒定的 moment 轴终于是可学习的非退化特征。端到端 A/B
   回归**揪出一个 NaN→1.0 的真 bug**(pandas 把 None 转成 NaN、绕过 `is None` 检查,把
   score_final clamp 成 1.0 = 每张无信号照片恒 keep)——已修 + 加守卫测试。400 样本真实
   标注训练 + 翻到 adjudicate 由 owner 把关(伪造标注会毒化模型——RESCORER-V3 的教训)。

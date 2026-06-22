@@ -158,7 +158,15 @@ def analyze_one(path: Path) -> Optional[dict]:
     if wedding_moment_confidence is not None:
         moment_score = float(wedding_moment_confidence)
     elif face_count >= 1:
-        moment_score = 0.40 if ("closed_eyes" in flags) else 0.60
+        if "closed_eyes" in flags:
+            moment_score = 0.40
+        else:
+            # v2.14-P1.1 — a smiling, open-eyed face is a stronger moment than
+            # a neutral one. face_max_smile is the MediaPipe smile blendshape
+            # (0..1). Neutral (smile 0) stays at the prior 0.60 baseline; a full
+            # smile lifts it to 0.85. Real expression signal, bounded.
+            _smile = float(face.metrics.get("face_max_smile") or 0.0)
+            moment_score = round(min(0.85, 0.60 + 0.25 * _smile), 4)
 
     return {
         "path": str(path),

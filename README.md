@@ -59,9 +59,12 @@ be learned** (see [`docs/ROADMAP-v2.14-charter.md`](docs/ROADMAP-v2.14-charter.m
 **constant 0.5 placeholder for every photo** in fusion, plus two of its three
 rubric checks always returned `None`. A constant feature carries zero information,
 so the rescorer could *never* learn it. Now `moment_score` is a real signal where
-one honestly exists (wedding-moment confidence; face eyes-open/blink), left neutral
-where no signal exists (landscapes unchanged), and `emotion_present` is evaluated
-from wedding-moment confidence. An end-to-end A/B regression caught a latent
+one honestly exists (wedding-moment confidence; face smile/eyes), left neutral
+where no signal exists (landscapes unchanged); `emotion_present` is evaluated from
+wedding-moment confidence **and** the face smile blendshape; and `action_at_peak`
+now resolves from the burst-peak ranker — within a real burst, the crowned frame
+*is* the captured action moment (singletons honestly stay unscored). The
+once-constant "moment" axis is finally a learnable, non-degenerate feature. An end-to-end A/B regression caught a latent
 **NaN→1.0 bug** (a pandas `None`→`NaN` slipped past an `is None` check and clamped
 `score_final` to 1.0 = always-keep for every no-signal frame) — now fixed and
 guarded by a test. The 400-sample real-label training session + flipping the

@@ -199,19 +199,35 @@ def _check_eval(check_key: str, row: dict[str, Any]) -> bool | None:
             return None
         return not _flag(row, "closed_eyes")
     if check_key == "action_at_peak":
-        # Genuinely needs a peak/action model or a human label — no honest
-        # signal exists for stills, so stay None (skipped from the denominator)
-        # rather than fabricate one. (v2.14: still unmodelled by design.)
-        return None
-    if check_key == "emotion_present":
-        # v2.14 — no general expression detector, but for wedding scenes the
-        # moment classifier estimates emotional/decisive peak in [0,1]; a
-        # confident wedding-moment is real "emotion present" signal. Non-wedding
-        # frames stay None (skipped) — honest, not faked.
-        wmc = _f(row, "wedding_moment_confidence")
-        if wmc is None:
+        # v2.14-P1.1 — within a REAL burst (size≥2), the frame the burst-peak
+        # ranker crowned (non-empty burst_peak_reason, e.g. "最锐 +1.6σ") IS the
+        # captured action peak; a burst frame that lost the race
+        # (is_burst_peak False) is not. A singleton (is_burst_peak trivially
+        # True but no reason — "peak of 1") has no action sequence to peak
+        # within, so stay None (skipped) rather than fabricate a peak.
+        bp = row.get("is_burst_peak")
+        if bp is None or (isinstance(bp, float) and bp != bp):  # missing / NaN
             return None
-        return wmc >= 0.5
+        is_peak = bp in (True, "True", "true", 1, "1")
+        if not is_peak:
+            return False
+        reason = row.get("burst_peak_reason")
+        return True if (isinstance(reason, str) and reason.strip()) else None
+    if check_key == "emotion_present":
+        # v2.14 — wedding scenes: the moment classifier estimates emotional /
+        # decisive peak in [0,1].
+        wmc = _f(row, "wedding_moment_confidence")
+        if wmc is not None:
+            return wmc >= 0.5
+        # v2.14-P1.1 — non-wedding: a smiling face is real "emotion present"
+        # (MediaPipe smile blendshape, face_max_smile 0..1). Faceless frames
+        # stay None (skipped) — honest, not faked.
+        if _f(row, "face_count") in (None, 0):
+            return None
+        smile = _f(row, "face_max_smile")
+        if smile is None:
+            return None
+        return smile >= 0.30
 
     # aesthetic
     if check_key == "clipiqa_above_median":

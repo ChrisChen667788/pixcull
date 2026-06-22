@@ -74,13 +74,33 @@
   即删不污染本机):构图强帧提分、构图弱的 eagle keep→maybe——倾斜方向正确。
 - 完整门禁全绿。
 
-## 后续
+## P1.1 — moment 轴深化(已交付)
 
-- **moment 轴深化**:若标注后 moment 仍弱,考虑把 `wedding_moment_confidence` 推广到
-  非婚礼场景的表情/峰值代理,或接一个轻量表情检测器(让 `action_at_peak`/非婚礼
-  `emotion_present` 不再 None)。
-- **P0-2 标注 session 仍待 owner**:axis_weights 现在真接进了热路径,但它要等你的真实纠正
-  (≥50)才激活——这又一次指向「真实标注是激活智能栈的总开关」。
+P0-1 让 moment 非常数,但 `action_at_peak` 仍恒 None、`emotion_present` 仅婚礼可评。
+本轮接入两个**已存在的真实信号**(不伪造、不新增模型):
+- **`action_at_peak` ← 连拍峰值**:真连拍(size≥2)里 burst-peak ranker 加冕的那帧
+  (`burst_peak_reason` 非空)就是捕捉到的动作峰值 → True;输掉的帧 → False;单张
+  (`is_burst_peak` trivially True 但无 reason)→ None(无动作序列可言,不伪造)。
+- **`emotion_present` ← 微笑**:非婚礼场景用 MediaPipe `face_max_smile` blendshape
+  (≥0.30 = 表情在场);无脸/无信号 → None。
+- **`moment_score`(worker)并入 smile**:睁眼中性脸仍 0.60(不回归),满笑升到 0.85;
+  闭眼 0.40。
+
+验证:`tests/test_moment_axis.py`(burst-peak 真连拍判定 4 例 + 非婚礼 smile 4 例)·
+landscape A/B:**decision/score_final 全不变**(rubric 星不喂 score_final;合成图无微笑→
+worker moment_score 不变),唯一变化是 sunset 误检脸的 `rubric_moment_stars` 4.25→2.16
+(无笑中性脸 moment 星正确下降,真实数据上合理)· 完整门禁全绿。
+
+> 注:这些 rubric 星(moment 现已含表情/动作)是 adjudicate 翻开后 rescorer 的**特征**——
+> 这正是「去 stub 让它可学」的闭环:特征非常数了,真实标注一来就能学到这条轴。
+
+## P0-2 — 标注 session(owner 执行,工具+手册已备)
+
+运行手册:[`docs/LABELING-SESSION.md`](LABELING-SESSION.md)——逐条命令(shadow 采集 →
+`pick_next_to_label` 优先队列 → 标 ≥400 条 → `export_training_set` →
+`check_v1_2_trigger` 三门 → 训练 → `--rescorer-mode adjudicate`)。**真实标注必须你来**;
+标完我接手跑门禁+训练+off/adjudicate golden A/B+翻默认。axis_weights(P1)与 moment 轴
+(P0-1/P1.1)都已接好线、可学——**只等这一批真实标签做总开关**。
 
 ## 方法论延续
 
