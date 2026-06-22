@@ -144,6 +144,22 @@ def analyze_one(path: Path) -> Optional[dict]:
             # the row still lands cleanly.
             pass
 
+    # v2.14 — moment_score: de-stub the "moment" fusion axis.  Until now it was
+    # a constant 0.5 placeholder for EVERY frame (moment is 1/6 of the weighted
+    # fusion), so it carried zero discriminative signal AND could never be
+    # learned (a constant feature is useless to the rescorer).  Derive a real
+    # value where one honestly exists; leave it None otherwise so fusion keeps
+    # its deliberate neutral-0.5 default (landscape / no-face frames unchanged).
+    # There is no general expression / peak-action detector, so we use only
+    # signals that genuinely exist: the wedding-moment classifier's confidence,
+    # and (weakly) whether a detected face is mid-blink.  action_at_peak stays
+    # unmodelled — see rubric_decompose.
+    moment_score: Optional[float] = None
+    if wedding_moment_confidence is not None:
+        moment_score = float(wedding_moment_confidence)
+    elif face_count >= 1:
+        moment_score = 0.40 if ("closed_eyes" in flags) else 0.60
+
     return {
         "path": str(path),
         "filename": path.name,
@@ -156,6 +172,9 @@ def analyze_one(path: Path) -> Optional[dict]:
         # have to None-check.
         "wedding_moment":            wedding_moment,
         "wedding_moment_confidence": wedding_moment_confidence,
+        # v2.14 — real "moment" fusion signal (None = no signal → fusion
+        # falls back to its neutral 0.5 placeholder).
+        "moment_score":              moment_score,
         # V22 — face data for downstream clustering. ``face_bboxes`` is
         # the per-face (x1,y1,x2,y2,conf) tuples from FaceDetector;
         # ``face_embeddings`` is the matching CLIP image features.

@@ -52,6 +52,22 @@
 
 ## What's new
 
+**v2.14** — **real-data learning: de-stub the "moment" axis so it can actually
+be learned** (see [`docs/ROADMAP-v2.14-charter.md`](docs/ROADMAP-v2.14-charter.md) +
+[`docs/DESIGN-AUDIT-2030Q2.md`](docs/DESIGN-AUDIT-2030Q2.md)). The audit found the
+"moment" axis — the decisive-moment axis the product most loudly markets — was a
+**constant 0.5 placeholder for every photo** in fusion, plus two of its three
+rubric checks always returned `None`. A constant feature carries zero information,
+so the rescorer could *never* learn it. Now `moment_score` is a real signal where
+one honestly exists (wedding-moment confidence; face eyes-open/blink), left neutral
+where no signal exists (landscapes unchanged), and `emotion_present` is evaluated
+from wedding-moment confidence. An end-to-end A/B regression caught a latent
+**NaN→1.0 bug** (a pandas `None`→`NaN` slipped past an `is None` check and clamped
+`score_final` to 1.0 = always-keep for every no-signal frame) — now fixed and
+guarded by a test. The 400-sample real-label training session + flipping the
+rescorer to adjudicate mode is owner-gated (fabricated labels poison the model —
+the RESCORER-V3 lesson).
+
 **v2.13** — **root-caused the "screenshot hang" and fixed a real UI bug**
 (see [`docs/ROADMAP-v2.13-charter.md`](docs/ROADMAP-v2.13-charter.md)). The v2.12
 "body-not-delivered to headless chromium" theory was **wrong**: the similarity

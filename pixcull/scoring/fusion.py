@@ -4,9 +4,29 @@ The fusion step normalizes each detector's metric into [0, 1], applies the
 scene-specific weights, then adds bonuses and penalties based on flags.
 """
 
+import math
 from typing import Any
 
 from pixcull.config import PixCullConfig, SceneTemplate
+
+
+def _coalesce(value: Any, default: float = 0.5) -> float:
+    """Return ``value`` as a float, or ``default`` when it is missing.
+
+    CRITICAL: ``fuse_score`` is called with ``row.to_dict()`` from a pandas
+    DataFrame, where a Python ``None`` in a numeric column becomes ``NaN`` —
+    which is NOT caught by ``x is None``.  An un-coalesced NaN propagates
+    through the weighted sum and ``min(1.0, NaN)`` clamps to 1.0, silently
+    forcing every no-signal frame to score_final == 1.0 (== always keep).
+    So coalesce both ``None`` AND ``NaN`` to the neutral default.
+    """
+    if value is None:
+        return default
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return default
+    return default if math.isnan(f) else f
 
 
 def _normalize_sharpness(lap_subject: float | None, lap_global: float, tpl: SceneTemplate) -> float:
@@ -69,13 +89,17 @@ def fuse_score(
         raw.get("mean_luma", 128),
     )
     aes = _aesthetic_blend(raw.get("laion_aes", 5.0), raw.get("clipiqa", 0.5))
-    # composition + moment: V0.5+ compute from dedicated detectors.
-    # V0.2: detectors not yet shipped. Previous attempt to drop them from the
-    # weighted sum shifted cull scores UP because sharpness is saturated noise
-    # on 2048px Laplacian. Instead keep them as 0.5 placeholders (pulls cull
-    # and keep both toward 0.5, leaving aesthetic+exposure as the discriminator).
-    comp = raw.get("composition_score", 0.5)
-    moment = raw.get("moment_score", 0.5)
+    # composition + moment: computed from dedicated signals when available
+    # (composition_classifier; v2.14 moment_score from the wedding-moment
+    # classifier / blink flag in worker.py).  When a signal is genuinely
+    # ABSENT the value is None → fall back to the deliberate neutral 0.5
+    # placeholder.  Dropping the axis from the weighted sum was tried in V0.2
+    # and shifted cull scores UP (sharpness is saturated noise at 2048px), so
+    # neutral-0.5 stays the honest default for frames with no signal.  NOTE: a
+    # plain ``.get(k, 0.5)`` is NOT enough now — worker writes an explicit
+    # ``moment_score: None`` key, so we must coalesce None → 0.5 here.
+    comp = _coalesce(raw.get("composition_score"))
+    moment = _coalesce(raw.get("moment_score"))
 
     dims = {
         "sharpness":   sharp,

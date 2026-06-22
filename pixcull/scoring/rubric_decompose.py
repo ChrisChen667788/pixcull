@@ -199,9 +199,19 @@ def _check_eval(check_key: str, row: dict[str, Any]) -> bool | None:
             return None
         return not _flag(row, "closed_eyes")
     if check_key == "action_at_peak":
-        return None  # subjective; requires human label
+        # Genuinely needs a peak/action model or a human label — no honest
+        # signal exists for stills, so stay None (skipped from the denominator)
+        # rather than fabricate one. (v2.14: still unmodelled by design.)
+        return None
     if check_key == "emotion_present":
-        return None  # ditto
+        # v2.14 — no general expression detector, but for wedding scenes the
+        # moment classifier estimates emotional/decisive peak in [0,1]; a
+        # confident wedding-moment is real "emotion present" signal. Non-wedding
+        # frames stay None (skipped) — honest, not faked.
+        wmc = _f(row, "wedding_moment_confidence")
+        if wmc is None:
+            return None
+        return wmc >= 0.5
 
     # aesthetic
     if check_key == "clipiqa_above_median":
