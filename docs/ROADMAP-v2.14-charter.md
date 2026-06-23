@@ -102,6 +102,23 @@ worker moment_score 不变),唯一变化是 sunset 误检脸的 `rubric_moment_s
 标完我接手跑门禁+训练+off/adjudicate golden A/B+翻默认。axis_weights(P1)与 moment 轴
 (P0-1/P1.1)都已接好线、可学——**只等这一批真实标签做总开关**。
 
+## P2 — 航拍主题(aerial scene,已交付)
+
+owner 要求:DJI 航拍素材后续归到「航拍」主题。纯视觉 CLIP 难把航拍风光和地面风光分开,
+所以走**确定性 EXIF 覆盖**:
+- `io/exif.py`:`read_exif_make_model()` + `is_drone_camera()`——按**机型 Model 码**识别
+  (DJI 相机模块 `FC####`;Mavic 2 Pro / Mavic 3 报 Make="Hasselblad" + Model
+  `L1D-20c`/`L2D-20c`),**只匹配机型不匹配 Make**,避开真·哈苏中画幅(X1D/907X);兜底
+  认 `DJI_` 文件名。
+- `worker.py`:场景分类后,若判定为无人机 → 覆盖 `scene="aerial"`(仿 stilllife rerank
+  模式)。**不动 CLIP 的 SCENE_PROMPTS**,所以非无人机照零扰动(不引入 softmax 漂移)。
+- `genre_strategies.py` 加 aerial 策略(俯瞰构图/图案/光影主导,抑制人脸·瞬间类 check);
+  `scene_templates.yaml` 加 aerial 模板(同风光,用默认权重)。
+
+验证:`tests/test_aerial_scene.py` 7 项(DJI make / FC 码 / 哈苏-DJI 机型 / 真哈苏排除 /
+普通相机 / DJI_ 文件名 / 下游注册)· **端到端 A/B**:16 张真实 DJI 航拍**全部归 aerial**,
+10 张佳能非DJI 场景**字节级不变、零误判**· 完整门禁全绿。
+
 ## 方法论延续
 
 v2.13「把根因查透」→ v2.14「**让评分轴非常数、让智能真能学**」。本轮最大的教训复刻了

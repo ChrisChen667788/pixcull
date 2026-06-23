@@ -12,7 +12,12 @@ from pixcull.detectors.face import FaceDetector
 from pixcull.detectors.scene import SceneDetector
 from pixcull.detectors.subject import SubjectDetector
 from pixcull.detectors.wedding_moment import WeddingMomentDetector
-from pixcull.io.exif import read_exif_gps, read_exif_time
+from pixcull.io.exif import (
+    is_drone_camera,
+    read_exif_gps,
+    read_exif_make_model,
+    read_exif_time,
+)
 from pixcull.io.loader import load_image
 from pixcull.scoring.aesthetic import AestheticScorer
 
@@ -83,6 +88,25 @@ def analyze_one(path: Path) -> Optional[dict]:
                 # the corrected number, not the original stilllife max.
                 scene.metrics["scene_confidence"] = float(_p)
                 break
+
+    # v2.14-P2 — aerial scene. DJI / drone shots are "aerial" regardless of
+    # what CLIP guessed: an aerial landscape reads as "landscape" to CLIP, so a
+    # visual classifier can't separate them. Detect deterministically from the
+    # drone camera's EXIF make/model (DJI modules report FC####; the Mavic
+    # 2 Pro / Mavic 3 report Hasselblad "L1D-20c"/"L2D-20c") or a DJI_ filename,
+    # and override. Non-drone frames are untouched.
+    try:
+        _mk, _md = read_exif_make_model(path)
+        if is_drone_camera(_mk, _md, path.name):
+            scene_name = "aerial"
+            scene.extras["scene"] = "aerial"
+            # keep scene_probs indexable by the chosen scene for downstream
+            # consumers that look up scene_probs[scene_name].
+            sp = scene.extras.setdefault("scene_probs", {})
+            sp["aerial"] = float(scene.metrics.get("scene_confidence") or 1.0)
+    except Exception:
+        pass
+
     comp = d["composition"].analyze(img, mask=mask, scene=scene_name)
     canon = d["canon"].analyze(img, mask=mask)
 

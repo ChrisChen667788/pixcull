@@ -74,7 +74,12 @@ the RESCORER-V3 lesson). Also wires **axis-aware personalization**: once you hav
 demonstrably value (a composition-lover's runs reward composition-strong frames
 and demote weak ones), not just a global threshold nudge — clamped to a gentle
 ±2× and a no-op without a profile (generic runs stay byte-identical, verified by
-an A/B regression).
+an A/B regression). Adds an **aerial scene** for DJI/drone footage: detected
+deterministically from the drone camera's EXIF model code (DJI `FC####`; the
+Mavic 2 Pro/3's Hasselblad `L1D-20c`/`L2D-20c`) — matching the *model*, not the
+make, so a genuine Hasselblad body isn't mistaken for a drone — with a `DJI_`
+filename fallback. Non-drone frames are untouched (16 real aerials → aerial,
+10 Canon frames byte-identical in an A/B).
 
 **v2.13** — **root-caused the "screenshot hang" and fixed a real UI bug**
 (see [`docs/ROADMAP-v2.13-charter.md`](docs/ROADMAP-v2.13-charter.md)). The v2.12

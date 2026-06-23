@@ -173,6 +173,12 @@ scenes:
     description: "街拍 — 暂用默认模板"
     use_defaults: true
 
+  # v2.14-P2 — 航拍(DJI / 无人机俯瞰),按 EXIF 机型确定性归类;评分暂用默认模板
+  # (与风光同档,构图/光影/美感主导,逐轴侧重见 genre_strategies)。
+  aerial:
+    description: "航拍 / 无人机俯瞰 — 暂用默认模板"
+    use_defaults: true
+
 
 # ==================== 融合规则 ====================
 fusion:

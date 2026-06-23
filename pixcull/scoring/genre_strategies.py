@@ -118,6 +118,22 @@ GENRE_STRATEGIES: dict[str, GenreStrategy] = {
         },
         notes_zh="风光:光质/构图/黄金时刻 = 灵魂;主体可以是抽象的山或云。",
     ),
+    # v2.14-P2 — 航拍(DJI / 无人机俯瞰)。像风光但更偏俯瞰构图与图案/光影;
+    # 没有人脸、没有决定性瞬间可言,主体即大地肌理 → 抑制人脸/瞬间类 check。
+    "aerial": GenreStrategy(
+        axis_emphasis={
+            "composition": 1.40, "aesthetic": 1.25, "light": 1.25,
+            "technical": 1.10, "subject": 0.70, "moment": 0.50,
+        },
+        check_overrides={
+            "subject_eyes_open": "suppress",
+            "face_not_motion_blurred": "suppress",
+            "not_blink_or_mid_yawn": "suppress",
+            "action_at_peak": "suppress",
+            "emotion_present": "suppress",
+        },
+        notes_zh="航拍:俯瞰构图/图案/光影主导;无人脸与决定性瞬间,主体即大地肌理。",
+    ),
     "street": GenreStrategy(
         axis_emphasis={
             "moment": 1.35, "subject": 1.10, "composition": 1.10,
