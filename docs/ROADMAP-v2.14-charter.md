@@ -94,13 +94,34 @@ worker moment_score 不变),唯一变化是 sunset 误检脸的 `rubric_moment_s
 > 注:这些 rubric 星(moment 现已含表情/动作)是 adjudicate 翻开后 rescorer 的**特征**——
 > 这正是「去 stub 让它可学」的闭环:特征非常数了,真实标注一来就能学到这条轴。
 
-## P0-2 — 标注 session(owner 执行,工具+手册已备)
+## P0-2 — 标注 session(已执行,结果如实记录)
 
-运行手册:[`docs/LABELING-SESSION.md`](LABELING-SESSION.md)——逐条命令(shadow 采集 →
-`pick_next_to_label` 优先队列 → 标 ≥400 条 → `export_training_set` →
-`check_v1_2_trigger` 三门 → 训练 → `--rescorer-mode adjudicate`)。**真实标注必须你来**;
-标完我接手跑门禁+训练+off/adjudicate golden A/B+翻默认。axis_weights(P1)与 moment 轴
-(P0-1/P1.1)都已接好线、可学——**只等这一批真实标签做总开关**。
+运行手册:[`docs/LABELING-SESSION.md`](LABELING-SESSION.md)。实际执行(owner 本机):
+从 owner 照片库分层取样 408 张真实照片(14 个主题文件夹、等距抽样、排除 AppleDouble 与
+LUT 预设)→ 分 5 批跑流水线 → `make_label_sheet.py` 出按主体分组的标注表。**owner 逐表
+复核后背书模型判定**(无逐行改判)——这与「拿模型判定当标签」的 RESCORER-V3 陷阱的区别
+是有人真看过每一行;但也意味着这批**没有纠正信号**。与 v0.11 金标集(200 行、含 95 个
+真 cull 分歧)合并成 **608 行**训练集后:
+
+| 门 | 阈值 | 实测 | 状态 |
+|---|---|---|---|
+| (1) 训练行数 | ≥400 | 608 | ✅ |
+| (2) landscape CV AUC | ≥0.70 | **0.777** | ✅ |
+| (3) Δacc vs 规则栈 | ≥+0.03 | −0.023 | ❌(**结构性**:背书标签下规则栈 acc=1.000,rescorer 只能打平;需 keep↔maybe 边界上的**真实改判**才可能过) |
+
+→ **adjudicate 保持 off**(如实)。已交付的真实成果:
+- **rescorer 训练产物**(608 行、GBM、CV acc 0.977 / AUC 0.988,本机
+  `~/pixcull_label_run/models/`,库外不公开)——**shadow 模式端到端验证通过**
+  (banner 加载、`rescorer_pred`/`prob_keep` 填充、判定不被改动)。
+- **个性化档案首次真实激活**:608 条纠正 → `~/.pixcull/personal_profile.json`
+  (keep_rate 0.77 → 阈值 −0.060;轴权最重 **subject** 0.483)——holdout 诚实评估
+  personal F1 0.801 ≥ generic 0.799 才安装;真机 banner
+  「boundary shifted −0.060 + axis-weighted toward subject」= **v2.4-P0-2 +
+  v2.14-P1 全链路第一次用真实数据点火**。
+- 金标集从 128/200 扩到 608(含逐场景覆盖:landscape 117 / portrait 58 / event 51…)。
+
+**门(3) 的解锁路径**(留作后续):从**未精修**的文件夹(原片卡直出)挖一小批模型判 keep
+但 owner 会改判的帧(maybe 边界、低美学 keep、连拍非峰值 keep),几十条真实改判即可。
 
 ## P2 — 航拍主题(aerial scene,已交付)
 

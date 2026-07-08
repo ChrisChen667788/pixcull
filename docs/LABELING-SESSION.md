@@ -1,5 +1,11 @@
 # PixCull 标注 session 运行手册(v2.14-P0-2)
 
+> **状态(已执行一轮)**:408 张分层取样 → owner 复核背书 + v0.11 金标 200 行 → 608 行
+> 训练集。三门:①608✅ ②landscape AUC 0.777✅ ③Δacc −0.023❌(结构性——背书标签无纠正
+> 信号,规则栈 acc=1.000)。**adjudicate 保持 off**;rescorer 已训练并过 shadow 验证;
+> 个性化档案首次真实激活(subject 轴主导,holdout personal≥generic)。门③解锁:从未精修
+> 文件夹补几十条 keep↔maybe **真实改判**。详见 ROADMAP-v2.14-charter §P0-2。
+
 > 「激活智能栈」的总开关:**你的 ≥400 条真实人工标注**。代码侧(P0-1 moment 去 stub、
 > P1 轴级个性化、P1.1 moment 深化)都已就绪并让评分轴**可学**;现在缺的只有真实标签。
 > **不能用模型自己的判定当标签**——那正是 RESCORER-V3 翻车的原因(200 行只出 1 个 maybe、
