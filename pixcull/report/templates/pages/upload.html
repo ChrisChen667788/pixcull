@@ -1,0 +1,1715 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <title>PixCull — AI 摄影分拣</title>
+  <style>
+/*__DESIGN_TOKENS_CSS__*/
+    /* v0.6 (3/5) — upload-page-specific tokens.
+       The hero gradient backdrop was the V14 visual signature;
+       remap it to the new --accent (indigo) color. */
+    :root {
+      --bg-grad: radial-gradient(1200px 600px at 50% -200px,
+                 rgba(196,185,169,0.10), transparent 60%),
+                 radial-gradient(900px 500px at 90% 110%,
+                 rgba(196,185,169,0.05), transparent 60%);
+      /* legacy button paddings kept; existing buttons reference them */
+      --btn-pad-s: 4px 10px;
+      --btn-pad-m: 7px 14px;
+      --btn-pad-l: 10px 22px;
+    }
+
+    /* ===========================================================
+       v0.11-P1-5 — hero reveal on /upload (extends v0.9-P0-2).
+       Brand mark + title + subtitle + feature strip + dropzone
+       cascade in over ~1.4s; reduced-motion users get static.
+       =========================================================== */
+    body.hero-revealing .hero-brand {
+      animation: uploadReveal 460ms var(--ease-out, cubic-bezier(0.2,0.8,0.2,1)) both;
+    }
+    body.hero-revealing .hero-title {
+      animation: uploadReveal 520ms var(--ease-out, cubic-bezier(0.2,0.8,0.2,1)) both;
+      animation-delay: 80ms;
+    }
+    body.hero-revealing .subtitle,
+    body.hero-revealing .hero-subtitle {
+      animation: uploadReveal 500ms var(--ease-out, cubic-bezier(0.2,0.8,0.2,1)) both;
+      animation-delay: 160ms;
+    }
+    body.hero-revealing .feature-strip,
+    body.hero-revealing .feature-row {
+      animation: uploadReveal 540ms var(--ease-out, cubic-bezier(0.2,0.8,0.2,1)) both;
+      animation-delay: 240ms;
+    }
+    body.hero-revealing .dropzone,
+    body.hero-revealing .upload-card {
+      animation: uploadRevealZ 600ms var(--ease-out, cubic-bezier(0.2,0.8,0.2,1)) both;
+      animation-delay: 320ms;
+    }
+    @keyframes uploadReveal {
+      from { opacity: 0; transform: translateY(14px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes uploadRevealZ {
+      /* z-tilt evokes the v0.9 signature "card lands from above"
+         without depending on perspective on every parent — uses
+         a subtle scale + translateY so it falls back gracefully */
+      from { opacity: 0; transform: translateY(28px) scale(0.985); }
+      to   { opacity: 1; transform: translateY(0)    scale(1);     }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      body.hero-revealing .hero-brand,
+      body.hero-revealing .hero-title,
+      body.hero-revealing .subtitle,
+      body.hero-revealing .hero-subtitle,
+      body.hero-revealing .feature-strip,
+      body.hero-revealing .feature-row,
+      body.hero-revealing .dropzone,
+      body.hero-revealing .upload-card { animation: none; }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh;
+      background: var(--bg);
+      background-image: var(--bg-grad);
+      background-attachment: fixed;
+      color: var(--fg);
+      /* V14.2 — Windows-friendly system fallback chain. The old chain
+         pinned to PingFang SC (macOS-only) before Yahei; Inter was
+         last. Now: Inter → SF on macOS → Segoe UI Variable on Win11
+         → Microsoft Yahei UI for CJK on Windows → fallbacks. */
+      font: 14px/1.55 -apple-system, BlinkMacSystemFont,
+            "Segoe UI Variable", "Segoe UI", "PingFang SC",
+            "Microsoft Yahei UI", "Microsoft Yahei",
+            "Helvetica Neue", sans-serif;
+      letter-spacing: 0.01em;
+      display: flex; flex-direction: column; align-items: center;
+      padding: 80px 20px 60px;
+    }
+    /* V14.2 — visible focus ring for keyboard users on every
+       interactive element. ``focus-visible`` doesn't fire on mouse
+       click, so this is invisible to mouse users (matching the
+       intent: a11y for keyboard nav without aesthetic tax on
+       pointer use). */
+    *:focus-visible {
+      outline: 2px solid var(--focus-ring);
+      outline-offset: 2px;
+      border-radius: var(--radius-sm);
+    }
+    button, input, select, a {
+      /* belt-and-braces: nuke the default browser focus then let
+         our :focus-visible above re-add a consistent ring */
+      outline: none;
+    }
+    h1 {
+      margin: 0 0 8px; font-size: 28px; font-weight: 700;
+      letter-spacing: -0.02em;
+      background: linear-gradient(180deg, #ffffff 0%, #c8d0db 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .subtitle {
+      color: var(--muted); margin-bottom: 36px; max-width: 540px;
+      text-align: center; font-size: 13.5px;
+    }
+
+    /* v0.4 P1 (4/4) — hero landing rules.  Replaces the single
+       cramped title with a brand mark + huge hero title + value-
+       prop subtitle + 3-column feature strip.  Same hero pattern
+       the results page header uses, so the visual continuity
+       between /upload and /results is now obvious. */
+    .hero-brand {
+      display: inline-flex; align-items: center; gap: 10px;
+      margin-bottom: 28px;
+      text-decoration: none;
+      color: var(--fg);
+      transition: transform 220ms cubic-bezier(0.16,1,0.3,1);
+    }
+    .hero-brand:hover { transform: translateY(-2px); }
+    .hero-brand:hover svg { transform: rotate(-12deg); }
+    .hero-brand svg { transition: transform 220ms cubic-bezier(0.34,1.56,0.64,1); }
+    .hero-wordmark {
+      font-size: 17px; font-weight: 700; letter-spacing: -0.02em;
+      color: var(--fg);
+    }
+    /* v0.9-P0-3 — the "Cull" half of the wordmark uses the
+       signature brand gradient on every page that surfaces the
+       wordmark (matches results.html brand-mark .wordmark span). */
+    .hero-wordmark b {
+      font-weight: 700;
+      background: linear-gradient(135deg, #c4b9a9 0%, #6a6052 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    .hero-title {
+      margin: 0 0 14px;
+      font-size: 44px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
+      text-align: center;
+      max-width: 720px;
+      /* v0.9-P0-3 — hero title uses the signature gradient instead
+         of the previous flat white→gray.  Pure visual brand anchor
+         on the first surface every new user sees. */
+      background: linear-gradient(135deg, #c4b9a9 0%, #6a6052 60%, #ffffff 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      font-family: "Charter", "Iowan Old Style", "PT Serif",
+                   "Source Serif Pro", "Source Serif 4", "Cambria",
+                   Georgia, "Songti SC", "STZhongsong", serif;
+    }
+    .hero-subtitle {
+      color: var(--muted); max-width: 560px; text-align: center;
+      font-size: 14px; line-height: 1.7;
+      margin-bottom: 36px;
+    }
+    .hero-subtitle .pill {
+      display: inline-flex; align-items: center;
+      padding: 1px 8px; border-radius: 999px; font-size: 11px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      margin: 0 2px;
+    }
+    .hero-features {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      max-width: 720px; width: 100%;
+      margin-bottom: 36px;
+    }
+    .hero-feature {
+      background: rgba(255,255,255,0.02);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 18px;
+      text-align: left;
+      transition: border-color 180ms ease-out,
+                  background 180ms ease-out,
+                  transform 180ms cubic-bezier(0.16,1,0.3,1);
+    }
+    .hero-feature:hover {
+      border-color: #c4b9a9;
+      background: rgba(196,185,169,0.06);
+      transform: translateY(-2px);
+    }
+    .hero-feature-icon {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 32px; height: 32px;
+      border-radius: 8px;
+      background: rgba(196,185,169,0.14);
+      color: #d8cebf;
+      margin-bottom: 10px;
+    }
+    .hero-feature-title {
+      font-size: 13px; font-weight: 600;
+      color: var(--fg);
+      margin-bottom: 4px;
+    }
+    .hero-feature-text {
+      font-size: 11.5px; color: var(--muted);
+      line-height: 1.55;
+    }
+    /* On narrow screens the 3-col strip collapses to a single column */
+    @media (max-width: 640px) {
+      .hero-features { grid-template-columns: 1fr; }
+      .hero-title { font-size: 32px; }
+    }
+    .subtitle .pill {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 2px 7px; border-radius: 999px; font-size: 11px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+    }
+    .subtitle .pill.k { color: var(--keep); }
+    .subtitle .pill.m { color: var(--maybe); }
+    .subtitle .pill.c { color: var(--cull); }
+    .card {
+      width: 100%; max-width: 620px; background: var(--bg-card);
+      border: 1px solid var(--border); border-radius: 14px;
+      padding: 24px; box-shadow: var(--shadow-lg);
+      backdrop-filter: blur(8px);
+    }
+    .drop-zone {
+      border: 1.5px dashed var(--border-hi); border-radius: 10px;
+      padding: 48px 20px; text-align: center;
+      cursor: pointer;
+      transition: border-color 0.18s, background 0.18s, box-shadow 0.18s;
+      background: linear-gradient(180deg, rgba(255,255,255,0.015), transparent);
+    }
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: var(--accent);
+      background: linear-gradient(180deg, rgba(196,185,169,0.06), transparent);
+      box-shadow: 0 0 0 4px var(--accent-glow);
+    }
+    .drop-zone .big {
+      font-size: 32px; margin-bottom: 12px; opacity: 0.55;
+      transition: opacity 0.15s;
+    }
+    .drop-zone:hover .big { opacity: 0.9; }
+    .drop-zone .hint { color: var(--muted); font-size: 12px; margin-top: 10px; }
+    .file-list {
+      margin-top: 14px; max-height: 160px; overflow-y: auto;
+      border-top: 1px solid var(--border);
+      padding-top: 10px; font-size: 12px; color: var(--muted);
+    }
+    .file-list .item { padding: 2px 0; }
+    .actions {
+      margin-top: 16px; display: flex; gap: 10px; align-items: center;
+    }
+    button {
+      background: linear-gradient(180deg, var(--accent-hi), var(--accent));
+      color: white; border: 0; padding: 10px 22px;
+      font-size: 13px; font-weight: 600; letter-spacing: 0.02em;
+      border-radius: 7px; cursor: pointer;
+      box-shadow: 0 1px 0 rgba(255,255,255,0.15) inset, 0 4px 14px var(--accent-glow);
+      transition: transform 0.06s, box-shadow 0.15s, opacity 0.15s;
+    }
+    button:hover { box-shadow: 0 1px 0 rgba(255,255,255,0.25) inset, 0 6px 18px var(--accent-glow); }
+    button:active { transform: translateY(1px); }
+    button:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
+    button.secondary {
+      background: transparent; color: var(--muted);
+      border: 1px solid var(--border); box-shadow: none;
+    }
+    button.secondary:hover { color: var(--fg); border-color: var(--border-hi); }
+    .status { margin-top: 18px; padding: 14px; border-radius: 6px;
+              background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+              display: none; }
+    .status.show { display: block; }
+    .status .label { color: var(--muted); font-size: 11px;
+                     text-transform: uppercase; letter-spacing: 0.5px;
+                     margin-bottom: 6px; }
+    .progress {
+      height: 6px; background: rgba(255,255,255,0.04);
+      border-radius: 999px; overflow: hidden; margin-top: 12px;
+      border: 1px solid var(--border);
+    }
+    .progress-bar {
+      height: 100%; width: 0%;
+      background: linear-gradient(90deg, var(--accent), var(--accent-hi));
+      transition: width 0.3s; border-radius: 999px;
+      box-shadow: 0 0 18px var(--accent-glow);
+      animation: shimmer 2s ease-in-out infinite;
+    }
+    @keyframes shimmer {
+      0%, 100% { box-shadow: 0 0 12px var(--accent-glow); }
+      50%      { box-shadow: 0 0 24px var(--accent-glow); }
+    }
+    .progress-bar.error {
+      background: linear-gradient(90deg, #dc2626, var(--error));
+      animation: none;
+    }
+    .progress-bar.done {
+      background: linear-gradient(90deg, #10b981, var(--keep));
+      animation: none;
+    }
+    a.results-link {
+      display: inline-block; margin-top: 12px;
+      color: var(--accent); text-decoration: none;
+      font-weight: 500;
+    }
+    a.results-link:hover { text-decoration: underline; }
+    /* V14.0 — Retry CTA. Stylistically secondary so it doesn't shout
+       at the user — but obvious enough to discover after a failure. */
+    .retry-btn {
+      display: inline-block; margin-top: 12px; margin-left: 8px;
+      padding: 6px 14px;
+      border: 1px solid var(--border); border-radius: 6px;
+      background: rgba(255,255,255,0.04); color: var(--fg);
+      font-size: 13px; cursor: pointer;
+      transition: background 120ms, border-color 120ms;
+    }
+    .retry-btn:hover {
+      background: rgba(255,255,255,0.08);
+      border-color: var(--border-hi);
+    }
+    .footer {
+      margin-top: 36px; color: var(--muted); font-size: 11px;
+      text-align: center; max-width: 600px; line-height: 1.6;
+    }
+    .footer code {
+      background: rgba(255,255,255,0.06);
+      padding: 1px 6px; border-radius: 3px;
+    }
+    /* V12.2 onboarding tour overlays */
+    .tour-overlay {
+      position: fixed; inset: 0; z-index: 100;
+      background: rgba(0,0,0,0.7);
+      display: none; align-items: center; justify-content: center;
+      backdrop-filter: blur(4px);
+    }
+    .tour-overlay.show { display: flex; }
+    .tour-card {
+      background: var(--bg-card); border: 1px solid var(--border-hi);
+      border-radius: 12px; padding: 28px 32px;
+      width: min(520px, 92vw);
+      box-shadow: 0 24px 80px rgba(0,0,0,0.7);
+      position: relative;
+    }
+    .tour-card .step-num {
+      position: absolute; top: 12px; right: 16px;
+      color: var(--muted); font-size: 11px;
+      font-family: ui-monospace, monospace;
+    }
+    .tour-card h2 {
+      margin: 0 0 12px; font-size: 20px;
+      background: linear-gradient(180deg, #fff, #c8d0db);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .tour-card .body {
+      color: var(--fg); font-size: 14px; line-height: 1.7;
+      margin-bottom: 18px;
+    }
+    .tour-card .body code {
+      background: rgba(255,255,255,0.06); padding: 2px 7px;
+      border-radius: 3px; font-size: 12px;
+    }
+    .tour-card .body kbd {
+      display: inline-block;
+      background: rgba(255,255,255,0.08); border: 1px solid var(--border-hi);
+      border-bottom-width: 2px;
+      padding: 1px 7px; border-radius: 4px;
+      font-family: ui-monospace, monospace; font-size: 11px;
+      color: var(--accent-hi);
+    }
+    .tour-card .actions {
+      display: flex; gap: 8px; align-items: center;
+      border-top: 1px solid var(--border); padding-top: 16px;
+    }
+    .tour-card .skip {
+      background: transparent; color: var(--muted);
+      border: 1px solid var(--border);
+    }
+    .tour-card .next {
+      margin-left: auto;
+    }
+    .tour-card .progress-dots {
+      display: flex; gap: 6px;
+    }
+    .tour-card .dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--border);
+    }
+    .tour-card .dot.active { background: var(--accent); }
+    .tabs {
+      display: flex; gap: 4px; margin-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .tabs .tab {
+      padding: 8px 12px; font-size: 12px; cursor: pointer;
+      color: var(--muted); border-bottom: 2px solid transparent;
+      margin-bottom: -1px; user-select: none;
+    }
+    .tabs .tab.active { color: var(--fg); border-bottom-color: var(--accent); }
+    .tabs .tab:hover { color: var(--fg); }
+
+    .scan-explain {
+      background: rgba(196, 185, 169, 0.08);
+      border-left: 3px solid var(--accent);
+      padding: 10px 14px; border-radius: 4px;
+      font-size: 12px; color: var(--fg); line-height: 1.6;
+      margin-bottom: 14px;
+    }
+    .path-input { display: flex; gap: 8px; margin-bottom: 8px; }
+    .path-input input {
+      flex: 1; background: rgba(0,0,0,0.3); border: 1px solid var(--border);
+      color: var(--fg); padding: 8px 12px; border-radius: 4px; font: inherit;
+      font-family: ui-monospace, monospace; font-size: 12px;
+    }
+    .path-input input:focus { border-color: var(--accent); outline: none; }
+    .folder-info {
+      font-size: 11px; color: var(--muted); min-height: 16px;
+      padding: 4px 0;
+    }
+    .folder-info b { color: var(--fg); }
+
+    /* V8.3: folder browser was breaking when the listing was long
+       (>15 entries) — the modal-card's max-height: 80vh combined
+       with absent inner scrolling pushed header + footer offscreen.
+       Lock to a fixed viewport-relative size, scroll only the body,
+       sticky header + footer. */
+    /* V14.4 — flip browser modal from style.display to .show class
+       so it can share the modalBackdropIn / modalContentIn keyframes
+       and ARIA helpers below. The legacy ``style.display=flex|none``
+       call sites have been migrated to ``classList.add/remove("show")``. */
+    .browser-modal {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.78);
+      display: none; align-items: center; justify-content: center;
+      z-index: 10; backdrop-filter: blur(6px);
+    }
+    .browser-modal.show { display: flex; animation: modalBackdropIn 160ms ease-out; }
+    .browser-modal.show .browser-card {
+      animation: modalContentIn 200ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .browser-modal.show, .browser-modal.show .browser-card {
+        animation-duration: 0.01ms;
+      }
+    }
+    .browser-card {
+      background: var(--bg-card); border: 1px solid var(--border-hi);
+      border-radius: 12px;
+      width: min(640px, 94vw);
+      height: min(78vh, 720px);
+      display: flex; flex-direction: column;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.6);
+      overflow: hidden;     /* contain the inner scroll */
+    }
+    .browser-header {
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;       /* never collapse */
+      background: rgba(255,255,255,0.02);
+    }
+    .browser-header code {
+      flex: 1; min-width: 0;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      font-family: ui-monospace, monospace;
+      color: var(--fg); font-size: 12px;
+    }
+    .browser-header .quick {
+      display: flex; gap: 4px; flex-wrap: wrap;
+    }
+    .browser-header .quick a {
+      color: var(--muted); font-size: 11px;
+      padding: 3px 8px; border-radius: 4px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      text-decoration: none; cursor: pointer; user-select: none;
+    }
+    .browser-header .quick a:hover {
+      color: var(--fg); border-color: var(--border-hi);
+    }
+    .browser-header .close {
+      width: 28px; height: 28px; border-radius: 6px;
+      display: inline-flex; align-items: center; justify-content: center;
+      cursor: pointer; user-select: none; font-size: 16px;
+      color: var(--muted);
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .browser-header .close:hover {
+      color: var(--fg); border-color: var(--border-hi);
+    }
+    /* V14.4 — at narrow widths, the breadcrumb path + quick-jump
+       chips + close button compress into a tiny illegible row. Stack
+       vertically with bigger tap targets (≥36 px). The quick chips
+       stay flex-wrap'd so they drop to a second row instead of
+       horizontally scrolling. */
+    @media (max-width: 640px) {
+      .browser-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+        padding: 12px;
+      }
+      .browser-header code {
+        order: 1;
+        font-size: 13px;
+        word-break: break-all;
+        white-space: normal;
+        overflow: visible;
+        text-overflow: clip;
+      }
+      .browser-header .quick {
+        order: 2;
+        gap: 6px;
+      }
+      .browser-header .quick a {
+        padding: 6px 10px;
+        font-size: 12px;
+        min-height: 32px;
+        display: inline-flex;
+        align-items: center;
+      }
+      .browser-header .close {
+        order: 0;
+        align-self: flex-end;
+        width: 36px; height: 36px;
+        font-size: 18px;
+      }
+      .browser-card {
+        height: 92vh;
+        width: 96vw;
+      }
+    }
+    .browser-body {
+      overflow-y: auto;     /* THIS scrolls when content overflows */
+      flex: 1 1 auto; min-height: 0;
+      padding: 6px 0;
+    }
+    .browser-body::-webkit-scrollbar { width: 8px; }
+    .browser-body::-webkit-scrollbar-track { background: transparent; }
+    .browser-body::-webkit-scrollbar-thumb {
+      background: var(--border-hi); border-radius: 4px;
+    }
+    .browser-body .row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 6px 14px; cursor: pointer; user-select: none;
+    }
+    .browser-body .row:hover { background: rgba(255,255,255,0.05); }
+    .browser-body .row.parent { color: var(--muted); }
+    .browser-body .icon { width: 16px; opacity: 0.7; }
+    .browser-body .name { flex: 1; min-width: 0;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .browser-body .badge {
+      background: rgba(196,185,169,0.15); color: #d8cebf;
+      padding: 1px 6px; font-size: 10px; border-radius: 2px;
+      flex-shrink: 0;
+    }
+    .browser-footer {
+      padding: 12px 14px; border-top: 1px solid var(--border);
+      display: flex; align-items: center; gap: 10px;
+      flex-shrink: 0; background: rgba(255,255,255,0.02);
+    }
+    .browser-footer button { padding: 6px 14px; }
+  </style>
+</head>
+<body class="hero-revealing">
+  <!-- v0.11-P1-5 — strip the hero-revealing class once the animation
+       completes so subsequent interactions don't re-trigger transitions.
+       1500ms covers the longest cascade (dropzone @ delay 320 + dur 600
+       = 920ms + slack). -->
+  <script>setTimeout(() => document.body.classList.remove("hero-revealing"), 1500);</script>
+  <!-- V28.1 — active user pill in the top-right corner. Click to open
+       the user-management modal. Updates from /api/v1/users/active on
+       page load. Renders empty initially so the layout doesn't jump. -->
+  <div id="userPill" style="position:fixed;top:14px;right:18px;z-index:50;
+       padding:6px 14px;border:1px solid var(--border);border-radius:20px;
+       background:var(--bg-card);color:var(--muted);font-size:11px;
+       cursor:pointer;user-select:none;display:none">
+    <span style="opacity:0.7">用户</span>
+    <span id="userPillName" style="color:var(--fg);font-weight:500">···</span>
+    <span style="opacity:0.5;margin-left:4px">▾</span>
+  </div>
+  <div id="userModal" style="display:none;position:fixed;inset:0;
+       background:rgba(0,0,0,0.7);z-index:200;align-items:center;
+       justify-content:center" onclick="if(event.target===this)closeUserModal()">
+    <div style="background:var(--bg-card);border:1px solid var(--border);
+         border-radius:8px;padding:24px;width:min(440px,90vw);
+         box-shadow:var(--shadow-lg)">
+      <h3 style="margin:0 0 14px;font-size:16px">用户配置</h3>
+      <div style="color:var(--muted-soft);font-size:11px;margin-bottom:14px">
+        当前活动用户: <span id="userModalActive" style="color:var(--fg)">···</span>
+        <br>每个用户独立维护垂类样本桶 / 策略 / phrase 覆盖。
+      </div>
+      <div id="userModalList" style="margin-bottom:18px"></div>
+      <div style="border-top:1px solid var(--border);padding-top:14px">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:6px">
+          新建用户:
+        </div>
+        <div style="display:flex;gap:8px">
+          <input id="userCreateInput" type="text" placeholder="alice / bob ..."
+            style="flex:1;background:transparent;color:var(--fg);border:1px solid var(--border);
+                   border-radius:4px;padding:6px 10px;font:inherit;outline:none"
+            maxlength="39">
+          <button id="userCreateBtn" style="padding:6px 14px;
+            background:var(--accent);color:#fff;border:none;border-radius:4px;
+            font:inherit;cursor:pointer">创建</button>
+        </div>
+        <div id="userCreateMsg" style="font-size:10px;color:var(--muted-soft);margin-top:6px"></div>
+      </div>
+      <div style="border-top:1px solid var(--border);padding-top:14px;
+           margin-top:14px;font-size:10px;color:var(--muted-soft);line-height:1.5">
+        <b style="color:var(--fg)">V28.2:</b> 点击上面任一非当前用户的行 → 直接切换(本浏览器
+        会话内,通过 cookie 标记;不需要重启服务)。<br>
+        <span style="opacity:0.8">如果要 PERMANENTLY 改默认用户(全局),启动前设
+        <code style="background:rgba(0,0,0,0.3);padding:1px 5px;border-radius:3px;
+              font-family:ui-monospace,monospace">PIXCULL_USER=&lt;id&gt;</code></span>
+      </div>
+      <div style="text-align:right;margin-top:14px">
+        <button onclick="closeUserModal()" style="padding:6px 14px;
+          background:transparent;color:var(--muted);border:1px solid var(--border);
+          border-radius:4px;font:inherit;cursor:pointer">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- v0.4 P1 (4/4) — hero landing.
+       Replaces the V14.2 single-line "PixCull" title + tagline
+       with a proper product hero: brand mark, big gradient
+       title, value-prop subtitle, and a 3-column "why this
+       tool exists" feature strip.  Designed to read as a real
+       product instead of a tool that needs context. -->
+  <a href="#" class="hero-brand" aria-label="PixCull">
+    <!-- v0.9-P0-3 — same "spotlight on one in a crowd" mark as
+         the results-page workspace bar.  Persistent identity
+         across surfaces. -->
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"
+         style="width:32px;height:32px;color:#aab3c1">
+      <defs>
+        <linearGradient id="pcBrandGradHero"
+                        x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%"   stop-color="#c4b9a9"/>
+          <stop offset="100%" stop-color="#6a6052"/>
+        </linearGradient>
+      </defs>
+      <circle cx="4"  cy="5"  r="1.6" fill="currentColor" opacity="0.32"/>
+      <circle cx="20" cy="6"  r="1.4" fill="currentColor" opacity="0.28"/>
+      <circle cx="3"  cy="19" r="1.8" fill="currentColor" opacity="0.30"/>
+      <circle cx="21" cy="20" r="1.3" fill="currentColor" opacity="0.28"/>
+      <circle cx="12" cy="12" r="7"  fill="url(#pcBrandGradHero)"/>
+      <circle cx="12" cy="12" r="7.5" fill="none"
+              stroke="url(#pcBrandGradHero)" stroke-width="0.6"
+              opacity="0.5"/>
+    </svg>
+    <span class="hero-wordmark">Pix<b>Cull</b></span>
+  </a>
+
+  <h1 class="hero-title">本地优先的 AI 摄影分拣</h1>
+  <div class="hero-subtitle">
+    6 轴 rubric · 风格感知 · Lr / C1 双向 round-trip<br>
+    <span style="opacity:0.75">在你的电脑上一键评估上千张照片,自动给出
+    <span class="pill k">● keep</span> ·
+    <span class="pill m">● maybe</span> ·
+    <span class="pill c">● cull</span>
+    建议。所有计算本地完成,原图永远不离开你的硬盘。</span>
+  </div>
+
+  <div class="hero-features">
+    <div class="hero-feature">
+      <div class="hero-feature-icon">
+        <!-- shield / lock — local privacy -->
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="1.8" stroke-linecap="round"
+             stroke-linejoin="round" style="width:18px;height:18px">
+          <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1Z"/>
+          <path d="m9 12 2 2 4-4"/>
+        </svg>
+      </div>
+      <div class="hero-feature-title">本地优先</div>
+      <div class="hero-feature-text">原图不上传 · CLIP / 模型缓存本地</div>
+    </div>
+    <div class="hero-feature">
+      <div class="hero-feature-icon">
+        <!-- target — precision -->
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="1.8" stroke-linecap="round"
+             stroke-linejoin="round" style="width:18px;height:18px">
+          <circle cx="12" cy="12" r="10"/>
+          <circle cx="12" cy="12" r="6"/>
+          <circle cx="12" cy="12" r="2"/>
+        </svg>
+      </div>
+      <div class="hero-feature-title">6 轴 rubric</div>
+      <div class="hero-feature-text">技术 · 主体 · 构图 · 光线 · 瞬间 · 美学</div>
+    </div>
+    <div class="hero-feature">
+      <div class="hero-feature-icon">
+        <!-- workflow — round-trip -->
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="1.8" stroke-linecap="round"
+             stroke-linejoin="round" style="width:18px;height:18px">
+          <path d="M3 7v6h6"/>
+          <path d="M21 17a9 9 0 0 0-15-6.7L3 13"/>
+          <path d="M21 17v-6h-6"/>
+          <path d="M3 7a9 9 0 0 1 15 6.7l3-2.7"/>
+        </svg>
+      </div>
+      <div class="hero-feature-title">Lr / C1 双向</div>
+      <div class="hero-feature-text">XMP / .cos sidecar 直接读写</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="tabs">
+      <span class="tab active" data-tab="upload">上传模式 (复制到 /tmp)</span>
+      <span class="tab" data-tab="scan">扫描本地文件夹 (零拷贝,推荐)</span>
+    </div>
+
+    <div class="tab-pane" data-pane="upload">
+    <div class="drop-zone" id="dropZone">
+      <div class="big" id="dropIcon">⇪</div>
+      <div id="dropMain">拖拽照片到这里,或<u>点击选择</u></div>
+      <div class="hint" id="dropHint">支持 JPG / PNG / RAW (CR3/CR2/NEF/ARW/DNG)</div>
+    </div>
+    <input id="fileInput" type="file" multiple accept=".jpg,.jpeg,.png,.cr3,.cr2,.nef,.arw,.dng,.tif,.tiff" style="display:none">
+    <div class="file-list" id="fileList" style="display:none"></div>
+
+    <div class="actions">
+      <!-- v0.9-P0-3 — primary CTA wears the signature brand gradient.
+           Most-clicked button on the most-seen page. -->
+      <button id="uploadBtn" class="btn-primary" disabled>开始分析</button>
+      <button id="clearBtn" class="secondary">清空</button>
+      <!-- P-UX-21: zero-friction sample data button. Skips upload +
+           model warm-up, drops the visitor straight into a /results
+           view with 6 pre-scored sample images. The single biggest
+           OSS-discoverability win — most visitors never make it past
+           the "wait, do I need to install something first" gate. -->
+      <button id="sampleBtn" class="secondary"
+              title="用 6 张示例数据立刻进入 /results 体验,不需要装环境"
+              style="margin-left:auto;background:rgba(196,185,169,0.15);border-color:#c4b9a9;color:#d8cebf">
+        ⚡ 用示例数据立刻体验
+      </button>
+      <span id="hint" style="color:var(--muted);font-size:12px"></span>
+    </div>
+    </div>
+
+    <div class="tab-pane" data-pane="scan" style="display:none">
+      <div class="scan-explain">
+        直接告诉服务器照片在哪个文件夹 — <b>不复制原图</b>,只把分析结果(scores.csv / 缩略图 / XMP)写到 /tmp。
+        适合 GB 级 RAW 工作流。
+      </div>
+      <div class="path-input">
+        <input id="folderPath" type="text" placeholder="例如 ~/Pictures/2024-shoot 或 /Volumes/SSD/RAW">
+        <button id="browseBtn" class="secondary" type="button">浏览…</button>
+      </div>
+      <div id="folderInfo" class="folder-info"></div>
+      <!-- V17.0 — vertical override. Optional. When set, the run is
+           tagged with this vertical so per-vertical eval can filter
+           and (V17.1+) scoring can adjust thresholds. -->
+      <div class="vertical-pick" style="margin-top:10px; display:flex; align-items:center; gap:8px; flex-wrap:wrap">
+        <label style="font-size:12px; color:var(--muted)">这批照片的垂类(可选):</label>
+        <select id="scanVertical" style="background: rgba(0,0,0,0.3); color: var(--fg);
+                  border: 1px solid var(--border); padding: 5px 10px;
+                  border-radius: 4px; font: inherit; font-size: 12px;">
+          <option value="">— 自动检测 —</option>
+        </select>
+        <a href="/verticals" style="font-size: 11px; color: var(--accent); text-decoration: none">
+          管理样本库 →
+        </a>
+      </div>
+      <div class="actions">
+        <button id="scanBtn" disabled>开始分析</button>
+        <span id="scanHint" style="color:var(--muted);font-size:12px"></span>
+      </div>
+
+      <!-- Folder browser modal — V8.3 with sticky header + quick jumps -->
+      <div class="browser-modal" id="browserModal">
+        <div class="browser-card">
+          <div class="browser-header">
+            <code id="browserPath" title="当前位置"></code>
+            <span class="quick" id="browserQuick">
+              <a data-go="~">~</a>
+              <a data-go="~/Pictures">Pictures</a>
+              <a data-go="~/Desktop">Desktop</a>
+              <a data-go="~/Downloads">Downloads</a>
+              <a data-go="/Volumes">Volumes</a>
+            </span>
+            <span class="close" id="browserClose" title="关闭 (Esc)">×</span>
+          </div>
+          <div class="browser-body" id="browserBody"></div>
+          <div class="browser-footer">
+            <button id="browserUseHere" type="button">用这个位置(图片在当前层级)</button>
+            <span id="browserHereCount" class="muted"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="status" id="status">
+      <div class="label" id="stateLabel">就绪</div>
+      <div id="message">--</div>
+      <div class="progress"><div class="progress-bar" id="progressBar"></div></div>
+      <a class="results-link" id="resultsLink" style="display:none">查看结果 →</a>
+      <!-- V14.0: explicit Retry affordance when the run errored. Hidden
+           by default; pollStatus / catch-blocks reveal it. -->
+      <button class="retry-btn" id="retryBtn" type="button" style="display:none">↻ 重试</button>
+    </div>
+  </div>
+
+  <div class="footer">
+    本地服务,所有数据存在 <code>/tmp/pixcull_demo/&lt;run_id&gt;/</code>。
+    第一次跑某种照片时模型加载需 ~10 秒,后续每张约 2-10 秒。
+    <span id="storageHint" style="display:none">
+      已积累 <b id="storageBytes">--</b> 本地缓存 ·
+      <a href="/admin">查看 / 清理 →</a>
+    </span>
+    <span id="storageHintEmpty">
+      · <a href="/admin" style="color:var(--muted)">存储管理</a>
+    </span>
+    · <a href="/tether" style="color:var(--muted)" title="监听文件夹,新照片落地即刻分析">📡 Tethered live</a>
+    · <a href="/history" style="color:var(--muted)" title="所有跑过的 run">🕒 历史</a>
+    <span id="licenseHint" style="margin-left:8px"></span>
+    · <a href="?tour=1" style="color:var(--muted)">再看一次教程</a>
+  </div>
+
+<script>
+  // Background poll for storage size — only visible when there's
+  // actually data to clean. Cheap, hits stdlib http.server which
+  // doesn't care about an extra request every page load.
+  fetch("/storage_info").then(r => r.json()).then(s => {
+    if (s.runs_total_bytes > 0) {
+      const mb = s.runs_total_bytes >= 1e9
+        ? (s.runs_total_bytes / 1e9).toFixed(1) + " GB"
+        : (s.runs_total_bytes / 1024 / 1024).toFixed(0) + " MB";
+      document.getElementById("storageBytes").textContent =
+        `${mb} · ${s.n_runs} 次记录`;
+      document.getElementById("storageHint").style.display = "inline";
+      document.getElementById("storageHintEmpty").style.display = "none";
+    }
+  }).catch(() => {});
+
+  // V12.0 — license + monthly quota status badge
+  fetch("/license").then(r => r.json()).then(L => {
+    const el = document.getElementById("licenseHint");
+    if (!el) return;
+    if (L.is_pro) {
+      el.innerHTML = `· <span style="color:var(--keep)">⚡ ${L.tier.toUpperCase()}</span>`;
+    } else {
+      const used = L.used_this_month, q = L.monthly_quota;
+      const pct = q > 0 ? Math.round(100 * used / q) : 0;
+      const color = pct >= 90 ? "var(--cull)" : pct >= 70 ? "var(--maybe)" : "var(--muted)";
+      el.innerHTML = `· <span style="color:${color}">FREE ${used}/${q}</span> · `
+        + `<a id="upgradeLink" style="color:var(--accent);cursor:pointer">升级 Pro</a>`;
+      const up = document.getElementById("upgradeLink");
+      if (up) up.addEventListener("click", () => {
+        const tok = prompt("贴上 Pro license token (可在 https://pixcull.dev 获取):");
+        if (!tok) return;
+        fetch("/license", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token: tok.trim() }),
+        }).then(r => r.json()).then(d => {
+          alert(d.ok ? d.message : ("失败: " + (d.error || "未知")));
+          if (d.ok) location.reload();
+        });
+      });
+    }
+  }).catch(() => {});
+</script>
+
+<!-- V12.2 Onboarding tour overlay -->
+<div class="tour-overlay" id="tourOverlay">
+  <div class="tour-card">
+    <span class="step-num" id="tourStep">1 / 5</span>
+    <h2 id="tourTitle"></h2>
+    <div class="body" id="tourBody"></div>
+    <div class="actions">
+      <div class="progress-dots" id="tourDots"></div>
+      <button class="skip" id="tourSkip">跳过</button>
+      <button class="next" id="tourNext">下一步</button>
+    </div>
+  </div>
+</div>
+<script>
+// V12.2 — first-run onboarding tour. 5 steps. Skippable.
+// Sets localStorage 'pixcull_tour_done' so it doesn't re-fire.
+(() => {
+  const STEPS = [
+    {
+      title: "欢迎使用 PixCull",
+      body: `<p>1.3 GB 的本地 AI 摄影分拣器。30 秒带你看完核心用法。</p>
+        <p style="color:var(--muted);font-size:12px">基于 Cartier-Bresson《决定性瞬间》、
+        Ansel Adams Zone System、14 类摄影题材定制评分,搭配本地 VLM (Qwen3-VL) +
+        DeepSeek meta-judge 的混合判断流。</p>`
+    },
+    {
+      title: "两种导入照片的方式",
+      body: `<p>顶部两个 tab:</p>
+        <p>📤 <b>上传模式</b>:把照片复制到 <code>/tmp/pixcull_demo</code> 处理(适合小批量、跨机)</p>
+        <p>📁 <b>扫描本地文件夹</b> ⭐:零拷贝索引,只把 score / 缩略图写到本地。
+        适合 GB 级 RAW(推荐)。</p>
+        <p style="color:var(--muted);font-size:12px">"浏览…" 模态顶部有 <code>~</code> /
+        <code>Pictures</code> / <code>Volumes</code> 等一键跳转,外置硬盘也能直接选。</p>`
+    },
+    {
+      title: "结果页的关键操作",
+      body: `<p>分析跑完进结果页:</p>
+        <p>🖱 点缩略图 → <b>大图 + 完整评分面板</b>(右侧 380px 信息栏)</p>
+        <p>⌨ <kbd>j</kbd> / <kbd>k</kbd> 切换 · <kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> 标 keep/maybe/cull</p>
+        <p>⌨ <kbd>space</kbd> 大图 · <kbd>Cmd+Z</kbd> 撤销 · <kbd>?</kbd> 完整快捷键</p>
+        <p>顶部下拉可按 <b>分数 / 时间 / 连拍聚类</b> 排序,聚类后每组有"⊞ 并排比较"按钮。</p>`
+    },
+    {
+      title: "DeepSeek meta-judge 看不见的英雄",
+      body: `<p>每张图分析后都会被 <b>4 路评分</b>:</p>
+        <p>① 规则栈 (canon check list) ② V2.1 多轴回归模型 ③ 本地 Qwen3-VL 视觉</p>
+        <p>④ <b>DeepSeek V4-Flash 综合</b> ⌬ — 读 ①②③ + detector 数值,产生最终判断 + 矛盾警示</p>
+        <p style="color:var(--muted);font-size:12px">紫色 ⌬ 标的卡片是 meta 给出的判断;
+        悬浮可看完整 rationale 和"VLM 给 5★ 但 detector 显示 subject_fraction=0.005"这种校准。</p>`
+    },
+    {
+      title: "导出 + 学习闭环",
+      body: `<p>📤 <b>下载 XMP</b> → Lightroom / Capture One 直接读 5★/3★/1★ 评级</p>
+        <p>📊 <b>下载 CSV</b> → Excel/Numbers 友好</p>
+        <p>🎯 <b>批量打分</b> → 输 <code>0.7,0.4</code> 自动按分数分桶</p>
+        <p>🔥 <b>每标 10 张系统自动重训练个性化模型</b> — 你的判断会被学进去,越用越准。</p>
+        <p style="color:var(--muted);font-size:12px;margin-top:14px">
+        现在你已经掌握了 90% 的功能。开始拖照片或选文件夹 →</p>`
+    },
+  ];
+  let cur = 0;
+  const overlay = document.getElementById("tourOverlay");
+  const stepEl = document.getElementById("tourStep");
+  const titleEl = document.getElementById("tourTitle");
+  const bodyEl = document.getElementById("tourBody");
+  const nextBtn = document.getElementById("tourNext");
+  const skipBtn = document.getElementById("tourSkip");
+  const dotsEl = document.getElementById("tourDots");
+
+  function paint() {
+    const s = STEPS[cur];
+    stepEl.textContent = `${cur + 1} / ${STEPS.length}`;
+    titleEl.textContent = s.title;
+    bodyEl.innerHTML = s.body;
+    nextBtn.textContent = (cur === STEPS.length - 1) ? "开始使用" : "下一步";
+    dotsEl.innerHTML = STEPS.map((_, i) =>
+      `<span class="dot ${i === cur ? 'active' : ''}"></span>`
+    ).join("");
+  }
+  function close() {
+    overlay.classList.remove("show");
+    try { localStorage.setItem("pixcull_tour_done", "1"); } catch (e) {}
+  }
+  nextBtn.addEventListener("click", () => {
+    if (cur < STEPS.length - 1) { cur++; paint(); }
+    else close();
+  });
+  skipBtn.addEventListener("click", close);
+  // Keyboard: → next, Esc skip
+  document.addEventListener("keydown", e => {
+    if (!overlay.classList.contains("show")) return;
+    if (e.key === "ArrowRight" || e.key === "Enter") {
+      e.preventDefault(); nextBtn.click();
+    } else if (e.key === "ArrowLeft") {
+      if (cur > 0) { cur--; paint(); }
+    } else if (e.key === "Escape") {
+      e.preventDefault(); close();
+    }
+  });
+  // Click backdrop = skip
+  overlay.addEventListener("click", e => {
+    if (e.target === overlay) close();
+  });
+
+  // P-UX-19 — onboarding tour is now OPT-IN. The previous behavior
+  // (auto-show on first visit + modal-block the whole page) was
+  // friction for the 80% of users who'd rather click around than
+  // sit through a tour. New flow:
+  //
+  //   1. First-time visitors see a small dismissible 👋 tip pill
+  //      at the bottom-right of the page. NO modal blocking.
+  //   2. Click the pill → fires the full 5-step tour.
+  //   3. Dismiss the pill → localStorage remembers; pill never
+  //      reappears. The tour stays reachable via ?tour=1.
+  //   4. Returning users see nothing extra.
+  const forced = location.search.includes("tour=1");
+  let done = false;
+  try { done = localStorage.getItem("pixcull_tour_done") === "1"; } catch (e) {}
+
+  if (forced) {
+    paint();
+    overlay.classList.add("show");
+  } else if (!done) {
+    // Float a small 👋 pill — non-blocking, dismissible.
+    const pill = document.createElement("button");
+    pill.className = "shortcuts-hint";   // reuse existing floating-pill style
+    pill.style.cssText = "bottom: 60px; right: 18px; cursor: pointer; border: 0; background: rgba(196,185,169,0.92); color: white;";
+    pill.type = "button";
+    pill.setAttribute("aria-label", "打开新手引导");
+    pill.innerHTML = "👋 30 秒看完核心用法 <span style=\"opacity:0.6;margin-left:8px;font-size:11px\">✕</span>";
+    document.body.appendChild(pill);
+
+    const dismissAndRemember = () => {
+      pill.remove();
+      try { localStorage.setItem("pixcull_tour_done", "1"); } catch (e) {}
+    };
+    pill.addEventListener("click", e => {
+      // X icon (the trailing ✕) dismisses without showing the tour.
+      // Anything else opens the tour AND marks dismissed.
+      const rect = pill.getBoundingClientRect();
+      const xZone = rect.right - 24;
+      if (e.clientX >= xZone) {
+        dismissAndRemember();
+        return;
+      }
+      paint();
+      overlay.classList.add("show");
+      dismissAndRemember();
+    });
+  }
+})();
+</script>
+
+<!-- V28.1 — active-user pill + modal wiring. Reads /api/v1/users to
+     populate; lets the user create new profiles inline. Switching is
+     env-var-based (documented in the modal); changing on-the-fly
+     would need a process restart which we can't do from JS. -->
+<script>
+(() => {
+  const pill = document.getElementById("userPill");
+  const pillName = document.getElementById("userPillName");
+  const modal = document.getElementById("userModal");
+  const modalActive = document.getElementById("userModalActive");
+  const modalList = document.getElementById("userModalList");
+  const createInput = document.getElementById("userCreateInput");
+  const createBtn = document.getElementById("userCreateBtn");
+  const createMsg = document.getElementById("userCreateMsg");
+
+  async function refreshUsers() {
+    try {
+      const r = await fetch("/api/v1/users");
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const data = await r.json();
+      pillName.textContent = data.active || "default";
+      pill.style.display = "block";
+      modalActive.textContent = data.active || "default";
+      modalList.innerHTML = (data.users || []).map(u => {
+        const tag = u.is_active
+          ? '<span style="color:var(--keep);margin-left:6px;font-size:10px">← 当前</span>'
+          : '<span style="color:var(--muted-soft);margin-left:6px;font-size:10px">点击切换</span>';
+        return `<div data-uid="${u.user_id}" class="user-row"
+                style="padding:8px 10px;border-radius:4px;
+                ${u.is_active ? 'background:rgba(111,170,120,0.08);' : 'cursor:pointer;'}
+                margin-bottom:4px;display:flex;justify-content:space-between;
+                align-items:center;font-size:12px">
+          <span><b>${u.user_id}</b>${tag}</span>
+          <span style="color:var(--muted-soft);font-size:10px">
+            ${u.vertical_count} 个垂类已填样本
+          </span>
+        </div>`;
+      }).join("");
+      // V28.2 — click a (non-active) row to switch via cookie
+      modalList.querySelectorAll(".user-row").forEach(row => {
+        row.addEventListener("click", async () => {
+          const targetUid = row.dataset.uid;
+          if (!targetUid) return;
+          if (targetUid === pillName.textContent) return;  // already active
+          try {
+            const res = await fetch("/api/v1/users/active", {
+              method: "POST",
+              headers: {"Content-Type": "application/json"},
+              body: JSON.stringify({user_id: targetUid}),
+            });
+            if (!res.ok) throw new Error("HTTP " + res.status);
+            // V28.2: the cookie set means subsequent requests load
+            // the new user. Refresh to pick up everything.
+            location.reload();
+          } catch (e) {
+            createMsg.textContent = "切换失败: " + e.message;
+          }
+        });
+      });
+    } catch (e) {
+      console.warn("userPill: refresh failed", e);
+      pill.style.display = "none";
+    }
+  }
+
+  pill.addEventListener("click", () => {
+    refreshUsers();
+    modal.style.display = "flex";
+  });
+  window.closeUserModal = () => { modal.style.display = "none"; };
+
+  createBtn.addEventListener("click", async () => {
+    const id = (createInput.value || "").trim();
+    if (!id) {
+      createMsg.textContent = "请输入 user_id";
+      return;
+    }
+    createBtn.disabled = true;
+    try {
+      const r = await fetch("/api/v1/users", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({user_id: id}),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (r.ok) {
+        createMsg.textContent = data.created
+          ? `已创建 '${id}'。切换需要 export PIXCULL_USER=${id} + 重启。`
+          : `'${id}' 已存在(无新建)。`;
+        createInput.value = "";
+        refreshUsers();
+      } else {
+        createMsg.textContent = "失败: " + (data.error || ("HTTP " + r.status));
+      }
+    } catch (e) {
+      createMsg.textContent = "网络错误: " + e.message;
+    } finally {
+      createBtn.disabled = false;
+    }
+  });
+
+  // Initial load
+  refreshUsers();
+})();
+</script>
+
+<script>
+(() => {
+  const dropZone = document.getElementById("dropZone");
+  const fileInput = document.getElementById("fileInput");
+  const fileList = document.getElementById("fileList");
+  const uploadBtn = document.getElementById("uploadBtn");
+  const clearBtn = document.getElementById("clearBtn");
+  const hint = document.getElementById("hint");
+  const statusEl = document.getElementById("status");
+  const stateLabel = document.getElementById("stateLabel");
+  const messageEl = document.getElementById("message");
+  const progressBar = document.getElementById("progressBar");
+  const resultsLink = document.getElementById("resultsLink");
+
+  let pickedFiles = [];
+
+  // V17.12 — browser-side error capture (same as /verticals page).
+  // Best-effort POST; server respects V14.7 opt-in.
+  (function() {
+    const _seen = new Set();
+    function _capture(payload) {
+      const key = (payload.message||"") + "|" + (payload.source||"") + "|" + (payload.lineno||"");
+      if (_seen.has(key)) return;
+      _seen.add(key);
+      if (_seen.size > 20) return;
+      try {
+        fetch("/error_reports/client_event", {
+          method: "POST", headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({...payload,
+            url: location.pathname,
+            ua: navigator.userAgent.slice(0, 200)}),
+          keepalive: true,
+        }).catch(() => {});
+      } catch (e) {}
+    }
+    window.addEventListener("error", e => _capture({
+      kind: "error", message: e.message || "",
+      source: e.filename || "", lineno: e.lineno || 0,
+      colno: e.colno || 0,
+      stack: (e.error && e.error.stack) || "",
+    }));
+    window.addEventListener("unhandledrejection", e => _capture({
+      kind: "unhandledrejection",
+      message: String((e.reason && e.reason.message) || e.reason || ""),
+      stack: (e.reason && e.reason.stack) || "",
+    }));
+  })();
+
+  // V14.4 — modal a11y. Each modal registered with ``registerModal``
+  // gets ARIA role=dialog, aria-modal, aria-labelledby (auto-derived),
+  // a Tab focus trap, and focus restore on close. Toggle visibility
+  // via ``classList.add/remove("show")`` exactly like before — the
+  // observer handles the ARIA/focus side reactively.
+  function _modalFocusables(el) {
+    return Array.from(el.querySelectorAll(
+      'a[href], button, input, textarea, select, [tabindex]:not([tabindex="-1"])'
+    )).filter(x => !x.disabled && x.offsetParent !== null);
+  }
+  function _attachTrap(el) {
+    el.setAttribute("role", "dialog");
+    el.setAttribute("aria-modal", "true");
+    if (!el.getAttribute("aria-labelledby")) {
+      const head = el.querySelector("h1, h2, h3, .modal-title");
+      if (head) {
+        if (!head.id) head.id = "modal-title-" + Math.random().toString(36).slice(2, 8);
+        el.setAttribute("aria-labelledby", head.id);
+      }
+    }
+    el._previouslyFocused = document.activeElement;
+    setTimeout(() => {
+      const f = _modalFocusables(el);
+      if (f.length) f[0].focus();
+    }, 0);
+    el._trapHandler = (e) => {
+      if (e.key !== "Tab") return;
+      const f = _modalFocusables(el);
+      if (!f.length) return;
+      const first = f[0], last = f[f.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault(); last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault(); first.focus();
+      }
+    };
+    el.addEventListener("keydown", el._trapHandler);
+  }
+  function _detachTrap(el) {
+    if (el._trapHandler) {
+      el.removeEventListener("keydown", el._trapHandler);
+      el._trapHandler = null;
+    }
+    const prev = el._previouslyFocused;
+    el._previouslyFocused = null;
+    if (prev && typeof prev.focus === "function" && document.body.contains(prev)) {
+      prev.focus();
+    }
+  }
+  function registerModal(el) {
+    if (!el || el._a11yWired) return;
+    el._a11yWired = true;
+    el._isOpen = el.classList.contains("show");
+    if (el._isOpen) _attachTrap(el);
+    const obs = new MutationObserver(() => {
+      const open = el.classList.contains("show");
+      if (open && !el._isOpen) {
+        el._isOpen = true;
+        _attachTrap(el);
+      } else if (!open && el._isOpen) {
+        el._isOpen = false;
+        _detachTrap(el);
+      }
+    });
+    obs.observe(el, { attributes: true, attributeFilter: ["class"] });
+  }
+  function openModal(el) {
+    if (!el) return;
+    registerModal(el);
+    el.classList.add("show");
+  }
+  function closeModal(el) {
+    if (!el) return;
+    el.classList.remove("show");
+  }
+
+  function fmtBytes(b) {
+    if (b >= 1e9) return (b / 1e9).toFixed(2) + " GB";
+    if (b >= 1e6) return (b / 1e6).toFixed(0) + " MB";
+    return (b / 1024).toFixed(0) + " KB";
+  }
+
+  function refreshList() {
+    if (!pickedFiles.length) {
+      fileList.style.display = "none";
+      uploadBtn.disabled = true;
+      hint.textContent = "";
+      return;
+    }
+    fileList.style.display = "block";
+    fileList.innerHTML = pickedFiles.map(f =>
+      `<div class="item">• ${f.name} <span style="opacity:0.5">(${fmtBytes(f.size)})</span></div>`
+    ).join("");
+    uploadBtn.disabled = false;
+    const total = pickedFiles.reduce((s, f) => s + f.size, 0);
+    let warn = "";
+    if (total > 1.5e9) {
+      warn = ` <span style="color:var(--maybe)">· 较大,上传会慢</span>`;
+    }
+    hint.innerHTML = `${pickedFiles.length} 张 · 共 ${fmtBytes(total)}${warn}`;
+  }
+
+  dropZone.addEventListener("click", () => fileInput.click());
+  fileInput.addEventListener("change", e => {
+    pickedFiles = pickedFiles.concat(Array.from(e.target.files));
+    refreshList();
+    fileInput.value = "";
+  });
+
+  // V14.2 — live drag feedback. We can read e.dataTransfer.items
+  // count during dragover (the actual File objects are sealed until
+  // drop) so the user gets "丢下 N 张" instead of just a glow.
+  const dropMain = document.getElementById("dropMain");
+  const dropHint = document.getElementById("dropHint");
+  const dropIcon = document.getElementById("dropIcon");
+  const _dropDefaults = {
+    main: dropMain.innerHTML,
+    hint: dropHint.innerHTML,
+    icon: dropIcon.innerHTML,
+  };
+  ["dragenter", "dragover"].forEach(ev =>
+    dropZone.addEventListener(ev, e => {
+      e.preventDefault(); dropZone.classList.add("dragover");
+      // dataTransfer.items is the live count even during drag
+      const n = e.dataTransfer && e.dataTransfer.items
+        ? Array.from(e.dataTransfer.items).filter(i => i.kind === "file").length
+        : 0;
+      if (n > 0) {
+        dropIcon.innerHTML = "⤓";
+        dropMain.innerHTML = `松开以加入 <b>${n}</b> 张图片`;
+        dropHint.innerHTML = `已选 ${pickedFiles.length} · 加上将共 ${pickedFiles.length + n} 张`;
+      }
+    })
+  );
+  ["dragleave", "drop"].forEach(ev =>
+    dropZone.addEventListener(ev, e => {
+      e.preventDefault(); dropZone.classList.remove("dragover");
+      dropMain.innerHTML = _dropDefaults.main;
+      dropHint.innerHTML = _dropDefaults.hint;
+      dropIcon.innerHTML = _dropDefaults.icon;
+    })
+  );
+  dropZone.addEventListener("drop", e => {
+    pickedFiles = pickedFiles.concat(Array.from(e.dataTransfer.files));
+    refreshList();
+  });
+
+  clearBtn.addEventListener("click", () => {
+    pickedFiles = [];
+    refreshList();
+    statusEl.classList.remove("show");
+  });
+
+  // ---------------------- Tab switching --------------------------------
+  document.querySelectorAll(".tab").forEach(t => {
+    t.addEventListener("click", () => {
+      document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
+      t.classList.add("active");
+      const which = t.dataset.tab;
+      document.querySelectorAll(".tab-pane").forEach(p => {
+        p.style.display = p.dataset.pane === which ? "" : "none";
+      });
+      statusEl.classList.remove("show");
+    });
+  });
+
+  // ---------------------- Scan local folder ----------------------------
+  const folderPath = document.getElementById("folderPath");
+  const scanBtn = document.getElementById("scanBtn");
+  const folderInfo = document.getElementById("folderInfo");
+  const scanHint = document.getElementById("scanHint");
+  const browseBtn = document.getElementById("browseBtn");
+
+  // V17.0 — populate the vertical dropdown from /verticals.json on
+  // page load. Falls back to a no-op if the registry is unreachable
+  // (then the user's choice is just ``""`` = auto-detect).
+  (async () => {
+    const sel = document.getElementById("scanVertical");
+    if (!sel) return;
+    try {
+      const res = await fetch("/verticals.json");
+      if (!res.ok) return;
+      const reg = await res.json();
+      for (const v of reg) {
+        const opt = document.createElement("option");
+        opt.value = v.key;
+        opt.textContent = `${v.icon}  ${v.zh}`;
+        sel.appendChild(opt);
+      }
+    } catch (_) { /* offline → auto-detect default fine */ }
+  })();
+
+  let lastFolderCheck = "";
+  async function inspectFolder() {
+    const p = folderPath.value.trim();
+    if (!p) {
+      folderInfo.textContent = "";
+      scanBtn.disabled = true;
+      lastFolderCheck = "";
+      return;
+    }
+    if (p === lastFolderCheck) return;
+    lastFolderCheck = p;
+    folderInfo.textContent = "检查中…";
+    try {
+      const res = await fetch("/browse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: p }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        folderInfo.textContent = data.error || "路径无效";
+        scanBtn.disabled = true;
+        return;
+      }
+      const subN = data.entries.filter(e => e.n_images > 0).length;
+      folderInfo.innerHTML =
+        `当前层级 <b>${data.n_images_here}</b> 张图`
+        + (subN ? ` · 子文件夹 <b>${subN}</b> 个含图(扫描时会递归)` : "")
+        + ` · <span style="opacity:0.7">${data.path}</span>`;
+      scanBtn.disabled = data.n_images_here === 0 && subN === 0;
+    } catch (e) {
+      folderInfo.textContent = "检查失败: " + e;
+      scanBtn.disabled = true;
+    }
+  }
+  folderPath.addEventListener("input", () => {
+    clearTimeout(folderPath._t);
+    folderPath._t = setTimeout(inspectFolder, 350);
+  });
+
+  // V14.0 — Retry support. We remember the last fired action (scan or
+  // upload) so the user can re-trigger it without re-picking files or
+  // re-typing a folder path. ``lastAction`` is set on success path,
+  // re-fired on retry click.
+  let lastAction = null;  // { kind: 'scan'|'upload', run: () => Promise }
+  const retryBtn = document.getElementById("retryBtn");
+
+  function showRetry(visible) {
+    if (retryBtn) retryBtn.style.display = visible ? "inline-block" : "none";
+  }
+
+  if (retryBtn) {
+    retryBtn.addEventListener("click", () => {
+      if (!lastAction) return;
+      showRetry(false);
+      lastAction.run();
+    });
+  }
+
+  async function runScan(p) {
+    scanBtn.disabled = true;
+    showRetry(false);
+    statusEl.classList.add("show");
+    stateLabel.textContent = "索引中";
+    messageEl.textContent = "扫描文件夹…";
+    progressBar.style.width = "5%";
+    progressBar.classList.remove("error", "done");
+
+    try {
+      // V17.0 — pull the optional vertical override from the dropdown.
+      // Sent as ``vertical`` in the body; server stores it in run
+      // metadata so per-vertical eval / tuning can filter on it.
+      const verticalSel = document.getElementById("scanVertical");
+      const vertical = (verticalSel && verticalSel.value) || "";
+      const res = await fetch("/scan_local", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ folder: p, vertical }),
+      });
+      if (!res.ok) {
+        let msg;
+        try { msg = (await res.json()).error || `HTTP ${res.status}`; }
+        catch (_) { msg = `HTTP ${res.status}`; }
+        throw new Error(msg);
+      }
+      const data = await res.json();
+      stateLabel.textContent = "分析中";
+      messageEl.textContent = `已索引 ${data.n} 张图,正在分析…`;
+      pollStatus(data.run_id);
+    } catch (err) {
+      stateLabel.textContent = "失败";
+      messageEl.textContent = err.message || String(err);
+      progressBar.classList.add("error");
+      progressBar.style.width = "100%";
+      scanBtn.disabled = false;
+      showRetry(true);  // V14.0 — let user retry without re-entering path
+    }
+  }
+
+  scanBtn.addEventListener("click", () => {
+    const p = folderPath.value.trim();
+    if (!p) return;
+    lastAction = { kind: "scan", run: () => runScan(p) };
+    runScan(p);
+  });
+
+  // ---------------------- Folder browser modal -------------------------
+  const browserModal = document.getElementById("browserModal");
+  const browserPath = document.getElementById("browserPath");
+  const browserBody = document.getElementById("browserBody");
+  const browserClose = document.getElementById("browserClose");
+  const browserUseHere = document.getElementById("browserUseHere");
+  const browserHereCount = document.getElementById("browserHereCount");
+  let browserCurrent = "";
+
+  async function loadBrowser(path) {
+    browserBody.textContent = "加载中…";
+    try {
+      const res = await fetch("/browse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: path || "" }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        browserBody.innerHTML = `<div class="muted" style="padding:14px">${data.error || "失败"}</div>`;
+        return;
+      }
+      browserCurrent = data.path;
+      browserPath.textContent = data.path;
+      browserHereCount.textContent =
+        data.n_images_here ? `当前层 ${data.n_images_here} 张` : "(当前层无图)";
+      const rows = [];
+      if (data.parent) {
+        rows.push(`<div class="row parent" data-go="${data.parent}"><span class="icon">⬆</span><span class="name">..</span></div>`);
+      }
+      data.entries.forEach(e => {
+        const badge = e.n_images > 0
+          ? `<span class="badge">${e.n_images} 张</span>`
+          : (e.n_images === -1 ? `<span class="muted">⊘</span>` : "");
+        const childPath = data.path === "/" ? `/${e.name}` : `${data.path}/${e.name}`;
+        rows.push(`<div class="row" data-go="${childPath}"><span class="icon">▸</span><span class="name">${e.name}</span>${badge}</div>`);
+      });
+      browserBody.innerHTML = rows.join("") || `<div class="muted" style="padding:14px">空文件夹</div>`;
+      browserBody.querySelectorAll(".row").forEach(r => {
+        r.addEventListener("click", () => loadBrowser(r.dataset.go));
+      });
+    } catch (e) {
+      browserBody.innerHTML = `<div class="muted" style="padding:14px">${e}</div>`;
+    }
+  }
+  // V14.4 — flipped from style.display to .show class so the modal
+  // can share the global animation keyframes + ARIA helpers below.
+  // Pre-register so the observer wires up focus trap + restoration
+  // even on the very first open.
+  registerModal(browserModal);
+  browseBtn.addEventListener("click", () => {
+    openModal(browserModal);
+    loadBrowser(folderPath.value.trim() || "");
+  });
+  browserClose.addEventListener("click", () => closeModal(browserModal));
+  browserUseHere.addEventListener("click", () => {
+    folderPath.value = browserCurrent;
+    closeModal(browserModal);
+    inspectFolder();
+  });
+  // V8.3: quick-jump shortcut buttons in the modal header.
+  document.querySelectorAll("#browserQuick a").forEach(a => {
+    a.addEventListener("click", () => loadBrowser(a.dataset.go));
+  });
+  // V8.3 + V14.4: Esc to close, click on backdrop to close.
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && browserModal.classList.contains("show")) {
+      closeModal(browserModal);
+    }
+  });
+  browserModal.addEventListener("click", e => {
+    if (e.target === browserModal) closeModal(browserModal);
+  });
+
+  // ---------------------- Upload (existing path) -----------------------
+  async function runUpload(files) {
+    if (!files.length) return;
+    uploadBtn.disabled = true;
+    clearBtn.disabled = true;
+    showRetry(false);
+    statusEl.classList.add("show");
+    stateLabel.textContent = "上传中";
+    messageEl.textContent = `正在上传 ${files.length} 张图片…`;
+    progressBar.style.width = "5%";
+    progressBar.classList.remove("error", "done");
+
+    const fd = new FormData();
+    files.forEach(f => fd.append("files", f));
+
+    let runId = null;
+    try {
+      const res = await fetch("/analyze", { method: "POST", body: fd });
+      if (!res.ok) {
+        // Server now returns JSON {error: "..."} on rejection; fall back
+        // to raw text only if that's not what we got.
+        let msg;
+        try {
+          const data = await res.json();
+          msg = data.error || `HTTP ${res.status}`;
+        } catch (_) {
+          msg = `HTTP ${res.status}`;
+        }
+        throw new Error(msg);
+      }
+      const data = await res.json();
+      runId = data.run_id;
+    } catch (err) {
+      stateLabel.textContent = "上传失败";
+      messageEl.textContent = err.message || String(err);
+      progressBar.classList.add("error");
+      progressBar.style.width = "100%";
+      uploadBtn.disabled = false;
+      clearBtn.disabled = false;
+      // V14.0 — Retry will re-upload the same File objects. The
+      // browser keeps them alive in memory as long as the input
+      // hasn't been re-clicked, so this works without re-picking.
+      showRetry(true);
+      return;
+    }
+
+    stateLabel.textContent = "分析中";
+    pollStatus(runId);
+  }
+
+  uploadBtn.addEventListener("click", () => {
+    if (!pickedFiles.length) return;
+    const snapshot = pickedFiles.slice();
+    lastAction = { kind: "upload", run: () => runUpload(snapshot) };
+    runUpload(snapshot);
+  });
+
+  // P-UX-21 — zero-friction sample-data path. POSTs to a server
+  // endpoint that copies samples/output/ → /tmp/pixcull_demo/<id>/
+  // (already pre-scored) + serves the 6 sample input files in place
+  // via the manifest's absolute paths. Visitor goes from "click" to
+  // "interactive /results page" in under 1 second.
+  const sampleBtn = document.getElementById("sampleBtn");
+  if (sampleBtn) sampleBtn.addEventListener("click", async () => {
+    sampleBtn.disabled = true; const orig = sampleBtn.textContent;
+    sampleBtn.textContent = "⚡ 加载中…";
+    try {
+      const r = await fetch("/sample_demo", { method: "POST" });
+      const d = await r.json();
+      if (!d.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      location.href = `/results/${d.run_id}`;
+    } catch (e) {
+      sampleBtn.textContent = orig;
+      sampleBtn.disabled = false;
+      alert("加载示例数据失败: " + e.message);
+    }
+  });
+
+  // V14.2 — rolling-window ETA. We collect (timestamp, done) samples
+  // for the last ~25 polls and compute "items per second" from the
+  // tail. Smoother than naive total-elapsed/done because per-image
+  // cost varies (RAW decode is slower for the first image, model
+  // warming, occasional API stalls).
+  function fmtEta(secs) {
+    if (!isFinite(secs) || secs < 1) return "<1s";
+    if (secs < 60) return `${Math.round(secs)}s`;
+    const m = Math.floor(secs / 60), s = Math.round(secs % 60);
+    return s ? `${m}m${s}s` : `${m}m`;
+  }
+
+  async function pollStatus(runId) {
+    let stalled = 0;
+    let lastDone = 0;
+    const samples = [];   // [{t, done}, ...] up to 25
+    while (true) {
+      let s;
+      try {
+        const res = await fetch(`/status/${runId}`);
+        s = await res.json();
+      } catch (e) {
+        await new Promise(r => setTimeout(r, 1500));
+        continue;
+      }
+
+      // Update rolling samples for ETA
+      const now = Date.now() / 1000;
+      samples.push({ t: now, done: s.done || 0 });
+      while (samples.length > 25) samples.shift();
+
+      let etaTxt = "";
+      if (s.total && s.done > 0 && samples.length >= 4) {
+        // Use only the most recent half of the window so the rate
+        // tracks current pace, not the cold-start spike.
+        const tail = samples.slice(-Math.max(4, Math.floor(samples.length / 2)));
+        const dt = tail[tail.length - 1].t - tail[0].t;
+        const dn = tail[tail.length - 1].done - tail[0].done;
+        if (dt > 0 && dn > 0) {
+          const rate = dn / dt;  // items/sec
+          const remain = s.total - s.done;
+          if (remain > 0) etaTxt = ` · 预计 ${fmtEta(remain / rate)}`;
+        }
+      }
+      messageEl.textContent = (s.message || "处理中…") + etaTxt;
+      if (s.total) {
+        const pct = Math.max(5, Math.round(100 * s.done / s.total));
+        progressBar.style.width = pct + "%";
+      }
+
+      if (s.state === "done") {
+        progressBar.classList.add("done");
+        progressBar.style.width = "100%";
+        stateLabel.textContent = "完成";
+        resultsLink.href = `/results/${runId}`;
+        resultsLink.style.display = "inline-block";
+        clearBtn.disabled = false;
+        return;
+      }
+      if (s.state === "error") {
+        progressBar.classList.add("error");
+        stateLabel.textContent = "失败";
+        clearBtn.disabled = false;
+        // V14.0 — pipeline-side error → user can retry the same files
+        if (lastAction) {
+          uploadBtn.disabled = false;
+          scanBtn.disabled = false;
+          showRetry(true);
+        }
+        return;
+      }
+      // stall detector — purely cosmetic, doesn't abort
+      if (s.done === lastDone) stalled++; else { stalled = 0; lastDone = s.done; }
+
+      await new Promise(r => setTimeout(r, 800));
+    }
+  }
+})();
+</script>
+</body>
+</html>

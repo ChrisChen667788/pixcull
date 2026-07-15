@@ -54,8 +54,14 @@ tasks:
 完整源码 + iOS 伴侣 App + Lightroom 插件,均在 GitHub:
 **[github.com/ChrisChen667788/pixcull](https://github.com/ChrisChen667788/pixcull)**
 
-## v0.7 → v2.15 主要更新
+## v0.7 → v2.16 主要更新
 
+- **v2.16**:**偿还巨石债·第一刀** —— 审计首推主题(v2.4 承诺、拖了 11 个版本):
+  serve_demo.py 里 7 个内联 HTML 页面巨块(~5,300 行 Python 字符串)抽成
+  `templates/pages/*.html` 真文件(AST 求值抽取、共享 design-tokens CSS 占位符回注),
+  **18,225 → 12,884 行(−29%)**;重构唯一验收标准:**7 条路由响应前后字节级一致**
+  (curl-diff)+ 模板守卫测试。后续:results.js 模块化 + do_GET 路由表。详见
+  `docs/ROADMAP-v2.16-charter.md`。
 - **v2.15**:**culling 终于有了「审完」的终点线** —— 工作条新增实时**「待审 N」**计数
   (还没人工确认判定的照片数;重按确认也计入),归零翻成**「全部已审 ✓ · 导出 XMP」**
   完成 chip,一键触发此前埋在 ⌘K 里的 XMP 导出,刷新不丢;新增**「◐ 决议 maybe」**

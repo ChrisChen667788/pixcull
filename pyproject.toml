@@ -128,6 +128,7 @@ include = [
     "pixcull/scoring/data/*.json",        # v2.4-P1-3 — calibrated audio thresholds ship with the package
     "pixcull/report/templates/*.j2",
     "pixcull/report/templates/*.html",   # V19.4.1 — results.html is loaded from disk at runtime
+    "pixcull/report/templates/pages/*.html",  # v2.16-P0 — serve_demo page templates (extracted blobs)
 ]
 
 [tool.ruff]

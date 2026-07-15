@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <title>PixCull — 存储管理</title>
+  <style>
+/*__DESIGN_TOKENS_CSS__*/
+    /* v0.6 (3/5) — admin-page aliases.
+       Legacy --danger was a separate token; alias to --c-danger. */
+    :root { --danger: var(--c-danger); }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; background: var(--bg); color: var(--fg);
+      font-family: var(--font-body);
+      font-size: var(--t-body);
+      line-height: var(--lh-normal);
+      -webkit-font-smoothing: antialiased;
+    }
+    *:focus-visible {
+      outline: 2px solid var(--focus-ring);
+      outline-offset: 2px;
+      border-radius: 4px;
+    }
+    header {
+      padding: 18px 24px 12px; border-bottom: 1px solid var(--border);
+    }
+    header h1 { margin: 0 0 4px; font-size: 16px; font-weight: 600; }
+    header h1 a { color: var(--muted); text-decoration: none; font-weight: 400; margin-left: 12px; font-size: 13px; }
+    header h1 a:hover { color: var(--fg); }
+    main { padding: 16px 24px 40px; max-width: 1100px; }
+    .card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 8px; padding: 16px; margin-bottom: 18px;
+    }
+    .card h2 { margin: 0 0 10px; font-size: 13px; font-weight: 600;
+               color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+    .summary-row { display: flex; gap: 24px; flex-wrap: wrap; }
+    .summary-row .stat { min-width: 100px; }
+    .summary-row .stat .v { font-size: 22px; font-weight: 600; }
+    .summary-row .stat .k { color: var(--muted); font-size: 11px; }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+    button {
+      background: var(--bg-card-hi); color: var(--fg); border: 1px solid var(--border);
+      padding: 6px 12px; font-size: 12px; border-radius: 4px; cursor: pointer;
+    }
+    button:hover { border-color: var(--fg); }
+    button.danger { color: var(--danger); border-color: var(--danger); }
+    button.danger:hover { background: rgba(239, 68, 68, 0.1); }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 12px; }
+    th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-weight: 500; font-size: 11px; text-transform: uppercase; }
+    tr:hover td { background: rgba(255,255,255,0.025); }
+    td.size { font-family: ui-monospace, monospace; }
+    .pill { display: inline-block; padding: 1px 6px; font-size: 10px; border-radius: 2px; margin-right: 3px; }
+    .pill.keep { background: var(--keep); color: white; }
+    .pill.maybe { background: var(--maybe); color: white; }
+    .pill.cull { background: var(--cull); color: white; }
+    .pill.stale { background: rgba(255,255,255,0.08); color: var(--muted); }
+    .pill.running { background: var(--accent); color: white; }
+    a.btn { display: inline-block; padding: 4px 10px; font-size: 11px;
+            color: var(--accent); text-decoration: none;
+            border: 1px solid var(--border); border-radius: 3px; }
+    a.btn:hover { border-color: var(--accent); }
+    .muted { color: var(--muted); font-size: 11px; }
+    .global-cache td { font-family: ui-monospace, monospace; font-size: 11px; }
+    .toast {
+      position: fixed; bottom: 20px; right: 20px;
+      background: var(--bg-card-hi); border: 1px solid var(--border);
+      border-radius: 6px; padding: 10px 14px; font-size: 12px;
+      max-width: 360px; box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+      transform: translateX(120%); transition: transform 0.2s;
+    }
+    .toast.show { transform: translateX(0); }
+    .toast.error { border-color: var(--danger); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>存储管理
+      <a href="/">← 返回上传</a>
+      <a href="/verticals" style="color: var(--accent)">垂类样本采集 →</a>
+    </h1>
+    <div class="muted" id="rootHint">--</div>
+  </header>
+  <main>
+    <!-- P-UX-12 — your taste profile, derived from accumulated
+         human annotations. Helps you see your own selection bias
+         + sets up data-driven rescorer adaptation later. -->
+    <div class="card" id="prefsCard" style="display:none">
+      <h2>你的选片偏好(基于人工标注历史)</h2>
+      <div class="summary-row">
+        <div class="stat"><div class="v" id="prefsTotal">--</div><div class="k">累计人工标注</div></div>
+        <div class="stat"><div class="v" id="prefsKeepRate">--</div><div class="k">人工 keep 占比</div></div>
+        <div class="stat"><div class="v" id="prefsTopScene">--</div><div class="k">最常 keep 的题材</div></div>
+        <div class="stat"><div class="v" id="prefsTopReason">--</div><div class="k">最常 cull 的原因</div></div>
+      </div>
+      <div style="margin-top:14px">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">题材分布</div>
+        <table id="prefsSceneTable" class="global-cache" style="margin-top:4px">
+          <thead><tr><th>场景</th><th>keep</th><th>maybe</th><th>cull</th><th>keep 占比</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div style="margin-top:14px">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">你 keep 时 vs cull 时,各维度的平均星级</div>
+        <table id="prefsAxisTable" class="global-cache" style="margin-top:4px">
+          <thead><tr><th>维度</th><th>keep 时 ★</th><th>cull 时 ★</th><th>差值(你的偏好权重)</th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <div class="muted" style="margin-top:6px">
+          差值越大说明你越在乎这一维 —— 例如 "构图 keep 4.5 / cull 1.8 = +2.7" 表示你对构图非常严格。
+          未来 PixCull 可以按这些权重自动调整 keep/cull 阈值(P-UX-12 v0.2)。
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>V2.1 多轴 rescorer 训练</h2>
+      <div class="muted" style="margin-bottom: 10px">
+        把累计的人工 rubric 标注 + auto/goldenset 数据训成 6 个 per-axis 回归模型。
+        训完后下次跑 pipeline 自动启用,与 auto rubric 并排显示。
+      </div>
+      <div id="retrainStatus" style="margin-bottom:10px;font-size:12px"></div>
+      <table class="global-cache" id="axisModelsTable" style="margin-bottom:8px">
+        <thead><tr><th>轴</th><th>训练行数</th><th>含人工</th><th>CV R²</th><th>CV MAE (★)</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <div class="actions">
+        <button id="retrainBtn">立即训练</button>
+        <label style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:4px">
+          <input type="checkbox" id="retrainGoldenset" checked> 含 goldenset 冷启动数据
+        </label>
+        <label style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:4px">
+          <input type="checkbox" id="retrainIncludeAuto" checked> 含 auto rubric 数据
+        </label>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>本 demo 占用</h2>
+      <div class="summary-row">
+        <div class="stat"><div class="v" id="totalSize">--</div><div class="k">总占用</div></div>
+        <div class="stat"><div class="v" id="totalRuns">--</div><div class="k">分析记录数</div></div>
+        <div class="stat"><div class="v" id="totalImages">--</div><div class="k">累计图片</div></div>
+      </div>
+      <div class="actions">
+        <button id="cleanupOlder">清理 1 小时前的</button>
+        <button id="cleanupKeepLast">仅保留最近 3 次</button>
+        <button id="cleanupAll" class="danger">全部清空</button>
+        <button id="refresh">刷新</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>每次分析记录</h2>
+      <table id="runsTable">
+        <thead><tr>
+          <th>run_id</th>
+          <th>大小</th>
+          <th>图片</th>
+          <th>分类</th>
+          <th>状态</th>
+          <th>距今</th>
+          <th></th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+      <div class="muted" id="emptyHint" style="display:none; padding: 12px 0">没有记录。回到主页上传一批就有了。</div>
+    </div>
+
+    <div class="card">
+      <h2>机器全局模型缓存</h2>
+      <div class="muted" style="margin-bottom: 8px">这些是 PyTorch / HuggingFace 等下载的预训练模型。删除后<b>第一次重新分析</b>会下载,之后照旧。本面板<b>不会</b>动它们,需要清的话执行下方命令。</div>
+      <table class="global-cache" id="cachesTable">
+        <thead><tr><th>缓存</th><th>路径</th><th>大小</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <!-- V15 — pointer to the goldenset eval workflow. The script
+         is CLI-only for now (running the pipeline programmatically
+         + writing reports to disk); we just surface the recipe so
+         the admin page is the discoverable entry point. -->
+    <div class="card">
+      <h2>评估 rescorer · 对照真实数据集</h2>
+      <div class="muted" style="margin-bottom: 10px">
+        把一组带 <code>manual_label</code>(keep / maybe / cull)的图作为 ground truth,
+        让 pipeline 跑一遍,出 confusion matrix · macro-F1 · Cohen κ · 逐轴 MAE。
+        如果你之前评过一版,把那次的 <code>eval_*.json</code> 喂回去 (<code>--baseline</code>)
+        就能告诉你新模型究竟是否变好。
+      </div>
+      <pre style="background: rgba(0,0,0,0.3); padding: 10px 12px; border-radius: 6px;
+                  border: 1px solid var(--border); font-size: 11px; overflow-x:auto;
+                  margin-bottom: 10px">
+# 数据布局
+golden/
+  ground_truth.csv          # filename, scene, manual_label
+                            #   + 可选 gt_&lt;axis&gt;_stars 列做逐轴评估
+  images/*.jpg
+
+# 单次评估(CLI)
+PYTHONPATH=. python scripts/eval_on_golden_set.py golden/ \
+  --report --label v1
+
+# V1 vs V2 对比 — 哪个 rescorer 更好?
+PYTHONPATH=. python scripts/eval_on_golden_set.py golden/ \
+  --report --label v2 \
+  --baseline golden/_eval_output/eval_v1.json
+</pre>
+      <div class="muted" style="font-size: 11px">
+        输出位置:<code>&lt;golden&gt;/_eval_output/eval_&lt;label&gt;.{json,html}</code>。
+        HTML 是自包含的,可以直接发给搭档看。
+        阈值约定见 <code>pixcull.scoring.eval_metrics._improvement_verdict</code>:
+        macro-F1 +2pp 才算"推荐替换"。
+      </div>
+    </div>
+
+    <!-- V14.7 — opt-in error reporting toggle. Defaults OFF. Hard
+         requirement: nothing leaves the user's machine until they
+         explicitly flip the switch + click "submit". -->
+    <div class="card">
+      <h2>错误上报(opt-in,默认关闭)</h2>
+      <div class="muted" style="margin-bottom: 10px">
+        开启后,只在你<b>主动点击</b>"立即提交"时会把日志(已脱敏)上传到指定 endpoint。
+        <a href="/privacy" target="_blank" style="color:var(--accent)">完整政策 →</a>
+      </div>
+      <div style="display:flex; align-items:center; gap:12px; margin-bottom:10px">
+        <label style="display:flex; align-items:center; gap:6px; font-size:13px; cursor:pointer">
+          <input type="checkbox" id="erEnabled"> 开启
+        </label>
+        <span style="color:var(--muted); font-size:11px" id="erStatusBadge"></span>
+      </div>
+      <div style="margin-bottom:10px">
+        <label style="display:block; font-size:11px; color:var(--muted); margin-bottom:4px">
+          Endpoint URL(留空则只 dry-run 不发送):
+        </label>
+        <input id="erEndpoint" type="url" placeholder="https://your-sentry-or-server.example/report"
+               style="width:100%; max-width:520px; background: rgba(0,0,0,0.3); color: var(--fg);
+                      border: 1px solid var(--border); padding: 6px 10px; border-radius: 4px;
+                      font: inherit; font-size:12px">
+      </div>
+      <div class="actions">
+        <button id="erSaveBtn">保存设置</button>
+        <button id="erSubmitBtn">立即提交一次报告</button>
+        <button id="erPreviewBtn">预览将发送的内容</button>
+      </div>
+      <pre id="erOut" style="margin-top:12px; padding:12px; background: rgba(0,0,0,0.3);
+            border: 1px solid var(--border); border-radius: 4px; font-size:11px;
+            max-height: 320px; overflow:auto; display:none; white-space: pre-wrap;
+            color: var(--muted)"></pre>
+    </div>
+  </main>
+  <div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  const fmt = b => {
+    if (b == null) return "--";
+    if (b >= 1e9) return (b / 1e9).toFixed(2) + " GB";
+    if (b >= 1e6) return (b / 1e6).toFixed(1) + " MB";
+    if (b >= 1e3) return (b / 1e3).toFixed(0) + " KB";
+    return b + " B";
+  };
+  const fmtAge = s => {
+    if (s == null) return "--";
+    if (s < 60) return s + "秒前";
+    if (s < 3600) return Math.round(s/60) + "分钟前";
+    if (s < 86400) return (s/3600).toFixed(1) + "小时前";
+    return (s/86400).toFixed(1) + "天前";
+  };
+  const toast = (msg, isErr = false) => {
+    const el = document.getElementById("toast");
+    el.textContent = msg;
+    el.classList.toggle("error", isErr);
+    el.classList.add("show");
+    setTimeout(() => el.classList.remove("show"), 3000);
+  };
+
+  // P-UX-12 — fetch + render the user preference profile card.
+  // Independent of the storage refresh, fires once on page load.
+  async function loadPreferenceProfile() {
+    let p;
+    try {
+      const res = await fetch("/api/v1/users/preferences");
+      if (!res.ok) return;
+      p = await res.json();
+    } catch (_e) { return; }
+    if (!p || !p.total_human_annotations) return;  // nothing to show yet
+    const card = document.getElementById("prefsCard");
+    if (!card) return;
+    card.style.display = "";
+
+    // Summary row
+    const total = p.total_human_annotations || 0;
+    const scenes = p.scene_decision_counts || {};
+    let keepTotal = 0, allTotal = 0;
+    for (const sc of Object.values(scenes)) {
+      keepTotal += (sc.keep || 0);
+      allTotal  += (sc.keep || 0) + (sc.maybe || 0) + (sc.cull || 0);
+    }
+    document.getElementById("prefsTotal").textContent = total;
+    document.getElementById("prefsKeepRate").textContent =
+      allTotal > 0 ? Math.round(100 * keepTotal / allTotal) + "%" : "--";
+
+    // Top scene by keep count
+    const sceneEntries = Object.entries(scenes).sort(
+      (a, b) => (b[1].keep || 0) - (a[1].keep || 0));
+    document.getElementById("prefsTopScene").textContent =
+      sceneEntries.length > 0
+        ? `${sceneEntries[0][0]} (${sceneEntries[0][1].keep || 0})`
+        : "--";
+
+    // Top cull reason
+    const reasons = p.cull_reasons || {};
+    const topReason = Object.entries(reasons).sort((a, b) => b[1] - a[1])[0];
+    document.getElementById("prefsTopReason").textContent =
+      topReason ? `${topReason[0]} (${topReason[1]})` : "--";
+
+    // Scene table
+    const sceneTbody = document.querySelector("#prefsSceneTable tbody");
+    sceneTbody.innerHTML = sceneEntries.slice(0, 12).map(([scene, c]) => {
+      const k = c.keep || 0, m = c.maybe || 0, x = c.cull || 0;
+      const sum = k + m + x;
+      const pct = sum > 0 ? Math.round(100 * k / sum) + "%" : "--";
+      return `<tr><td>${scene}</td><td>${k}</td><td>${m}</td><td>${x}</td><td>${pct}</td></tr>`;
+    }).join("");
+
+    // Axis table — keep avg vs cull avg + difference (your weight)
+    const ax = p.avg_rubric_when || {};
+    const keepAxes = ax.keep || {};
+    const cullAxes = ax.cull || {};
+    const axisLabels = {
+      technical: "技术", subject: "主体", composition: "构图",
+      light: "光线", moment: "瞬间", aesthetic: "美感",
+    };
+    const axisRows = Object.keys(axisLabels).map(name => {
+      const kv = keepAxes[name], cv = cullAxes[name];
+      const diff = (kv != null && cv != null) ? (kv - cv) : null;
+      return {
+        name, label: axisLabels[name], kv, cv, diff,
+      };
+    }).filter(r => r.kv != null || r.cv != null);
+    // Sort by diff descending so the axis you care about most is at top
+    axisRows.sort((a, b) => (b.diff ?? -99) - (a.diff ?? -99));
+    const axisTbody = document.querySelector("#prefsAxisTable tbody");
+    axisTbody.innerHTML = axisRows.map(r => {
+      const k = r.kv != null ? r.kv.toFixed(2) : "--";
+      const c = r.cv != null ? r.cv.toFixed(2) : "--";
+      const d = r.diff != null
+        ? `<b style="color:${r.diff > 1.5 ? '#6faa78' : r.diff > 0.5 ? '#d6a443' : 'var(--muted)'}">${r.diff >= 0 ? '+' : ''}${r.diff.toFixed(2)}</b>`
+        : "--";
+      return `<tr><td>${r.label}</td><td>${k}</td><td>${c}</td><td>${d}</td></tr>`;
+    }).join("");
+  }
+  loadPreferenceProfile();
+
+  async function refresh() {
+    let info;
+    try {
+      const res = await fetch("/storage_info");
+      info = await res.json();
+    } catch (e) {
+      toast("加载失败: " + e, true); return;
+    }
+    document.getElementById("rootHint").textContent =
+      `数据目录: ${info.demo_root}`;
+    document.getElementById("totalSize").textContent = fmt(info.runs_total_bytes);
+    document.getElementById("totalRuns").textContent = info.n_runs;
+    document.getElementById("totalImages").textContent =
+      info.runs.reduce((s, r) => s + r.n_input, 0);
+
+    const tbody = document.querySelector("#runsTable tbody");
+    if (!info.runs.length) {
+      tbody.innerHTML = "";
+      document.getElementById("emptyHint").style.display = "block";
+    } else {
+      document.getElementById("emptyHint").style.display = "none";
+      tbody.innerHTML = info.runs.map(r => {
+        const pills = ["keep","maybe","cull"]
+          .filter(d => r.decisions[d])
+          .map(d => `<span class="pill ${d}">${d} ${r.decisions[d]}</span>`)
+          .join("");
+        const stateP = r.state === "running"
+          ? `<span class="pill running">running</span>`
+          : r.state === "stale" ? `<span class="pill stale">stale</span>` : "";
+        // Mode tag: 'scan' = no copies, only derived data. Reassures
+        // the user that deleting a scan run won't touch their originals.
+        const modeP = r.mode === "scan"
+          ? `<span class="pill" style="background:rgba(196,185,169,0.18);color:#d8cebf" title="扫描模式 — 只存派生数据,删除不影响原图">scan</span>`
+          : `<span class="pill" style="background:rgba(255,255,255,0.06);color:var(--muted)" title="上传模式 — 原图副本存在 input/">upload</span>`;
+        const isRunning = r.state === "running";
+        return `<tr data-id="${r.run_id}">
+          <td><code>${r.run_id}</code> ${modeP}</td>
+          <td class="size">${fmt(r.size_bytes)}</td>
+          <td>${r.n_input}</td>
+          <td>${pills || '<span class="muted">--</span>'}</td>
+          <td>${stateP}</td>
+          <td class="muted">${fmtAge(r.age_seconds)}</td>
+          <td>
+            <a class="btn" href="/results/${r.run_id}">查看</a>
+            <button class="btn rescan-scene" ${isRunning ? "disabled title='running 中'" : "title='重判 stilllife → portrait 等(face_count>0 校正)'"}>重判场景</button>
+            <a class="btn" href="/admin/delivery/${r.run_id}" ${isRunning ? "style='pointer-events:none;opacity:0.4'" : "title='P-PRO-7.1 · 完整交付审计(场景 + 人脸 + 婚礼 + ICC + EXIF)'"}>📋 交付审计</a>
+            <button class="danger del" ${isRunning ? "disabled title='running 中,等完成再删'" : ""}>删除</button>
+          </td>
+        </tr>`;
+      }).join("");
+      tbody.querySelectorAll("button.del").forEach(btn => {
+        btn.addEventListener("click", async e => {
+          const tr = btn.closest("tr");
+          const id = tr.dataset.id;
+          if (!confirm(`删除 run ${id}?这会移除该次的上传图片、缩略图、scores.csv 和 XMP 输出。`)) return;
+          btn.disabled = true;
+          try {
+            const res = await fetch(`/runs/${id}`, { method: "DELETE" });
+            const data = await res.json();
+            if (data.ok) {
+              toast(`已删除 ${id}`);
+              refresh();
+            } else {
+              toast("删除失败: " + data.message, true);
+              btn.disabled = false;
+            }
+          } catch (e) {
+            toast("删除失败: " + e, true);
+            btn.disabled = false;
+          }
+        });
+      });
+    }
+
+    const cBody = document.querySelector("#cachesTable tbody");
+    cBody.innerHTML = (info.global_caches || []).map(c =>
+      `<tr><td>${c.label}</td><td>${c.path}</td><td class="size">${fmt(c.size_bytes)}</td></tr>`
+    ).join("") || `<tr><td colspan="3" class="muted">没有发现已知模型缓存</td></tr>`;
+  }
+
+  async function cleanup(params, label) {
+    if (!confirm(`确认 ${label}?`)) return;
+    try {
+      const res = await fetch("/runs/cleanup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(params),
+      });
+      const data = await res.json();
+      const mb = data.freed_bytes >= 1e9
+        ? (data.freed_bytes/1e9).toFixed(2) + " GB"
+        : (data.freed_bytes/1024/1024).toFixed(1) + " MB";
+      toast(`已清理 ${data.deleted} 项,释放 ${mb}`);
+      refresh();
+    } catch (e) {
+      toast("清理失败: " + e, true);
+    }
+  }
+
+  document.getElementById("refresh").addEventListener("click", refresh);
+  document.getElementById("cleanupOlder").addEventListener("click",
+    () => cleanup({ older_than_hours: 1 }, "清理 1 小时前的全部 run"));
+  document.getElementById("cleanupKeepLast").addEventListener("click",
+    () => cleanup({ keep_last: 3 }, "保留最近 3 次,删除其余"));
+  document.getElementById("cleanupAll").addEventListener("click",
+    () => cleanup({ keep_last: 0 }, "全部清空(不含正在运行)"));
+
+  // P0.4 — re-judge scenes via /runs/<id>/rescan_scene. Targets the
+  // V20 stilllife-with-face mistag in older cached runs.
+  document.querySelector("#runsTable tbody").addEventListener("click", async e => {
+    const btn = e.target.closest(".rescan-scene");
+    if (!btn) return;
+    const row = btn.closest("tr");
+    const rid = row && row.dataset.id;
+    if (!rid) return;
+    if (!confirm(`重判 ${rid} 的场景? (face_count>0 的 stilllife → 改为次高概率类)`)) return;
+    btn.disabled = true; btn.textContent = "…";
+    try {
+      const res = await fetch(`/runs/${rid}/rescan_scene`, {method: "POST"});
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || ("HTTP " + res.status));
+      const redistro = data.scene_redistribution
+        ? Object.entries(data.scene_redistribution)
+            .map(([k, v]) => `${k}:${v}`).join(", ")
+        : "(无)";
+      toast(`已修正 ${data.n_corrected}/${data.n_total} 张 · 新分布: ${redistro}`);
+    } catch (e) {
+      toast("重判失败: " + e.message, true);
+    } finally {
+      btn.disabled = false; btn.textContent = "重判场景";
+    }
+  });
+
+  // V2.1 retrain panel
+  const retrainBtn = document.getElementById("retrainBtn");
+  const retrainStatus = document.getElementById("retrainStatus");
+  const axisTable = document.querySelector("#axisModelsTable tbody");
+
+  async function refreshRetrain() {
+    try {
+      const res = await fetch("/retrain_status");
+      const s = await res.json();
+      const meta = s.last_meta || {};
+      const axes = (s.axes || meta.axes || []);
+      // Status pill
+      let statusHtml = "";
+      if (s.state === "running") {
+        statusHtml = `<span style="color:var(--accent)">▶ 训练中</span> · ${s.phase || "..."}`;
+      } else if (s.state === "queued") {
+        statusHtml = `<span style="color:var(--muted)">排队中</span>`;
+      } else if (s.state === "error") {
+        statusHtml = `<span style="color:var(--danger)">✗ ${s.message}</span>`;
+      } else if (s.state === "done") {
+        const dur = ((s.finished_at - s.started_at)).toFixed(1);
+        statusHtml = `<span style="color:var(--keep)">✓ ${s.message}</span> · ${dur}s`;
+      }
+      if (meta.created_at) {
+        statusHtml += ` <span class="muted">(上次训练 ${meta.created_at.slice(0,16)})</span>`;
+      }
+      retrainStatus.innerHTML = statusHtml || `<span class="muted">尚未训练 · 点"立即训练"开始</span>`;
+      // Table
+      if (axes.length) {
+        axisTable.innerHTML = axes.map(a =>
+          `<tr><td><b>${a.axis}</b></td><td>${a.rows}</td><td>${a.n_human}</td><td>${a.cv_r2.toFixed(3)}</td><td>${a.cv_mae.toFixed(3)}</td></tr>`
+        ).join("");
+      } else {
+        axisTable.innerHTML = `<tr><td colspan="5" class="muted">无</td></tr>`;
+      }
+      // Keep polling while running
+      if (s.state === "running" || s.state === "queued") {
+        setTimeout(refreshRetrain, 1500);
+      }
+    } catch (e) {
+      retrainStatus.textContent = "状态读取失败: " + e;
+    }
+  }
+
+  retrainBtn.addEventListener("click", async () => {
+    if (!confirm("开始训练?会用累计的所有人工标注 + 选定的辅助数据集。预计 < 1 分钟。")) return;
+    retrainBtn.disabled = true;
+    try {
+      const res = await fetch("/retrain", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          include_auto: document.getElementById("retrainIncludeAuto").checked,
+          also_goldenset: document.getElementById("retrainGoldenset").checked,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert("启动失败: " + (data.error || res.status));
+      }
+    } finally {
+      setTimeout(() => { retrainBtn.disabled = false; }, 1000);
+      refreshRetrain();
+    }
+  });
+
+  // V14.7 — opt-in error reporting toggle wiring
+  const erEnabled = document.getElementById("erEnabled");
+  const erEndpoint = document.getElementById("erEndpoint");
+  const erSaveBtn = document.getElementById("erSaveBtn");
+  const erSubmitBtn = document.getElementById("erSubmitBtn");
+  const erPreviewBtn = document.getElementById("erPreviewBtn");
+  const erStatusBadge = document.getElementById("erStatusBadge");
+  const erOut = document.getElementById("erOut");
+
+  async function loadErrorReportSettings() {
+    try {
+      const res = await fetch("/settings/error_reports");
+      const s = await res.json();
+      erEnabled.checked = !!s.enabled;
+      erEndpoint.value = s.endpoint || "";
+      erStatusBadge.textContent = s.enabled
+        ? (s.endpoint ? "状态:已开启 + 已配置" : "状态:已开启(dry-run)")
+        : "状态:关闭";
+    } catch (e) {
+      erStatusBadge.textContent = "状态:加载失败";
+    }
+  }
+
+  erSaveBtn.addEventListener("click", async () => {
+    erSaveBtn.disabled = true;
+    try {
+      const res = await fetch("/settings/error_reports", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+          enabled: erEnabled.checked,
+          endpoint: erEndpoint.value.trim(),
+        }),
+      });
+      const d = await res.json();
+      showToast(d.ok ? "已保存" : "保存失败");
+      loadErrorReportSettings();
+    } finally {
+      erSaveBtn.disabled = false;
+    }
+  });
+
+  async function callSubmit() {
+    const res = await fetch("/error_reports/submit", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({reason: "manual"}),
+    });
+    return await res.json();
+  }
+
+  erSubmitBtn.addEventListener("click", async () => {
+    erSubmitBtn.disabled = true;
+    try {
+      const d = await callSubmit();
+      erOut.style.display = "block";
+      erOut.textContent = JSON.stringify(d, null, 2);
+      showToast(d.sent ? `已发送 (HTTP ${d.status})` : (d.message || "未发送"));
+    } finally {
+      erSubmitBtn.disabled = false;
+    }
+  });
+
+  erPreviewBtn.addEventListener("click", async () => {
+    // Preview = same submit path, just shows the payload locally.
+    // If user is disabled, callSubmit returns no payload; flip on
+    // briefly to render preview, then restore.
+    const wasOff = !erEnabled.checked;
+    if (wasOff) {
+      // Don't actually toggle the persisted setting — call a
+      // "what would happen if enabled" by temporarily flipping
+      // and restoring. In the common case where there's no endpoint,
+      // submit_report does dry-run anyway.
+      erEnabled.checked = true;
+      await fetch("/settings/error_reports", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({enabled: true, endpoint: ""}),
+      });
+    }
+    try {
+      const d = await callSubmit();
+      erOut.style.display = "block";
+      erOut.textContent = JSON.stringify(d.payload || d, null, 2);
+    } finally {
+      if (wasOff) {
+        erEnabled.checked = false;
+        await fetch("/settings/error_reports", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({enabled: false, endpoint: erEndpoint.value.trim()}),
+        });
+        loadErrorReportSettings();
+      }
+    }
+  });
+
+  loadErrorReportSettings();
+
+  refresh();
+  refreshRetrain();
+})();
+</script>
+</body>
+</html>

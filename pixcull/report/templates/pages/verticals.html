@@ -1,0 +1,1849 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <title>PixCull — 垂类样本采集</title>
+  <style>
+    :root {
+      --bg: #161310; --bg-card: #1e1a14; --bg-card-hi: #272118;
+      --fg: #e9ecf2; --muted: #a8b2c1; --accent: #c4b9a9;
+      --accent-hi: #d8cebf; --border: #2b241a;
+      --keep: #4ade80; --maybe: #d9a30c; --cull: #cf6f5b;
+      --focus-ring: rgba(216,206,191,0.55);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; background: var(--bg); color: var(--fg);
+      font: 14px/1.55 -apple-system, "SF Pro Text", Inter,
+            "Segoe UI Variable", "PingFang SC", sans-serif;
+    }
+    *:focus-visible {
+      outline: 2px solid var(--focus-ring); outline-offset: 2px; border-radius: 4px;
+    }
+    header {
+      padding: 18px 28px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: baseline; gap: 16px;
+    }
+    header h1 { margin: 0; font-size: 18px; font-weight: 600; }
+    header a { color: var(--muted); text-decoration: none; font-size: 13px; }
+    header a:hover { color: var(--fg); }
+    main { padding: 18px 28px 60px; max-width: 1080px; margin: 0 auto; }
+    .intro {
+      background: var(--bg-card); border-left: 3px solid var(--accent);
+      border-radius: 4px; padding: 12px 16px; margin-bottom: 22px;
+      font-size: 13px; color: var(--muted);
+    }
+    .intro b { color: var(--fg); }
+    /* V17.9 — filter + sort toolbar */
+    .vtoolbar {
+      display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+      margin-bottom: 14px; padding: 10px 12px;
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    .vtabs { display: flex; gap: 4px; flex-wrap: wrap; }
+    .vtab {
+      background: transparent; color: var(--muted);
+      border: 1px solid transparent; padding: 5px 12px;
+      border-radius: 999px; font: inherit; font-size: 12px;
+      cursor: pointer; transition: all 120ms;
+    }
+    .vtab:hover { color: var(--fg); background: rgba(255,255,255,0.04); }
+    .vtab.active {
+      color: var(--accent-hi); background: rgba(196,185,169,0.12);
+      border-color: rgba(196,185,169,0.30);
+    }
+    .vsort { display: inline-flex; align-items: center; gap: 6px;
+              font-size: 12px; color: var(--muted); }
+    .vsort select {
+      padding: 5px 8px; background: rgba(0,0,0,0.3); color: var(--fg);
+      border: 1px solid var(--border); border-radius: 4px;
+      font: inherit; font-size: 12px;
+    }
+    #vsearch {
+      margin-left: auto;
+      padding: 5px 12px; min-width: 200px;
+      background: rgba(0,0,0,0.3); color: var(--fg);
+      border: 1px solid var(--border); border-radius: 999px;
+      font: inherit; font-size: 12px;
+    }
+    .vempty {
+      text-align: center; color: var(--muted);
+      padding: 40px; font-size: 13px;
+    }
+
+    .vlist {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 14px;
+    }
+    .vcard {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 10px; padding: 14px 14px 12px;
+      transition: border-color 120ms;
+      display: flex; flex-direction: column;
+    }
+    .vcard:hover { border-color: var(--accent); }
+    .vcard .vhead {
+      display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px;
+    }
+    .vcard .vicon { font-size: 20px; line-height: 1; }
+    .vcard .vname { font-size: 14.5px; font-weight: 600; letter-spacing: -0.01em; }
+    .vcard .vdesc {
+      font-size: 11.5px; color: var(--muted); line-height: 1.55;
+      margin-bottom: 10px;
+      /* clamp to 2 lines so cards align consistently */
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .progress-shell {
+      width: 100%; height: 4px; background: rgba(255,255,255,0.06);
+      border-radius: 999px; overflow: hidden; margin-bottom: 6px;
+    }
+    .progress-bar {
+      height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-hi));
+      border-radius: 999px; transition: width 240ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .vstats {
+      display: flex; gap: 8px; align-items: center;
+      flex-wrap: wrap;
+      font-size: 11px; color: var(--muted); margin-bottom: 10px;
+    }
+    .vstats .pill {
+      background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+      padding: 2px 8px; border-radius: 999px; font-variant-numeric: tabular-nums;
+    }
+    .vstats .target-label {
+      margin-left: auto;
+      font-size: 10.5px; color: var(--muted);
+    }
+    /* V17.7 — empty-state hint shown when 0/0 samples. Subtle prompt
+       so empty cards don't just look broken. */
+    .empty-hint {
+      font-size: 11.5px; color: var(--muted);
+      padding: 8px 12px; margin-bottom: 10px;
+      background: rgba(255,255,255,0.025);
+      border: 1px dashed var(--border);
+      border-radius: 6px;
+      line-height: 1.5;
+    }
+    .empty-hint b { color: var(--fg); font-weight: 600; }
+    .vstats .pill.good { color: var(--keep); border-color: rgba(74,222,128,0.3); }
+    .vstats .pill.bad  { color: var(--cull); border-color: rgba(248,113,113,0.3); }
+    /* V17.15 — counts pills are now clickable shortcuts to the
+       sample drawer. Hover state reveals the affordance. */
+    .vstats .pill.clickable {
+      cursor: pointer;
+      transition: background 120ms, transform 80ms;
+    }
+    .vstats .pill.clickable:hover {
+      background: rgba(255,255,255,0.08);
+      transform: scale(1.05);
+    }
+    /* V17.4 — auto-tuned indicator */
+    .vstats .pill.tuned {
+      color: var(--accent-hi);
+      border-color: rgba(96,165,250,0.4);
+      background: rgba(196,185,169,0.10);
+      cursor: help;
+    }
+    /* V17.5 — AI phrase override pill */
+    .vstats .pill.phrased {
+      color: #d8cebf;
+      border-color: rgba(196,185,169,0.40);
+      background: rgba(196,185,169,0.10);
+      cursor: help;
+    }
+    /* V17.7 — two-row button layout. The previous flex:1 / 6-buttons
+       single row crushed every label to single-char vertical wrap on
+       320px cards. Now: primary uploads on row 1 (green/red coded),
+       tool actions on row 2 (icon-led, smaller). */
+    .vactions {
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .vactions .row {
+      display: flex; gap: 6px;
+    }
+    .vactions button {
+      flex: 1; background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      color: var(--fg); padding: 6px 10px; border-radius: 5px;
+      font: inherit; font-size: 12px; cursor: pointer;
+      white-space: nowrap;
+      display: inline-flex; align-items: center; justify-content: center;
+      gap: 4px;
+      transition: border-color 120ms, background 120ms, color 120ms;
+    }
+    .vactions button:hover {
+      border-color: var(--accent); background: rgba(196,185,169,0.08);
+    }
+    /* Row 1 — primary action buttons. Coded green / red so the user
+       immediately reads "add good / add bad" from color alone. */
+    .vactions .row.primary button {
+      padding: 8px 12px; font-size: 13px; font-weight: 500;
+    }
+    .vactions .row.primary button.good {
+      background: rgba(74,222,128,0.08);
+      border-color: rgba(74,222,128,0.30);
+      color: var(--keep);
+    }
+    .vactions .row.primary button.good:hover {
+      background: rgba(74,222,128,0.16);
+      border-color: var(--keep);
+    }
+    .vactions .row.primary button.bad {
+      background: rgba(248,113,113,0.06);
+      border-color: rgba(248,113,113,0.25);
+      color: var(--cull);
+    }
+    .vactions .row.primary button.bad:hover {
+      background: rgba(248,113,113,0.14);
+      border-color: var(--cull);
+    }
+    /* Row 2 — secondary tools. Icon-led, smaller. Each gets a
+       distinct hover-color hint matching its function. */
+    .vactions .row.secondary button {
+      padding: 5px 6px; font-size: 11.5px;
+      color: var(--muted);
+    }
+    .vactions .row.secondary button .ic {
+      font-size: 13px;
+    }
+    .vactions .row.secondary button:hover { color: var(--fg); }
+    .vactions .row.secondary button.tune:hover {
+      border-color: var(--accent); color: var(--accent-hi);
+    }
+    .vactions .row.secondary button.llm-phrases:hover {
+      border-color: #d8cebf; color: #d8cebf;
+    }
+    .vactions .row.secondary button.eval:hover {
+      border-color: var(--keep); color: var(--keep);
+    }
+    /* V17.7 — bulk-import link styled to match secondary buttons */
+    .vactions .row.secondary .bulk-link {
+      flex: 1; padding: 5px 6px; font-size: 11.5px;
+      color: var(--muted); background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border); border-radius: 5px;
+      text-decoration: none; white-space: nowrap;
+      display: inline-flex; align-items: center; justify-content: center;
+      gap: 4px;
+      transition: border-color 120ms, color 120ms;
+    }
+    .vactions .row.secondary .bulk-link:hover {
+      border-color: var(--accent-hi); color: var(--accent-hi);
+    }
+    .vactions .row.secondary .bulk-link .ic { font-size: 13px; }
+    /* V17.13 — Unsplash button uses Unsplash-y warm-orange accent */
+    .vactions .row.secondary button.unsplash:hover {
+      border-color: #f59e0b; color: #d6a443;
+    }
+    /* Disabled state — when there are no samples, secondary tools
+       can't do anything useful. Make that obvious. */
+    .vactions button:disabled {
+      opacity: 0.4; cursor: not-allowed;
+    }
+    .vactions button:disabled:hover {
+      border-color: var(--border); background: rgba(255,255,255,0.04);
+      color: var(--muted);
+    }
+
+    /* Per-vertical detail drawer (opens inside the card) */
+    .vdetail {
+      display: none; margin-top: 12px; padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+    .vdetail.show { display: block; }
+    .vdetail-tabs {
+      display: flex; gap: 4px; margin-bottom: 8px;
+    }
+    .vdetail-tabs button {
+      background: transparent; color: var(--muted); border: 0;
+      padding: 4px 10px; border-radius: 4px; font-size: 12px; cursor: pointer;
+    }
+    .vdetail-tabs button.active {
+      background: rgba(255,255,255,0.08); color: var(--fg);
+    }
+    .drop-zone {
+      border: 2px dashed var(--border); border-radius: 6px;
+      padding: 14px; text-align: center; font-size: 12px; color: var(--muted);
+      cursor: pointer; transition: border-color 120ms, background 120ms;
+    }
+    .drop-zone:hover, .drop-zone.over {
+      border-color: var(--accent); background: rgba(196,185,169,0.05);
+      color: var(--fg);
+    }
+    .sample-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+      gap: 4px; margin-top: 10px;
+    }
+    .sample {
+      position: relative; aspect-ratio: 1/1; background: #000;
+      border-radius: 4px; overflow: hidden; cursor: pointer;
+    }
+    .sample img {
+      width: 100%; height: 100%; object-fit: cover;
+    }
+    .sample .rm {
+      position: absolute; top: 2px; right: 2px;
+      width: 18px; height: 18px; border-radius: 4px;
+      background: rgba(0,0,0,0.7); color: #fff; border: 0;
+      font-size: 11px; cursor: pointer; opacity: 0;
+      transition: opacity 120ms;
+    }
+    .sample:hover .rm { opacity: 1; }
+    .sample .rm:hover { background: var(--cull); }
+
+    /* V17.4 — tune result modal */
+    .tune-modal {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.85);
+      display: none; align-items: center; justify-content: center;
+      z-index: 25; padding: 20px; backdrop-filter: blur(6px);
+    }
+    .tune-modal.show { display: flex; }
+    .tune-card {
+      background: var(--bg-card); border: 1px solid var(--border-hi);
+      border-radius: 12px; padding: 22px;
+      max-width: 560px; width: 100%;
+    }
+    .tune-card h3 { margin: 0 0 12px; font-size: 16px; }
+    .tune-card .compare {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+      margin: 16px 0;
+    }
+    .tune-card .stat-card {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      border-radius: 8px; padding: 12px;
+    }
+    .tune-card .stat-card.tuned { border-color: rgba(74,222,128,0.4); }
+    .tune-card .stat-card .label {
+      font-size: 11px; color: var(--muted); margin-bottom: 6px;
+    }
+    .tune-card .stat-card .f1 {
+      font-size: 26px; font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      color: var(--fg);
+    }
+    .tune-card .stat-card.tuned .f1 { color: var(--keep); }
+    .tune-card .stat-card .row {
+      font-size: 11.5px; color: var(--muted);
+      margin-top: 4px; font-variant-numeric: tabular-nums;
+    }
+    .tune-card .deltas {
+      font-size: 12px; color: var(--muted);
+      margin-bottom: 14px; padding: 8px 10px;
+      background: rgba(255,255,255,0.03);
+      border-radius: 6px; border: 1px solid var(--border);
+    }
+    .tune-card .deltas b { color: var(--fg); }
+    .tune-card .actions {
+      display: flex; gap: 10px; justify-content: flex-end;
+      margin-top: 14px;
+    }
+    .tune-card .actions button {
+      padding: 8px 18px; font-size: 13px; border-radius: 6px;
+      border: 1px solid var(--border); cursor: pointer;
+      background: rgba(255,255,255,0.04); color: var(--fg);
+      font: inherit;
+    }
+    .tune-card .actions button.primary {
+      background: var(--accent); border-color: var(--accent);
+      color: #fff;
+    }
+    .tune-card .actions button.primary:hover { opacity: 0.9; }
+    .tune-card .actions button:hover { border-color: var(--accent); }
+
+    /* V17.10 — F1 surface heatmap inside the tune modal */
+    .heatmap-wrap[open] summary { color: var(--fg); }
+    .heatmap-grid {
+      display: grid; grid-template-columns: 36px repeat(11, 1fr);
+      gap: 2px;
+      font-variant-numeric: tabular-nums;
+    }
+    .heatmap-grid .hcorner,
+    .heatmap-grid .haxis-x,
+    .heatmap-grid .haxis-y {
+      display: flex; align-items: center; justify-content: center;
+      font-size: 9.5px; color: var(--muted); padding: 2px;
+    }
+    .heatmap-grid .haxis-x { font-size: 9px; }
+    .heatmap-grid .haxis-y { justify-content: flex-end; padding-right: 6px; }
+    .heatmap-grid .hcell {
+      aspect-ratio: 1/1; min-height: 16px;
+      border-radius: 2px; cursor: help;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 9px; color: rgba(255,255,255,0.85);
+      transition: transform 80ms;
+    }
+    .heatmap-grid .hcell:hover { transform: scale(1.15); z-index: 2;
+                                   box-shadow: 0 0 0 1px var(--fg); }
+    .heatmap-grid .hcell.best {
+      outline: 2px solid var(--keep);
+      outline-offset: -2px;
+    }
+    .heatmap-grid .hcell.current {
+      outline: 2px dashed var(--accent);
+      outline-offset: -2px;
+    }
+    .heatmap-axis-label {
+      margin-top: 6px; font-size: 9.5px; color: var(--muted);
+      text-align: center;
+    }
+
+    /* V17.1 — sample zoom overlay. Tiny lightbox-of-its-own for the
+       /verticals page, doesn't share the results-page lightbox JS. */
+    /* V17.11 — first-run guide overlay */
+    .guide-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.78);
+      display: none; align-items: center; justify-content: center;
+      z-index: 30; padding: 24px; backdrop-filter: blur(8px);
+    }
+    .guide-overlay.show { display: flex;
+      animation: guideIn 240ms cubic-bezier(0.16, 1, 0.3, 1); }
+    @keyframes guideIn {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+    .guide-card {
+      background: var(--bg-card); border: 1px solid var(--border-hi);
+      border-radius: 14px; padding: 28px 32px;
+      max-width: 540px; width: 100%;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.6);
+    }
+    .guide-step {
+      font-size: 11px; color: var(--accent-hi);
+      text-transform: uppercase; letter-spacing: 0.08em;
+      margin-bottom: 8px;
+    }
+    .guide-title {
+      margin: 0 0 12px; font-size: 20px; font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+    .guide-body {
+      font-size: 13.5px; line-height: 1.65;
+      color: var(--fg); margin-bottom: 18px;
+      min-height: 100px;
+    }
+    .guide-body b { color: var(--accent-hi); }
+    .guide-body code {
+      background: rgba(255,255,255,0.06);
+      padding: 1px 6px; border-radius: 3px;
+      font-family: ui-monospace, monospace; font-size: 12px;
+    }
+    .guide-progress {
+      display: flex; gap: 6px; margin-bottom: 16px;
+    }
+    .guide-dot {
+      width: 28px; height: 3px; border-radius: 999px;
+      background: rgba(255,255,255,0.10);
+    }
+    .guide-dot.active { background: var(--accent); }
+    .guide-actions {
+      display: flex; gap: 10px; justify-content: flex-end;
+    }
+    .guide-actions button {
+      padding: 8px 18px; font-size: 13px; border-radius: 6px;
+      border: 1px solid var(--border); background: rgba(255,255,255,0.04);
+      color: var(--fg); font: inherit; cursor: pointer;
+    }
+    .guide-actions button.primary {
+      background: var(--accent); border-color: var(--accent); color: #fff;
+    }
+    .guide-actions button.primary:hover { opacity: 0.9; }
+
+    .sample-zoom {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.92);
+      display: none; align-items: center; justify-content: center;
+      z-index: 20; padding: 24px;
+      backdrop-filter: blur(6px);
+    }
+    .sample-zoom.show { display: flex; }
+    .sample-zoom img {
+      max-width: 100%; max-height: 100%; object-fit: contain;
+      border-radius: 8px; box-shadow: 0 12px 40px rgba(0,0,0,0.7);
+    }
+    .sample-zoom .caption {
+      position: absolute; bottom: 16px; left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.72); color: var(--fg);
+      padding: 6px 14px; border-radius: 4px; font-size: 12px;
+      max-width: 80%; overflow: hidden; text-overflow: ellipsis;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+    /* V17.16 — chevron + close buttons */
+    .sample-zoom .sz-nav, .sample-zoom .sz-close {
+      position: absolute;
+      background: rgba(0,0,0,0.55); color: #fff;
+      border: 1px solid rgba(255,255,255,0.15);
+      cursor: pointer; user-select: none;
+      transition: background 120ms, transform 80ms;
+    }
+    .sample-zoom .sz-nav:hover, .sample-zoom .sz-close:hover {
+      background: rgba(0,0,0,0.85); transform: scale(1.06);
+    }
+    .sample-zoom .sz-nav {
+      top: 50%; transform: translateY(-50%);
+      width: 44px; height: 60px; border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 26px; z-index: 21;
+    }
+    .sample-zoom .sz-nav:hover { transform: translateY(-50%) scale(1.06); }
+    .sample-zoom .sz-prev { left: 24px; }
+    .sample-zoom .sz-next { right: 24px; }
+    .sample-zoom .sz-close {
+      top: 24px; right: 24px;
+      width: 32px; height: 32px; border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+    }
+    @media (max-width: 640px) {
+      .sample-zoom .sz-nav { width: 36px; height: 50px; font-size: 22px; }
+      .sample-zoom .sz-prev { left: 12px; }
+      .sample-zoom .sz-next { right: 12px; }
+    }
+
+    .toast-stack {
+      position: fixed; bottom: 16px; right: 16px; z-index: 10;
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .toast {
+      background: var(--bg-card); color: var(--fg);
+      border: 1px solid var(--border); border-left: 3px solid var(--accent);
+      padding: 8px 14px; border-radius: 4px; font-size: 12px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+    }
+    .toast.error { border-left-color: var(--cull); }
+    .toast.success { border-left-color: var(--keep); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>垂类样本采集</h1>
+    <a href="/">← 返回上传</a>
+    <a href="/admin">管理面板 →</a>
+    <a href="#" onclick="window._pcShowGuide(); return false;">📖 再看教程</a>
+  </header>
+  <main>
+    <div class="intro">
+      为下面 10 类摄影各上传一些<b>你自己拍过 / 你欣赏的样片</b>,
+      标记 <span style="color:var(--keep)">👍 好片</span> 或
+      <span style="color:var(--cull)">👎 该剔除</span>。
+      之后 PixCull 在评分这类照片时会自动倾向你的审美 —
+      建议每类各上传 20+ 张,样本越多越精准。
+      <br>所有样本都<b>留在你本机</b>:
+      <code>~/Library/Application Support/PixCull/verticals/</code>。
+    </div>
+
+    <!-- V17.9 — filter + sort toolbar -->
+    <div class="vtoolbar" id="vtoolbar">
+      <div class="vtabs" id="vtabs" role="tablist">
+        <button class="vtab active" data-filter="all" role="tab">全部</button>
+        <button class="vtab" data-filter="has-samples" role="tab">已有样本</button>
+        <button class="vtab" data-filter="tuned" role="tab">🎯 已调参</button>
+        <button class="vtab" data-filter="phrased" role="tab">✨ 有 AI 话术</button>
+        <button class="vtab" data-filter="empty" role="tab">未开始</button>
+      </div>
+      <label class="vsort">
+        <span>排序:</span>
+        <select id="vsort">
+          <option value="default">默认</option>
+          <option value="progress-desc">进度高 → 低</option>
+          <option value="progress-asc">进度低 → 高</option>
+          <option value="samples-desc">样本数多 → 少</option>
+          <option value="samples-asc">样本数少 → 多</option>
+          <option value="zh">中文名 A-Z</option>
+        </select>
+      </label>
+      <input type="search" id="vsearch" placeholder="搜索 (婚纱 / bird / 风光 …)">
+    </div>
+    <div class="vlist" id="vlist"></div>
+    <div class="vempty" id="vempty" style="display:none">
+      没有符合筛选条件的垂类。
+    </div>
+  </main>
+  <div class="sample-zoom" id="sampleZoom" role="dialog" aria-modal="true">
+    <button class="sz-nav sz-prev" id="szPrev"
+            title="上一张 (←)" aria-label="上一张">‹</button>
+    <img id="sampleZoomImg" alt="">
+    <button class="sz-nav sz-next" id="szNext"
+            title="下一张 (→)" aria-label="下一张">›</button>
+    <button class="sz-close" id="szClose"
+            title="关闭 (Esc)" aria-label="关闭">×</button>
+    <div class="caption" id="sampleZoomCaption"></div>
+  </div>
+
+  <!-- V17.11 — first-run guide overlay. 3 steps, dismissable. -->
+  <div class="guide-overlay" id="guideOverlay" role="dialog" aria-modal="true"
+       aria-labelledby="guideTitle">
+    <div class="guide-card">
+      <div class="guide-step" id="guideStepCount">第 1 / 3 步</div>
+      <h2 id="guideTitle" class="guide-title">为常拍的题材定制评分</h2>
+      <div class="guide-body" id="guideBody"></div>
+      <div class="guide-progress">
+        <div class="guide-dot active"></div>
+        <div class="guide-dot"></div>
+        <div class="guide-dot"></div>
+      </div>
+      <div class="guide-actions">
+        <button id="guideSkip">跳过</button>
+        <button class="primary" id="guideNext">下一步</button>
+      </div>
+    </div>
+  </div>
+  <!-- V17.5 — DeepSeek phrase generation result modal -->
+  <div class="tune-modal" id="llmPhrasesModal" role="dialog" aria-modal="true"
+       aria-labelledby="llmPhrasesTitle">
+    <div class="tune-card" style="max-width: 640px">
+      <h3 id="llmPhrasesTitle">AI 专属话术生成</h3>
+      <div id="llmPhrasesSubtitle" style="font-size: 12px;
+              color: var(--muted); margin-bottom: 12px"></div>
+      <div id="llmPhrasesBody" style="font-size: 13px; max-height: 50vh;
+              overflow-y: auto; padding-right: 4px"></div>
+      <div class="actions">
+        <button id="llmPhrasesClose">关闭</button>
+        <button id="llmPhrasesRevert" style="display: none">恢复默认话术</button>
+        <button class="primary" id="llmPhrasesRegen">再生成一次</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- V17.13 — Unsplash fetch modal: query + count + bucket -->
+  <div class="tune-modal" id="unsplashModal" role="dialog" aria-modal="true"
+       aria-labelledby="unsplashTitle">
+    <div class="tune-card" style="max-width: 560px">
+      <h3 id="unsplashTitle">从 Unsplash 拉取 CC0 参考样本</h3>
+      <div style="font-size: 12px; color: var(--muted); margin-bottom: 14px;
+              line-height: 1.55">
+        Unsplash License 允许任意商用 / ML 训练用,
+        无需署名(我们仍会保存摄影师 credit 到 sidecar)。
+        免费 API 限额 50 次/小时。
+      </div>
+      <div style="margin-bottom: 10px">
+        <label style="display: block; font-size: 11px; color: var(--muted);
+                margin-bottom: 4px">搜索词</label>
+        <input id="unsplashQuery" type="text"
+               style="width: 100%; padding: 7px 10px;
+                       background: rgba(0,0,0,0.3); color: var(--fg);
+                       border: 1px solid var(--border); border-radius: 4px;
+                       font: inherit; font-size: 13px;">
+      </div>
+      <div style="display: flex; gap: 10px; margin-bottom: 10px">
+        <div style="flex: 1">
+          <label style="display: block; font-size: 11px; color: var(--muted);
+                  margin-bottom: 4px">朝向</label>
+          <select id="unsplashOrient" style="width: 100%; padding: 7px;
+                  background: rgba(0,0,0,0.3); color: var(--fg);
+                  border: 1px solid var(--border); border-radius: 4px;
+                  font: inherit; font-size: 13px">
+            <option value="landscape">横向</option>
+            <option value="portrait">竖向</option>
+            <option value="squarish">方形</option>
+          </select>
+        </div>
+        <div style="flex: 1">
+          <label style="display: block; font-size: 11px; color: var(--muted);
+                  margin-bottom: 4px">桶</label>
+          <select id="unsplashBucket" style="width: 100%; padding: 7px;
+                  background: rgba(0,0,0,0.3); color: var(--fg);
+                  border: 1px solid var(--border); border-radius: 4px;
+                  font: inherit; font-size: 13px">
+            <option value="good">👍 好片(参考)</option>
+            <option value="bad">👎 待剔除</option>
+          </select>
+        </div>
+        <div style="width: 90px">
+          <label style="display: block; font-size: 11px; color: var(--muted);
+                  margin-bottom: 4px">张数</label>
+          <input id="unsplashCount" type="number" value="15" min="1" max="100"
+                 style="width: 100%; padding: 7px;
+                         background: rgba(0,0,0,0.3); color: var(--fg);
+                         border: 1px solid var(--border); border-radius: 4px;
+                         font: inherit; font-size: 13px">
+        </div>
+      </div>
+      <div id="unsplashResult" style="font-size: 12px; color: var(--muted);
+              margin: 14px 0; min-height: 24px"></div>
+      <div class="actions">
+        <button id="unsplashClose">关闭</button>
+        <button class="primary" id="unsplashFetch">拉取</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- V17.6 — per-vertical eval report modal -->
+  <div class="tune-modal" id="evalModal" role="dialog" aria-modal="true"
+       aria-labelledby="evalTitle">
+    <div class="tune-card" style="max-width: 720px">
+      <h3 id="evalTitle">本垂类评估报告</h3>
+      <div id="evalSubtitle" style="font-size: 12px;
+              color: var(--muted); margin-bottom: 12px"></div>
+      <div id="evalBody" style="font-size: 13px; max-height: 56vh;
+              overflow-y: auto; padding-right: 4px"></div>
+      <div class="actions">
+        <button id="evalClose">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- V17.4 — tune result modal -->
+  <div class="tune-modal" id="tuneModal" role="dialog" aria-modal="true"
+       aria-labelledby="tuneTitle">
+    <div class="tune-card">
+      <h3 id="tuneTitle">自动调参结果</h3>
+      <div id="tuneSubtitle" class="muted" style="font-size: 12px;
+              color: var(--muted); margin-bottom: 4px"></div>
+      <div class="compare">
+        <div class="stat-card baseline">
+          <div class="label">当前 (V17.2 默认)</div>
+          <div class="f1" id="tuneBaseF1">--</div>
+          <div class="row" id="tuneBaseRow">--</div>
+        </div>
+        <div class="stat-card tuned">
+          <div class="label">建议 (自动调参)</div>
+          <div class="f1" id="tuneNewF1">--</div>
+          <div class="row" id="tuneNewRow">--</div>
+        </div>
+      </div>
+      <div class="deltas" id="tuneDeltas">--</div>
+      <!-- V17.10 — F1 surface heatmap. Y-axis is keep_min_delta
+           (-0.10 top to +0.10 bottom in 0.02 steps), X-axis is
+           cull_max_delta. Cell color = F1 (red→yellow→green). The
+           current "best" cell is outlined. -->
+      <details class="heatmap-wrap" id="tuneHeatmapWrap"
+                style="margin-top: 14px; display: none">
+        <summary style="cursor: pointer; font-size: 11.5px;
+                color: var(--muted); padding: 4px 0">
+          📈 F1 surface — keep_min_delta × cull_max_delta
+        </summary>
+        <div id="tuneHeatmap" style="margin-top: 8px;
+                font-size: 10px; color: var(--muted)"></div>
+      </details>
+      <div class="actions">
+        <button id="tuneCancel">关闭</button>
+        <button id="tuneRevert" style="display: none">恢复默认</button>
+        <button class="primary" id="tuneApply">应用建议</button>
+      </div>
+    </div>
+  </div>
+  <div class="toast-stack" id="toastStack"></div>
+
+  <script>
+    const vlist = document.getElementById("vlist");
+    const toastStack = document.getElementById("toastStack");
+
+    function toast(message, kind = "") {
+      const el = document.createElement("div");
+      el.className = "toast " + kind;
+      el.textContent = message;
+      toastStack.appendChild(el);
+      setTimeout(() => el.remove(), 3500);
+    }
+    const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => (
+      {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
+    ));
+
+    let registry = [];
+    // V17.9 — filter / sort / search state.
+    const viewState = {
+      filter: "all", sort: "default", search: ""
+    };
+    async function loadRegistry() {
+      const res = await fetch("/verticals.json");
+      registry = await res.json();
+      render();
+      // V17.11 — show first-run guide once registry has loaded so
+      // the user sees what verticals exist behind the overlay.
+      if (typeof maybeShowGuide === "function") maybeShowGuide();
+    }
+
+    // V17.9 — apply filter + sort + search to the registry view
+    function applyView(reg) {
+      let out = reg.slice();
+      // Filter
+      if (viewState.filter === "has-samples") {
+        out = out.filter(v => v.counts.total > 0);
+      } else if (viewState.filter === "tuned") {
+        out = out.filter(v => v.policy && v.policy.is_override);
+      } else if (viewState.filter === "phrased") {
+        out = out.filter(v => v.phrases && v.phrases.is_override);
+      } else if (viewState.filter === "empty") {
+        out = out.filter(v => v.counts.total === 0);
+      }
+      // Search — match against key / zh / description
+      if (viewState.search.trim()) {
+        const q = viewState.search.trim().toLowerCase();
+        out = out.filter(v =>
+          v.key.toLowerCase().includes(q)
+          || v.zh.toLowerCase().includes(q)
+          || (v.description||"").toLowerCase().includes(q)
+        );
+      }
+      // Sort
+      const s = viewState.sort;
+      if (s === "progress-desc") out.sort((a,b) => b.progress - a.progress);
+      else if (s === "progress-asc")  out.sort((a,b) => a.progress - b.progress);
+      else if (s === "samples-desc")  out.sort((a,b) => b.counts.total - a.counts.total);
+      else if (s === "samples-asc")   out.sort((a,b) => a.counts.total - b.counts.total);
+      else if (s === "zh") out.sort((a,b) => a.zh.localeCompare(b.zh, "zh"));
+      // "default" = original registry order
+      return out;
+    }
+
+    // V17.1 + V17.16 — sample-zoom overlay. Click any sample tile →
+    // fullscreen image. V17.16: ← / → navigate within the same
+    // bucket; "12 / 55" position indicator; chevron + close buttons;
+    // backdrop-click closes but image-click doesn't.
+    const sampleZoom = document.getElementById("sampleZoom");
+    const sampleZoomImg = document.getElementById("sampleZoomImg");
+    const sampleZoomCaption = document.getElementById("sampleZoomCaption");
+    const szPrev = document.getElementById("szPrev");
+    const szNext = document.getElementById("szNext");
+    const szClose = document.getElementById("szClose");
+
+    let _zoomState = null;   // {samples, index, urlBuilder}
+
+    function openSampleZoom(samples, idx, urlBuilder) {
+      if (!samples || !samples.length) return;
+      _zoomState = {samples, index: idx, urlBuilder};
+      _paintZoom();
+      sampleZoom.classList.add("show");
+    }
+    function _paintZoom() {
+      if (!_zoomState) return;
+      const {samples, index, urlBuilder} = _zoomState;
+      const s = samples[index];
+      sampleZoomImg.src = urlBuilder(s.filename);
+      sampleZoomCaption.textContent =
+        `${s.filename} · ${index + 1} / ${samples.length}`;
+      // Hide chevrons when only 1 image to avoid noise
+      szPrev.style.display = samples.length > 1 ? "" : "none";
+      szNext.style.display = samples.length > 1 ? "" : "none";
+    }
+    function zoomStep(delta) {
+      if (!_zoomState) return;
+      const n = _zoomState.samples.length;
+      _zoomState.index = (_zoomState.index + delta + n) % n;   // wrap
+      _paintZoom();
+    }
+    function closeSampleZoom() {
+      sampleZoom.classList.remove("show");
+      sampleZoomImg.src = "";
+      _zoomState = null;
+    }
+
+    // Wire controls
+    szClose.addEventListener("click", e => { e.stopPropagation(); closeSampleZoom(); });
+    szPrev.addEventListener("click", e => { e.stopPropagation(); zoomStep(-1); });
+    szNext.addEventListener("click", e => { e.stopPropagation(); zoomStep(+1); });
+    // V17.16 — only close on backdrop click. Click on img / nav / close
+    // (handled above) doesn't bubble to here.
+    sampleZoom.addEventListener("click", e => {
+      if (e.target === sampleZoom) closeSampleZoom();
+    });
+
+    document.addEventListener("keydown", e => {
+      if (sampleZoom.classList.contains("show")) {
+        if (e.key === "Escape") { closeSampleZoom(); return; }
+        if (e.key === "ArrowLeft" || e.key === "k") {
+          e.preventDefault(); zoomStep(-1); return;
+        }
+        if (e.key === "ArrowRight" || e.key === "j") {
+          e.preventDefault(); zoomStep(+1); return;
+        }
+      }
+      if (e.key === "Escape" && tuneModal.classList.contains("show")) {
+        closeTune();
+      }
+    });
+
+    // V17.4 — tune flow.
+    //   tuneFor(key)  → POST /verticals/tune/<key>, render result
+    //   applyTune(key, result) → POST /verticals/apply_override/<key>
+    //   revertTune(key) → POST /verticals/revert_override/<key>
+    const tuneModal = document.getElementById("tuneModal");
+    const tuneTitle = document.getElementById("tuneTitle");
+    const tuneSubtitle = document.getElementById("tuneSubtitle");
+    const tuneBaseF1 = document.getElementById("tuneBaseF1");
+    const tuneBaseRow = document.getElementById("tuneBaseRow");
+    const tuneNewF1 = document.getElementById("tuneNewF1");
+    const tuneNewRow = document.getElementById("tuneNewRow");
+    const tuneDeltas = document.getElementById("tuneDeltas");
+    const tuneCancel = document.getElementById("tuneCancel");
+    const tuneApply  = document.getElementById("tuneApply");
+    const tuneRevert = document.getElementById("tuneRevert");
+    let _currentTune = null;   // last result, keyed for the apply button
+
+    function fmtPP(v) {
+      if (v == null) return "0";
+      const sign = v > 0 ? "+" : "";
+      return sign + (v * 100).toFixed(1) + "pp";
+    }
+
+    function renderTune(key, vert, result) {
+      tuneTitle.textContent = `${vert.icon}  ${vert.zh} · 自动调参结果`;
+      tuneSubtitle.textContent =
+        `分析了 ${result.n_samples_analyzed} 张样本(👍 ${result.n_good} · 👎 ${result.n_bad}) · `
+        + `耗时 ${result.elapsed_s}s`;
+
+      const b = result.baseline || {};
+      const t = result.tuned || {};
+      tuneBaseF1.textContent = (b.f1 || 0).toFixed(3);
+      tuneBaseRow.textContent =
+        `precision ${(b.precision || 0).toFixed(2)} · recall ${(b.recall || 0).toFixed(2)} · acc ${(b.accuracy || 0).toFixed(2)}`;
+      tuneNewF1.textContent = (t.f1 || 0).toFixed(3);
+      tuneNewRow.textContent =
+        `precision ${(t.precision || 0).toFixed(2)} · recall ${(t.recall || 0).toFixed(2)} · acc ${(t.accuracy || 0).toFixed(2)}`;
+
+      const dF1 = (t.f1 || 0) - (b.f1 || 0);
+      const sign = dF1 >= 0 ? "+" : "";
+      tuneDeltas.innerHTML =
+        `keep_min_delta: <b>${fmtPP(result.baseline_delta_keep)}</b> → <b>${fmtPP(result.tuned_delta_keep)}</b>`
+        + ` &nbsp;·&nbsp; cull_max_delta: <b>${fmtPP(result.baseline_delta_cull)}</b> → <b>${fmtPP(result.tuned_delta_cull)}</b>`
+        + ` &nbsp;·&nbsp; F1 提升 <b style="color:${dF1 > 0 ? 'var(--keep)' : (dF1 < 0 ? 'var(--cull)' : 'var(--muted)')}">${sign}${dF1.toFixed(3)}</b>`;
+
+      // Show "revert" button only if an override is already in effect
+      tuneRevert.style.display = vert.policy && vert.policy.is_override ? "" : "none";
+      // Disable apply when the suggestion would worsen things
+      tuneApply.disabled = dF1 < 0;
+      tuneApply.textContent = dF1 >= 0 ? "应用建议" : "建议反而变差,不应用";
+
+      // V17.10 — F1 surface heatmap.
+      renderHeatmap(result);
+
+      _currentTune = {key, vert, result};
+      tuneModal.classList.add("show");
+    }
+
+    // V17.10 — render the F1 surface as an 11×11 grid. Color scale
+    // is red(0) → amber(0.5) → green(1.0). Hover any cell to see
+    // the exact (Δk, Δc) → F1 / P / R / acc. Best cell outlined
+    // green; current registry default outlined blue dashed.
+    function renderHeatmap(result) {
+      const wrap = document.getElementById("tuneHeatmapWrap");
+      const grid = document.getElementById("tuneHeatmap");
+      if (!wrap || !grid) return;
+      const cells = result.grid || [];
+      if (cells.length < 9) {   // tuner couldn't run (no samples)
+        wrap.style.display = "none";
+        return;
+      }
+      wrap.style.display = "";
+
+      // Build the [-0.10..+0.10 step 0.02] axis.
+      const axis = [];
+      for (let i = 0; i < 11; i++) axis.push(Math.round((-0.10 + i * 0.02) * 100) / 100);
+
+      // Map cells into 11×11 dict for O(1) lookup
+      const byKey = {};
+      let maxF1 = 0, bestKey = null;
+      for (const c of cells) {
+        const k = `${c.keep_delta.toFixed(2)},${c.cull_delta.toFixed(2)}`;
+        byKey[k] = c;
+        if (c.f1 > maxF1) { maxF1 = c.f1; bestKey = k; }
+      }
+      const tunedKey = `${result.tuned_delta_keep.toFixed(2)},${result.tuned_delta_cull.toFixed(2)}`;
+      const baselineKey = `${result.baseline_delta_keep.toFixed(2)},${result.baseline_delta_cull.toFixed(2)}`;
+
+      function f1Color(f1) {
+        if (f1 == null) return "rgb(40,40,40)";
+        // Red→Yellow→Green linear in HSL hue
+        const hue = Math.max(0, Math.min(120, f1 * 120));
+        const sat = 60 + f1 * 20;
+        const lig = 30 + f1 * 25;
+        return `hsl(${hue}, ${sat}%, ${lig}%)`;
+      }
+
+      const parts = [`<div class="heatmap-grid">`];
+      // Header row: corner + cull_delta axis
+      parts.push(`<div class="hcorner">Δkeep \\ Δcull</div>`);
+      for (const cd of axis) {
+        const sign = cd > 0 ? "+" : "";
+        parts.push(`<div class="haxis-x">${sign}${(cd*100).toFixed(0)}</div>`);
+      }
+      // Body rows
+      for (const kd of axis) {
+        const sign = kd > 0 ? "+" : "";
+        parts.push(`<div class="haxis-y">${sign}${(kd*100).toFixed(0)}</div>`);
+        for (const cd of axis) {
+          const key = `${kd.toFixed(2)},${cd.toFixed(2)}`;
+          const c = byKey[key];
+          if (!c) {
+            parts.push(`<div class="hcell" style="background: rgba(255,255,255,0.02)"
+                             title="跳过 (keep_min ≤ cull_max,非法)"></div>`);
+            continue;
+          }
+          const isBest = key === bestKey;
+          const isBaseline = key === baselineKey;
+          const cls = ["hcell"];
+          if (isBest) cls.push("best");
+          if (isBaseline && !isBest) cls.push("current");
+          const f1txt = (c.f1 * 100).toFixed(0);
+          parts.push(
+            `<div class="${cls.join(' ')}" style="background: ${f1Color(c.f1)}"`
+            + ` title="Δk=${sign}${(kd*100).toFixed(0)}pp · Δc=${cd > 0 ? '+' : ''}${(cd*100).toFixed(0)}pp\nF1=${c.f1.toFixed(3)} · P=${c.precision.toFixed(2)} · R=${c.recall.toFixed(2)} · acc=${c.accuracy.toFixed(2)}">${f1txt}</div>`
+          );
+        }
+      }
+      parts.push(`</div>`);
+      parts.push(`<div class="heatmap-axis-label">F1 = 颜色(红 0 → 绿 1) · `
+        + `数字 = F1×100 · <span style="color:var(--keep)">绿框</span>=最优 · `
+        + `<span style="color:var(--accent-hi)">蓝虚框</span>=V17.2 默认 · hover 看详情</div>`);
+      grid.innerHTML = parts.join("");
+    }
+
+    function closeTune() {
+      tuneModal.classList.remove("show");
+      _currentTune = null;
+    }
+    tuneCancel.addEventListener("click", closeTune);
+    tuneModal.addEventListener("click", e => {
+      if (e.target === tuneModal) closeTune();
+    });
+
+    async function tuneFor(key, vert) {
+      const v = vert || registry.find(x => x.key === key);
+      if (!v) return;
+      // Need at least 1 good + 1 bad
+      if ((v.counts.good || 0) < 1 || (v.counts.bad || 0) < 1) {
+        toast(`需要先在 ${v.zh} 中各上传至少 1 张好片 / 待剔除`, "error");
+        return;
+      }
+      toast(`正在分析 ${v.zh} 的 ${v.counts.total} 张样本…`, "");
+      try {
+        const res = await fetch(`/verticals/tune/${encodeURIComponent(key)}`,
+                                  {method: "POST"});
+        if (!res.ok) {
+          const e = await res.json().catch(() => ({}));
+          toast(`调参失败: ${e.error || res.status}`, "error");
+          return;
+        }
+        const result = await res.json();
+        renderTune(key, v, result);
+      } catch (e) {
+        toast(`调参出错: ${e}`, "error");
+      }
+    }
+
+    tuneApply.addEventListener("click", async () => {
+      if (!_currentTune) return;
+      const {key, result} = _currentTune;
+      try {
+        const res = await fetch(`/verticals/apply_override/${encodeURIComponent(key)}`,
+                                  {method: "POST",
+                                   headers: {"Content-Type": "application/json"},
+                                   body: JSON.stringify({
+                                     n_good: result.n_good, n_bad: result.n_bad,
+                                     base_keep_min: result.base_keep_min,
+                                     base_cull_max: result.base_cull_max,
+                                     baseline_delta_keep: result.baseline_delta_keep,
+                                     baseline_delta_cull: result.baseline_delta_cull,
+                                     baseline: result.baseline,
+                                     tuned_delta_keep: result.tuned_delta_keep,
+                                     tuned_delta_cull: result.tuned_delta_cull,
+                                     tuned: result.tuned,
+                                   })});
+        if (!res.ok) {
+          const e = await res.json().catch(() => ({}));
+          toast(`应用失败: ${e.error || res.status}`, "error");
+          return;
+        }
+        toast("已应用,新的 keep/maybe/cull 阈值即刻生效", "success");
+        closeTune();
+        loadRegistry();   // refresh the 🎯 已调参 pill
+      } catch (e) {
+        toast(`应用出错: ${e}`, "error");
+      }
+    });
+
+    tuneRevert.addEventListener("click", async () => {
+      if (!_currentTune) return;
+      const {key} = _currentTune;
+      if (!confirm("恢复到 V17.2 默认 policy?(自动调参的 override 文件会被删除)")) return;
+      try {
+        const res = await fetch(`/verticals/revert_override/${encodeURIComponent(key)}`,
+                                  {method: "POST"});
+        if (!res.ok) {
+          toast("撤销失败", "error");
+          return;
+        }
+        toast("已恢复默认", "success");
+        closeTune();
+        loadRegistry();
+      } catch (e) {
+        toast(`撤销出错: ${e}`, "error");
+      }
+    });
+
+    // ─────────────────────── V17.5 LLM phrases ──────────────────────
+    const llmPhrasesModal    = document.getElementById("llmPhrasesModal");
+    const llmPhrasesTitle    = document.getElementById("llmPhrasesTitle");
+    const llmPhrasesSubtitle = document.getElementById("llmPhrasesSubtitle");
+    const llmPhrasesBody     = document.getElementById("llmPhrasesBody");
+    const llmPhrasesClose    = document.getElementById("llmPhrasesClose");
+    const llmPhrasesRegen    = document.getElementById("llmPhrasesRegen");
+    const llmPhrasesRevert   = document.getElementById("llmPhrasesRevert");
+    let _currentLlm = null;
+
+    document.addEventListener("keydown", e => {
+      if (e.key === "Escape") {
+        if (llmPhrasesModal.classList.contains("show")) closeLlm();
+        if (evalModal.classList.contains("show")) closeEval();
+      }
+    });
+
+    function closeLlm() {
+      llmPhrasesModal.classList.remove("show");
+      _currentLlm = null;
+    }
+    llmPhrasesClose.addEventListener("click", closeLlm);
+    llmPhrasesModal.addEventListener("click", e => {
+      if (e.target === llmPhrasesModal) closeLlm();
+    });
+
+    function renderLlmPhrases(vert, result) {
+      llmPhrasesTitle.textContent =
+        `${vert.icon}  ${vert.zh} · AI 专属话术`;
+      const tokens = (result.prompt_tokens || 0)
+                   + (result.completion_tokens || 0);
+      llmPhrasesSubtitle.innerHTML =
+        `基于 <b>${result.n_samples_seen}</b> 张好样本生成 · ` +
+        `主场景 <b>${esc(result.scene_mode||'(混合)')}</b> · ` +
+        `top 风格 ${(result.style_modes||[]).slice(0,3).map(esc).join(' / ') || '(无)'} · ` +
+        `${tokens} tokens · ${result.elapsed_s}s`;
+      const axisLabels = {
+        subject:     '主体', composition: '构图',
+        light:       '光线', moment:      '瞬间',
+        aesthetic:   '美感', technical:   '技术',
+      };
+      const blocks = Object.entries(result.axes || {}).map(([axis, phrases]) => `
+        <div style="margin-bottom: 14px; padding: 10px;
+                background: rgba(255,255,255,0.03);
+                border: 1px solid var(--border); border-radius: 6px">
+          <div style="font-size: 11px; text-transform: uppercase;
+                  letter-spacing: 0.05em; color: var(--muted);
+                  margin-bottom: 6px;">
+            ${axisLabels[axis] || axis}
+          </div>
+          <ul style="margin: 0; padding-left: 18px; color: var(--fg);">
+            ${phrases.map(p => `<li style="line-height: 1.8">${esc(p)}</li>`).join("")}
+          </ul>
+        </div>
+      `).join("");
+      llmPhrasesBody.innerHTML = blocks
+        || `<div style="color: var(--muted)">LLM 没生成有效短语,重试一次?</div>`;
+      llmPhrasesRevert.style.display =
+        (vert.phrases && vert.phrases.is_override) ? "" : "none";
+      _currentLlm = {key: vert.key, vert, result};
+      llmPhrasesModal.classList.add("show");
+    }
+
+    async function llmPhrasesFor(key) {
+      const v = registry.find(x => x.key === key);
+      if (!v) return;
+      if ((v.counts.good || 0) < 3) {
+        toast(`${v.zh} 至少需要 3 张好样本才能生成 AI 话术`, "error");
+        return;
+      }
+      toast(`正在用 DeepSeek 分析 ${v.counts.good} 张好样本…`, "");
+      try {
+        const res = await fetch(
+          `/verticals/llm_phrases/${encodeURIComponent(key)}`,
+          {method: "POST"});
+        if (!res.ok) {
+          const e = await res.json().catch(() => ({}));
+          toast(`生成失败: ${e.error || res.status}`, "error");
+          return;
+        }
+        const result = await res.json();
+        renderLlmPhrases(v, result);
+        loadRegistry();
+        toast("AI 话术已应用,下次跑该垂类 batch 时生效", "success");
+      } catch (e) {
+        toast(`出错: ${e}`, "error");
+      }
+    }
+    llmPhrasesRegen.addEventListener("click", () => {
+      if (!_currentLlm) return;
+      llmPhrasesFor(_currentLlm.key);
+    });
+    llmPhrasesRevert.addEventListener("click", async () => {
+      if (!_currentLlm) return;
+      if (!confirm("恢复 V17.3 默认 phrase 池?")) return;
+      try {
+        const res = await fetch(
+          `/verticals/revert_phrases/${encodeURIComponent(_currentLlm.key)}`,
+          {method: "POST"});
+        if (res.ok) {
+          toast("已恢复默认话术", "success");
+          closeLlm();
+          loadRegistry();
+        }
+      } catch (e) { toast(`撤销出错: ${e}`, "error"); }
+    });
+
+    // ─────────────────────── V17.6 eval report ──────────────────────
+    const evalModal    = document.getElementById("evalModal");
+    const evalTitle    = document.getElementById("evalTitle");
+    const evalSubtitle = document.getElementById("evalSubtitle");
+    const evalBody     = document.getElementById("evalBody");
+    const evalCloseBtn = document.getElementById("evalClose");
+    function closeEval() { evalModal.classList.remove("show"); }
+    evalCloseBtn.addEventListener("click", closeEval);
+    evalModal.addEventListener("click", e => {
+      if (e.target === evalModal) closeEval();
+    });
+
+    function renderEval(report) {
+      evalTitle.textContent =
+        `${esc(report.vertical_icon)}  ${esc(report.vertical_zh)} · 评估报告`;
+      const thr = report.thresholds_used;
+      const m = report.metrics;
+      const isOv = thr.is_override ? "(已应用 V17.4 自动调参 override)" : "(V17.2 默认 policy)";
+      evalSubtitle.innerHTML =
+        `分析了 <b>${report.n_total}</b> 张样本(👍 ${report.n_good} · 👎 ${report.n_bad}) ` +
+        `· keep ≥ <b>${thr.keep_min}</b> / cull ≤ <b>${thr.cull_max}</b> ` +
+        `<span style="color: var(--muted)">${esc(isOv)}</span>`;
+
+      const confRows = ["good","bad"].map(b => {
+        const c = report.confusion[b];
+        const total = c.keep + c.maybe + c.cull;
+        const pct = v => total ? Math.round(100 * v / total) + "%" : "0%";
+        return `<tr>
+          <th style="text-align: left; padding: 4px 8px">${b === "good" ? "👍 好片" : "👎 待剔除"} (${total})</th>
+          <td style="padding: 4px 8px; color: var(--keep)">${c.keep} <span class="muted">${pct(c.keep)}</span></td>
+          <td style="padding: 4px 8px; color: var(--maybe)">${c.maybe} <span class="muted">${pct(c.maybe)}</span></td>
+          <td style="padding: 4px 8px; color: var(--cull)">${c.cull} <span class="muted">${pct(c.cull)}</span></td>
+        </tr>`;
+      }).join("");
+
+      const f1Color = m.f1 >= 0.85 ? "var(--keep)" :
+                       m.f1 >= 0.70 ? "var(--maybe)" : "var(--cull)";
+
+      const fp = report.misclassified_keep || [];
+      const fn = report.misclassified_cull || [];
+      const renderList = (list, color) => list.length
+        ? list.map(x => `<li style="line-height: 1.6">
+            <code style="color: ${color}">${esc(x.filename)}</code>
+            <span class="muted"> · score ${x.score} · pred <b>${esc(x.pred)}</b> · scene ${esc(x.scene||'?')} ${(x.flags||[]).length ? '· flags: ' + x.flags.map(esc).join(',') : ''}</span>
+          </li>`).join("")
+        : `<li style="color: var(--muted)">无</li>`;
+
+      evalBody.innerHTML = `
+        <!-- F1 banner -->
+        <div style="background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+                border-radius: 6px; padding: 12px 16px; margin-bottom: 14px;">
+          <div style="font-size: 11px; color: var(--muted); margin-bottom: 4px">F1 (positive class = "kept")</div>
+          <div style="font-size: 28px; font-weight: 600; color: ${f1Color}; font-variant-numeric: tabular-nums">
+            ${(m.f1 || 0).toFixed(3)}
+          </div>
+          <div style="font-size: 12px; color: var(--muted); margin-top: 4px;
+                  font-variant-numeric: tabular-nums">
+            precision <b>${(m.precision||0).toFixed(2)}</b> ·
+            recall <b>${(m.recall||0).toFixed(2)}</b> ·
+            accuracy <b>${(m.accuracy||0).toFixed(2)}</b> ·
+            tp/fp/tn/fn <b>${m.tp}/${m.fp}/${m.tn}/${m.fn}</b>
+          </div>
+        </div>
+
+        <!-- Confusion -->
+        <div style="font-size: 11px; text-transform: uppercase;
+                letter-spacing: 0.05em; color: var(--muted);
+                margin-bottom: 6px;">混淆矩阵</div>
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px;
+                background: var(--bg-card); border: 1px solid var(--border);
+                border-radius: 6px; overflow: hidden;">
+          <thead><tr style="background: rgba(255,255,255,0.04)">
+            <th style="text-align: left; padding: 6px 8px">真实 \\ 预测</th>
+            <th style="text-align: left; padding: 6px 8px">keep</th>
+            <th style="text-align: left; padding: 6px 8px">maybe</th>
+            <th style="text-align: left; padding: 6px 8px">cull</th>
+          </tr></thead>
+          <tbody>${confRows}</tbody>
+        </table>
+
+        <!-- Misclassified -->
+        ${fp.length || fn.length ? `
+          <div style="font-size: 11px; text-transform: uppercase;
+                  letter-spacing: 0.05em; color: var(--muted);
+                  margin-bottom: 6px;">误判样本(点击文件名可在 Finder 中查看)</div>
+          ${fp.length ? `
+            <div style="margin-bottom: 8px">
+              <div style="color: var(--cull); font-size: 12px; margin-bottom: 4px">
+                ✗ 应该 cull 但被保留 (${fp.length})
+              </div>
+              <ul style="margin: 0; padding-left: 18px; font-size: 11.5px">
+                ${renderList(fp, 'var(--cull)')}
+              </ul>
+            </div>
+          ` : ''}
+          ${fn.length ? `
+            <div>
+              <div style="color: var(--keep); font-size: 12px; margin-bottom: 4px">
+                ✗ 应该 keep 但被 cull (${fn.length})
+              </div>
+              <ul style="margin: 0; padding-left: 18px; font-size: 11.5px">
+                ${renderList(fn, 'var(--keep)')}
+              </ul>
+            </div>
+          ` : ''}
+        ` : `<div style="color: var(--keep); font-size: 12px">✓ 所有样本分类正确</div>`}
+
+        <div style="margin-top: 14px; padding-top: 10px;
+                border-top: 1px solid var(--border);
+                font-size: 11px; color: var(--muted)">
+          score 分布:好片 ${report.score_distrib.good.score_mean} (${report.score_distrib.good.score_min}~${report.score_distrib.good.score_max}) ·
+          待剔除 ${report.score_distrib.bad.score_mean} (${report.score_distrib.bad.score_min}~${report.score_distrib.bad.score_max})
+        </div>
+      `;
+      evalModal.classList.add("show");
+    }
+
+    // V17.13 — Unsplash CC0 fetcher
+    const unsplashModal    = document.getElementById("unsplashModal");
+    const unsplashQuery    = document.getElementById("unsplashQuery");
+    const unsplashOrient   = document.getElementById("unsplashOrient");
+    const unsplashBucket   = document.getElementById("unsplashBucket");
+    const unsplashCount    = document.getElementById("unsplashCount");
+    const unsplashResult   = document.getElementById("unsplashResult");
+    const unsplashCloseBtn = document.getElementById("unsplashClose");
+    const unsplashFetchBtn = document.getElementById("unsplashFetch");
+    const UNSPLASH_DEFAULTS = {
+      wedding:   {query: "wedding bride groom",   orientation: "portrait"},
+      bird:      {query: "bird in flight nature", orientation: "landscape"},
+      wildlife:  {query: "wildlife animal nature",orientation: "landscape"},
+      kids:      {query: "happy child portrait",  orientation: "portrait"},
+      pet:       {query: "dog cat portrait pet",  orientation: "squarish"},
+      cosplay:   {query: "cosplay anime costume", orientation: "portrait"},
+      landscape: {query: "landscape mountains",   orientation: "landscape"},
+      travel:    {query: "travel destination",    orientation: "landscape"},
+      event:     {query: "concert event crowd",   orientation: "landscape"},
+      sports:    {query: "sports action peak",    orientation: "landscape"},
+    };
+    let _currentUnsplashKey = null;
+    function closeUnsplash() { unsplashModal.classList.remove("show"); }
+    unsplashCloseBtn.addEventListener("click", closeUnsplash);
+    unsplashModal.addEventListener("click", e => {
+      if (e.target === unsplashModal) closeUnsplash();
+    });
+    function unsplashFor(key) {
+      const v = registry.find(x => x.key === key);
+      if (!v) return;
+      _currentUnsplashKey = key;
+      const d = UNSPLASH_DEFAULTS[key] || {query: key, orientation: "landscape"};
+      unsplashQuery.value = d.query;
+      unsplashOrient.value = d.orientation;
+      unsplashBucket.value = "good";
+      unsplashCount.value = "15";
+      unsplashResult.innerHTML = `<span style="color:var(--muted)">点 "拉取" → Unsplash API 搜索 → 下载入桶</span>`;
+      unsplashFetchBtn.disabled = false;
+      document.getElementById("unsplashTitle").textContent =
+        `${v.icon}  ${v.zh} · 从 Unsplash 拉取`;
+      unsplashModal.classList.add("show");
+      setTimeout(() => unsplashQuery.focus(), 50);
+    }
+    unsplashFetchBtn.addEventListener("click", async () => {
+      if (!_currentUnsplashKey) return;
+      const query = unsplashQuery.value.trim();
+      if (!query) { toast("请输入搜索词", "error"); return; }
+      const body = {
+        query,
+        orientation: unsplashOrient.value,
+        bucket: unsplashBucket.value,
+        count: parseInt(unsplashCount.value) || 15,
+      };
+      unsplashFetchBtn.disabled = true;
+      unsplashResult.innerHTML = `<span style="color:var(--muted)">正在搜索 + 下载…(每张 1-3s,可能要等一会)</span>`;
+      try {
+        const res = await fetch(
+          `/verticals/unsplash_fetch/${encodeURIComponent(_currentUnsplashKey)}`,
+          {method: "POST",
+           headers: {"Content-Type": "application/json"},
+           body: JSON.stringify(body)});
+        const d = await res.json();
+        if (!res.ok) {
+          unsplashResult.innerHTML =
+            `<span style="color:var(--cull)">失败: ${esc(d.error || res.status)}</span>`;
+          unsplashFetchBtn.disabled = false;
+          return;
+        }
+        unsplashResult.innerHTML =
+          `<div style="color:var(--keep)">已下载 <b>${d.saved.length}</b> 张到
+            ${esc(d.bucket)} 桶 · 跳过 ${d.skipped.length}</div>
+          <div style="margin-top:8px;font-size:11px;color:var(--muted)">
+            当前 sample bank: 👍 ${d.counts.good} · 👎 ${d.counts.bad}<br>
+            credit (示例 3 位):
+            ${d.saved.slice(0,3).map(s =>
+              `<a href="${esc(s.url)}" target="_blank" style="color:var(--accent-hi)">${esc(s.photographer)}</a>`
+            ).join(" · ")}
+          </div>`;
+        loadRegistry();
+        toast(`已从 Unsplash 拉取 ${d.saved.length} 张`, "success");
+      } catch (e) {
+        unsplashResult.innerHTML =
+          `<span style="color:var(--cull)">网络错误: ${esc(e)}</span>`;
+      } finally {
+        unsplashFetchBtn.disabled = false;
+      }
+    });
+    document.addEventListener("keydown", e => {
+      if (e.key === "Escape" && unsplashModal.classList.contains("show")) {
+        closeUnsplash();
+      }
+    });
+
+    async function evalFor(key) {
+      const v = registry.find(x => x.key === key);
+      if (!v) return;
+      if ((v.counts.total || 0) < 1) {
+        toast(`${v.zh} 没有样本可以评估`, "error");
+        return;
+      }
+      toast(`正在评估 ${v.zh} 的 ${v.counts.total} 张样本…`, "");
+      try {
+        const res = await fetch(`/verticals/eval/${encodeURIComponent(key)}`,
+                                  {method: "POST"});
+        if (!res.ok) {
+          const e = await res.json().catch(() => ({}));
+          toast(`评估失败: ${e.error || res.status}`, "error");
+          return;
+        }
+        const report = await res.json();
+        renderEval(report);
+      } catch (e) { toast(`评估出错: ${e}`, "error"); }
+    }
+
+    function render() {
+      const filtered = applyView(registry);
+      const vempty = document.getElementById("vempty");
+      if (!filtered.length) {
+        vlist.innerHTML = "";
+        if (vempty) vempty.style.display = "block";
+        return;
+      }
+      if (vempty) vempty.style.display = "none";
+      vlist.innerHTML = filtered.map(v => `
+        <div class="vcard" data-key="${esc(v.key)}">
+          <div class="vhead">
+            <span class="vicon">${esc(v.icon)}</span>
+            <span class="vname">${esc(v.zh)}</span>
+          </div>
+          <div class="vdesc">${esc(v.description)}</div>
+          <div class="progress-shell">
+            <div class="progress-bar" style="width: ${(v.progress*100).toFixed(0)}%"></div>
+          </div>
+          <div class="vstats">
+            <span class="pill good clickable" data-bucket="good" data-key="${esc(v.key)}"
+                  title="点击查看好片样本">👍 ${v.counts.good}</span>
+            <span class="pill bad clickable" data-bucket="bad" data-key="${esc(v.key)}"
+                  title="点击查看待剔除样本">👎 ${v.counts.bad}</span>
+            ${v.policy && v.policy.is_override ?
+              `<span class="pill tuned" title="已自动调参 · F1 ${(v.policy.baseline_f1||0).toFixed(2)} → ${(v.policy.tuned_f1||0).toFixed(2)}">🎯 已调参</span>`
+              : ''}
+            ${v.phrases && v.phrases.is_override ?
+              `<span class="pill phrased" title="已生成 AI 专属话术,样本 n=${v.phrases.n_samples_seen||0}">✨ AI 话术</span>`
+              : ''}
+            <span class="target-label">目标各 ${v.sample_target} 张</span>
+          </div>
+          ${v.counts.total === 0 ? `
+            <div class="empty-hint">
+              先点 <b>+ 好片</b> 上传几张你欣赏的 <b>${esc(v.zh)}</b> 样片 → 自动获得专属评分
+            </div>
+          ` : ''}
+          <div class="vactions">
+            <!-- Row 1: primary upload actions, green/red coded -->
+            <div class="row primary">
+              <button class="good" data-key="${esc(v.key)}" data-bucket="good"
+                      title="上传一张这个垂类的好片(参考样本)">
+                <span class="ic">👍</span>+ 好片
+              </button>
+              <button class="bad" data-key="${esc(v.key)}" data-bucket="bad"
+                      title="上传一张该被剔除的样本(反例)">
+                <span class="ic">👎</span>+ 待剔除
+              </button>
+            </div>
+            <!-- Row 2: secondary tools — disabled until samples exist -->
+            <div class="row secondary">
+              <a class="bulk-link" href="/verticals/bulk/${encodeURIComponent(v.key)}"
+                 title="选个文件夹 → pipeline 自动分类 → 一键灌入 sample bank">
+                <span class="ic">📥</span>批量导入
+              </a>
+              <button class="unsplash" data-key="${esc(v.key)}"
+                      title="从 Unsplash (CC0) 拉取参考样本(婚纱/拍鸟/cosplay/儿童 这些没有第一方素材时用)">
+                <span class="ic">🌐</span>Unsplash
+              </button>
+              <button class="tune" data-key="${esc(v.key)}"
+                      title="用收集的好/坏样本自动调阈值"
+                      ${(v.counts.good < 1 || v.counts.bad < 1) ? 'disabled' : ''}>
+                <span class="ic">🎯</span>调参
+              </button>
+              <button class="llm-phrases" data-key="${esc(v.key)}"
+                      title="用 DeepSeek 基于好样本生成业务话术"
+                      ${v.counts.good < 3 ? 'disabled' : ''}>
+                <span class="ic">✨</span>AI 话术
+              </button>
+              <button class="eval" data-key="${esc(v.key)}"
+                      title="看当前 policy 在你样本上的 F1 / 混淆矩阵"
+                      ${v.counts.total < 1 ? 'disabled' : ''}>
+                <span class="ic">📊</span>报告
+              </button>
+              <button class="manage" data-key="${esc(v.key)}"
+                      title="管理已上传的样本(查看/删除)">
+                <span class="ic">⋯</span>管理
+              </button>
+            </div>
+          </div>
+          <div class="vdetail" data-key="${esc(v.key)}">
+            <div class="vdetail-tabs">
+              <button data-bucket="good" class="active">好片 (${v.counts.good})</button>
+              <button data-bucket="bad">待剔除 (${v.counts.bad})</button>
+            </div>
+            <div class="drop-zone" data-key="${esc(v.key)}">
+              拖拽文件到此 · 或点击选择
+              <input type="file" hidden accept="image/*" multiple>
+            </div>
+            <div class="sample-grid"></div>
+          </div>
+        </div>
+      `).join("");
+      // Wire each card
+      vlist.querySelectorAll(".vcard").forEach(card => wireCard(card));
+    }
+
+    function wireCard(card) {
+      const key = card.dataset.key;
+      const detail = card.querySelector(".vdetail");
+      const tabs = card.querySelectorAll(".vdetail-tabs button");
+      const dropZone = card.querySelector(".drop-zone");
+      const fileInput = dropZone.querySelector("input[type=file]");
+      const grid = card.querySelector(".sample-grid");
+
+      let currentBucket = "good";
+
+      function setBucket(b) {
+        currentBucket = b;
+        tabs.forEach(t => t.classList.toggle("active", t.dataset.bucket === b));
+        loadSamples();
+      }
+
+      // V17.1 — fetch the per-bucket sample list and render thumbnails.
+      // Hover ✕ deletes; click pops the full image in a lightbox.
+      async function loadSamples() {
+        grid.innerHTML = `<div style="grid-column: 1 / -1; padding: 8px;
+          color: var(--muted); font-size: 11px">加载中…</div>`;
+        try {
+          const res = await fetch(
+            `/verticals/list/${encodeURIComponent(key)}/${currentBucket}`
+          );
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const d = await res.json();
+          // Update tab counts inline (no re-fetch of full registry)
+          tabs.forEach(t => {
+            const b = t.dataset.bucket;
+            t.textContent = (b === "good" ? "好片 " : "待剔除 ")
+              + `(${d.counts[b]})`;
+            t.classList.toggle("active", b === currentBucket);
+          });
+          if (!d.samples.length) {
+            grid.innerHTML = `<div style="grid-column: 1 / -1; padding: 8px;
+              color: var(--muted); font-size: 11px">
+              空 — 拖文件到上方区域开始
+            </div>`;
+            return;
+          }
+          grid.innerHTML = d.samples.map(s => {
+            const url = `/verticals/sample/${encodeURIComponent(key)}/${currentBucket}/${encodeURIComponent(s.filename)}`;
+            return `
+              <div class="sample" data-fn="${esc(s.filename)}">
+                <img src="${url}" alt="${esc(s.filename)}" loading="lazy">
+                <button class="rm" data-fn="${esc(s.filename)}"
+                  title="删除这张样本">✕</button>
+              </div>`;
+          }).join("");
+          // Wire each sample's delete + zoom
+          grid.querySelectorAll(".sample").forEach(s => {
+            const fn = s.dataset.fn;
+            const rmBtn = s.querySelector(".rm");
+            rmBtn.addEventListener("click", async (e) => {
+              e.stopPropagation();
+              if (!confirm("删除这张样本?(只删除你机上的样本库,不会动原图)")) return;
+              try {
+                const r = await fetch(
+                  `/verticals/sample/${encodeURIComponent(key)}/${currentBucket}/${encodeURIComponent(fn)}`,
+                  {method: "DELETE"}
+                );
+                if (r.ok) {
+                  toast("已删除", "success");
+                  loadSamples();
+                  loadRegistry();   // progress bar refresh
+                } else {
+                  toast("删除失败", "error");
+                }
+              } catch (err) { toast("删除出错: " + err, "error"); }
+            });
+            // Click anywhere else on the tile → zoom
+            // V17.16 — pass the full samples list so ← / → navigates
+            // within the bucket without closing + re-opening.
+            s.addEventListener("click", () => {
+              const idx = d.samples.findIndex(x => x.filename === fn);
+              openSampleZoom(
+                d.samples, Math.max(0, idx),
+                (filename) =>
+                  `/verticals/sample/${encodeURIComponent(key)}/${currentBucket}/${encodeURIComponent(filename)}`
+              );
+            });
+          });
+        } catch (err) {
+          grid.innerHTML = `<div style="grid-column: 1 / -1; padding: 8px;
+            color: var(--cull); font-size: 11px">加载失败: ${esc(err.message || err)}</div>`;
+        }
+      }
+
+      tabs.forEach(t => {
+        t.addEventListener("click", () => setBucket(t.dataset.bucket));
+      });
+
+      // V17.15 — counts pills double as drawer-shortcuts. Click the
+      // 👍 N pill to see the good-bucket grid, 👎 N for bad.
+      card.querySelectorAll(".vstats .pill.clickable").forEach(pill => {
+        pill.addEventListener("click", () => {
+          const b = pill.dataset.bucket;
+          if (b) {
+            setBucket(b);
+            // Always show drawer on pill click (don't toggle —
+            // user pressed the pill to look at samples)
+            if (!detail.classList.contains("show")) {
+              detail.classList.add("show");
+            }
+          }
+        });
+      });
+
+      // Action buttons (+ 好片 / + 待剔除 / 🎯 自动调参 /
+      //  ✨ AI 话术 / 📊 看报告 / 🌐 Unsplash / 管理…)
+      card.querySelectorAll(".vactions button").forEach(btn => {
+        btn.addEventListener("click", () => {
+          // V17.4-13 — non-drawer buttons intercept first
+          if (btn.classList.contains("tune")) {
+            tuneFor(btn.dataset.key);
+            return;
+          }
+          if (btn.classList.contains("llm-phrases")) {
+            llmPhrasesFor(btn.dataset.key);
+            return;
+          }
+          if (btn.classList.contains("eval")) {
+            evalFor(btn.dataset.key);
+            return;
+          }
+          if (btn.classList.contains("unsplash")) {
+            unsplashFor(btn.dataset.key);
+            return;
+          }
+          const b = btn.dataset.bucket;
+          if (b) setBucket(b);
+          else loadSamples();   // 管理… → just load current bucket
+          detail.classList.toggle("show");
+        });
+      });
+
+      // Drop zone
+      dropZone.addEventListener("click", () => fileInput.click());
+      ["dragenter", "dragover"].forEach(ev => {
+        dropZone.addEventListener(ev, e => {
+          e.preventDefault(); dropZone.classList.add("over");
+        });
+      });
+      ["dragleave", "drop"].forEach(ev => {
+        dropZone.addEventListener(ev, e => {
+          e.preventDefault(); dropZone.classList.remove("over");
+        });
+      });
+      dropZone.addEventListener("drop", e => {
+        e.preventDefault();
+        upload(e.dataTransfer.files);
+      });
+      fileInput.addEventListener("change", e => upload(e.target.files));
+
+      async function upload(files) {
+        if (!files || !files.length) return;
+        const fd = new FormData();
+        for (const f of files) fd.append("files", f, f.name);
+        const url = `/verticals/upload/${encodeURIComponent(key)}?bucket=${currentBucket}`;
+        try {
+          const res = await fetch(url, {method: "POST", body: fd});
+          const d = await res.json();
+          if (!res.ok) {
+            toast(`上传失败: ${d.error || res.status}`, "error");
+            return;
+          }
+          toast(`已上传 ${d.saved.length} 张到 ${key} · ${currentBucket}`, "success");
+          loadRegistry();   // refresh counts + progress bar
+        } catch (e) {
+          toast(`上传出错: ${e}`, "error");
+        }
+      }
+    }
+
+    // V17.11 — first-run guide. 3 steps walk the user through the
+    // core flow: pick a vertical → upload reference shots →
+    // benefit. Dismissable; "已看过" stored in localStorage so it
+    // never returns after the user has been onboarded.
+    // V17.12 — browser-side error capture. Best-effort POST to
+    // /error_reports/client_event for window.onerror +
+    // unhandledrejection. The server respects the V14.7 opt-in so
+    // this is a no-op when error reporting is disabled. We bound
+    // payloads so a runaway page can't spam huge stacks.
+    (function() {
+      const _seen = new Set();   // de-dup within a page life
+      function _capture(payload) {
+        // De-dup by message + source + lineno to avoid 100 toasts
+        // when the same broken loop fires every frame.
+        const key = (payload.message||"") + "|"
+                  + (payload.source||"") + "|"
+                  + (payload.lineno||"");
+        if (_seen.has(key)) return;
+        _seen.add(key);
+        if (_seen.size > 20) return;   // hard cap per page
+        try {
+          fetch("/error_reports/client_event", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({
+              ...payload,
+              url: location.pathname,
+              ua: navigator.userAgent.slice(0, 200),
+            }),
+            keepalive: true,   // survive page unload
+          }).catch(() => {});
+        } catch (e) {}
+      }
+      window.addEventListener("error", e => _capture({
+        kind: "error",
+        message: e.message || "",
+        source: e.filename || "",
+        lineno: e.lineno || 0,
+        colno: e.colno || 0,
+        stack: (e.error && e.error.stack) || "",
+      }));
+      window.addEventListener("unhandledrejection", e => _capture({
+        kind: "unhandledrejection",
+        message: String((e.reason && e.reason.message) || e.reason || ""),
+        stack: (e.reason && e.reason.stack) || "",
+      }));
+    })();
+
+    const GUIDE_KEY = "pixcull.verticals_guide_seen.v1";
+    const GUIDE_STEPS = [
+      {
+        title: "为常拍的题材定制评分",
+        body: `PixCull 默认有 14 类内置题材识别 — 但 <b>婚纱</b> /
+          <b>拍鸟</b> / <b>儿童</b> / <b>风光</b> 这些<b>业务垂类</b>
+          的评分标准非常不同。<br><br>
+          这页面让你为 <b>10 个垂类</b>各上传一批参考样片(👍 好片 /
+          👎 待剔除),PixCull 学完之后,你下次跑这类批次会用上
+          你的审美 — 而不是我手写的"通用 sport 模板"。`
+      },
+      {
+        title: "三个层次的\"定制\"",
+        body: `每个垂类卡有 3 个工具:<br><br>
+          <b>🎯 调参</b> · 用你的好/坏样本网格搜索最优 keep/cull 阈值,
+            实时显示 F1 提升<br>
+          <b>✨ AI 话术</b> · DeepSeek 根据你的样本生成<b>专属点评</b>,
+            告别"主体占画 30%+"这种通用句<br>
+          <b>📊 报告</b> · 看当前 policy 在你样本上的混淆矩阵 + 误判清单`
+      },
+      {
+        title: "三种灌样本的方式",
+        body: `<b>📥 批量导入</b> · 选一个文件夹(<code>~/摄影/某次拍摄</code>)
+            → PixCull 自动分类 → 你确认后一键灌入<br>
+          <b>+ 好片 / + 待剔除</b> · 手动拖拽单张<br>
+          <b>跑完批次自动 promote</b> · 在主页扫描时选了垂类 + 标注过
+            keep/cull,结果页有"📥 灌入 sample bank"按钮一键写入<br><br>
+          所有样本都<b>留在你本机</b> · 不上云。`
+      },
+    ];
+    let _guideIdx = 0;
+    const guideOverlay = document.getElementById("guideOverlay");
+    const guideStepCount = document.getElementById("guideStepCount");
+    const guideTitle = document.getElementById("guideTitle");
+    const guideBody = document.getElementById("guideBody");
+    const guideNext = document.getElementById("guideNext");
+    const guideSkip = document.getElementById("guideSkip");
+    const guideDots = document.querySelectorAll(".guide-dot");
+    function paintGuide() {
+      const s = GUIDE_STEPS[_guideIdx];
+      guideStepCount.textContent = `第 ${_guideIdx + 1} / ${GUIDE_STEPS.length} 步`;
+      guideTitle.textContent = s.title;
+      guideBody.innerHTML = s.body;
+      guideNext.textContent = (_guideIdx === GUIDE_STEPS.length - 1)
+        ? "开始使用" : "下一步";
+      guideDots.forEach((d, i) => {
+        d.classList.toggle("active", i <= _guideIdx);
+      });
+    }
+    function dismissGuide() {
+      guideOverlay.classList.remove("show");
+      try { localStorage.setItem(GUIDE_KEY, "1"); } catch (e) {}
+    }
+    function maybeShowGuide() {
+      try {
+        if (localStorage.getItem(GUIDE_KEY)) return;
+      } catch (e) {}
+      _guideIdx = 0;
+      paintGuide();
+      guideOverlay.classList.add("show");
+    }
+    guideNext.addEventListener("click", () => {
+      if (_guideIdx >= GUIDE_STEPS.length - 1) {
+        dismissGuide();
+      } else {
+        _guideIdx++;
+        paintGuide();
+      }
+    });
+    guideSkip.addEventListener("click", dismissGuide);
+    guideOverlay.addEventListener("click", e => {
+      if (e.target === guideOverlay) dismissGuide();
+    });
+    document.addEventListener("keydown", e => {
+      if (e.key === "Escape" && guideOverlay.classList.contains("show")) {
+        dismissGuide();
+      }
+    });
+
+    // Expose a re-launcher for the header link "再看一次"
+    window._pcShowGuide = () => {
+      try { localStorage.removeItem(GUIDE_KEY); } catch (e) {}
+      maybeShowGuide();
+    };
+
+    // V17.9 — wire filter / sort / search controls
+    document.querySelectorAll(".vtab").forEach(tab => {
+      tab.addEventListener("click", () => {
+        document.querySelectorAll(".vtab").forEach(t =>
+          t.classList.toggle("active", t === tab));
+        viewState.filter = tab.dataset.filter;
+        render();
+      });
+    });
+    const vsort = document.getElementById("vsort");
+    if (vsort) vsort.addEventListener("change", () => {
+      viewState.sort = vsort.value;
+      render();
+    });
+    const vsearch = document.getElementById("vsearch");
+    if (vsearch) {
+      let _searchTimer;
+      vsearch.addEventListener("input", () => {
+        clearTimeout(_searchTimer);
+        _searchTimer = setTimeout(() => {
+          viewState.search = vsearch.value;
+          render();
+        }, 150);
+      });
+    }
+
+    loadRegistry();
+  </script>
+</body>
+</html>

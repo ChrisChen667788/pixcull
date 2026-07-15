@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <title>PixCull — 隐私 / 错误上报政策</title>
+  <style>
+    :root {
+      --bg: #161310; --bg-card: #1e1a14; --fg: #e9ecf2;
+      --muted: #a8b2c1; --accent: #c4b9a9; --border: #2b241a;
+      --keep: #4ade80; --cull: #cf6f5b;
+    }
+    body {
+      margin: 0; min-height: 100vh; background: var(--bg); color: var(--fg);
+      font: 14px/1.65 -apple-system, "SF Pro Text", Inter,
+            "Segoe UI Variable", "PingFang SC", sans-serif;
+      padding: 32px 24px;
+    }
+    main { max-width: 720px; margin: 0 auto; }
+    h1 { font-size: 22px; font-weight: 600; margin: 0 0 6px; }
+    .subtitle { color: var(--muted); margin-bottom: 24px; }
+    h2 {
+      font-size: 14px; text-transform: uppercase; letter-spacing: 0.06em;
+      color: var(--muted); font-weight: 600;
+      margin: 28px 0 8px;
+    }
+    .card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 8px; padding: 16px 20px; margin-bottom: 14px;
+    }
+    .card.good { border-left: 3px solid var(--keep); }
+    .card.bad  { border-left: 3px solid var(--cull); }
+    ul { padding-left: 20px; margin: 6px 0; }
+    li { margin: 4px 0; }
+    code {
+      background: rgba(255,255,255,0.06); padding: 1px 5px;
+      border-radius: 3px; font-family: ui-monospace, monospace;
+      font-size: 12.5px;
+    }
+    .back {
+      display: inline-block; margin-top: 32px;
+      color: var(--accent); text-decoration: none;
+    }
+    .back:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>错误上报政策</h1>
+    <p class="subtitle">
+      默认<b>关闭</b>。开启后,只在你点 “立即提交一次错误报告”
+      或者(将来)程序崩溃时才会把数据外发。每次发送什么、发到哪里都对你透明。
+    </p>
+
+    <h2>会上报的内容</h2>
+    <div class="card good">
+      <ul>
+        <li>App 版本号</li>
+        <li>操作系统类别 / 版本(如 <code>Darwin · arm64 · 24.x</code>)</li>
+        <li>Python 版本</li>
+        <li>最近一次 stderr 日志的<b>末尾 200 行</b>(脱敏后)</li>
+      </ul>
+    </div>
+
+    <h2>脱敏规则(发送前自动应用)</h2>
+    <div class="card">
+      <ul>
+        <li><code>/Users/&lt;name&gt;</code> → <code>/Users/&lt;redacted&gt;</code></li>
+        <li><code>/home/&lt;name&gt;</code> → <code>/home/&lt;redacted&gt;</code></li>
+        <li><code>C:\Users\&lt;name&gt;</code> → <code>C:\Users\&lt;redacted&gt;</code></li>
+        <li><code>sk-...</code> DeepSeek / OpenAI API key → <code>sk-***</code></li>
+        <li><code>Bearer &lt;token&gt;</code> → <code>Bearer ***</code></li>
+        <li><code>hf_...</code> Hugging Face token → <code>hf_***</code></li>
+        <li><code>AKIA...</code> AWS access key → <code>AKIA***</code></li>
+        <li>邮箱地址 → <code>&lt;email&gt;</code></li>
+      </ul>
+    </div>
+
+    <h2>绝不会上报</h2>
+    <div class="card bad">
+      <ul>
+        <li>你的图片或图片路径</li>
+        <li>图片字节数据</li>
+        <li>License token</li>
+        <li>你写的 rubric 标注 / 评注文字</li>
+        <li><code>/annotation</code> 或 <code>/export</code> 的请求体</li>
+      </ul>
+    </div>
+
+    <h2>上报地址</h2>
+    <div class="card">
+      你在管理面板里自己填一个 endpoint URL。如果留空,即便 “开启” 也只是
+      dry-run(本地拼好 payload 但不发送),你能在浏览器里看到完整内容。
+      <br><br>
+      官方目前<b>没有共享 endpoint</b> — 这是骨架,等真正的 Sentry / PostHog
+      搭建好了才会启用。
+    </div>
+
+    <h2>关闭后</h2>
+    <div class="card">
+      改回开关或者把 endpoint 留空都立即生效。设置存在
+      <code>~/Library/Application Support/PixCull/config.json</code> 里,
+      你可以直接编辑或删除。
+    </div>
+
+    <a class="back" href="/admin">← 返回管理面板</a>
+  </main>
+</body>
+</html>

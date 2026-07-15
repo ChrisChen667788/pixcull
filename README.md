@@ -52,6 +52,18 @@
 
 ## What's new
 
+**v2.16** — **paying down the monolith, slice 1** (see
+[`docs/ROADMAP-v2.16-charter.md`](docs/ROADMAP-v2.16-charter.md)). The audit's
+top-recommended theme, promised back in v2.4 and deferred for 11 releases:
+serve_demo.py's seven inline HTML page blobs (~5,300 lines of raw
+upload/verticals/admin/… markup inside Python strings) now live as real files
+under `templates/pages/`, loaded through the same `_read_template` mechanism as
+video_review/timeline — **18,225 → 12,884 lines (−29%)** with an AST-driven
+extraction (shared design-tokens CSS re-spliced via a placeholder) and the only
+acceptance bar that matters for a refactor: **all seven routes byte-identical
+before vs after** (curl-diff), guarded by a new template test. Next slices:
+results.js modules + a routing table for do_GET's 200-line if/elif chain.
+
 **v2.15** — **the culling pass finally has a finish line** (see
 [`docs/ROADMAP-v2.15-charter.md`](docs/ROADMAP-v2.15-charter.md)). The workspace
 bar gains a live **待审 N** counter (photos still without a human-confirmed
