@@ -1233,6 +1233,15 @@ def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
             "src_path": str(r.get("path", "") or ""),
             "scene": str(r.get("scene", "") or ""),
             "decision": str(r.get("decision", "") or ""),
+            # v2.15-P0 — has a HUMAN confirmed this photo's keep/maybe/cull?
+            # (annotations.jsonl overall_label; rubric-stars-only annotations
+            # don't count — the culling pass is about the decision.)  Drives
+            # the workspace-bar "待审 N" progress + the session-done moment.
+            "human_decided": bool(
+                human_rec
+                and str(human_rec.get("overall_label", "")).strip().lower()
+                in ("keep", "maybe", "cull")
+            ),
             "score_final": _f(r.get("score_final")),
             "score_sharpness": _f(r.get("score_sharpness")),
             "score_exposure": _f(r.get("score_exposure")),
@@ -1432,6 +1441,10 @@ def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
         "rescorer_n_scored": len(rescored),
         "rescorer_n_disagrees": len(disagrees),
         "n_human_labeled": n_human_labeled,
+        # v2.15-P0 — how many photos have a human-confirmed decision.
+        # n_total − n_human_decided = the "待审" (unreviewed) count that
+        # gives the culling pass a visible finish line.
+        "n_human_decided": sum(1 for r in rows if r["human_decided"]),
         "n_promotable": n_promotable,    # V17.8 — promote-to-bank count
         "rubric_axis_means": axis_means,
         "mode": run.get("mode", "upload"),

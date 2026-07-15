@@ -554,6 +554,16 @@
   // v0.4 P2 (2/4) — annotate each stat <b> with data-stat so the
   // quickLabel / _lbLabel post-pass can update + pulse the matching
   // number without re-rendering the whole header.
+  // v2.15-P0 — review-progress state. Declared BEFORE the stats bar is
+  // built because _updateReviewProgress() runs during init: `let` bindings
+  // are hoisted but DEAD until their declaration line, so declaring these
+  // down next to the helpers threw a TDZ ReferenceError that aborted the
+  // whole IIFE (the same failure mode as the v0.13 activeLearningDivider
+  // incident — one throw here = blank grid).
+  let _reviewDoneCelebrated = false;   // completion toast fires once
+  let _resolveMaybesActive = false;    // maybe-resolution queue on?
+  let _rmPrev = null;                  // {decision, sort} to restore on exit
+
   const stats = [
     // v0.9-P0-2 — primary total renders with brand gradient (signature
     // anchor visible at-a-glance in the workspace bar).  Per-decision
@@ -562,6 +572,17 @@
     `<span class="keep">keep <b data-stat="keep">${summary.n_keep}</b></span>`,
     `<span class="maybe">maybe <b data-stat="maybe">${summary.n_maybe}</b></span>`,
     `<span class="cull">cull <b data-stat="cull">${summary.n_cull}</b></span>`,
+    // v2.15-P0 — the culling pass finally has a finish line: photos still
+    // WITHOUT a human-confirmed decision. Ticks down live as you label;
+    // at zero the chip flips to "全部已审 ✓" and becomes the XMP-export
+    // shortcut. (Distinct from 人工标注 below, which counts rubric stars.)
+    _reviewChipHtml(),
+    // v2.15-P0 — maybe-resolution queue: one click filters to the maybe
+    // band sorted most-ambiguous-first (|P(keep)−0.5|, falls back to
+    // |score_final−0.5|), so the end-of-session cleanup has an order.
+    `<button class="resolve-maybes-btn" id="resolveMaybesBtn"`
+    + ` title="只看 maybe,按『模型最拿不准』排序 — 从最难的开始,1/2/3 直接判">`
+    + `◐ 决议 maybe</button>`,
     `<span class="stat-aux">耗时 <b>${ela}</b></span>`,
   ];
   if (summary.rescorer_active) {
@@ -662,6 +683,24 @@
       }
     });
   }
+
+  // v2.15-P0 — wire the review-progress chip (click when done → XMP export)
+  // and the maybe-resolution toggle. Both live in the stats bar built above.
+  // DELEGATED to the stats container: the done-transition swaps the chip via
+  // outerHTML, so a listener on the original element would die with the node
+  // (the v2.13 detached-node family).
+  statsEl?.addEventListener("click", (e) => {
+    const chip = e.target.closest("#reviewProgress");
+    if (!chip || !chip.classList.contains("done")) return;
+    _track("review_done_export");
+    document.getElementById("exportZipBtn")?.click();
+  });
+  document.getElementById("resolveMaybesBtn")?.addEventListener("click", () => {
+    _toggleResolveMaybes();
+  });
+  // Initial paint (hides the resolve button when there are no maybes,
+  // shows the done state when the run loads fully reviewed).
+  _updateReviewProgress();
 
   // V9.0 — sort + scene filter + style filter + cluster grouping
   // Active filter state. activeDecision is one of all/keep/maybe/cull.
@@ -1569,6 +1608,18 @@
         // within cluster: best first (descending final score)
         return (y.score_final ?? 0) - (x.score_final ?? 0);
       });
+    }
+    // v2.15-P0 — most-ambiguous first: distance from the 0.5 keep/cull
+    // boundary, using the rescorer's P(keep) when the learned head ran
+    // (shadow/adjudicate) and score_final otherwise. Drives the
+    // maybe-resolution queue; also usable as a plain sort.
+    else if (s === "uncertain") {
+      const u = (r) => {
+        const p = (typeof r.rescorer_prob_keep === "number")
+          ? r.rescorer_prob_keep : r.score_final;
+        return (typeof p === "number") ? Math.abs(p - 0.5) : 99;
+      };
+      a.sort((x, y) => u(x) - u(y));
     } else {
       // default: keep > maybe > cull, then descending score
       a.sort((x, y) => {
@@ -1745,6 +1796,128 @@
       if (el) el.textContent = summary[k];
       _pulseStat(newDecision);
     }
+  }
+
+  // ── v2.15-P0 — culling-pass finish line + maybe-resolution queue ─────────
+  // The session-close gap from DESIGN-AUDIT-2030Q2: after labeling a whole
+  // batch the product never said "you're done". `_markReviewed` is called on
+  // every human decision (keyboard, lightbox, bulk); the chip counts down
+  // n_total − n_human_decided and flips to the completion state at zero,
+  // where a click triggers the existing (but buried) XMP export.
+  function _reviewChipHtml() {
+    const total = summary.n_total || 0;
+    const done  = summary.n_human_decided || 0;
+    const left  = Math.max(0, total - done);
+    if (total > 0 && left === 0) {
+      return `<span class="stat-aux review-progress done" id="reviewProgress"`
+        + ` title="每张照片都有人工确认的判定 — 点击下载 XMP zip,带着结果回 Lightroom">`
+        + `全部已审 ✓ · 导出 XMP</span>`;
+    }
+    return `<span class="stat-aux review-progress" id="reviewProgress"`
+      + ` title="还没有人工确认判定的照片数(键盘 1/2/3、lightbox 或批量框选都算确认)。`
+      + `清零后这里变成 XMP 导出入口">`
+      + `待审 <b data-stat="unreviewed">${left}</b></span>`;
+  }
+
+  function _updateReviewProgress() {
+    const chip = document.getElementById("reviewProgress");
+    if (chip) {
+      const total = summary.n_total || 0;
+      const left  = Math.max(0, total - (summary.n_human_decided || 0));
+      const wasDone = chip.classList.contains("done");
+      if (total > 0 && left === 0) {
+        if (!wasDone) {
+          chip.outerHTML = _reviewChipHtml();   // swap to the done state
+          const fresh = document.getElementById("reviewProgress");
+          fresh?.classList.add("pulse-done");
+          if (!_reviewDoneCelebrated) {
+            _reviewDoneCelebrated = true;
+            _track("review_all_done");
+            showToast("🎉 全部已审 — 点工作条的「导出 XMP」把结果带回 Lightroom", "success");
+          }
+        }
+      } else if (wasDone) {
+        chip.outerHTML = _reviewChipHtml();     // e.g. new photos appended
+      } else {
+        const b = chip.querySelector('b[data-stat="unreviewed"]');
+        if (b && b.textContent !== String(left)) {
+          b.textContent = String(left);
+          _pulseStat("unreviewed");
+        }
+      }
+    }
+    // Hide the resolve button when there is nothing to resolve; auto-exit
+    // the queue when the last maybe gets decided (the finish feels earned).
+    const btn = document.getElementById("resolveMaybesBtn");
+    const nMaybe = summary.n_maybe || 0;
+    if (btn) btn.hidden = (nMaybe === 0 && !_resolveMaybesActive);
+    if (_resolveMaybesActive && nMaybe === 0) {
+      _toggleResolveMaybes();   // restores the pre-queue filter + sort
+      showToast("maybe 清零 ✓ — 决议完成", "success");
+    }
+  }
+
+  // Mark one photo as human-reviewed (idempotent). Accepts the filename so
+  // the bulk-marquee path (a nested IIFE that only knows filenames) can call
+  // it too. Re-confirming the model's decision (prev === new) still counts —
+  // the human looked at it, which is exactly what "已审" means.
+  function _markReviewed(fn) {
+    const r = rows.find(x => x && x.filename === fn);
+    if (r && !r.human_decided) {
+      r.human_decided = true;
+      summary.n_human_decided = (summary.n_human_decided || 0) + 1;
+    }
+    _updateReviewProgress();
+  }
+
+  // Drop the resolve-mode STATE without restoring _rmPrev. For the bulk
+  // filter-replacing paths (view preset, ⌘K reset, "reset all", Smart-
+  // Collection restore): the user just chose a whole new filter, so
+  // restoring the pre-queue snapshot later would silently clobber it —
+  // exit the mode, keep their choice.
+  function _exitResolveMaybesSilently() {
+    if (!_resolveMaybesActive) return;
+    _resolveMaybesActive = false;
+    _rmPrev = null;
+    document.getElementById("resolveMaybesBtn")?.classList.remove("active");
+  }
+
+  // One-click maybe-resolution queue: filter to the maybe band, sorted
+  // most-ambiguous-first. Saves and restores the user's own filter + sort
+  // (and syncs the decision pills + sort <select> — the v2.13 lesson:
+  // render() never rebuilds sidebar/toolbar controls for you).
+  function _toggleResolveMaybes() {
+    const btn = document.getElementById("resolveMaybesBtn");
+    if (!_resolveMaybesActive) {
+      _rmPrev = { decision: filterState.decision, sort: filterState.sort };
+      filterState.decision = "maybe";
+      filterState.sort = "uncertain";
+      _resolveMaybesActive = true;
+      _track("resolve_maybes");
+      btn?.classList.add("active");
+      showToast(`◐ 决议模式:${summary.n_maybe || 0} 张 maybe,最拿不准的排最前 — 1/2/3 直接判`, "info");
+      // v2.15 — the maybe filter COMPOSES with scene/face/style filters (a
+      // feature: resolve maybes within a scene). But if those hide every
+      // maybe the queue looks broken — say why. Deferred one tick so it
+      // reads the post-render() grid below.
+      setTimeout(() => {
+        if (_resolveMaybesActive && (summary.n_maybe || 0) > 0
+            && !grid.querySelector(".card")) {
+          showToast("当前场景/人物等筛选挡住了所有 maybe — 清掉那些筛选,或再点一次退出决议模式", "info");
+        }
+      }, 0);
+    } else {
+      filterState.decision = (_rmPrev && _rmPrev.decision) || "all";
+      filterState.sort = (_rmPrev && _rmPrev.sort) || "default";
+      _rmPrev = null;
+      _resolveMaybesActive = false;
+      btn?.classList.remove("active");
+    }
+    document.querySelectorAll("#decisionPills .pill").forEach(el =>
+      el.classList.toggle("active", el.dataset.d === filterState.decision));
+    const sortSel = document.getElementById("sortBy");
+    if (sortSel) sortSel.value = filterState.sort;
+    render();
   }
 
   // v0.4 P1 (2/4) — quick fade flash when filter state changes.
@@ -2316,6 +2489,7 @@
       grid.innerHTML = emptyHtml;
       const reset = document.getElementById("resetFiltersBtn");
       if (reset) reset.addEventListener("click", () => {
+        _exitResolveMaybesSilently();   // v2.15 — "reset all" replaces the filter
         filterState.decision = "all";
         filterState.scenes.clear();
         filterState.styles.clear();
@@ -2521,6 +2695,7 @@
   }
   function _applyView(view) {
     if (!view) return;
+    _exitResolveMaybesSilently();   // v2.15 — a preset replaces the whole filter
     filterState.decision = view.decision || "all";
     filterState.scenes = new Set(view.scenes || []);
     filterState.styles = new Set(view.styles || []);
@@ -4743,6 +4918,7 @@
       // v0.4 P2 (2/4) — shift stat counters + pulse, same as
       // the keyboard path.
       _shiftStatCounts(_prevDecision, label);
+      _markReviewed(fn);   // v2.15-P0 — counts even when prev === new
       // P-UX-25 — same broadcast as quickLabel(); see the comment
       // on the keyboard path for rationale.
       _pixMultiTab.broadcastAnnotation(fn, label);
@@ -4837,6 +5013,13 @@
         });
         const r = rows.find(x => x.filename === item.filename);
         if (r) {
+          // v2.15-P0 — sync the header keep/maybe/cull tallies with the
+          // restored decision (pre-existing gap: undo used to leave them
+          // stale, which also desynced summary.n_maybe — the count the
+          // maybe-resolution auto-exit reads). NOTE: undo does NOT
+          // un-review — it re-POSTs a human annotation above, so the
+          // photo stays human-decided on both client and server.
+          _shiftStatCounts(r.decision, item.prev_decision);
           r.decision = item.prev_decision;
           r.rubric_human_labeled = item.prev_human_labeled;
         }
@@ -4916,6 +5099,7 @@
       // matching keep/maybe/cull buckets + pulse the changed
       // numbers so the user feels their action move the totals.
       _shiftStatCounts(_prevDecision, label);
+      _markReviewed(focusedFn);   // v2.15-P0 — counts even when prev === new
       // P-UX-25 — broadcast to any sibling tab on the same run_id so
       // the user sees the change live in the other window instead of
       // discovering a stale decision on next reload.
@@ -5642,6 +5826,7 @@
   }
   function _cmdkResetFilters() {
     if (typeof filterState !== "undefined") {
+      _exitResolveMaybesSilently();   // v2.15 — ⌘K reset replaces the filter
       filterState.decision = "all";
       filterState.scenes = new Set();
       filterState.styles = new Set();
@@ -8320,6 +8505,11 @@
         // Sibling tab labeled fn → reflect locally so the user sees
         // the change live in this tab.
         const r = rows.find(x => x.filename === m.fn);
+        // v2.15-P0 — a sibling tab's label means a HUMAN reviewed this photo:
+        // keep this tab's 待审 chip in sync. Deliberately outside the
+        // decision-changed guard below — a sibling CONFIRM (prev === new)
+        // still counts as reviewed, mirroring the local labeling paths.
+        if (r && typeof _markReviewed === "function") _markReviewed(m.fn);
         if (r && r.decision !== m.dec) {
           r.decision = m.dec;
           r.rubric_human_labeled = true;
@@ -10314,7 +10504,14 @@
         // Update the row + card
         const row = (typeof rows !== "undefined" ? rows : [])
           .find(r => r && r.filename === e.filename);
-        if (row) row.decision = e.prev;
+        if (row) {
+          // v2.15-P0 — keep header tallies (and summary.n_maybe, which the
+          // maybe-resolution auto-exit reads) in sync with the restore.
+          if (typeof _shiftStatCounts === "function") {
+            _shiftStatCounts(row.decision, e.prev);
+          }
+          row.decision = e.prev;
+        }
         const card = document.querySelector(
           `#grid .card[data-fn="${CSS.escape(e.filename)}"]`);
         if (card) {
@@ -10349,7 +10546,13 @@
         });
         const row = (typeof rows !== "undefined" ? rows : [])
           .find(r => r && r.filename === e.filename);
-        if (row) row.decision = e.next;
+        if (row) {
+          // v2.15-P0 — same tally sync as _undo (see comment there).
+          if (typeof _shiftStatCounts === "function") {
+            _shiftStatCounts(row.decision, e.next);
+          }
+          row.decision = e.next;
+        }
         const card = document.querySelector(
           `#grid .card[data-fn="${CSS.escape(e.filename)}"]`);
         if (card) {
@@ -10500,6 +10703,11 @@
       const item = all.find(x => x.name === name);
       if (!item) return;
       if (item.filter && typeof filterState === "object") {
+        // v2.15 — restoring a collection replaces the whole filter; drop any
+        // active maybe-resolution mode so its later exit can't clobber it.
+        if (typeof _exitResolveMaybesSilently === "function") {
+          _exitResolveMaybesSilently();
+        }
         Object.assign(filterState, item.filter);
       }
       if (item.sort && typeof window.sortBy !== "undefined") {
@@ -11443,6 +11651,23 @@
             card.classList.remove("dec-keep", "dec-maybe", "dec-cull");
             card.classList.add("dec-" + action);
           }
+          // v2.15-P0 — the fallback used to patch ONLY the card DOM: the
+          // rows[] entry and header tallies went stale, so the next
+          // render() silently reverted the visual state (the v2.13 bug
+          // class). Sync the in-memory row + stats + review progress too.
+          try {
+            const row = (typeof rows !== "undefined" ? rows : [])
+              .find(x => x && x.filename === fn);
+            if (row) {
+              if (typeof _shiftStatCounts === "function") {
+                _shiftStatCounts(row.decision, action);
+              }
+              row.decision = action;
+              row.rubric_human_labeled = true;
+              if (action !== "cull") row.cull_reason = "";
+            }
+            if (typeof _markReviewed === "function") _markReviewed(fn);
+          } catch (_e) { /* stats best-effort; server state is canonical */ }
         } catch (e) { /* swallow — next attempt will see fresh state */ }
       }
       // Surface a toast — uses page-level toast() if present, else

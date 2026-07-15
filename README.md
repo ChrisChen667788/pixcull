@@ -52,6 +52,21 @@
 
 ## What's new
 
+**v2.15** — **the culling pass finally has a finish line** (see
+[`docs/ROADMAP-v2.15-charter.md`](docs/ROADMAP-v2.15-charter.md)). The workspace
+bar gains a live **待审 N** counter (photos still without a human-confirmed
+decision — re-confirming the model also counts); at zero it flips to a
+**"全部已审 ✓ · 导出 XMP"** completion chip that triggers the (previously
+buried) XMP export with one click, and the state survives reload. A new
+**◐ 决议 maybe** button enters a maybe-resolution queue — filtered to the maybe
+band, sorted **most-ambiguous-first** (|P(keep)−0.5| from the v2.14 shadow
+rescorer, score-based fallback), focus pre-placed on the hardest frame — and
+auto-exits restoring your filter+sort when the last maybe is decided. The
+keep↔maybe overrides this queue produces are exactly the corrective labels the
+v2.14 gate ③ still needs — UX and the training loop close into one circle.
+Also fixes a latent bulk-marquee bug (decisions patched only card DOM; rows[]
+and header tallies went stale until the next repaint silently reverted them).
+
 **v2.14** — **real-data learning: de-stub the "moment" axis so it can actually
 be learned** (see [`docs/ROADMAP-v2.14-charter.md`](docs/ROADMAP-v2.14-charter.md) +
 [`docs/DESIGN-AUDIT-2030Q2.md`](docs/DESIGN-AUDIT-2030Q2.md)). The audit found the

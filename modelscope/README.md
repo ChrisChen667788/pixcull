@@ -54,8 +54,15 @@ tasks:
 完整源码 + iOS 伴侣 App + Lightroom 插件,均在 GitHub:
 **[github.com/ChrisChen667788/pixcull](https://github.com/ChrisChen667788/pixcull)**
 
-## v0.7 → v2.14 主要更新
+## v0.7 → v2.15 主要更新
 
+- **v2.15**:**culling 终于有了「审完」的终点线** —— 工作条新增实时**「待审 N」**计数
+  (还没人工确认判定的照片数;重按确认也计入),归零翻成**「全部已审 ✓ · 导出 XMP」**
+  完成 chip,一键触发此前埋在 ⌘K 里的 XMP 导出,刷新不丢;新增**「◐ 决议 maybe」**
+  一键进入决议队列(只看 maybe、按 |P(keep)−0.5| **最拿不准优先**排序、焦点直接落在
+  最难那张),maybe 清零自动退出并还原你的筛选;这条队列产出的 keep↔maybe 人工改判
+  正是 v2.14 门③缺的纠正标签——UX 与训练回路闭环。顺手修掉批量框选只改 DOM 不改
+  状态的潜伏 bug。详见 `docs/ROADMAP-v2.15-charter.md`。
 - **v2.14**:**真实标注 + 激活智能栈:把 moment 轴去 stub,让它真能被学到** —— 审计
   (`docs/DESIGN-AUDIT-2030Q2.md`,3/5)发现产品最响亮的「决定性瞬间」轴在融合里对**每张
   照片恒等于 0.5**、rubric 三个 check 有两个永远返回 None。常数特征零信息 → rescorer
