@@ -61,8 +61,15 @@ under `templates/pages/`, loaded through the same `_read_template` mechanism as
 video_review/timeline — **18,225 → 12,884 lines (−29%)** with an AST-driven
 extraction (shared design-tokens CSS re-spliced via a placeholder) and the only
 acceptance bar that matters for a refactor: **all seven routes byte-identical
-before vs after** (curl-diff), guarded by a new template test. Next slices:
-results.js modules + a routing table for do_GET's 200-line if/elif chain.
+before vs after** (curl-diff), guarded by a new template test. **Slice 2 —
+results.js modules**: eight clean-boundary subsystems (undo stack, Selects
+mode, Smart Collections, bookmark/conflicts, marquee select, WebRTC,
+onboarding, transparency hint — 802 lines) now live in `src/modules/*.js`,
+re-spliced at build time via `@@MODULE:` markers with the artifact hash
+**unchanged**, and a machine-enforced boundary lint (each module a single
+self-contained IIFE; cross-module talk via `window.PixCull*` only) — cutting
+off a stretch of the "one broken invariant → nine simultaneous bugs"
+propagation path. Next: mid-file subsystems + a routing table for do_GET.
 
 **v2.15** — **the culling pass finally has a finish line** (see
 [`docs/ROADMAP-v2.15-charter.md`](docs/ROADMAP-v2.15-charter.md)). The workspace

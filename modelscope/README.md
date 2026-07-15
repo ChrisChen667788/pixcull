@@ -60,8 +60,11 @@ tasks:
   serve_demo.py 里 7 个内联 HTML 页面巨块(~5,300 行 Python 字符串)抽成
   `templates/pages/*.html` 真文件(AST 求值抽取、共享 design-tokens CSS 占位符回注),
   **18,225 → 12,884 行(−29%)**;重构唯一验收标准:**7 条路由响应前后字节级一致**
-  (curl-diff)+ 模板守卫测试。后续:results.js 模块化 + do_GET 路由表。详见
-  `docs/ROADMAP-v2.16-charter.md`。
+  (curl-diff)+ 模板守卫测试 · **第二刀:results.js 模块化**——尾部 8 个自洽子系统
+  (undo 栈/Selects/收藏/书签/框选/WebRTC/onboarding,802 行)抽到 `src/modules/*.js`,
+  构建时 `@@MODULE:` 标记原位回拼、**产物 hash 不变**,并加**机器化边界 lint**(模块=
+  单条自包含 IIFE、模块间只准走 `window.PixCull*`)——把 v2.13「一处破九处炸」的传播
+  路径截断一段。后续:中部子系统 + do_GET 路由表。详见 `docs/ROADMAP-v2.16-charter.md`。
 - **v2.15**:**culling 终于有了「审完」的终点线** —— 工作条新增实时**「待审 N」**计数
   (还没人工确认判定的照片数;重按确认也计入),归零翻成**「全部已审 ✓ · 导出 XMP」**
   完成 chip,一键触发此前埋在 ⌘K 里的 XMP 导出,刷新不丢;新增**「◐ 决议 maybe」**

@@ -26,13 +26,31 @@
 `/admin/perf`)响应**全部字节级一致**。守卫测试 `tests/test_page_templates.py`
 (文件存在且完整、常量是整页、占位符不外泄、design-tokens 真被注入)。完整门禁绿。
 
+## P1 — results.js 模块化·第一批(已交付)
+
+11.8k 行单 IIFE 里,尾部 8 个**边界干净的嵌套 IIFE 子系统**抽成
+`src/modules/*.js`(共 802 行):onboarding、transparency-hint、**undo 栈**、
+Selects 模式、Smart Collections、书签/冲突、**marquee 框选**、WebRTC。
+
+- **机制**:构建器新增 `@@MODULE:<file>@@` 标记——`_assemble_js()` 把模块文件在
+  **原位**回拼进 results.js 再进 shell;标记↔文件 1:1 强校验(孤儿模块、未解析标记
+  都直接 fail build)。
+- **验收**:抽取后 `make results-html` 直接报 *already current* ——
+  **results.html 产物 hash 与抽取前完全一致**(`2d1ba47…`),零运行时风险。
+- **机器化边界 lint**(`tests/test_module_boundaries.py`,3 项):
+  ① 标记纪律(1:1、无孤儿);② 每个模块必须是**单条自包含 IIFE**(不向主闭包泄漏
+  顶层声明);③ **跨模块隔离**——模块 A 的顶层内名不得被模块 B 引用(模块间只准走
+  `window.PixCull*`);引用扫描剥离注释、自有声明任意缩进豁免(开发中即抓掉 4 个
+  误报,规则已校准)。
+- 装配后整体 `node --check` 语法绿;完整门禁 exit=0。
+
+> 这一步的价值不在行数,在**边界被机器看住了**:下次谁把 marquee 的手伸进 undo 的
+> 内部状态,CI 直接红——v2.13「一处破九处炸」的传播路径被截断了一段。
+
 ## 后续切片(本主题未完)
 
-- **P1 — results.js 模块化**:11.5k 行单 IIFE、422 个顶层声明、14+ 个 setup*() 嵌套
-  IIFE 共享一个闭包。先抽 3-4 个最自洽子系统(撤销栈 / 多 tab 同步 / onboarding /
-  ⌘K 面板)到 `src/modules/*.js`,由 `make results-html` 装配;给
-  `test_results_build.py` 加模块边界 lint(禁跨模块共享闭包写)。**风险**:undo/sync
-  与网格/lightbox 共享状态,边界划错即回归——先零逻辑、后有状态。
+- **P1.1 — 中部子系统继续抽**:多 tab 同步(`_pixMultiTab`)、⌘K 面板、confidence
+  modal、EXIF overlay 等边界稍粘的块(与主闭包 render/rows 交互多,需先立接口再搬)。
 - **P2 — serve_demo 路由表**:do_GET 200+ 行 if/elif 链(~60 个 path)改注册表,
   业务函数与 HTTP 管道分层。
 - PyInstaller spec 的 templates 打包 glob 待核(pyproject 已修;.spec 是发行物主题

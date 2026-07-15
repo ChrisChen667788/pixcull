@@ -97,11 +97,16 @@ Audit the diff before any push (`git -C <repo> diff origin/main..main`):
 - Web demo: `scripts/serve_demo.py` (BaseHTTPRequestHandler;
   `_DEMO_ROOT=/tmp/pixcull_demo`, env-overridable via
   `PIXCULL_DEMO_ROOT`; routes via `if path.startswith(...)`
-  in `do_GET`/`do_POST`).  UI: `pixcull/report/templates/results.html`
+  in `do_GET`/`do_POST`; the 7 standalone pages — upload/verticals/admin/…
+  — live as `templates/pages/*.html` since v2.16, loaded via
+  `_read_template`).  UI: `pixcull/report/templates/results.html`
   (single-file at *runtime*; since v2.5 it is a **built artifact** —
-  edit `templates/src/{results.src.html,results.css,results.js}` then
-  `make results-html`; `tests/test_results_build.py` golden-fails any
-  hand edit to the artifact) + the dedicated video surfaces
+  edit `templates/src/{results.src.html,results.css,results.js}` **or a
+  subsystem file in `templates/src/modules/*.js`** (v2.16: spliced back
+  at `@@MODULE:` markers; `tests/test_module_boundaries.py` lints the
+  seams — modules are single IIFEs talking only via `window.PixCull*`),
+  then `make results-html`; `tests/test_results_build.py` golden-fails
+  any hand edit to the artifact) + the dedicated video surfaces
   (`/video/<id>`, `/timeline/<id>`, templates `video_review.html` /
   `timeline.html`).
 - v2.0 video stack: `io/video.py` (extract) → `scoring/temporal.py`

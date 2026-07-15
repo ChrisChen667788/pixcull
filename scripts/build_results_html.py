@@ -35,14 +35,45 @@ OUT = ROOT / "pixcull" / "report" / "templates" / "results.html"
 _MARKERS = ("results.css", "results.js")
 
 
+def _assemble_js(src_dir: Path) -> str:
+    """v2.16-P1 — results.js is itself assembled from modules.
+
+    Self-contained subsystems (undo stack, selects mode, smart collections,
+    bookmark/conflicts, marquee select, WebRTC, onboarding) live as files in
+    ``src/modules/`` and are spliced back at their original positions via
+    ``@@MODULE:<file>@@`` marker lines, so the built artifact stays
+    byte-identical to the pre-split monolith.  Markers must resolve 1:1 —
+    a missing module file or an orphaned module file both fail the build.
+    """
+    js = (src_dir / "results.js").read_text("utf-8")
+    mod_dir = src_dir / "modules"
+    used: set[str] = set()
+    for mod in sorted(mod_dir.glob("*.js")) if mod_dir.exists() else []:
+        marker = f"@@MODULE:{mod.name}@@\n"
+        if marker not in js:
+            raise SystemExit(
+                f"[build-results] orphaned module (no marker): {mod.name}")
+        js = js.replace(marker, mod.read_text("utf-8"))
+        used.add(mod.name)
+    if "@@MODULE:" in js:
+        import re
+        left = re.findall(r"@@MODULE:([^@]+)@@", js)
+        raise SystemExit(f"[build-results] unresolved module marker(s): {left}")
+    return js
+
+
 def build(src_dir: Path = SRC_DIR) -> str:
     """Splice src/results.src.html + its @@INLINE parts into one page."""
     shell = (src_dir / "results.src.html").read_text("utf-8")
+    parts = {
+        "results.css": (src_dir / "results.css").read_text("utf-8"),
+        "results.js": _assemble_js(src_dir),
+    }
     for name in _MARKERS:
         marker = f"@@INLINE:{name}@@\n"
         if marker not in shell:
             raise SystemExit(f"[build-results] marker missing: {marker!r}")
-        shell = shell.replace(marker, (src_dir / name).read_text("utf-8"))
+        shell = shell.replace(marker, parts[name])
     if "@@INLINE:" in shell:
         raise SystemExit("[build-results] unresolved @@INLINE marker left")
     return shell
