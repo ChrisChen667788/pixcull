@@ -86,3 +86,29 @@ def test_api_v1_rows_alias_stays_slim_for_ios(live):
     assert d["schema"].startswith("pixcull.api.v1.rows")
     assert d["n_total"] == 2500
     assert "rubric_stars" not in d["rows"][0]
+
+
+def test_reel_decision_persists_and_profile_rebuilds(server_mod, tmp_path, monkeypatch, live):
+    # bigrun isn't a video run — build a tiny one with candidates+signals
+    import json as _json
+    rd = tmp_path / "reelrun"
+    (rd / "output").mkdir(parents=True)
+    (rd / "output" / "manifest.json").write_text("{}")
+    sig = {"motion": 0.9, "stability": 0.8, "burst": 0.7, "quality": 0.6}
+    lo = {"motion": 0.2, "stability": 0.3, "burst": 0.1, "quality": 0.4}
+    (rd / "reel_candidates.json").write_text(_json.dumps(
+        [{"rank": 1, "signals": sig}, {"rank": 2, "signals": lo}]))
+    prof_path = tmp_path / "reel_profile.json"
+    import pixcull.scoring.reel as R
+    monkeypatch.setattr(R, "REEL_PROFILE_PATH", prof_path)
+    import urllib.request
+    for rank, dec in ((1, "keep"), (2, "cull")):
+        req = urllib.request.Request(
+            f"{live}/video/reel_decision/reelrun", method="POST",
+            data=_json.dumps({"rank": rank, "decision": dec}).encode(),
+            headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=15) as r:
+            assert _json.loads(r.read())["ok"]
+    assert (rd / "reel_decisions.jsonl").exists()
+    prof = _json.loads(prof_path.read_text())
+    assert prof["n"] == 2 and prof["pref"]["burst"] == pytest.approx(0.6)

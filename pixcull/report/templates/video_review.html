@@ -311,7 +311,15 @@ function updatePlayhead(){
 /* ---- reel panel ---- */
 function decKey(rank){ return 'pixcull_reel_'+RUN_ID+'_'+rank; }
 function getDec(rank){ try{return localStorage.getItem(decKey(rank))||'';}catch(e){return '';} }
-function setDec(rank,d){ try{ const cur=getDec(rank); localStorage.setItem(decKey(rank), cur===d?'':d);}catch(e){} renderReel(); }
+function setDec(rank,d){
+  let next=d;
+  try{ const cur=getDec(rank); next=(cur===d?'':d); localStorage.setItem(decKey(rank), next);}catch(e){}
+  // v2.20-P3 — persist server-side (fire-and-forget): decisions feed the
+  // cross-run reel taste profile that tilts future ranking.
+  try{ fetch('/video/reel_decision/'+encodeURIComponent(RUN_ID),{method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({rank:rank,decision:next})}).catch(()=>{}); }catch(e){}
+  renderReel(); }
 // v2.17-P0 — one labelled mini-bar for a 0..1 sub-signal
 function sigBar(label,v){
   v=Math.max(0,Math.min(1,+v||0));

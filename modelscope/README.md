@@ -54,7 +54,13 @@ tasks:
 完整源码 + iOS 伴侣 App + Lightroom 插件,均在 GitHub:
 **[github.com/ChrisChen667788/pixcull](https://github.com/ChrisChen667788/pixcull)**
 
-## v0.7 → v2.19 主要更新
+## v0.7 → v2.20 主要更新
+- **v2.20**:**视频主题闭环收官 + 三尾巴** —— reel 的 why 会提重叠的音频事件(现场
+  笑声/掌声/配乐律动);审片页 Keep/Cull 从 localStorage-only 升级为**服务端持久化 +
+  学习口味档案**(keep−cull 信号对比、≥20 条真实决议激活、排名倾斜 cap ±15%),
+  `pixcull reel` 下次运行即按你的口味排——视频侧终于像照片侧一样会学。尾巴:逐轴
+  why-low 接真信号(闭眼/连拍非峰值/微笑强度/CLIP-IQA·LAION 分)、Lr 同步刷新恢复
+  滚动+聚焦、⌘K 面板成为第 29 个受边界 lint 的模块。详见 `docs/ROADMAP-v2.20-charter.md`。
 - **v2.19**:**音频事件上时间线 + 首个可发行产物** —— v2.1 就学出的笑声/掌声/音乐事件
   终于画出来:/video 审片页与 lightbox scrubber 双时间线底部事件车道(按类着色 + emoji
   标签 + 区间/置信 tooltip),数据随 /video/data 与 PAYLOAD.video 附带、缺失优雅隐藏;

@@ -226,7 +226,8 @@ _SCENE_WORDS = {
 }
 
 
-def compose_why(window: dict, *, max_fragments: int = 3) -> str:
+def compose_why(window: dict, *, max_fragments: int = 3,
+                audio_events: list | None = None) -> str:
     """Human-readable reason from the window's own signals."""
     frames = window.get("frames", [])
     if not frames:
@@ -252,6 +253,23 @@ def compose_why(window: dict, *, max_fragments: int = 3) -> str:
         cands.append((0.7, "人物入镜"))
     if scene and scene in _SCENE_WORDS:
         cands.append((0.6, _SCENE_WORDS[scene]))
+    # v2.20-P3 — the audio tagger's events finally reach the why: when this
+    # window overlaps a detected event, say so (strongest overlap wins).
+    if audio_events:
+        w0, w1 = window.get("start_s", 0.0), window.get("end_s", 0.0)
+        aud_zh = {"laughter": "现场笑声", "applause": "现场掌声",
+                  "music": "配乐律动"}
+        best = None
+        for ev in audio_events:
+            frag = aud_zh.get(ev.get("kind"))
+            if not frag:
+                continue
+            if ev.get("start_s", 0.0) < w1 and ev.get("end_s", 0.0) > w0:
+                conf = float(ev.get("confidence") or 0.5)
+                if best is None or conf > best[0]:
+                    best = (conf, frag)
+        if best:
+            cands.append((min(0.95, 0.5 + best[0] * 0.5), best[1]))
 
     if not cands:
         return "稳定可用片段"
@@ -324,6 +342,62 @@ def compose_why_low(signals: dict, medians: dict,
 
 
 # ==========================================================================
+# v2.20-P3 — reel taste profile. The shooter's Keep/Cull on reel candidates
+# (persisted server-side since v2.20) teaches a per-signal preference that
+# gently tilts future ranking — the photo side's personal_learn philosophy:
+# deterministic, capped, hard activation gate, no-op without real decisions.
+# ==========================================================================
+
+REEL_PROFILE_PATH = Path.home() / ".pixcull" / "reel_profile.json"
+REEL_PROFILE_MIN_DECISIONS = 20
+_PROFILE_KEYS = ("motion", "stability", "burst", "quality")
+_TILT_CAP = 0.15   # rank-score multiplier stays within [0.85, 1.15]
+
+
+def learn_reel_profile(records: list) -> dict | None:
+    """``records = [{"decision": "keep"|"cull", "signals": {...}}]`` →
+    ``{"n": N, "pref": {signal: keep_mean − cull_mean}}``. None when either
+    side is empty — no contrast, nothing to learn."""
+    keeps = [r["signals"] for r in records
+             if r.get("decision") == "keep" and r.get("signals")]
+    culls = [r["signals"] for r in records
+             if r.get("decision") == "cull" and r.get("signals")]
+    if not keeps or not culls:
+        return None
+    pref = {}
+    for k in _PROFILE_KEYS:
+        km = float(np.mean([float(s.get(k, 0.0) or 0.0) for s in keeps]))
+        cm = float(np.mean([float(s.get(k, 0.0) or 0.0) for s in culls]))
+        pref[k] = round(km - cm, 4)
+    return {"n": len(keeps) + len(culls), "pref": pref}
+
+
+def load_reel_profile(path=None) -> dict | None:
+    """Persisted profile, or None below the activation gate (same hard
+    ≥N-real-decisions rule as photo personalization)."""
+    p = Path(path) if path else REEL_PROFILE_PATH
+    try:
+        d = json.loads(p.read_text("utf-8"))
+    except (OSError, ValueError):
+        return None
+    if int(d.get("n") or 0) < REEL_PROFILE_MIN_DECISIONS:
+        return None
+    return d if isinstance(d.get("pref"), dict) else None
+
+
+def _profile_tilt(signals: dict, medians: dict, pref: dict) -> float:
+    """Gentle rank multiplier: reward windows whose signals sit above the
+    clip median on the axes this shooter demonstrably keeps. Capped."""
+    bias = 0.0
+    for k in _PROFILE_KEYS:
+        sv, mv = signals.get(k), medians.get(k)
+        if sv is None or mv is None:
+            continue
+        bias += float(pref.get(k, 0.0) or 0.0) * (float(sv) - float(mv))
+    return 1.0 + max(-_TILT_CAP, min(_TILT_CAP, bias))
+
+
+# ==========================================================================
 # Candidate dataclass + selection
 # ==========================================================================
 
@@ -357,6 +431,8 @@ def select_candidates(
     n_min: int = DEFAULT_MIN_CANDIDATES,
     n_max: int = DEFAULT_MAX_CANDIDATES,
     nms_overlap: float = _NMS_OVERLAP,
+    audio_events: list | None = None,
+    profile: dict | None = None,
 ) -> list[ReelCandidate]:
     """Greedy MMR + NMS over candidate windows → ranked ReelCandidates."""
     pool = [w for w in windows if w.get("frames")]
@@ -370,6 +446,11 @@ def select_candidates(
         key: round(float(np.median([w["_signals"][key] for w in pool])), 4)
         for key in ("motion", "stability", "burst", "quality")
     } if pool else {}
+    # v2.20-P3 — learned taste tilt (no-op without an ACTIVE profile).
+    if profile and isinstance(profile.get("pref"), dict) and pool:
+        for w in pool:
+            w["_base"] *= _profile_tilt(w["_signals"], _sig_medians,
+                                        profile["pref"])
 
     selected: list[dict] = []
     while pool and len(selected) < n_max:
@@ -410,7 +491,7 @@ def select_candidates(
             window_score=w["window_score"],
             confidence=w["confidence"],
             novelty=round(w["_novelty"], 4),
-            why=compose_why(w),
+            why=compose_why(w, audio_events=audio_events),
             best_frame_id=w["best_frame_id"],
             best_frame_score=w["best_frame_score"],
             frame_ids=w["frame_ids"],
@@ -427,11 +508,14 @@ def detect_reel_candidates(
     stride_s: float = DEFAULT_STRIDE_S,
     n_min: int = DEFAULT_MIN_CANDIDATES,
     n_max: int = DEFAULT_MAX_CANDIDATES,
+    audio_events: list | None = None,
+    profile: dict | None = None,
 ) -> list[ReelCandidate]:
     """Full P0-3 detection over per-frame records (pure; no IO)."""
     windows = sliding_windows(
         frames, window_lens_s=window_lens_s, stride_s=stride_s)
-    return select_candidates(windows, n_min=n_min, n_max=n_max)
+    return select_candidates(windows, n_min=n_min, n_max=n_max,
+                             audio_events=audio_events, profile=profile)
 
 
 # ==========================================================================
@@ -493,9 +577,20 @@ def run_reel_detection(
         rec.update(extra)
         frames.append(rec)
 
+    # v2.20-P3 — audio events feed the why; the learned taste profile (from
+    # the shooter's persisted Keep/Cull decisions) gently tilts ranking.
+    audio_events: list | None = None
+    try:
+        _ap = output_dir / "audio_events.json"
+        if _ap.exists():
+            audio_events = (json.loads(_ap.read_text("utf-8"))
+                            .get("events") or None)
+    except (OSError, ValueError):
+        audio_events = None
     candidates = detect_reel_candidates(
         frames, window_lens_s=window_lens_s, stride_s=stride_s,
         n_min=n_min, n_max=n_max,
+        audio_events=audio_events, profile=load_reel_profile(),
     )
 
     # v2.1-P0-3 — add a fluent `why_semantic` per candidate (optional LLM,

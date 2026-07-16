@@ -334,3 +334,57 @@ def test_candidates_carry_signals_and_why_low():
     blob = json.dumps([c.to_dict() for c in cands], ensure_ascii=False)
     back = json.loads(blob)
     assert "signals" in back[0] and "why_low" in back[0]
+
+
+# --------------------------------------------------------------------------
+# v2.20-P3 — audio-aware why + reel taste profile
+# --------------------------------------------------------------------------
+
+def test_compose_why_mentions_overlapping_audio():
+    frames = [_frame(0, 0.0, burst=0.9), _frame(1, 0.5, burst=0.9)]
+    w = R.window_aggregate(frames, 0.0, 1.0)
+    ev = [{"kind": "laughter", "start_s": 0.3, "end_s": 0.8, "confidence": 0.9}]
+    assert "现场笑声" in R.compose_why(w, audio_events=ev)
+    # non-overlapping event stays silent
+    ev2 = [{"kind": "applause", "start_s": 5.0, "end_s": 6.0, "confidence": 0.9}]
+    assert "现场掌声" not in R.compose_why(w, audio_events=ev2)
+
+
+def test_learn_reel_profile_contrast_required():
+    sig_hi = {"motion": 0.9, "stability": 0.9, "burst": 0.8, "quality": 0.7}
+    sig_lo = {"motion": 0.3, "stability": 0.4, "burst": 0.1, "quality": 0.4}
+    recs = ([{"decision": "keep", "signals": sig_hi}] * 3
+            + [{"decision": "cull", "signals": sig_lo}] * 2)
+    prof = R.learn_reel_profile(recs)
+    assert prof["n"] == 5
+    assert prof["pref"]["burst"] == pytest.approx(0.7)
+    # keep-only → no contrast → None
+    assert R.learn_reel_profile([{"decision": "keep", "signals": sig_hi}]) is None
+
+
+def test_load_reel_profile_gate(tmp_path):
+    p = tmp_path / "prof.json"
+    p.write_text('{"n": 5, "pref": {"burst": 0.5}}')
+    assert R.load_reel_profile(p) is None            # below the ≥20 gate
+    p.write_text('{"n": 25, "pref": {"burst": 0.5}}')
+    assert R.load_reel_profile(p)["pref"]["burst"] == 0.5
+
+
+def test_profile_tilt_reorders_candidates():
+    # two clearly separated peaks; the burst-lover profile must not FLIP
+    # decisions wildly (cap ±0.15) but a bursty window should gain rank
+    # score relative to a calm one.
+    frames = _clip_with_peaks([3.0, 12.0])
+    base = R.detect_reel_candidates(frames)
+    prof = {"n": 30, "pref": {"burst": 1.0, "motion": 0.0,
+                              "stability": 0.0, "quality": 0.0}}
+    tilted = R.detect_reel_candidates(frames, profile=prof)
+    b0 = {c.rank: c.score for c in base}
+    t0 = {c.rank: c.score for c in tilted}
+    assert b0 and t0
+    # scores changed somewhere (the tilt is live) but stay within the cap
+    ratios = [t.score / b.score for b, t in
+              [(x, y) for x in base for y in tilted
+               if abs(x.start_s - y.start_s) < 1e-6 and abs(x.end_s - y.end_s) < 1e-6]
+              if b.score > 0]
+    assert ratios and all(0.84 <= r <= 1.16 for r in ratios)

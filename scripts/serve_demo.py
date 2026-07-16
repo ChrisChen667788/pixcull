@@ -686,6 +686,54 @@ def is_video_run(run_id: str) -> bool:
         and _video_frames_dir(run_dir) is not None
 
 
+def _rebuild_reel_profile() -> int:
+    """v2.20-P3 — walk every run's reel_decisions.jsonl (last line wins per
+    rank), join each decided rank to its candidate's v2.17 sub-signals, and
+    relearn the shooter's reel taste profile (written to
+    ``~/.pixcull/reel_profile.json``; the ranking gate needs ≥20 decisions).
+    Returns the record count that fed the profile (0 = nothing learnable)."""
+    from pixcull.scoring.reel import REEL_PROFILE_PATH, learn_reel_profile
+    records: list[dict] = []
+    try:
+        run_dirs = [d for d in _DEMO_ROOT.iterdir() if d.is_dir()]
+    except OSError:
+        return 0
+    for rd in run_dirs:
+        dec_path = rd / "reel_decisions.jsonl"
+        cand_path = rd / "reel_candidates.json"
+        if not (dec_path.exists() and cand_path.exists()):
+            continue
+        try:
+            cands = {int(c.get("rank")): c
+                     for c in json.loads(cand_path.read_text("utf-8"))
+                     if c.get("rank") is not None}
+            latest: dict[int, str] = {}
+            for line in dec_path.read_text("utf-8").splitlines():
+                try:
+                    r = json.loads(line)
+                    latest[int(r["rank"])] = str(r.get("decision") or "")
+                except (ValueError, KeyError, TypeError):
+                    continue
+        except (OSError, ValueError):
+            continue
+        for rank, dec in latest.items():
+            if dec not in ("keep", "cull"):
+                continue                      # cleared decision — skip
+            sig = (cands.get(rank) or {}).get("signals")
+            if sig:
+                records.append({"decision": dec, "signals": sig})
+    prof = learn_reel_profile(records)
+    if prof is None:
+        return 0
+    try:
+        REEL_PROFILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        REEL_PROFILE_PATH.write_text(
+            json.dumps(prof, ensure_ascii=False, indent=2), encoding="utf-8")
+    except OSError:
+        return 0
+    return int(prof.get("n") or 0)
+
+
 def _build_video_payload(run_id: str) -> dict | None:
     """v2.2-P0-2 — per-frame temporal scores + reel candidates keyed by
     *filename*, so the results.html lightbox can render a video-mode
@@ -1316,6 +1364,10 @@ def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
                                   (None, "", float("nan"))
                                else None),
             "wedding_moment_confidence": _f(r.get("wedding_moment_confidence")),
+            # v2.20(#2) — raw signals the per-axis why-low prose reads
+            "face_max_smile": _f(r.get("face_max_smile")),
+            "clipiqa": _f(r.get("clipiqa")),
+            "laion_aes": _f(r.get("laion_aes")),
             # V9.0 sort/filter/group fields
             "cluster_id": cluster_id,
             "datetime": dt_str,
@@ -4272,6 +4324,10 @@ class _Handler(BaseHTTPRequestHandler):
                 return
             if self._dispatch_api_v1_post(path):
                 return
+        # v2.20-P3 — persist a reel candidate Keep/Cull (was localStorage-only)
+        if path.startswith("/video/reel_decision/"):
+            return self._handle_reel_decision(
+                path[len("/video/reel_decision/"):])
         if path == "/analyze":
             return self._handle_analyze_post()
         if path == "/scan_local":
@@ -7098,6 +7154,45 @@ class _Handler(BaseHTTPRequestHandler):
     # ------------------------------------------------------------------
     # v2.0-P0-4 — video review surface.
     # ------------------------------------------------------------------
+    def _handle_reel_decision(self, tail: str) -> None:
+        """v2.20-P3 — POST /video/reel_decision/<run_id> {rank, decision}.
+
+        The review page's Keep/Cull used to live only in localStorage; now
+        each toggle appends to <run>/reel_decisions.jsonl (last line wins
+        per rank) and the cross-run taste profile is rebuilt, so future
+        ``pixcull reel`` ranking learns the shooter's preference.
+        """
+        rid = _safe_run_id(tail)
+        if rid is None:
+            return self._send_json(
+                400, json.dumps({"ok": False, "error": "bad run_id"}).encode())
+        run_dir = _run_dir(rid)
+        if not run_dir.exists():
+            self.send_error(404, "no such run")
+            return
+        clen = int(self.headers.get("Content-Length", "0") or "0")
+        if clen <= 0 or clen > 4096:
+            self.send_error(400, "expected small JSON body")
+            return
+        try:
+            body = json.loads(self.rfile.read(clen).decode("utf-8"))
+            rank = int(body.get("rank"))
+            decision = str(body.get("decision") or "")
+        except (UnicodeDecodeError, ValueError, TypeError):
+            self.send_error(400, "bad JSON body")
+            return
+        if decision not in ("keep", "cull", ""):
+            self.send_error(400, "decision must be keep | cull | ''")
+            return
+        rec = {"rank": rank, "decision": decision,
+               "at_ms": int(time.time() * 1000)}
+        with open(run_dir / "reel_decisions.jsonl", "a",
+                  encoding="utf-8") as fh:
+            fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
+        n_profile = _rebuild_reel_profile()
+        out = json.dumps({"ok": True, "n_profile": n_profile}).encode()
+        self._send_json(200, out)
+
     def _serve_video_data(self, tail: str) -> None:
         """GET /video/data/<run_id> — bundle manifest + temporal + reel."""
         rid = _safe_run_id(tail)

@@ -123,6 +123,13 @@ def test_cross_module_isolation():
     shared = _names(re.compile(
         r"^\s{2}(?:async\s+)?function\s+([A-Za-z_$][\w$]*)"
         r"|^\s{2}(?:const|let|var)\s+([A-Za-z_$][\w$]*)", re.M), main_js)
+    # the PAYLOAD destructuring (`const { run_id, rows, summary } = PAYLOAD`)
+    # is THE core shared vocabulary — plain decl regexes miss brace patterns.
+    for m in re.finditer(r"^\s{2}(?:const|let)\s*\{([^}]*)\}", main_js, re.M):
+        for nm in m.group(1).split(","):
+            nm = nm.strip().split(":")[0].strip()
+            if re.fullmatch(r"[A-Za-z_$][\w$]*", nm):
+                shared.add(nm)
     violations = []
     code = {name: _strip_comments(text) for name, text in mods.items()}
     for a, a_decls in top.items():

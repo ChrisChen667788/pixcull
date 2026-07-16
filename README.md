@@ -52,6 +52,18 @@
 
 ## What's new
 
+**v2.20** — **the video theme closes its loop + three long-standing tails**
+(see [`docs/ROADMAP-v2.20-charter.md`](docs/ROADMAP-v2.20-charter.md)). Reel
+candidates' `why` now mentions overlapping audio events (现场笑声/掌声/配乐);
+and the review page's Keep/Cull — localStorage-only until now — persists
+server-side and **teaches a reel taste profile** (keep-vs-cull signal contrast,
+≥20-decision activation gate, ranking tilt capped at ±15%) that `pixcull reel`
+applies next run: the video side finally learns like the photo side does.
+Tails: the per-axis why-low reads real moment/aesthetic signals (blink,
+non-peak burst frame, smile strength, CLIP-IQA/LAION scores); the Lr-sync
+reload restores scroll+focus instead of dumping you at the top; and the ⌘K
+palette becomes the 29th boundary-linted module.
+
 **v2.19** — **audio reaches the timelines + the first shippable artifact**
 (see [`docs/ROADMAP-v2.19-charter.md`](docs/ROADMAP-v2.19-charter.md)). The
 learned audio tagger's events (laughter / applause / music) have been computed
