@@ -65,21 +65,50 @@ _DECL_ANY = re.compile(
     r"|\(([A-Za-z_$][\w$]*)\s*(?:,|\)\s*(?:=>|\{))", re.M)
 
 
+_PARAM_LISTS = re.compile(
+    r"function\s*[A-Za-z_$\w]*\s*\(([^)]*)\)"     # function decls/exprs
+    r"|\(([^()]*)\)\s*=>"                         # (a, b) => arrows
+    r"|\b([A-Za-z_$][\w$]*)\s*=>"                 # bare-param arrows: card =>
+    r"|\bfor\s*\(\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)",  # for (const x of…
+    re.M)
+
+
 def _names(rx, text: str) -> set:
     out = set()
     for m in rx.finditer(text):
         out.update(g for g in m.groups() if g)
+    # every parameter name counts as a self-binding (the earlier single-param
+    # capture missed `text` in `_insertAt(ta, text)` — a real false positive)
+    for m in _PARAM_LISTS.finditer(text):
+        for params in m.groups():
+            if not params:
+                continue
+            for p in params.split(","):
+                p = p.strip().lstrip(".").split("=")[0].strip()
+                if re.fullmatch(r"[A-Za-z_$][\w$]*", p):
+                    out.add(p)
     return out
 
 
 def _strip_comments(text: str) -> str:
-    """Reference-scan on CODE only — a prose word in a comment ("wait until
-    onboarding done") must not read as a cross-module reference. Heuristic:
-    /* … */ blocks, full-line //, and ` // trailing` (space-guarded so URL
-    "https://" strings survive)."""
+    """Reference-scan on CODE only. Strips comments AND (single-line) string
+    literals — a CSS class name `"dragging"` or prose in a comment must not
+    read as a cross-module reference. Heuristics, calibrated on the real
+    false-positive families hit during the split:
+      comments: /* … */ blocks, full-line //, space-guarded trailing //;
+      strings: '…' / "…" without embedded newlines (template literals stay —
+      their ${expr} interpolations ARE code we want scanned)."""
     text = re.sub(r"/\*.*?\*/", " ", text, flags=re.S)
     text = re.sub(r"^\s*//.*$", "", text, flags=re.M)
     text = re.sub(r"\s//\s.*$", "", text, flags=re.M)
+    text = re.sub(r"'[^'\n]*'", "''", text)
+    text = re.sub(r'"[^"\n]*"', '""', text)
+    # template literals: DROP the literal text (prose like "标 keep / cull"
+    # is not code) but KEEP the ${…} interpolations — those ARE code.
+    text = re.sub(
+        r"`[^`]*`",
+        lambda m: " ; ".join(re.findall(r"\$\{([^}]*)\}", m.group(0))),
+        text, flags=re.S)
     return text
 
 
@@ -87,6 +116,13 @@ def test_cross_module_isolation():
     mods = {m.name: m.read_text(encoding="utf-8") for m in _modules()}
     top = {name: _names(_DECL_TOP, text) for name, text in mods.items()}
     own = {name: _names(_DECL_ANY, text) for name, text in mods.items()}
+    # Names the MAIN closure also declares (2-space indent in results.js —
+    # e.g. `const grid`) are shared vocabulary every module may use; a module
+    # shadowing one must not claim ownership of everyone else's usage.
+    main_js = (_SRC / "results.js").read_text(encoding="utf-8")
+    shared = _names(re.compile(
+        r"^\s{2}(?:async\s+)?function\s+([A-Za-z_$][\w$]*)"
+        r"|^\s{2}(?:const|let|var)\s+([A-Za-z_$][\w$]*)", re.M), main_js)
     violations = []
     code = {name: _strip_comments(text) for name, text in mods.items()}
     for a, a_decls in top.items():
@@ -96,9 +132,14 @@ def test_cross_module_isolation():
             for name in a_decls:
                 if name in own[b]:
                     continue          # b declares/binds its own `name` — fine
+                if name in shared:
+                    continue          # main-closure vocabulary (e.g. grid)
                 if len(name) < 4:
                     continue          # skip tiny common identifiers
-                if re.search(rf"\b{re.escape(name)}\b", code[b]):
+                # bare-identifier match only: `.name` (property access),
+                # `obj.name(` (method call) and `name:` (object-literal key,
+                # e.g. fetch's `body:`) are NOT references to A's const.
+                if re.search(rf"(?<![.\w$]){re.escape(name)}\b(?!\s*:)", code[b]):
                     violations.append(f"{b} references {a}'s internal {name!r}")
     assert not violations, (
         "modules must communicate via window.PixCull* only:\n  "

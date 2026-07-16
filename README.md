@@ -69,7 +69,7 @@ re-spliced at build time via `@@MODULE:` markers with the artifact hash
 **unchanged**, and a machine-enforced boundary lint (each module a single
 self-contained IIFE; cross-module talk via `window.PixCull*` only) — cutting
 off a stretch of the "one broken invariant → nine simultaneous bugs"
-propagation path. Next: mid-file subsystems + a routing table for do_GET.
+propagation path. **Slices 3+4**: twenty more mid-file subsystems (multi-tab sync, confidence modal, EXIF overlay, tour, …) extracted the same hash-preserving way — 28 modules / 2,160 lines total, results.js core down to 9.6k — and do_GET's 258-line if/elif over 65 paths became a declarative route table (31 exact + 30 ordered prefixes + 5 hand-written compounds), verified by a 31-route sweep: 28 byte-identical, 3 dynamic same-status. Adding an endpoint is now one table row.
 
 **v2.15** — **the culling pass finally has a finish line** (see
 [`docs/ROADMAP-v2.15-charter.md`](docs/ROADMAP-v2.15-charter.md)). The workspace

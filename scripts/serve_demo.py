@@ -4107,248 +4107,126 @@ class _Handler(BaseHTTPRequestHandler):
         else:
             set_request_user(None)
 
+    # ------------------------------------------------------------------
+    # v2.16-P2 — declarative GET routing.  do_GET was a 258-line if/elif
+    # chain over 65 paths; the two dominant shapes now live in tables
+    # (per-route history lives in git blame of the pre-table chain):
+    #   _GET_EXACT   path == "/x"           -> zero-arg handler
+    #   _GET_PREFIX  path.startswith("/x/") -> handler(tail)  ORDER MATTERS
+    # The /api/v1 auth gate and the handful of compound routes (suffix
+    # switches, rid/filename splits) stay hand-written in do_GET below,
+    # in their original relative order.
+    # ------------------------------------------------------------------
+    _GET_EXACT: dict = {
+        # first-run / privacy / settings
+        "/first_run": "_serve_first_run_page",
+        "/first_run_status": "_serve_first_run_status",
+        "/privacy": "_serve_privacy_page",
+        "/settings/error_reports": "_serve_error_reports_settings",
+        # verticals registry
+        "/verticals": "_serve_verticals_page",
+        "/verticals.json": "_serve_verticals_json",
+        "/verticals/bulk_thumb": "_serve_vertical_bulk_thumb",
+        # root + PWA chrome
+        "/": "_serve_upload_page",
+        "/manifest.json": "_serve_pwa_manifest",
+        "/sw.js": "_serve_pwa_service_worker",
+        # admin surfaces
+        "/admin": "_serve_admin_page",
+        "/admin/perf": "_serve_admin_perf_page",
+        "/admin/perf.json": "_serve_admin_perf_json",
+        "/admin/bias": "_serve_bias_audit_page",
+        "/admin/disagreement": "_serve_disagreement_page",
+        "/admin/bias.md": "_serve_bias_audit_markdown",
+        # runs / ops
+        "/runs": "_serve_runs_list",
+        "/storage_info": "_serve_storage_info",
+        "/rubric_meta": "_serve_rubric_meta",
+        "/retrain_status": "_serve_retrain_status",
+        "/license": "_serve_license_status",
+        "/license/refresh": "_handle_license_refresh",
+        "/sync/download": "_handle_sync_download",
+        "/healthz": "_serve_healthz",
+        # /api/v1 extras not covered by _dispatch_api_v1_get (the auth
+        # gate in do_GET has already run for these)
+        "/api/v1/recap": "_serve_daily_recap",
+        "/api/v1/bookmarks": "_serve_bookmarks_list",
+        "/api/v1/conflicts": "_serve_session_conflicts",
+        # standalone pages
+        "/history": "_serve_history_page",
+        "/companion": "_serve_companion_page",
+        "/tether": "_serve_tether_page",
+        "/tether/sessions": "_serve_tether_sessions",
+    }
+    # (prefix, handler, mode, extra_args) — mode: "tail" passes the
+    # query-stripped remainder; "raw" passes self.path's remainder (query
+    # intact — the ?w= thumb bucket); "full" passes the whole path.
+    _GET_PREFIX: tuple = (
+        ("/verticals/list/", "_serve_vertical_list", "tail", ()),
+        ("/verticals/sample/", "_serve_vertical_sample", "tail", ()),
+        ("/verticals/bulk/", "_serve_vertical_bulk_page", "tail", ()),
+        ("/docs/illustrations/", "_serve_static_doc_asset", "full", ()),
+        ("/docs/brand/", "_serve_static_doc_asset", "full", ()),
+        ("/admin/face_audit/", "_serve_face_audit", "tail", ()),
+        ("/admin/delivery/", "_serve_delivery_audit", "tail", ()),
+        ("/status/", "_serve_status", "tail", ()),
+        ("/results/", "_serve_results", "tail", ()),
+        ("/decisions/", "_serve_decisions", "tail", ()),
+        ("/face_clusters/", "_serve_face_clusters", "tail", ()),
+        ("/face_avatar/", "_serve_face_avatar", "tail", ()),
+        ("/locations/", "_serve_locations", "tail", ()),
+        ("/thumb/", "_serve_image", "raw", (_THUMB_SIZE,)),
+        ("/full/", "_serve_image", "raw", (_FULL_SIZE,)),
+        ("/face_crop/", "_serve_face_crop", "raw", ()),
+        ("/video/data/", "_serve_video_data", "tail", ()),
+        ("/video/frame/", "_serve_video_frame", "tail", ()),
+        ("/video/", "_serve_video_review", "tail", ()),
+        ("/timeline/data/", "_serve_timeline_data", "tail", ()),
+        ("/timeline/", "_serve_timeline_page", "tail", ()),
+        ("/xmp_zip/", "_serve_xmp_zip", "tail", ()),
+        ("/share/", "_serve_share_page", "tail", ()),
+        ("/style/distances/", "_serve_style_distances", "tail", ()),
+        ("/tether/status/", "_serve_tether_status", "tail", ()),
+        ("/gallery_zip/", "_serve_gallery_zip", "tail", ()),
+        ("/scores_csv/", "_serve_scores_csv", "tail", ()),
+        ("/rubric/", "_serve_rubric", "tail", ()),
+        ("/annotation/", "_serve_annotation", "tail", ()),
+        ("/next_to_label/", "_serve_next_to_label", "tail", ()),
+    )
+
     def do_GET(self) -> None:  # noqa: N802
         self._read_request_user()       # V28.2
         path = urlparse(self.path).path
-        # V25 — versioned API namespace. Auth-gated, CORS-friendly,
-        # discoverable via ``GET /api/v1/``. Most routes are aliases to
-        # existing handlers; the discovery endpoint + a couple of
-        # mobile-friendly summary endpoints are unique to /api/v1/.
+        # V25 — versioned API namespace: auth gate FIRST; paths the v1
+        # dispatcher doesn't own fall through to the tables (auth already
+        # checked once).
         if path.startswith("/api/v1"):
             if not self._api_v1_auth_ok():
                 self.send_error(401, "missing or wrong X-PixCull-API-Key")
                 return
             if self._dispatch_api_v1_get(path):
                 return
-        # V14.6 — first-run setup endpoints. Available always (idempotent
-        # snapshot when no setup is running) so the launcher can spin
-        # up the server BEFORE warming starts and the browser can sit
-        # on /first_run polling status.
-        if path == "/first_run":
-            return self._serve_first_run_page()
-        if path == "/first_run_status":
-            return self._serve_first_run_status()
-        # V14.7 — opt-in error reporting + privacy disclosure
-        if path == "/privacy":
-            return self._serve_privacy_page()
-        if path == "/settings/error_reports":
-            return self._serve_error_reports_settings()
-        # V17.0 — vertical registry + per-vertical sample bank
-        if path == "/verticals":
-            return self._serve_verticals_page()
-        if path == "/verticals.json":
-            return self._serve_verticals_json()
-        if path.startswith("/verticals/list/"):
-            return self._serve_vertical_list(path[len("/verticals/list/"):])
-        if path.startswith("/verticals/sample/"):
-            return self._serve_vertical_sample(path[len("/verticals/sample/"):])
-        # V17.7 — bulk-classify page + on-the-fly thumbnail for the
-        # original-folder paths (constrained to the in-process whitelist
-        # built by the most recent bulk_classify call).
-        if path.startswith("/verticals/bulk/"):
-            return self._serve_vertical_bulk_page(path[len("/verticals/bulk/"):])
-        if path == "/verticals/bulk_thumb":
-            return self._serve_vertical_bulk_thumb()
-        if path == "/":
-            return self._serve_upload_page()
-        # v0.10-P2-1 — PWA install hooks.  manifest.json declares
-        # the install metadata; sw.js provides a minimal service
-        # worker that doesn't actually cache the heavy API
-        # responses (we keep those network-only because runs are
-        # mutable) but DOES cache the chrome (results.html shell +
-        # static CSS) so the app loads instantly on cold start
-        # from the home-screen icon.
-        if path == "/manifest.json":
-            return self._serve_pwa_manifest()
-        if path == "/sw.js":
-            return self._serve_pwa_service_worker()
-        # v0.13.14 — static assets under docs/illustrations/ +
-        # docs/brand/.  These are referenced from results.html
-        # (empty-state PNGs) and the PWA manifest (app icons).
-        # Read-only, long Cache-Control.  Path traversal protected
-        # via resolve() relative to REPO_ROOT.
-        if path.startswith("/docs/illustrations/") or \
-                path.startswith("/docs/brand/"):
-            return self._serve_static_doc_asset(path)
-        if path == "/admin":
-            return self._serve_admin_page()
-        # v0.7-P0-3 — large-batch (5k+) performance debug page.
-        # Surfaces: process RSS, # of active runs, /tmp/pixcull_demo
-        # disk usage, per-run row count, observer throttle stats
-        # (relayed client-side via window.PixCullStorage / _pcBucketsObsFn).
-        if path == "/admin/perf":
-            return self._serve_admin_perf_page()
-        if path == "/admin/perf.json":
-            return self._serve_admin_perf_json()
-        # P-AI-4.1 — face library quality audit page (HTML + JSON).
-        if path.startswith("/admin/face_audit/"):
-            return self._serve_face_audit(path[len("/admin/face_audit/"):])
-        # P-PRO-7.1 — full delivery audit page (scene + face + wedding
-        # + ICC + EXIF).  Re-uses scripts/cli_audit.py via subprocess
-        # so the markdown output is the single source of truth across
-        # CLI + web.
-        if path.startswith("/admin/delivery/"):
-            return self._serve_delivery_audit(path[len("/admin/delivery/"):])
-        if path == "/runs":
-            return self._serve_runs_list()
-        if path == "/storage_info":
-            return self._serve_storage_info()
-        if path == "/rubric_meta":
-            return self._serve_rubric_meta()
-        if path == "/retrain_status":
-            return self._serve_retrain_status()
-        if path == "/license":
-            return self._serve_license_status()
-        if path == "/license/refresh":
-            return self._handle_license_refresh()
-        if path == "/sync/download":
-            return self._handle_sync_download()
-        if path.startswith("/status/"):
-            return self._serve_status(path[len("/status/"):])
-        if path.startswith("/results/"):
-            return self._serve_results(path[len("/results/"):])
-        if path.startswith("/decisions/"):
-            # V21.2 — Lightroom plugin write-back endpoint. Returns
-            # {filename: decision} for a run so the LR Lua script can
-            # propagate decisions to star ratings / reject flags.
-            return self._serve_decisions(path[len("/decisions/"):])
-        if path.startswith("/face_clusters/"):
-            # V22.1 — face cluster summary + labels for a run.
-            return self._serve_face_clusters(path[len("/face_clusters/"):])
-        if path.startswith("/face_avatar/"):
-            # V22.3 — mini-avatar JPEG for a (run_id, cluster_id) pair.
-            return self._serve_face_avatar(path[len("/face_avatar/"):])
-        if path.startswith("/locations/"):
-            # V23 — GPS location cluster summary for a run.
-            return self._serve_locations(path[len("/locations/"):])
-        if path.startswith("/thumb/"):
-            # v0.6 (4/5) — pass self.path (query string intact) so the
-            # ``?w=<bucket>`` clamp inside _serve_image actually fires.
-            # The original V14.1 wiring used the already-query-stripped
-            # `path` variable, which silently dropped every viewport
-            # hint we ever sent (only the 420 default was ever cached).
-            return self._serve_image(
-                self.path[len("/thumb/"):], _THUMB_SIZE
-            )
-        if path.startswith("/full/"):
-            return self._serve_image(
-                self.path[len("/full/"):], _FULL_SIZE
-            )
-        # v2.9-P0-1 — square close-up crop of one detected face (query intact
-        # so the ?w= bucket reaches the handler).
-        if path.startswith("/face_crop/"):
-            return self._serve_face_crop(self.path[len("/face_crop/"):])
-        # v2.0-P0-4 — video review surface.  Non-/api/v1 paths so the
-        # same-origin review page can fetch without the API-key gate.
-        #   GET /video/data/<run_id>             → {manifest, temporal, reel}
-        #   GET /video/frame/<run_id>/<frame_id> → frame JPEG
-        #   GET /video/<run_id>                  → review HTML page
-        if path.startswith("/video/data/"):
-            return self._serve_video_data(path[len("/video/data/"):])
-        if path.startswith("/video/frame/"):
-            return self._serve_video_frame(path[len("/video/frame/"):])
-        if path.startswith("/video/"):
-            return self._serve_video_review(path[len("/video/"):])
-        # v2.0-P1-2 — joint photo + video timeline.
-        if path.startswith("/timeline/data/"):
-            return self._serve_timeline_data(path[len("/timeline/data/"):])
-        if path.startswith("/timeline/"):
-            return self._serve_timeline_page(path[len("/timeline/"):])
-        if path.startswith("/xmp_zip/"):
-            return self._serve_xmp_zip(path[len("/xmp_zip/"):])
-        # v0.7-P1-4 — token-gated client delivery share page.
-        # /share/<run_id>/<token>  → static-ish HTML showing keeps
-        if path.startswith("/share/"):
-            return self._serve_share_page(path[len("/share/"):])
-        # v0.7-P2-1 — fetch learned style distances for a run.
-        # v0.13.5 — paginated rows endpoint for 5k+ photo runs.
-        # GET /api/v1/runs/<run_id>/rows?offset=N&limit=M
-        #   → {ok, run_id, offset, limit, total, rows: [...]}
-        # The /results page can fetch in slices (foundation for
-        # virtual scroll in v0.14+).  Existing inline JSON dump
-        # in the HTML continues to work for ≤ 2k photo runs.
+        handler = self._GET_EXACT.get(path)
+        if handler is not None:
+            return getattr(self, handler)()
+        # v0.13.5 — paginated rows: compound suffix route
         if path.startswith("/api/v1/runs/") and path.endswith("/rows"):
-            mid = path[len("/api/v1/runs/"):-len("/rows")]
-            return self._serve_runs_rows(mid)
-        # v0.13.10 — operational health probe.
-        # GET /healthz → {ok, checks: [{name, ok, detail}, ...]}
-        # Used by:
-        #   * macOS LaunchAgent + brew services (boot health)
-        #   * Tether mode + LAN guests verifying the host is alive
-        #   * `scripts/collect_dogfood_bugs.py` automation
-        if path == "/healthz":
-            return self._serve_healthz()
-        # v0.13.9 — daily recap.
-        # GET /api/v1/recap?date=YYYY-MM-DD&user=<id>
-        #   → DailyRecap as JSON
-        if path == "/api/v1/recap":
-            return self._serve_daily_recap()
-        # v0.13.9 — bookmark list.
-        # GET /api/v1/bookmarks?run=<run_id>
-        if path == "/api/v1/bookmarks":
-            return self._serve_bookmarks_list()
-        # v0.13.9 — session conflicts dashboard.
-        # GET /api/v1/conflicts?run=<run_id>
-        if path == "/api/v1/conflicts":
-            return self._serve_session_conflicts()
-        # v0.13.1 — per-ref CLIP distance breakdown.
-        # GET /style/refs/<run_id>/<filename>
-        #   → {ok, target, refs: [{filename, distance, rank}, ...]}
+            return self._serve_runs_rows(
+                path[len("/api/v1/runs/"):-len("/rows")])
+        # v0.13.1 — per-ref CLIP distances: rid/filename split (a tail
+        # without "/" deliberately falls through to 404)
         if path.startswith("/style/refs/"):
             tail = path[len("/style/refs/"):]
             if "/" in tail:
                 rid, fn = tail.split("/", 1)
                 return self._serve_style_per_ref(rid, unquote(fn))
-        # GET /style/distances/<run_id>  → {filename: distance}
-        if path.startswith("/style/distances/"):
-            return self._serve_style_distances(
-                path[len("/style/distances/"):]
-            )
-        # v0.7-P2-4 — history timeline page (all past runs)
-        if path == "/history":
-            return self._serve_history_page()
-        # v0.12-P0-2 — second-monitor companion lightbox.
-        if path == "/companion":
-            return self._serve_companion_page()
-        # v0.13-P0-4 — bias audit dashboard.
-        if path == "/admin/bias":
-            return self._serve_bias_audit_page()
-        # v0.13-P1-3 — conflict-resolution dashboard.  Same data
-        # source as bias audit but filtered to high-reversal buckets
-        # + adds a per-run trend chart.
-        if path == "/admin/disagreement":
-            return self._serve_disagreement_page()
-        # v0.13-P2-2 — Bias audit markdown export.  Downloadable
-        # markdown that any tool (pandoc, browser print, Typora) can
-        # convert to PDF for client deliverables.
-        if path == "/admin/bias.md":
-            return self._serve_bias_audit_markdown()
-        # v0.8-P1-3 — short link resolver + QR SVG.
-        # GET /s/<code>      → 302 redirect to long URL (or 404/410)
-        # GET /s/<code>.svg  → inline QR SVG for the long URL
+        # v0.8-P1-3 — short link resolver + QR SVG (suffix switch)
         if path.startswith("/s/"):
             tail = path[len("/s/"):]
             if tail.endswith(".svg"):
                 return self._serve_shortlink_qr(tail[:-4])
             return self._serve_shortlink_redirect(tail)
-        # v0.7-P2-2 — tethered live scoring.
-        if path == "/tether":
-            return self._serve_tether_page()
-        if path == "/tether/sessions":
-            return self._serve_tether_sessions()
-        if path.startswith("/tether/status/"):
-            return self._serve_tether_status(
-                path[len("/tether/status/"):]
-            )
-        if path.startswith("/gallery_zip/"):
-            # V23.x — standalone HTML gallery export. Returns a zip
-            # the user can email/upload as-is; index.html opens in
-            # any browser, no PixCull server needed.
-            return self._serve_gallery_zip(path[len("/gallery_zip/"):])
-        # V9.3: scores.csv direct download
-        if path.startswith("/scores_csv/"):
-            return self._serve_scores_csv(path[len("/scores_csv/"):])
-        # v0.8-P2-2 — structured export (CSV / JSON, all fields)
+        # v0.8-P2-2 — structured export (suffix switch + explicit 404)
         if path.startswith("/export/structured/"):
             tail = path[len("/export/structured/"):]
             if tail.endswith(".json"):
@@ -4357,12 +4235,12 @@ class _Handler(BaseHTTPRequestHandler):
                 return self._serve_export_structured_csv(tail[:-4])
             self.send_error(404, "expected .json or .csv suffix")
             return
-        if path.startswith("/rubric/"):
-            return self._serve_rubric(path[len("/rubric/"):])
-        if path.startswith("/annotation/"):
-            return self._serve_annotation(path[len("/annotation/"):])
-        if path.startswith("/next_to_label/"):
-            return self._serve_next_to_label(path[len("/next_to_label/"):])
+        for prefix, name, mode, extra in self._GET_PREFIX:
+            if path.startswith(prefix):
+                if mode == "full":
+                    return getattr(self, name)(path)
+                src = self.path if mode == "raw" else path
+                return getattr(self, name)(src[len(prefix):], *extra)
         self.send_error(404, "not found")
 
     def do_POST(self) -> None:  # noqa: N802

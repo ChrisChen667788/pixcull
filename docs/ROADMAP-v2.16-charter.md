@@ -47,10 +47,32 @@ Selects 模式、Smart Collections、书签/冲突、**marquee 框选**、WebRTC
 > 这一步的价值不在行数,在**边界被机器看住了**:下次谁把 marquee 的手伸进 undo 的
 > 内部状态,CI 直接红——v2.13「一处破九处炸」的传播路径被截断了一段。
 
-## 后续切片(本主题未完)
+## P1.1 — 中部子系统全部抽完(已交付)
 
-- **P1.1 — 中部子系统继续抽**:多 tab 同步(`_pixMultiTab`)、⌘K 面板、confidence
-  modal、EXIF overlay 等边界稍粘的块(与主闭包 render/rows 交互多,需先立接口再搬)。
+第二批 **20 个**干净嵌套 IIFE(1,358 行)——含审计点名的**多 tab 同步**
+(`_initMultiTab`,主体只留 no-op stub 作接口)、confidence modal、EXIF overlay、
+library panel、hero reveal、video scrub、slash menu、tour、drag-reorder、companion
+window 等。同一抽取器、同一验收:**产物 hash 不变**。至此 **28 个模块 / 2,160 行**
+已出闭包,results.js 主体 **11.8k → 9,665 行**。
+
+边界 lint 又经三轮真实误报家族校准(属性访问 `.close` / 字符串与模板字面量文案 /
+函数参数含裸参箭头与 for-of / 主闭包共享词汇 `grid` / 对象字面量键 `body:`)——
+最终 **0 违规、0 误报**,规则稳定。
+
+**诚实未抽**:⌘K 面板(散装顶层声明,非 IIFE,`_cmdkResetFilters` 等被外部调用——
+需先立接口再搬)、lightbox/网格/渲染核心(本就是主体)。
+
+## P2 — do_GET 路由表(已交付)
+
+258 行 if/elif × 65 分支 → **31 条精确表 + 30 条有序前缀表(声明式,含
+tail/raw/full 三种传参模式)+ 5 个手写特例**(/api/v1 认证门、分页 rows 复合后缀、
+style/refs 的 rid/文件名切分、短链 .svg 后缀、结构化导出后缀切换),136 行。
+加新端点从此是**加一行表项**,不是读懂 258 行链。
+
+**验收**:31 条代表性路由(7 页面 + PWA + admin×4 + runs/ops×6 + 媒体 thumb 带
+query + 导出 + api/v1 + 404 兜底)重写前后 **28 条字节级一致、3 条动态端点
+(RSS/磁盘/时间戳)状态同型**;完整门禁 exit=0。
+精确表提前于前缀表的语义等价性已逐路径核对(无前缀遮蔽精确路径的情形)。
 - **P2 — serve_demo 路由表**:do_GET 200+ 行 if/elif 链(~60 个 path)改注册表,
   业务函数与 HTTP 管道分层。
 - PyInstaller spec 的 templates 打包 glob 待核(pyproject 已修;.spec 是发行物主题

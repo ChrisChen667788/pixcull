@@ -38,23 +38,7 @@
   // v0.5 — populate the new workspace-bar run pill.  Still
   // updates the legacy #runTag too in case anything probes it,
   // but the visible affordance is now #runPill inside .crumb-title.
-  (function _populateRunTag() {
-    const n = rows.length;
-    const shortId = (run_id || "").slice(0, 12);
-    const text = `${n} 张 · ${shortId}`;
-    const newEl = document.getElementById("runPill");
-    if (newEl) {
-      newEl.textContent = text;
-      newEl.style.display = "inline-flex";
-      newEl.title = `run id: ${run_id}`;
-    }
-    const legacy = document.getElementById("runTag");
-    if (legacy) {
-      legacy.textContent = text;
-      legacy.style.display = "inline-flex";
-    }
-    document.title = `PixCull · ${n} 张 · ${shortId}`;
-  })();
+@@MODULE:00-run-tag.js@@
 
   // P-UX-25 — multi-tab annotation conflict guard. Public surface
   // declared here at the top of the IIFE so quickLabel() / _lbLabel()
@@ -1639,71 +1623,7 @@
   // expand button.  On mobile (<= 900px) it becomes a drawer
   // that slides in from the left.  Both states persist in
   // localStorage[pixcull_lib_panel] = "open" | "collapsed".
-  (function _initLibraryPanel() {
-    const panel = document.getElementById("libraryPanel");
-    const backdrop = document.getElementById("libraryPanelBackdrop");
-    const btn = document.getElementById("lpCollapseBtn");
-    if (!panel || !btn) return;
-    const _LP_KEY = "pixcull_lib_panel";
-    const isMobile = () => window.matchMedia("(max-width: 900px)").matches;
-
-    function _apply(state) {
-      if (isMobile()) {
-        // Mobile: "open" shows the drawer, anything else hides it
-        panel.classList.toggle("open", state === "open");
-        if (backdrop) backdrop.classList.toggle("show", state === "open");
-        panel.classList.remove("collapsed");
-      } else {
-        // Desktop: "collapsed" shrinks to rail, default expanded
-        panel.classList.toggle("collapsed", state === "collapsed");
-        panel.classList.remove("open");
-        if (backdrop) backdrop.classList.remove("show");
-      }
-    }
-    let _state = "expanded";
-    try { _state = localStorage.getItem(_LP_KEY) || "expanded"; }
-    catch (e) {}
-    _apply(_state);
-
-    btn.addEventListener("click", () => {
-      if (isMobile()) {
-        // Mobile click closes the drawer
-        _state = "expanded";   // i.e. "not open"
-      } else {
-        _state = _state === "collapsed" ? "expanded" : "collapsed";
-      }
-      try { localStorage.setItem(_LP_KEY, _state); } catch (e) {}
-      _apply(_state);
-    });
-    // Mobile: tap backdrop to close
-    if (backdrop) {
-      backdrop.addEventListener("click", () => {
-        _state = "expanded";   // i.e. not "open"
-        try { localStorage.setItem(_LP_KEY, _state); } catch (e) {}
-        _apply(_state);
-      });
-    }
-    // Keyboard: "B" toggles the panel (LR-style)
-    document.addEventListener("keydown", e => {
-      // Ignore when typing in inputs
-      if (e.target.matches("input, textarea, select")) return;
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-      if (e.key === "b" || e.key === "B") {
-        e.preventDefault();
-        if (isMobile()) {
-          // Open / close drawer
-          _state = panel.classList.contains("open") ? "expanded" : "open";
-        } else {
-          _state = _state === "collapsed" ? "expanded" : "collapsed";
-        }
-        try { localStorage.setItem(_LP_KEY, _state); } catch (e) {}
-        _apply(_state);
-      }
-    });
-    // Re-apply on viewport changes so the same persisted state
-    // makes sense after a resize across the mobile breakpoint.
-    window.addEventListener("resize", () => _apply(_state));
-  })();
+@@MODULE:01-library-panel.js@@
 
   // v0.5 LR-grade (2/3) — density toolbar.  LR Library has a
   // 4-step grid-size slider that's been the standard photographer
@@ -1711,59 +1631,14 @@
   // enough: tight (browse), default (default), spread (review).
   // Persisted in localStorage so the photographer's chosen
   // density survives reload.
-  (function _initDensityToolbar() {
-    const _DENSITY_KEY = "pixcull_density";
-    const tb = document.querySelector(".density-toolbar");
-    if (!tb || !grid) return;
-    function _apply(density) {
-      grid.classList.remove("density-s", "density-m", "density-l");
-      grid.classList.add("density-" + density);
-      tb.querySelectorAll("button").forEach(b => {
-        b.classList.toggle("active", b.dataset.density === density);
-      });
-    }
-    let saved = "m";
-    try { saved = localStorage.getItem(_DENSITY_KEY) || "m"; } catch (e) {}
-    if (!["s","m","l"].includes(saved)) saved = "m";
-    _apply(saved);
-    tb.querySelectorAll("button").forEach(btn => {
-      btn.addEventListener("click", () => {
-        const d = btn.dataset.density;
-        if (!d) return;
-        try { localStorage.setItem(_DENSITY_KEY, d); } catch (e) {}
-        _apply(d);
-      });
-    });
-  })();
+@@MODULE:02-density-toolbar.js@@
 
   // v2.2 soft-skill — VISUAL_DENSITY dial (舒朗 calm ⇄ 详尽 dense).
   // Calm is the default: the card is photo + decision + editorial
   // score + the quiet axis strip; dense restores every secondary chip
   // / reason / advice line.  Toggles `.dense` on #grid (the calm CSS
   // is gated on `.grid:not(.dense)`); persisted across reloads.
-  (function _initCalmToolbar() {
-    const _CALM_KEY = "pixcull_calm";
-    const tb = document.querySelector(".calm-toolbar");
-    if (!tb || !grid) return;
-    function _apply(mode) {
-      grid.classList.toggle("dense", mode === "dense");
-      tb.querySelectorAll("button").forEach(b => {
-        b.classList.toggle("active", b.dataset.calm === mode);
-      });
-    }
-    let saved = "calm";
-    try { saved = localStorage.getItem(_CALM_KEY) || "calm"; } catch (e) {}
-    if (!["calm", "dense"].includes(saved)) saved = "calm";
-    _apply(saved);
-    tb.querySelectorAll("button").forEach(btn => {
-      btn.addEventListener("click", () => {
-        const m = btn.dataset.calm;
-        if (!m) return;
-        try { localStorage.setItem(_CALM_KEY, m); } catch (e) {}
-        _apply(m);
-      });
-    });
-  })();
+@@MODULE:03-calm-toolbar.js@@
 
   // v0.4 P2 (2/4) — stat-counter pulse helpers.
   // Called from quickLabel + _lbLabel when a decision flip changes
@@ -2616,44 +2491,7 @@
   // instant.  prefers-reduced-motion users skip the reveal
   // entirely (CSS @media handles that).
   // ============================================================
-  (function _heroReveal() {
-    // Skip on slow connections / save-data — animation work is
-    // wasted CPU on those clients.
-    if (navigator.connection
-        && navigator.connection.saveData === true) return;
-    document.body.classList.add("hero-revealing");
-    // Per-card stagger index.  Set on every initial card whose
-    // animation will fire.  IntersectionObserver-materialised
-    // placeholders catch up via the MutationObserver below.
-    function setStaggerIndices() {
-      let i = 0;
-      grid.querySelectorAll(".card").forEach(card => {
-        card.style.setProperty("--idx", String(i));
-        i += 1;
-      });
-    }
-    setStaggerIndices();
-    // Late-materialised placeholders (P-UX-18 large-batch streaming)
-    // get their --idx set when they swap into real .card elements.
-    const lateObs = new MutationObserver(muts => {
-      for (const m of muts) {
-        for (const node of m.addedNodes) {
-          if (node.nodeType === 1 && node.classList?.contains("card")) {
-            // Continue stagger from the current visible count
-            const idx = grid.querySelectorAll(".card").length - 1;
-            // Cap to 64 to match the CSS clamp
-            node.style.setProperty("--idx", String(Math.min(idx, 64)));
-          }
-        }
-      }
-    });
-    lateObs.observe(grid, { childList: true });
-    // Tear down after the reveal finishes
-    setTimeout(() => {
-      document.body.classList.remove("hero-revealing");
-      lateObs.disconnect();
-    }, 2200);
-  })();
+@@MODULE:04-hero-reveal.js@@
 
   // V9.0 sort dropdown
   document.getElementById("sortBy").addEventListener("change", e => {
@@ -3171,110 +3009,7 @@
   // frame nav for stepping (so no key conflict).  Entirely no-op for
   // photo runs (PAYLOAD.video is null).  The standalone /video page
   // remains the deep-link fallback.
-  (function initVideoScrub() {
-    const V = PAYLOAD.video;
-    if (!V || !Array.isArray(V.frames) || !V.frames.length) return;
-    const frames = V.frames, reel = V.reel || [];
-    const fnIdx = new Map(frames.map((f, i) => [f.filename, i]));
-    const t0 = frames[0].t, tEnd = frames[frames.length - 1].t || (t0 + 1);
-    let playing = 0, speed = 1, timer = null;
-    const st = document.createElement("style");
-    st.textContent =
-      "#lbVideoBar{position:absolute;left:50%;transform:translateX(-50%);"
-      + "bottom:104px;width:min(72%,900px);z-index:42;background:rgba(10,11,13,.86);"
-      + "backdrop-filter:blur(8px);border:1px solid #23262e;border-radius:12px;"
-      + "padding:8px 12px 10px;display:none}"
-      + ".lightbox.show #lbVideoBar{display:block}"
-      + "#lbVideoBar .vbc{display:flex;gap:8px;align-items:center;margin-bottom:5px}"
-      + "#lbVideoBar button{background:#1b1e26;border:1px solid #23262e;color:#e8e8ea;"
-      + "border-radius:7px;padding:4px 11px;font-size:13px;cursor:pointer}"
-      + "#lbVideoBar button.on{background:#c4b9a9;border-color:#c4b9a9;color:#fff}"
-      + "#lbVideoBar .vbr{margin-left:auto;color:#9aa0aa;font:11px ui-monospace,monospace}"
-      + "#vbTl{width:100%;height:54px;display:block;cursor:pointer;touch-action:none}";
-    document.head.appendChild(st);
-    const bar = document.createElement("div");
-    bar.id = "lbVideoBar";
-    bar.innerHTML =
-      '<div class="vbc"><button data-vb="back" title="后退播放">◀◀</button>'
-      + '<button data-vb="pause" title="暂停" class="on">❚❚</button>'
-      + '<button data-vb="fwd" title="前进播放">▶▶</button>'
-      + '<span class="vbr" id="vbReadout">视频时间线</span></div>'
-      + '<svg id="vbTl" viewBox="0 0 1000 60" preserveAspectRatio="none"></svg>';
-    (document.getElementById("lightbox") || document.body).appendChild(bar);
-    const tl = bar.querySelector("#vbTl");
-    const readout = bar.querySelector("#vbReadout");
-    const tx = (t) => (tEnd > t0) ? (t - t0) / (tEnd - t0) * 1000 : 0;
-    function draw() {
-      let s = "";
-      reel.forEach((c) => {
-        const x1 = tx(+c.start_s), x2 = tx(+c.end_s);
-        s += '<rect x="' + x1.toFixed(1) + '" y="0" width="'
-          + Math.max(2, x2 - x1).toFixed(1) + '" height="60" fill="#c4b9a9" '
-          + 'opacity="' + (0.12 + 0.22 * Math.min(1, +c.score || 0)).toFixed(2) + '"/>';
-        s += '<text x="' + (x1 + 2).toFixed(1) + '" y="11" fill="#d8cebf" '
-          + 'font-size="9">#' + c.rank + '</text>';
-      });
-      let area = "0,60", line = "";
-      frames.forEach((f, i) => {
-        const x = tx(f.t).toFixed(1), y = (60 - (f.score_temporal || 0) * 60).toFixed(1);
-        area += " " + x + "," + y; line += (i ? " L" : "M") + x + " " + y;
-      });
-      area += " 1000,60";
-      s += '<polygon points="' + area + '" fill="rgba(196,185,169,0.22)"/>';
-      s += '<path d="' + line + '" fill="none" stroke="#c4b9a9" stroke-width="1.4"/>';
-      s += '<line id="vbPh" x1="0" y1="0" x2="0" y2="60" stroke="#6a6052" stroke-width="2"/>';
-      tl.innerHTML = s;
-    }
-    const curIdx = () => fnIdx.has(_lbCurrentFn) ? fnIdx.get(_lbCurrentFn) : 0;
-    function go(i) {
-      i = Math.max(0, Math.min(frames.length - 1, i));
-      openLightbox(frames[i].filename);
-    }
-    function setBtns() {
-      bar.querySelector('[data-vb=back]').classList.toggle("on", playing < 0);
-      bar.querySelector('[data-vb=pause]').classList.toggle("on", playing === 0);
-      bar.querySelector('[data-vb=fwd]').classList.toggle("on", playing > 0);
-    }
-    function pause() { playing = 0; speed = 1; if (timer) clearInterval(timer); timer = null; setBtns(); }
-    function play(dir) {
-      if (playing === dir) { speed = Math.min(8, speed * 2); }
-      else { playing = dir; speed = 1; }
-      if (timer) clearInterval(timer);
-      timer = setInterval(() => {
-        const nx = curIdx() + playing;
-        if (nx < 0 || nx >= frames.length) { pause(); return; }
-        go(nx);
-      }, Math.max(60, 240 / speed));
-      setBtns();
-    }
-    window._videoScrubSync = function () {
-      if (!lb.classList.contains("show")) return;
-      const f = frames[curIdx()];
-      const p = tl.querySelector("#vbPh");
-      if (p) { const x = tx(f.t); p.setAttribute("x1", x); p.setAttribute("x2", x); }
-      readout.textContent = f.t.toFixed(2) + "s · score " +
-        (f.score_temporal || 0).toFixed(2) + " · " + (curIdx() + 1) + "/" + frames.length;
-    };
-    let dragging = false;
-    function seek(ev) {
-      const r = tl.getBoundingClientRect();
-      const x = Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width));
-      const t = t0 + x * (tEnd - t0);
-      let best = 0, bd = 1e9;
-      frames.forEach((f, i) => { const d = Math.abs(f.t - t); if (d < bd) { bd = d; best = i; } });
-      pause(); go(best);
-    }
-    tl.addEventListener("pointerdown", (e) => { dragging = true; seek(e); });
-    tl.addEventListener("pointermove", (e) => { if (dragging) seek(e); });
-    window.addEventListener("pointerup", () => { dragging = false; });
-    bar.querySelector('[data-vb=back]').onclick = () => play(-1);
-    bar.querySelector('[data-vb=pause]').onclick = pause;
-    bar.querySelector('[data-vb=fwd]').onclick = () => play(1);
-    // Pausing on close keeps a stray interval from running in the bg.
-    const _lbCloseEl = document.getElementById("lbClose");
-    if (_lbCloseEl) _lbCloseEl.addEventListener("click", pause);
-    draw();
-  })();
+@@MODULE:05-video-scrub.js@@
 
   // v0.5 LR-grade (3/3) — populate the lightbox filmstrip with the
   // currently-visible (filtered) grid order.  Builds once per open
@@ -6455,50 +6190,7 @@
   }
 
   // Modal close wiring (singleton — set up once on boot).
-  (function _wireShareUrlModal() {
-    const modal = document.getElementById("shareUrlModal");
-    if (!modal) return;
-    const closeBtn = document.getElementById("shareUrlClose");
-    function close() {
-      modal.classList.remove("show");
-      modal.setAttribute("aria-hidden", "true");
-    }
-    closeBtn?.addEventListener("click", close);
-    // Click backdrop (NOT card) → close
-    modal.addEventListener("click", e => {
-      if (e.target === modal) close();
-    });
-    // Esc closes
-    document.addEventListener("keydown", e => {
-      if (e.key === "Escape" && modal.classList.contains("show")) {
-        close();
-      }
-    });
-    // Copy buttons (delegated)
-    function wireCopy(btnId, inputId) {
-      const b = document.getElementById(btnId);
-      const inp = document.getElementById(inputId);
-      if (!b || !inp) return;
-      b.addEventListener("click", async () => {
-        try {
-          await navigator.clipboard.writeText(inp.value);
-          const orig = b.textContent;
-          b.textContent = "已复制 ✓";
-          b.classList.add("ok");
-          setTimeout(() => {
-            b.textContent = orig;
-            b.classList.remove("ok");
-          }, 1400);
-        } catch (_e) {
-          // Fall back to selectAll so the user can ⌘C manually
-          inp.focus();
-          inp.select();
-        }
-      });
-    }
-    wireCopy("shareUrlShortCopy", "shareUrlShort");
-    wireCopy("shareUrlLongCopy",  "shareUrlLong");
-  })();
+@@MODULE:06-share-url-modal.js@@
 
   // v0.7-P1-4 — client delivery share link.
   // Mints a token via POST /share/<run>/issue then surfaces the
@@ -7709,164 +7401,7 @@
   // Inert when the textarea doesn't carry data-slashmenu — so the
   // existing rationale text-typing experience is untouched.
   // ==================================================================
-  (function _slashMenuInit() {
-    let menuEl = null;
-    let activeTextarea = null;
-    let cursorIdx = 0;     // index of the "/" that opened the menu
-    let filterText = "";
-    let selectedIndex = 0;
-
-    const ALL_COMMANDS = [
-      { key: "keep",    label: "标 5★(keep)",
-        run: ta => _setAxisStarsFromTextarea(ta, 5) },
-      { key: "cull",    label: "标 1★(cull)",
-        run: ta => _setAxisStarsFromTextarea(ta, 1) },
-      { key: "maybe",   label: "标 3★(maybe)",
-        run: ta => _setAxisStarsFromTextarea(ta, 3) },
-      { key: "cite",    label: "插入正典引用模板",
-        run: ta => _insertAt(ta, " [cite: source · year] ") },
-      { key: "explain", label: "重新拉 DeepSeek 解释",
-        run: () => showToast("DeepSeek explanation refresh queued", "info") },
-    ];
-
-    function _setAxisStarsFromTextarea(ta, stars) {
-      // The textarea lives inside .axis-row[data-axis="..."]; find
-      // it + click the matching star.  Lets `/keep` mark the
-      // current axis as 5★ without breaking the keyboard flow.
-      const axisRow = ta.closest(".axis-row");
-      if (!axisRow) return;
-      const starEl = axisRow.querySelector(`.star[data-v="${stars}"]`);
-      if (starEl) starEl.click();
-    }
-
-    function _insertAt(ta, text) {
-      const start = ta.selectionStart || 0;
-      const end   = ta.selectionEnd   || start;
-      ta.value = ta.value.slice(0, start) + text + ta.value.slice(end);
-      const newPos = start + text.length;
-      ta.setSelectionRange(newPos, newPos);
-      ta.focus();
-    }
-
-    function _closeMenu() {
-      if (menuEl) {
-        menuEl.remove();
-        menuEl = null;
-      }
-      activeTextarea = null;
-      filterText = "";
-      selectedIndex = 0;
-    }
-
-    function _filtered() {
-      if (!filterText) return ALL_COMMANDS;
-      const f = filterText.toLowerCase();
-      return ALL_COMMANDS.filter(c =>
-        c.key.startsWith(f) || c.label.toLowerCase().includes(f));
-    }
-
-    function _renderMenu() {
-      if (!activeTextarea) return;
-      const items = _filtered();
-      if (items.length === 0) { _closeMenu(); return; }
-      if (selectedIndex >= items.length) selectedIndex = 0;
-      if (!menuEl) {
-        menuEl = document.createElement("div");
-        menuEl.className = "slash-menu";
-        menuEl.style.cssText = (
-          "position:absolute;z-index:1500;" +
-          "background:var(--surface-2);" +
-          "border:1px solid var(--border-hi, var(--border));" +
-          "border-radius:var(--radius-md, 8px);" +
-          "box-shadow:var(--shadow-lg);" +
-          "padding:4px 0;min-width:200px;" +
-          "font-size:12px;"
-        );
-        document.body.appendChild(menuEl);
-      }
-      menuEl.innerHTML = items.map((c, i) =>
-        `<div class="slash-item${i === selectedIndex ? " sel" : ""}" ` +
-        ` style="padding:6px 12px;cursor:pointer;` +
-        ` ${i === selectedIndex ? "background:var(--accent-soft, rgba(196,185,169,0.16));" : ""}"` +
-        ` data-key="${c.key}">` +
-        `  <span style="color:var(--accent);margin-right:6px">/</span>` +
-        `  <b>${c.key}</b>` +
-        `  <span style="color:var(--muted);margin-left:8px">${c.label}</span>` +
-        `</div>`
-      ).join("");
-      // Position near the textarea
-      const r = activeTextarea.getBoundingClientRect();
-      menuEl.style.left = (r.left + window.scrollX) + "px";
-      menuEl.style.top  = (r.bottom + window.scrollY + 4) + "px";
-      // Wire click → run
-      menuEl.querySelectorAll(".slash-item").forEach((el, i) => {
-        el.addEventListener("mouseenter", () => {
-          selectedIndex = i;
-          _renderMenu();
-        });
-        el.addEventListener("click", () => {
-          _runItem(_filtered()[i]);
-        });
-      });
-    }
-
-    function _runItem(cmd) {
-      if (!cmd || !activeTextarea) return _closeMenu();
-      const ta = activeTextarea;
-      // Drop the "/filter" text that opened the menu first.
-      ta.value = ta.value.slice(0, cursorIdx)
-               + ta.value.slice(cursorIdx + 1 + filterText.length);
-      ta.setSelectionRange(cursorIdx, cursorIdx);
-      _closeMenu();
-      try { cmd.run(ta); } catch (_e) {}
-    }
-
-    document.addEventListener("input", (e) => {
-      const ta = e.target;
-      if (!ta || ta.tagName !== "TEXTAREA") return;
-      if (!ta.dataset.slashmenu) return;
-      const pos = ta.selectionStart;
-      const v = ta.value;
-      // Find the most recent "/" preceded by start-of-text or a newline.
-      let i = pos - 1;
-      while (i >= 0 && v[i] !== "/" && v[i] !== "\n") i--;
-      if (i < 0 || v[i] !== "/" || (i > 0 && v[i - 1] !== "\n")) {
-        _closeMenu();
-        return;
-      }
-      // Capture the filter text between / and the cursor
-      activeTextarea = ta;
-      cursorIdx = i;
-      filterText = v.slice(i + 1, pos);
-      selectedIndex = 0;
-      _renderMenu();
-    });
-
-    document.addEventListener("keydown", (e) => {
-      if (!menuEl || !activeTextarea) return;
-      if (e.key === "Escape") { e.preventDefault(); _closeMenu(); return; }
-      const items = _filtered();
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        selectedIndex = (selectedIndex + 1) % items.length;
-        _renderMenu();
-      } else if (e.key === "ArrowUp") {
-        e.preventDefault();
-        selectedIndex = (selectedIndex - 1 + items.length) % items.length;
-        _renderMenu();
-      } else if (e.key === "Enter") {
-        e.preventDefault();
-        _runItem(items[selectedIndex]);
-      }
-    });
-
-    document.addEventListener("click", (e) => {
-      if (!menuEl) return;
-      if (e.target.closest(".slash-menu")) return;
-      if (e.target === activeTextarea) return;
-      _closeMenu();
-    });
-  })();
+@@MODULE:07-slash-menu.js@@
 
   document.getElementById("styleTrainBtn")?.addEventListener("click", async () => {
     const keepRows = rows.filter(r => r.decision === "keep");
@@ -8445,98 +7980,7 @@
   // (< 15.4) and some embedded webviews. On those we silently no-op;
   // the user gets the same experience as today.
   // ==================================================================
-  (function _initMultiTab() {
-    if (typeof BroadcastChannel === "undefined") return;
-    const _TAB_ID = (typeof crypto !== "undefined" && crypto.randomUUID)
-      ? crypto.randomUUID()
-      : (Date.now() + "-" + Math.random().toString(36).slice(2, 10));
-    let _bc;
-    try { _bc = new BroadcastChannel("pixcull-tab-coord:" + run_id); }
-    catch (e) { return; }
-
-    const _seenTabs = new Set();
-    let _bannerEl = null;
-
-    function _showBanner() {
-      if (_bannerEl) {
-        _bannerEl.classList.remove("hidden");
-        return;
-      }
-      _bannerEl = document.createElement("div");
-      _bannerEl.className = "multi-tab-banner";
-      _bannerEl.setAttribute("role", "status");
-      _bannerEl.setAttribute("aria-live", "polite");
-      _bannerEl.innerHTML = `
-        <span class="mtb-icon"><svg class="icon"><use href="#icon-alert"/></svg></span>
-        <span class="mtb-msg">同一批结果已在其它 tab 打开 — 标注会双向同步,但建议只在一个 tab 内编辑以避免覆盖</span>
-        <button class="mtb-close" type="button" aria-label="关闭多 tab 提示">✕</button>`;
-      document.body.appendChild(_bannerEl);
-      _bannerEl.querySelector(".mtb-close").addEventListener("click", () => {
-        _bannerEl.classList.add("hidden");
-      });
-    }
-
-    function _hideBannerIfAlone() {
-      if (_seenTabs.size === 0 && _bannerEl) {
-        _bannerEl.remove();
-        _bannerEl = null;
-      }
-    }
-
-    _bc.addEventListener("message", e => {
-      const m = e.data || {};
-      if (!m.type || !m.from || m.from === _TAB_ID) return;
-
-      if (m.type === "hello") {
-        _seenTabs.add(m.from);
-        // Echo back so the newcomer learns about us too
-        try { _bc.postMessage({type: "echo", from: _TAB_ID}); } catch (e) {}
-        _showBanner();
-      }
-      else if (m.type === "echo") {
-        _seenTabs.add(m.from);
-        _showBanner();
-      }
-      else if (m.type === "bye") {
-        _seenTabs.delete(m.from);
-        _hideBannerIfAlone();
-      }
-      else if (m.type === "annot" && m.fn) {
-        // Sibling tab labeled fn → reflect locally so the user sees
-        // the change live in this tab.
-        const r = rows.find(x => x.filename === m.fn);
-        // v2.15-P0 — a sibling tab's label means a HUMAN reviewed this photo:
-        // keep this tab's 待审 chip in sync. Deliberately outside the
-        // decision-changed guard below — a sibling CONFIRM (prev === new)
-        // still counts as reviewed, mirroring the local labeling paths.
-        if (r && typeof _markReviewed === "function") _markReviewed(m.fn);
-        if (r && r.decision !== m.dec) {
-          r.decision = m.dec;
-          r.rubric_human_labeled = true;
-          if (m.dec !== "cull") r.cull_reason = "";
-          try { render(); } catch (err) {}
-          try {
-            if (typeof toast === "function") {
-              toast(`其它 tab 标注:${m.fn.length > 40 ? m.fn.slice(0,38)+"…" : m.fn} → ${m.dec}`,
-                    "info", 2400);
-            }
-          } catch (err) {}
-        }
-      }
-    });
-
-    _pixMultiTab.broadcastAnnotation = function (fn, dec) {
-      try { _bc.postMessage({type: "annot", from: _TAB_ID, fn, dec}); }
-      catch (e) {}
-    };
-
-    // Announce ourselves; existing tabs will reply with "echo".
-    try { _bc.postMessage({type: "hello", from: _TAB_ID}); } catch (e) {}
-    // Politely depart on unload so the survivor can drop the banner.
-    window.addEventListener("beforeunload", () => {
-      try { _bc.postMessage({type: "bye", from: _TAB_ID}); } catch (e) {}
-    });
-  })();
+@@MODULE:08-multi-tab.js@@
 
   // ==================================================================
   // P-CORE-3 — scene-distribution anomaly banner.
@@ -8560,132 +8004,7 @@
   // mid-stream realize "wait, why are all my landscape shots
   // tagged stilllife".
   // ==================================================================
-  (function _initSceneAnomalyBanner() {
-    if (!rows || rows.length < 10) return;     // too few to judge
-
-    // Count scenes
-    const counts = new Map();
-    for (const r of rows) {
-      const s = r.scene || "(missing)";
-      counts.set(s, (counts.get(s) || 0) + 1);
-    }
-    const n = rows.length;
-    const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1]);
-    const [topScene, topN]       = sorted[0] || [null, 0];
-    const [secondScene, secondN] = sorted[1] || [null, 0];
-    const topPct    = topN / n;
-    const top2Pct   = (topN + secondN) / n;
-    const unknownN  = counts.get("unknown") || 0;
-    const unknownPct = unknownN / n;
-
-    let reason = null;
-    if (topPct > 0.60) {
-      reason = `单一场景 <b>${topScene}</b> 占了 <b>${(topPct*100).toFixed(0)}%</b> ` +
-               `(${topN} / ${n})。如果与实际场景相符则忽略;否则建议重判场景。`;
-    } else if (top2Pct > 0.95 && n >= 30) {
-      reason = `<b>${topScene}</b> + <b>${secondScene}</b> 占了 <b>${(top2Pct*100).toFixed(0)}%</b>。` +
-               `可能 scene 分类器把多种场景误归到这两类;先抽查再大批量标注。`;
-    } else if (unknownPct > 0.30) {
-      reason = `场景分类器在 <b>${(unknownPct*100).toFixed(0)}%</b> 的图片上 abstain ` +
-               `(标为 unknown)。这一批光线 / 场景对 CLIP 来说不典型,人工复核优先。`;
-    }
-    if (!reason) return;
-
-    const banner = document.createElement("div");
-    banner.className = "scene-anomaly-banner";
-    banner.setAttribute("role", "status");
-    banner.setAttribute("aria-live", "polite");
-    banner.innerHTML = `
-      <span class="sab-icon"><svg class="icon"><use href="#icon-chart"/></svg></span>
-      <span class="sab-msg">${reason}</span>
-      <button class="sab-toggle" type="button">查看分布详情</button>
-      <button class="sab-close" type="button" aria-label="关闭场景分布提示">✕</button>`;
-    document.body.appendChild(banner);
-
-    // P-UX-28 — pie chart panel.  Lazy-built on first click.
-    let pieEl = null;
-    function _buildPiePanel() {
-      // Generate distinct hues evenly spaced around the wheel
-      const entries = sorted;   // [[name, count], ...]
-      const total   = n;
-      const N       = entries.length;
-      const hue = i => Math.round((i * 360) / N);
-      const fill = i => `hsl(${hue(i)}, 62%, 55%)`;
-
-      // Build SVG pie via cumulative-angle-to-arc math.  conic-
-      // gradient would be simpler but doesn't support per-segment
-      // titles + a screenreader-friendly title on hover.
-      const cx = 70, cy = 70, r = 60;
-      let acc = 0;
-      const slices = entries.map(([name, cnt], i) => {
-        const frac = cnt / total;
-        const a0   = acc * 2 * Math.PI - Math.PI / 2;
-        const a1   = (acc + frac) * 2 * Math.PI - Math.PI / 2;
-        acc += frac;
-        const x0 = cx + r * Math.cos(a0), y0 = cy + r * Math.sin(a0);
-        const x1 = cx + r * Math.cos(a1), y1 = cy + r * Math.sin(a1);
-        const large = frac > 0.5 ? 1 : 0;
-        const d = `M${cx},${cy} L${x0.toFixed(2)},${y0.toFixed(2)} ` +
-                  `A${r},${r} 0 ${large} 1 ${x1.toFixed(2)},${y1.toFixed(2)} Z`;
-        const title = `${esc(name)}: ${cnt} (${(frac * 100).toFixed(1)}%)`;
-        return `<path d="${d}" fill="${fill(i)}" stroke="#0b0d10" stroke-width="1">` +
-               `<title>${title}</title></path>`;
-      }).join("");
-      const legend = entries.map(([name, cnt], i) => {
-        const frac = cnt / total;
-        return `<div class="sdp-legend-row">
-          <span class="sdp-swatch" style="background:${fill(i)}"></span>
-          <span class="sdp-name">${esc(name)}</span>
-          <span class="sdp-pct">${cnt} · ${(frac*100).toFixed(1)}%</span>
-        </div>`;
-      }).join("");
-      const panel = document.createElement("div");
-      panel.className = "scene-distribution-panel";
-      panel.innerHTML = `
-        <h4>场景分布 (共 ${total} 张)</h4>
-        <div class="sdp-content">
-          <svg viewBox="0 0 140 140" aria-label="场景分布饼图">
-            ${slices}
-          </svg>
-          <div class="sdp-legend">${legend}</div>
-        </div>`;
-      document.body.appendChild(panel);
-      return panel;
-    }
-
-    banner.querySelector(".sab-toggle").addEventListener("click", () => {
-      if (!pieEl) pieEl = _buildPiePanel();
-      pieEl.classList.toggle("show");
-    });
-    const close = () => {
-      banner.classList.add("hidden");
-      // P-UX-28 — also hide the expanded pie panel if open
-      if (pieEl) pieEl.classList.remove("show");
-      // Persist dismissal per-run so reopening the same tab
-      // doesn't re-prompt
-      try {
-        localStorage.setItem("pixcull_scene_anomaly_dismissed:" + run_id, "1");
-      } catch (_e) {}
-    };
-    banner.querySelector(".sab-close").addEventListener("click", close);
-    // Auto-dismiss when the user starts annotating (first 1/2/3/f)
-    function _onFirstAnnot(e) {
-      const k = e.key;
-      if (k === "1" || k === "2" || k === "3" ||
-          k === "f" || k === "F") {
-        document.removeEventListener("keydown", _onFirstAnnot, true);
-        close();
-      }
-    }
-    document.addEventListener("keydown", _onFirstAnnot, true);
-
-    // Honor persisted dismissal (same run reopened)
-    try {
-      if (localStorage.getItem("pixcull_scene_anomaly_dismissed:" + run_id) === "1") {
-        banner.classList.add("hidden");
-      }
-    } catch (_e) {}
-  })();
+@@MODULE:09-scene-anomaly-banner.js@@
 
   // ==================================================================
   // P-UX-26 — animated onboarding hints. First-ever visit gets:
@@ -8705,73 +8024,13 @@
   // ==================================================================
   // v2.4-P0-2b — surface "tuned to you" when a personal taste profile is
   // active (decisions were calibrated to the user's keep/cull history).
-  (function _initTunedBadge() {
-    const el = document.getElementById("tunedBadge");
-    if (!el) return;
-    fetch("/api/v1/users/profile")
-      .then(r => r.ok ? r.json() : null)
-      .then(d => {
-        if (!d) return;
-        if (d.is_active) {
-          const axis = d.most_cared_axis || "";
-          el.textContent = "🎯 已按你调校" + (axis ? (" · 重" + axis) : "");
-          el.style.display = "";
-          return;
-        }
-        // v2.5 — cold-start progress. The moat used to be invisible
-        // until 50 corrections; now any progress (≥3, so a first-time
-        // visitor isn't nagged) shows how close "tuned to you" is.
-        const n = d.n_annotations | 0, min = d.min_annotations | 0;
-        if (min > 0 && n >= 3 && n < min) {
-          el.textContent = "🎯 个性化 " + n + "/" + min;
-          el.title = "每次 keep/cull 纠正都在教 PixCull 你的口味 — 再标 "
-            + (min - n) + " 张,新批次就会自动按你的标准校准阈值";
-          el.style.opacity = "0.62";
-          el.style.display = "";
-        }
-      })
-      .catch(() => {});
-  })();
+@@MODULE:12-tuned-badge.js@@
 
   // v2.5 — feature-discovery tour. Open/close mirrors the shortcuts
   // modal; a one-shot pulse on the ✨ button (same onboard-pulse the
   // other affordances use, localStorage-gated) announces it exists
   // without ever auto-opening a modal over the user's work.
-  (function _initTour() {
-    const btn = document.getElementById("tourBtn");
-    const modal = document.getElementById("tourModal");
-    if (!btn || !modal) return;
-    if (typeof registerModal === "function") registerModal(modal);
-    btn.addEventListener("click", () => modal.classList.add("show"));
-    const closeBtn = document.getElementById("tourClose");
-    if (closeBtn) closeBtn.addEventListener("click",
-      () => modal.classList.remove("show"));
-    modal.addEventListener("click", e => {
-      if (e.target === modal) modal.classList.remove("show");
-    });
-    // registerModal only wires the focus trap — Escape is per-modal.
-    // CAPTURE phase + stopPropagation: the global Escape chain would
-    // otherwise ALSO fire on the same keypress and close the lightbox
-    // underneath the tour (v2.5 stability sweep).
-    document.addEventListener("keydown", e => {
-      if (e.key === "Escape" && modal.classList.contains("show")) {
-        e.preventDefault(); e.stopPropagation();
-        modal.classList.remove("show");
-      }
-    }, true);
-    try {
-      if (localStorage.getItem("pixcull_tour_pulse_v1") !== "1") {
-        setTimeout(() => {
-          btn.classList.add("onboard-pulse");
-          setTimeout(() => btn.classList.remove("onboard-pulse"), 5500);
-          // Persist only once the pulse actually rendered — setting it
-          // eagerly meant a reload inside the 2.2 s delay suppressed the
-          // one-shot hint forever (adversarial-review finding).
-          try { localStorage.setItem("pixcull_tour_pulse_v1", "1"); } catch (e) {}
-        }, 2200);
-      }
-    } catch (e) {}
-  })();
+@@MODULE:13-tour.js@@
 
 @@MODULE:10-onboarding.js@@
 
@@ -10213,127 +9472,7 @@
   // The popover is dismissable per-run (localStorage flag) — busy
   // photographers don't need it interrupting muscle-memory passes.
   // ==================================================================
-  (function setupConfidenceModal() {
-    const KEY = `pixcull_dismiss_confidence_modal:${run_id}`;
-    const grid = document.getElementById("grid");
-    if (!grid) return;
-    let popover = null;
-    let activeCard = null;
-    let dismissed = false;
-    try { dismissed = localStorage.getItem(KEY) === "1"; }
-    catch (_e) {}
-    if (dismissed) return;
-
-    function _isUncertain(row) {
-      const s = row && row.score_final;
-      if (typeof s !== "number") return false;
-      return s >= 0.45 && s <= 0.55;
-    }
-
-    function _explainRow(row) {
-      // Two short lines.  Higher-fidelity reasons come from
-      // v0.13-P0-1 attribution + burst-neighbor lookup; for now
-      // we derive from data already on the row.
-      const reasons = [];
-      const burst = row.burst_cluster;
-      const score = row.score_final;
-      const probKeep = row.rescorer_prob_keep;
-      if (typeof probKeep === "number") {
-        const conf = Math.round(Math.max(probKeep, 1 - probKeep) * 100);
-        reasons.push(`${conf}% sure`);
-      } else {
-        reasons.push("低置信度");
-      }
-      if (burst && typeof window.rows !== "undefined") {
-        const neighbours = (window.rows || rows).filter(r =>
-          r.burst_cluster === burst && r.filename !== row.filename);
-        if (neighbours.length) {
-          const top = neighbours.reduce((a, b) =>
-            (a.score_final || 0) > (b.score_final || 0) ? a : b);
-          const delta = (top.score_final || 0) - score;
-          if (delta > 0.005) {
-            reasons.push(`同组邻居高 ${delta.toFixed(2)}`);
-          }
-        }
-      }
-      const axes = row && row.rubric_axes;
-      if (axes && typeof axes === "object") {
-        const sorted = Object.entries(axes)
-          .filter(([_, a]) => a && typeof a.stars === "number")
-          .sort((a, b) => a[1].stars - b[1].stars);
-        if (sorted.length) {
-          reasons.push(`最弱轴 · ${sorted[0][0]} ${sorted[0][1].stars.toFixed(1)}★`);
-        }
-      }
-      return reasons.slice(0, 3);
-    }
-
-    function _show(card, row) {
-      if (popover) _hide();
-      popover = document.createElement("div");
-      popover.className = "confidence-popover";
-      popover.style.cssText = (
-        "position:absolute;z-index:30;" +
-        "background:rgba(20,18,14,0.96);color:#fff;" +
-        "padding:9px 12px;border-radius:8px;" +
-        "font:11.5px/1.5 system-ui;max-width:230px;" +
-        "box-shadow:0 6px 20px rgba(0,0,0,0.40);" +
-        "border:1px solid rgba(196,185,169,0.30);"
-      );
-      const reasons = _explainRow(row);
-      popover.innerHTML = (
-        "<div style='font-weight:600;color:#c4b9a9;margin-bottom:4px'>" +
-        "⌬ model 不确定</div>" +
-        reasons.map((r, i) => (
-          `<div style='color:${i === 0 ? "#fff" : "#aaa"}'>${
-            i === 0 ? "" : "· "}${r}</div>`
-        )).join("") +
-        "<button class='conf-dismiss' style='margin-top:6px;" +
-        "background:transparent;color:#666;border:0;cursor:pointer;" +
-        "font-size:10.5px;padding:2px 0;text-decoration:underline'>" +
-        "不再显示</button>"
-      );
-      const rect = card.getBoundingClientRect();
-      const gridRect = grid.getBoundingClientRect();
-      popover.style.left = (rect.left - gridRect.left + grid.scrollLeft +
-                            rect.width + 8) + "px";
-      popover.style.top  = (rect.top  - gridRect.top  + grid.scrollTop) + "px";
-      grid.appendChild(popover);
-      activeCard = card;
-      popover.querySelector(".conf-dismiss").addEventListener("click",
-        ev => {
-          ev.stopPropagation();
-          try { localStorage.setItem(KEY, "1"); } catch (_e) {}
-          dismissed = true;
-          _hide();
-        });
-    }
-
-    function _hide() {
-      if (popover) { try { popover.remove(); } catch (_e) {} }
-      popover = null;
-      activeCard = null;
-    }
-
-    grid.addEventListener("mouseover", ev => {
-      if (dismissed) return;
-      const card = ev.target.closest(".card");
-      if (!card || !card.dataset.fn) return;
-      if (card === activeCard) return;
-      const row = (typeof window.rows !== "undefined" ? window.rows : rows)
-        .find(r => r.filename === card.dataset.fn);
-      if (!row || !_isUncertain(row)) {
-        _hide();
-        return;
-      }
-      _show(card, row);
-    });
-    grid.addEventListener("mouseleave", _hide);
-    // Esc anywhere closes
-    document.addEventListener("keydown", ev => {
-      if (ev.key === "Escape") _hide();
-    });
-  })();
+@@MODULE:14-confidence-modal.js@@
 
   // ==================================================================
   // v0.13.12 — Cmd+Z undo stack for decisions.
@@ -10390,68 +9529,7 @@
   // When the current photo has a different decision in a previous
   // run, surface an amber "你之前选了 cull,现在 keep" chip.
   // ==================================================================
-  (function setupConflictWarning() {
-    let _conflictsCache = null;
-    async function _loadConflicts() {
-      try {
-        const r = await fetch(
-          `/api/v1/conflicts?run=${encodeURIComponent(run_id)}`);
-        if (!r.ok) return;
-        const d = await r.json();
-        if (d && d.conflicts) _conflictsCache = d.conflicts;
-      } catch (_e) {}
-    }
-    document.addEventListener("DOMContentLoaded", _loadConflicts);
-    if (document.readyState !== "loading") _loadConflicts();
-
-    // Hook into the Inspector via DOM-observer:  renderInfoPane is
-    // closure-scoped (defined OUTSIDE the IIFE but not on window),
-    // so we can't monkey-patch the function — instead we watch the
-    // #lbInfo container for content changes and inject a conflict
-    // banner when the current photo has a recorded conflict.
-    const lbInfo = document.getElementById("lbInfo");
-    if (lbInfo) {
-      const mo = new MutationObserver(() => {
-        if (!_conflictsCache || typeof _lbCurrentFn !== "string") return;
-        const conflict = _conflictsCache[_lbCurrentFn];
-        if (!conflict) return;
-        // Don't re-inject if already there
-        if (lbInfo.querySelector(".conflict-warning")) return;
-        const prevLabel = {
-          keep:  "✓ keep",
-          maybe: "? maybe",
-          cull:  "✕ cull",
-        }[conflict.previous_decision] || conflict.previous_decision;
-        const banner = document.createElement("div");
-        banner.className = "conflict-warning";
-        banner.style.cssText = (
-          "margin:8px 0;padding:8px 12px;border-radius:6px;" +
-          "background:rgba(245,158,11,0.10);" +
-          "border-left:3px solid #f59e0b;font-size:11.5px"
-        );
-        banner.innerHTML = (
-          "<div style='color:#fbbf24;font-weight:600;margin-bottom:2px'>" +
-          "⚠ 你之前选了不同决策</div>" +
-          "<div style='color:#bbb;line-height:1.5'>" +
-          "Run <code style='font-family:ui-monospace,Menlo;" +
-          "font-size:10.5px;background:rgba(255,255,255,0.08);" +
-          "padding:1px 4px;border-radius:3px'>" +
-          (conflict.previous_run_id || "").slice(0, 8) +
-          "</code> 标 " + prevLabel + " · 现在标 " +
-          conflict.current_decision + " — 改主意了?" +
-          "</div>"
-        );
-        // Insert right after the first <h3> if present, else at top
-        const firstH3 = lbInfo.querySelector("h3");
-        if (firstH3 && firstH3.nextSibling) {
-          firstH3.parentNode.insertBefore(banner, firstH3.nextSibling);
-        } else {
-          lbInfo.prepend(banner);
-        }
-      });
-      mo.observe(lbInfo, { childList: true, subtree: false });
-    }
-  })();
+@@MODULE:15-conflict-warning.js@@
 
   // ==================================================================
   // v0.13.11 — Adaptive maybe-band display.
@@ -10462,48 +9540,7 @@
   // Calc happens client-side via _scoreFinalValues + the same algo
   // sketch from self_tune.py.
   // ==================================================================
-  (function showAdaptiveBandChip() {
-    if (typeof rows !== "object" || !Array.isArray(rows)) return;
-    const scores = rows
-      .map(r => r && typeof r.score_final === "number" ? r.score_final : null)
-      .filter(v => v !== null);
-    if (scores.length < 20) return;
-    // Quick 25/75 percentile
-    const sorted = scores.slice().sort((a,b) => a-b);
-    const q25 = sorted[Math.floor(sorted.length * 0.25)];
-    const q75 = sorted[Math.floor(sorted.length * 0.75)];
-    const adaptiveKeep = 0.5 * q75 + 0.5 * 0.65;
-    const adaptiveCull = 0.5 * q25 + 0.5 * 0.40;
-    const keep = Math.max(0.55, Math.min(0.80, adaptiveKeep));
-    const cull = Math.max(0.20, Math.min(0.55, adaptiveCull));
-    // Only surface if either threshold drifted ≥ 0.03 from default
-    if (Math.abs(keep - 0.65) < 0.03 && Math.abs(cull - 0.40) < 0.03) return;
-    // Inject as a chip near the stats row
-    const stats = document.querySelector(".stats");
-    if (!stats) return;
-    const chip = document.createElement("span");
-    chip.className = "adaptive-band-chip";
-    chip.title = (
-      "v0.13.8 自调:keep ≥ " + keep.toFixed(2) +
-      " · cull < " + cull.toFixed(2) +
-      "(基于 " + scores.length + " 张评分的 25/75 分位)\n" +
-      "本 run 的 score 分布与全局默认偏离 ≥ 0.03,因此适配阈值。"
-    );
-    chip.style.cssText = (
-      "display:inline-flex;align-items:center;gap:6px;" +
-      "padding:3px 9px;border-radius:999px;" +
-      "background:rgba(196,185,169,0.14);color:#c4b9a9;" +
-      "border:1px dashed rgba(196,185,169,0.40);" +
-      "font-size:10.5px;font-weight:500;cursor:help;" +
-      "margin-left:8px;"
-    );
-    chip.innerHTML = (
-      `<span>⚙ 自调 maybe 区间</span>` +
-      `<span style='color:#fff;font-family:ui-monospace,Menlo;font-size:10px'>` +
-      `${cull.toFixed(2)}-${keep.toFixed(2)}</span>`
-    );
-    stats.appendChild(chip);
-  })();
+@@MODULE:16-adaptive-band-chip.js@@
 
   // ==================================================================
   // v0.13.4 — First-time lightbox key hint.
@@ -10515,74 +9552,7 @@
   // toolbar.  Auto-dismisses after 6s or on first keypress.
   // Once seen, never again (localStorage).
   // ==================================================================
-  (function setupLightboxKeyHint() {
-    const KEY = "pixcull_seen_lightbox_keys_v0_13";
-    let seen = false;
-    try { seen = localStorage.getItem(KEY) === "1"; } catch (_e) { seen = true; }
-    if (seen) return;
-    const lb = document.getElementById("lightbox");
-    if (!lb) return;
-    function _markSeen() {
-      try { localStorage.setItem(KEY, "1"); } catch (_e) {}
-      seen = true;
-    }
-    function _show() {
-      if (seen) return;
-      _markSeen();
-      const toast = document.createElement("div");
-      toast.style.cssText = (
-        "position:absolute;bottom:120px;left:50%;transform:translateX(-50%);" +
-        "background:rgba(20,18,14,0.96);color:#fff;" +
-        "padding:14px 22px;border-radius:12px;z-index:8;" +
-        "font:13px/1.6 system-ui;text-align:center;" +
-        "box-shadow:0 12px 32px rgba(0,0,0,0.45);" +
-        "border:1px solid rgba(196,185,169,0.30);" +
-        "max-width:min(560px,90vw);" +
-        "opacity:0;transition:opacity 320ms cubic-bezier(0.2,0.8,0.2,1)," +
-        "transform 320ms cubic-bezier(0.34,1.56,0.64,1);"
-      );
-      toast.innerHTML = (
-        "<div style='font-weight:600;color:#c4b9a9;margin-bottom:6px;" +
-        "font-size:11px;letter-spacing:0.04em;text-transform:uppercase'>" +
-        "✨ 这是你第一次打开 lightbox</div>" +
-        "<div>三个 PixCull 专属键位:</div>" +
-        "<div style='margin-top:8px;display:flex;justify-content:center;gap:18px;flex-wrap:wrap'>" +
-        "<span><kbd style='background:rgba(196,185,169,0.20);padding:3px 8px;" +
-        "border-radius:4px;font-family:ui-monospace,Menlo;color:#fff;" +
-        "border:1px solid rgba(196,185,169,0.40);font-size:11px'>A</kbd> " +
-        "<span style='color:#aaa;font-size:11.5px'>AI heatmap</span></span>" +
-        "<span><kbd style='background:rgba(196,185,169,0.20);padding:3px 8px;" +
-        "border-radius:4px;font-family:ui-monospace,Menlo;color:#fff;" +
-        "border:1px solid rgba(196,185,169,0.40);font-size:11px'>H</kbd> " +
-        "<span style='color:#aaa;font-size:11.5px'>EXIF + 直方图</span></span>" +
-        "<span><kbd style='background:rgba(196,185,169,0.20);padding:3px 8px;" +
-        "border-radius:4px;font-family:ui-monospace,Menlo;color:#fff;" +
-        "border:1px solid rgba(196,185,169,0.40);font-size:11px'>\\</kbd> " +
-        "<span style='color:#aaa;font-size:11.5px'>burst 比较</span></span>" +
-        "</div>" +
-        "<div style='margin-top:8px;color:#888;font-size:10.5px'>" +
-        "按任意键 / 6 秒后自动消失</div>"
-      );
-      lb.appendChild(toast);
-      requestAnimationFrame(() => {
-        toast.style.opacity = "1";
-      });
-      const fade = () => {
-        toast.style.opacity = "0";
-        setTimeout(() => { try { toast.remove(); } catch (_e) {} }, 320);
-      };
-      setTimeout(fade, 6000);
-      document.addEventListener("keydown", fade, { once: true });
-    }
-    // Watch lightbox for first .show via MutationObserver
-    const mo = new MutationObserver(() => {
-      if (lb.classList.contains("show") && !seen) {
-        // Defer 800ms so the user's eye lands on the image first
-        setTimeout(_show, 800);
-      }
-    });
-    mo.observe(lb, { attributes: true, attributeFilter: ["class"] });
-  })();
+@@MODULE:17-lightbox-key-hint.js@@
 
   // ==================================================================
   // v0.12-P1-2 — Inspector "compare with neighbor" hotkey.
@@ -10624,109 +9594,7 @@
   // Reads from the existing /exif_audit/<run_id>/<fn> cache (~0ms
   // for hot rows) — we never re-decode the original.
   // ==================================================================
-  (function setupExifOverlay() {
-    const lb = document.getElementById("lightbox");
-    if (!lb) return;
-    // Inject the overlay node lazily — keeps it out of the initial
-    // DOM weight for users who never press H.
-    let panel = null;
-    function _ensurePanel() {
-      if (panel) return panel;
-      panel = document.createElement("div");
-      panel.className = "lb-exif-overlay";
-      panel.style.cssText = (
-        "position:absolute;top:12px;left:12px;z-index:6;" +
-        "background:rgba(20,18,14,0.92);color:#fff;" +
-        "padding:10px 14px;border-radius:8px;" +
-        "font:11.5px/1.4 ui-monospace,SF Mono,Menlo,monospace;" +
-        "display:none;min-width:180px;max-width:280px;" +
-        "box-shadow:0 8px 24px rgba(0,0,0,0.4);"
-      );
-      panel.innerHTML = (
-        "<div id='lbExifMeta' style='line-height:1.6;color:#cfd5e0'></div>" +
-        "<canvas id='lbExifHist' width='220' height='60' " +
-        "style='display:block;margin-top:8px;width:220px;height:60px;" +
-        "background:rgba(0,0,0,0.5);border-radius:4px'></canvas>"
-      );
-      lb.appendChild(panel);
-      return panel;
-    }
-    async function _refresh() {
-      if (!_lbCurrentFn || !panel || panel.style.display === "none") return;
-      const meta = document.getElementById("lbExifMeta");
-      const cv = document.getElementById("lbExifHist");
-      meta.textContent = "loading…";
-      try {
-        const r = await fetch(`/exif_audit/${run_id}/${
-          encodeURIComponent(_lbCurrentFn)}`);
-        if (r.ok) {
-          const e = await r.json();
-          const lines = [];
-          if (e.iso != null) lines.push(`ISO ${e.iso}`);
-          if (e.aperture) lines.push(`f/${e.aperture}`);
-          if (e.shutter) lines.push(`${e.shutter}s`);
-          if (e.focal_length) lines.push(`${e.focal_length}mm`);
-          if (e.camera_model) lines.push(e.camera_model);
-          meta.textContent = lines.join(" · ") || "no EXIF";
-        } else {
-          meta.textContent = "no EXIF";
-        }
-      } catch (_e) {
-        meta.textContent = "EXIF unavailable";
-      }
-      // Histogram: pull the current <img> into a hidden canvas + walk pixels.
-      const img = document.getElementById("lbImg");
-      if (!img || !img.complete) return;
-      const tmp = document.createElement("canvas");
-      const W = 160, H = Math.round(160 * (img.naturalHeight / img.naturalWidth || 0.67));
-      tmp.width = W; tmp.height = H;
-      try {
-        const ctx = tmp.getContext("2d");
-        ctx.drawImage(img, 0, 0, W, H);
-        const data = ctx.getImageData(0, 0, W, H).data;
-        const bins = new Array(64).fill(0);
-        for (let i = 0; i < data.length; i += 4) {
-          const lum = 0.2126 * data[i] + 0.7152 * data[i+1] + 0.0722 * data[i+2];
-          bins[Math.min(63, Math.floor(lum / 4))]++;
-        }
-        const histCtx = cv.getContext("2d");
-        histCtx.clearRect(0, 0, cv.width, cv.height);
-        const maxB = Math.max(...bins, 1);
-        const bw = cv.width / 64;
-        histCtx.fillStyle = "rgba(196,185,169,0.75)";
-        for (let i = 0; i < 64; i++) {
-          const h = (bins[i] / maxB) * cv.height;
-          histCtx.fillRect(i * bw, cv.height - h, bw - 0.5, h);
-        }
-      } catch (_e) { /* tainted canvas — silent */ }
-    }
-    function _toggle() {
-      const p = _ensurePanel();
-      const showing = p.style.display !== "none";
-      p.style.display = showing ? "none" : "block";
-      if (!showing) _refresh();
-    }
-    document.addEventListener("keydown", ev => {
-      if (ev.target.matches("input,textarea,[contenteditable=true]")) return;
-      const inLightbox = lb.classList.contains("show");
-      if (!inLightbox) return;
-      if (ev.key === "h" || ev.key === "H") {
-        ev.preventDefault();
-        _toggle();
-      }
-    });
-    // Refresh whenever the lightbox navigates
-    const origOpen = window.openLightbox;
-    if (typeof origOpen === "function") {
-      window.openLightbox = function() {
-        const r = origOpen.apply(this, arguments);
-        if (panel && panel.style.display !== "none") {
-          setTimeout(_refresh, 60);
-        }
-        return r;
-      };
-    }
-  })();
+@@MODULE:18-exif-overlay.js@@
 
   // ==================================================================
   // v0.12-P1-5 — First-time annotation-modal explainer (3D card flip).
@@ -10737,100 +9605,7 @@
   // Reduced-motion users get a static 2-line summary instead of the
   // flip.
   // ==================================================================
-  (function setupAnnotationExplainer() {
-    const KEY = "pixcull_seen_rubric_intro_v1";
-    const am = document.getElementById("annModal");
-    if (!am) return;
-    let injected = false;
-    function _seen() {
-      try { return localStorage.getItem(KEY) === "1"; }
-      catch (_e) { return true; }   // privacy mode → treat as seen
-    }
-    function _markSeen() {
-      try { localStorage.setItem(KEY, "1"); } catch (_e) {}
-    }
-    function _inject() {
-      if (injected) return;
-      injected = true;
-      const layer = document.createElement("div");
-      layer.id = "rubricIntroLayer";
-      layer.style.cssText = (
-        "position:fixed;inset:0;z-index:120;display:flex;" +
-        "align-items:center;justify-content:center;" +
-        "background:rgba(0,0,0,0.75);backdrop-filter:blur(4px);" +
-        "opacity:0;transition:opacity 320ms cubic-bezier(0.2,0.8,0.2,1);"
-      );
-      const card = document.createElement("div");
-      card.style.cssText = (
-        "width:min(520px,92vw);background:linear-gradient(135deg,#2a2c36,#1d1f29);" +
-        "border:1px solid rgba(255,255,255,0.10);border-radius:14px;" +
-        "padding:28px;color:#fff;text-align:center;" +
-        "transform:perspective(700px) rotateY(70deg);" +
-        "transition:transform 540ms cubic-bezier(0.34,1.56,0.64,1);" +
-        "box-shadow:0 30px 70px rgba(0,0,0,0.45);"
-      );
-      card.innerHTML = (
-        "<div style='font-size:30px;margin-bottom:8px'>⌬</div>" +
-        "<h2 style='margin:0 0 6px;font-size:20px;letter-spacing:-0.01em'>每张照片 6 个轴 · 1-5★</h2>" +
-        "<div style='color:#a0a4b0;font-size:13px;line-height:1.65;margin-bottom:18px'>" +
-        "技术 · 主体 · 构图 · 光线 · 时刻 · 美感<br>" +
-        "Tab 在轴间跳 · 1-5 直接给当前轴打星 · 一张全维度评分通常 &lt; 5 秒。" +
-        "</div>" +
-        "<button id='rubricIntroDismiss' type='button' " +
-        "style='background:linear-gradient(135deg,#c4b9a9,#6a6052);color:#fff;" +
-        "border:0;padding:9px 22px;border-radius:999px;font-weight:600;" +
-        "font-size:13px;cursor:pointer'>开始 →</button>"
-      );
-      layer.appendChild(card);
-      document.body.appendChild(layer);
-      // Trigger the flip + fade after one frame
-      requestAnimationFrame(() => {
-        layer.style.opacity = "1";
-        card.style.transform = "perspective(700px) rotateY(0deg)";
-      });
-      function _dismiss() {
-        _markSeen();
-        document.removeEventListener("keydown", _onKey, true);
-        layer.style.opacity = "0";
-        card.style.transform = "perspective(700px) rotateY(-70deg)";
-        setTimeout(() => layer.remove(), 360);
-      }
-      // Persistent CAPTURE-phase key handling. The old `{ once:true }`
-      // Escape listener was consumed by the FIRST keypress of ANY key —
-      // a keyboard-flow user (1/2/3/Tab mid-cull) burned it instantly,
-      // Escape went dead and the veil read as a frozen UI. While the
-      // veil is up we also swallow every other shortcut, so keys can't
-      // silently annotate/navigate the photos behind it.
-      function _onKey(ev) {
-        if (!document.body.contains(layer)) {
-          document.removeEventListener("keydown", _onKey, true);
-          return;
-        }
-        if (ev.key === "Escape" || ev.key === "Enter" || ev.key === " ") {
-          ev.preventDefault(); ev.stopPropagation();
-          _dismiss();
-          return;
-        }
-        if (ev.key === "Tab") return;       // keep the dismiss button reachable
-        ev.stopPropagation();               // veil up → no shortcuts behind it
-      }
-      document.getElementById("rubricIntroDismiss")
-              .addEventListener("click", _dismiss);
-      layer.addEventListener("click", ev => {
-        if (ev.target === layer) _dismiss();
-      });
-      document.addEventListener("keydown", _onKey, true);
-    }
-    // Hook: watch for .ann-modal getting .show — that's the "first open"
-    // trigger.  Mutation observer keeps us decoupled from the existing
-    // openAnnotationModal callsites.
-    const mo = new MutationObserver(() => {
-      if (am.classList.contains("show") && !_seen()) {
-        _inject();
-      }
-    });
-    mo.observe(am, { attributes: true, attributeFilter: ["class"] });
-  })();
+@@MODULE:19-annotation-explainer.js@@
 
   // ==================================================================
   // v0.12-P1-1 — Drag-and-drop reorder for bucket panel + portfolio.
@@ -10844,56 +9619,7 @@
   // (500ms) → grab, finger drag = mouse drag.  iPad photographers
   // routinely use the bucket panel one-handed.
   // ==================================================================
-  (function setupDragReorder() {
-    function _wire(sel, persistKey) {
-      const containers = document.querySelectorAll(sel);
-      if (!containers.length) return;
-      let dragged = null;
-      containers.forEach(container => {
-        // Make every child item draggable.  Setting the attribute on
-        // the container alone doesn't work; HTML5 requires per-item.
-        container.querySelectorAll(":scope > *").forEach(it => {
-          it.setAttribute("draggable", "true");
-        });
-        container.addEventListener("dragstart", ev => {
-          const it = ev.target.closest(":scope > *");
-          if (!it) return;
-          dragged = it;
-          ev.dataTransfer.effectAllowed = "move";
-          it.classList.add("dragging");
-        });
-        container.addEventListener("dragend", ev => {
-          const it = ev.target.closest(":scope > *");
-          if (it) it.classList.remove("dragging");
-          dragged = null;
-        });
-        container.addEventListener("dragover", ev => {
-          ev.preventDefault();
-          if (!dragged) return;
-          const over = ev.target.closest(":scope > *");
-          if (!over || over === dragged) return;
-          const rect = over.getBoundingClientRect();
-          const before = (ev.clientY - rect.top) < rect.height / 2;
-          container.insertBefore(dragged, before ? over : over.nextSibling);
-        });
-        container.addEventListener("drop", ev => {
-          ev.preventDefault();
-          // Persist the new order.  The actual API is best-effort —
-          // localStorage gives offline behaviour; server endpoint can
-          // be wired later (the existing /buckets API supports this).
-          const order = Array.from(container.children)
-            .map(c => c.dataset.id || c.dataset.fn || c.textContent.trim())
-            .filter(Boolean);
-          if (persistKey) {
-            try { localStorage.setItem(persistKey, JSON.stringify(order)); }
-            catch (e) {}
-          }
-        });
-      });
-    }
-    _wire(".buckets-list", `pixcull_bucket_order:${run_id}`);
-    _wire(".share-portfolio-grid", `pixcull_portfolio_order:${run_id}`);
-  })();
+@@MODULE:24-drag-reorder.js@@
 
   // ==================================================================
   // v0.12-P0-2 — Multi-monitor companion window for the lightbox.
@@ -10905,71 +9631,7 @@
   // tiny (one filename string per nav), and BroadcastChannel is
   // available in every desktop browser since 2019.
   // ==================================================================
-  (function setupCompanionWindow() {
-    const btn = document.getElementById("lbCompanionToggle");
-    if (!btn || typeof BroadcastChannel !== "function") return;
-    const channelName = `pixcull-companion:${run_id}`;
-    const ch = new BroadcastChannel(channelName);
-    let companion = null;
-
-    function _post(kind, payload) {
-      try { ch.postMessage({ kind, payload, t: Date.now() }); }
-      catch (e) {}
-    }
-
-    // The primary window listens for companion-side decisions so the
-    // photographer can keep / cull from the second monitor and have
-    // the grid stay in sync.
-    ch.addEventListener("message", ev => {
-      const d = ev.data || {};
-      if (d.kind === "nav" && typeof d.payload === "string") {
-        if (typeof window.openLightbox === "function"
-            && d.payload !== _lbCurrentFn) {
-          window.openLightbox(d.payload);
-        }
-      } else if (d.kind === "request-state") {
-        // Companion just opened; send it the current photo + zoom
-        if (_lbCurrentFn) _post("nav", _lbCurrentFn);
-      }
-    });
-
-    // Wrap openLightbox so every nav fan-outs to the companion
-    if (typeof window.openLightbox === "function") {
-      const orig = window.openLightbox;
-      window.openLightbox = function(fn) {
-        const r = orig.apply(this, arguments);
-        if (companion && !companion.closed) {
-          _post("nav", fn);
-        }
-        return r;
-      };
-    }
-
-    btn.addEventListener("click", () => {
-      if (companion && !companion.closed) {
-        companion.focus();
-        return;
-      }
-      // Companion uses a query param to know its role + which channel
-      // to join.  /companion is served by serve_demo (companion HTML).
-      const u = `/companion?run_id=${encodeURIComponent(run_id)}` +
-                (_lbCurrentFn ? `&fn=${encodeURIComponent(_lbCurrentFn)}` : "");
-      companion = window.open(u, "pixcull-companion",
-        "popup=yes,width=1400,height=900");
-      if (!companion) {
-        if (typeof window.toast === "function") {
-          window.toast("浏览器阻止了副屏弹窗 — 检查弹窗设置", "warn");
-        }
-        return;
-      }
-      // Give the new window a moment to attach to the channel before
-      // pushing the current photo.  request-state from the companion
-      // covers the race the other way.
-      setTimeout(() => {
-        if (_lbCurrentFn) _post("nav", _lbCurrentFn);
-      }, 400);
-    });
-  })();
+@@MODULE:25-companion-window.js@@
 
   // ==================================================================
   // v0.11-P1-2 — Marquee select + bulk operations.
