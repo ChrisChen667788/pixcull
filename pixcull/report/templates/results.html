@@ -8615,6 +8615,55 @@
   // header and filter pills only, leaving the photo area black.
   buildDynamicFilters();
 
+  // v2.18-P0 — progressive hydration for 5k+ runs. The server now inlines
+  // only the first slice of rows (PAYLOAD.rows_meta carries the full total);
+  // we pull the remainder in the background via the /rows endpoint that has
+  // sat unused since v0.13.5, pushing into the SAME rows array every module
+  // closes over. summary + face/location cluster groups are already computed
+  // server-side over the full set, so header counts are correct from first
+  // paint; only row-derived state (burst-cluster sizes, scene/style pill
+  // sets, the visible grid) needs the post-hydration rebuild below.
+  (async function _hydrateRows() {
+    const meta = PAYLOAD.rows_meta;
+    if (!meta || !meta.total || rows.length >= meta.total) return;
+    const chip = document.createElement("span");
+    chip.className = "stat-aux";
+    chip.id = "hydration";
+    chip.title = "大批量 run:首屏只内联首片,其余分片后台加载 — 期间筛选/排序作用于已加载部分";
+    statsEl?.appendChild(chip);
+    const upd = () => { chip.textContent = `加载 ${rows.length}/${meta.total}…`; };
+    upd();
+    const lim = Math.max(1, Math.min(1000, meta.slice || 1000));
+    try {
+      while (rows.length < meta.total) {
+        const r = await fetch(
+          `/results_rows/${encodeURIComponent(run_id)}`
+          + `?offset=${rows.length}&limit=${lim}`);
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        const d = await r.json();
+        if (!d.rows || !d.rows.length) break;   // run shrank server-side — stop cleanly
+        rows.push(...d.rows);
+        upd();
+      }
+      // Recount burst-cluster sizes into the SAME Map render() closes over,
+      // rebuild the row-derived sidebar groups, then one full re-render.
+      _BURST_CLUSTER_SIZES.clear();
+      for (const rr of rows) {
+        const cid = rr.cluster_id;
+        if (cid != null) {
+          _BURST_CLUSTER_SIZES.set(cid, (_BURST_CLUSTER_SIZES.get(cid) || 0) + 1);
+        }
+      }
+      buildDynamicFilters();
+      render();
+      chip.remove();
+    } catch (err) {
+      chip.textContent = `⚠ 加载不完整 ${rows.length}/${meta.total}`;
+      chip.title = `后台分片加载失败(${err.message})— 刷新重试;` +
+        `当前筛选/排序只作用于已加载的 ${rows.length} 张`;
+    }
+  })();
+
   // Sort key function
   function sortRows(arr) {
     const order = { keep: 0, maybe: 1, cull: 2, "": 3 };

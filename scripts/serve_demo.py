@@ -4189,6 +4189,12 @@ class _Handler(BaseHTTPRequestHandler):
         ("/tether/status/", "_serve_tether_status", "tail", ()),
         ("/gallery_zip/", "_serve_gallery_zip", "tail", ()),
         ("/scores_csv/", "_serve_scores_csv", "tail", ()),
+        # v2.18-P0 — FULL-shape paginated rows for the results page's
+        # progressive hydration. (The /api/v1/.../rows alias serves the
+        # iOS SLIM shape and has shadowed the full v0.13.5 endpoint since
+        # P2.1 — discovered while wiring hydration; the page needs every
+        # field the inline dump carries, so it gets its own route.)
+        ("/results_rows/", "_serve_runs_rows", "tail", ()),
         ("/rubric/", "_serve_rubric", "tail", ()),
         ("/annotation/", "_serve_annotation", "tail", ()),
         ("/next_to_label/", "_serve_next_to_label", "tail", ()),
@@ -8604,9 +8610,27 @@ class _Handler(BaseHTTPRequestHandler):
         face_clusters_info = _build_face_clusters_info(run_id, rows)
         # V23 — GPS location clusters + per-cluster "best" picker.
         locations_info = _build_locations_info(rows, run_id)
+        # v2.18-P0 — progressive hydration for big runs. Inlining 5k rows of
+        # JSON made the HTML multi-MB and parse-bound; now only the first
+        # slice ships inline and the page pulls the rest in the background
+        # via /api/v1/runs/<id>/rows (same _build_results fields, localhost
+        # auth passes). summary / face_clusters / locations stay computed
+        # over the FULL row set, so every count is correct from first paint.
+        # PIXCULL_INLINE_ROWS overrides the threshold; 0 disables (inline all).
+        try:
+            _inline_max = int(os.environ.get("PIXCULL_INLINE_ROWS", "800"))
+        except ValueError:
+            _inline_max = 800
+        inline_rows = rows
+        rows_meta = None
+        if _inline_max > 0 and len(rows) > _inline_max:
+            inline_rows = rows[:_inline_max]
+            rows_meta = {"total": len(rows), "inlined": _inline_max,
+                         "slice": 1000}
         payload = {
             "run_id": run_id,
-            "rows": rows,
+            "rows": inline_rows,
+            "rows_meta": rows_meta,
             "summary": summary,
             "face_clusters": face_clusters_info,
             "locations": locations_info,

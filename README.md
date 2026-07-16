@@ -52,6 +52,21 @@
 
 ## What's new
 
+**v2.18** — **the 5k performance debt is paid** (see
+[`docs/ROADMAP-v2.18-charter.md`](docs/ROADMAP-v2.18-charter.md)). The /rows
+pagination endpoint was built in v0.13.5 "as the foundation for virtual
+scroll" and never wired — big runs still inlined every row as JSON in the
+HTML. Now the server inlines only the first slice (default 800,
+`PIXCULL_INLINE_ROWS`) with full-run counts still computed server-side, and
+the page hydrates the remainder in background chunks into the same rows
+array every module shares — a live progress chip, a full sidebar/grid
+rebuild on completion, and an honest degraded state on failure. Measured on
+a 2,500-row run: **HTML 6.45MB → 2.53MB (−60%)**, all 2,500 cards rendered
+post-hydration, zero JS errors. Also unearthed and routed around a latent
+shadowing bug: the iOS slim /api/v1 rows alias had made the full-shape
+endpoint unreachable since P2.1 — hydration gets its own `/results_rows/`
+route (one row in the v2.16 table), the slim alias keeps serving iOS.
+
 **v2.17** — **the glass box reaches video** (see
 [`docs/ROADMAP-v2.17-charter.md`](docs/ROADMAP-v2.17-charter.md)). Photos have
 had per-axis "why-low" prose since v2.9–v2.12; reel candidates only showed a
