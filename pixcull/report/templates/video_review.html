@@ -82,6 +82,13 @@ padding:1px 7px;font-size:11px;font-weight:600}
 .cand .span{color:var(--dim);font-variant-numeric:tabular-nums;font-size:12px}
 .cand .sc{margin-left:auto;font-weight:600;font-variant-numeric:tabular-nums}
 .cand .why{margin-top:5px;color:var(--ink);font-size:12px}
+/* v2.17-P0 — reel glass box: per-window sub-signal mini-bars + why-low */
+.cand .sigbars{display:flex;gap:10px;margin-top:5px;align-items:center}
+.cand .sig{display:inline-flex;align-items:center;gap:4px;font-size:10px;color:var(--dim)}
+.cand .sig b{display:inline-block;width:34px;height:4px;background:var(--line);
+  border-radius:2px;overflow:hidden;font-weight:normal}
+.cand .sig u{display:block;height:100%;background:var(--indigo);text-decoration:none}
+.cand .whylow{margin-top:4px;font-size:11px;color:var(--cull)}
 .cand .acts{margin-top:7px;display:flex;gap:6px}
 .cand .acts button{flex:1;border:1px solid var(--line);background:#15171d;
 color:var(--dim);border-radius:7px;padding:4px 0;font-size:11px;cursor:pointer}
@@ -291,6 +298,11 @@ function updatePlayhead(){
 function decKey(rank){ return 'pixcull_reel_'+RUN_ID+'_'+rank; }
 function getDec(rank){ try{return localStorage.getItem(decKey(rank))||'';}catch(e){return '';} }
 function setDec(rank,d){ try{ const cur=getDec(rank); localStorage.setItem(decKey(rank), cur===d?'':d);}catch(e){} renderReel(); }
+// v2.17-P0 — one labelled mini-bar for a 0..1 sub-signal
+function sigBar(label,v){
+  v=Math.max(0,Math.min(1,+v||0));
+  return '<span class="sig">'+label+'<b><u style="width:'+(v*100).toFixed(0)+'%"></u></b>'+v.toFixed(2)+'</span>';
+}
 function renderReel(){
   const box=$('reelList'); if(!REEL.length){ box.innerHTML='<div class="err">无候选片段</div>'; return; }
   // v2.7 — pick the bilingual reel caption by the active locale. Anything
@@ -304,6 +316,8 @@ function renderReel(){
       '<span class="span">'+(+c.start_s).toFixed(1)+'–'+(+c.end_s).toFixed(1)+'s</span>'+
       '<span class="sc">'+(+c.score).toFixed(2)+'</span></div>'+
       '<div class="why">'+((_useEn && c.why_en)?c.why_en:(c.why||''))+'</div>'+
+      (c.signals?('<div class="sigbars">'+sigBar('运镜',c.signals.motion)+sigBar('稳定',c.signals.stability)+sigBar('峰值',c.signals.burst)+'</div>'):'')+
+      (c.why_low?('<div class="whylow">▾ '+c.why_low+'</div>'):'')+
       (c.best_frame_id?('<img class="thumb" loading="lazy" src="'+frameURLById(c.best_frame_id,240)+'" alt="preview">'):'')+
       '<div class="acts"><button class="keep'+(d==='keep'?' on':'')+'" data-act="keep" data-rank="'+c.rank+'">✓ Keep</button>'+
       '<button class="cull'+(d==='cull'?' on':'')+'" data-act="cull" data-rank="'+c.rank+'">✕ Cull</button></div></div>';

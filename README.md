@@ -52,6 +52,18 @@
 
 ## What's new
 
+**v2.17** — **the glass box reaches video** (see
+[`docs/ROADMAP-v2.17-charter.md`](docs/ROADMAP-v2.17-charter.md)). Photos have
+had per-axis "why-low" prose since v2.9–v2.12; reel candidates only showed a
+score. Each candidate now carries its **per-window sub-signal breakdown**
+(camera-motion smoothness / content stability as window means, peak-instant as
+window max) plus a deterministic **why-low line naming the signal that drags it
+below the clip median** ("运镜平稳度拖分:0.32,低于全片中位 0.78") — computed
+at generation time from the window's own signals, no models. The review panel
+renders three labelled mini-bars + the amber why-low under each candidate,
+ternary-guarded so old runs' JSON degrades gracefully. Same contract as the
+photo side's `_axisWhyLow`.
+
 **v2.16** — **paying down the monolith, slice 1** (see
 [`docs/ROADMAP-v2.16-charter.md`](docs/ROADMAP-v2.16-charter.md)). The audit's
 top-recommended theme, promised back in v2.4 and deferred for 11 releases:

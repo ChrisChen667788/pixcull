@@ -282,3 +282,55 @@ def test_run_reel_detection_without_scores_csv(tmp_path):
     out = _write_run(tmp_path, _clip_with_peaks([6.0]), with_scene=False)
     cands = R.run_reel_detection(out, n_min=1, n_max=5)
     assert cands
+
+
+# --------------------------------------------------------------------------
+# v2.17-P0 — reel glass box: window_signals + compose_why_low + emission
+# --------------------------------------------------------------------------
+
+def test_window_signals_aggregation():
+    frames = [
+        _frame(0, 0.0, motion=0.8, stability=0.9, burst=0.1, final=0.6),
+        _frame(1, 0.5, motion=0.6, stability=0.7, burst=0.9, final=0.4),
+    ]
+    w = R.window_aggregate(frames, 0.0, 1.0)
+    s = R.window_signals(w)
+    assert s["motion"] == pytest.approx(0.7)        # mean
+    assert s["stability"] == pytest.approx(0.8)     # mean
+    assert s["burst"] == pytest.approx(0.9)         # MAX (peak signal)
+    assert s["quality"] == pytest.approx(w["mean_score_final"])
+
+
+def test_why_low_names_the_biggest_shortfall():
+    medians = {"motion": 0.85, "stability": 0.85, "burst": 0.5, "quality": 0.6}
+    s = {"motion": 0.45, "stability": 0.80, "burst": 0.5, "quality": 0.6}
+    out = R.compose_why_low(s, medians)
+    assert "运镜平稳度" in out and "0.45" in out and "0.85" in out
+
+
+def test_why_low_empty_for_strong_window():
+    medians = {"motion": 0.8, "stability": 0.8, "burst": 0.4, "quality": 0.6}
+    s = {"motion": 0.9, "stability": 0.85, "burst": 0.7, "quality": 0.7}
+    assert R.compose_why_low(s, medians) == ""
+    # tiny shortfall below the min_gap must also stay silent
+    s2 = dict(s, motion=0.78)
+    assert R.compose_why_low(s2, medians) == ""
+
+
+def test_candidates_carry_signals_and_why_low():
+    frames = _clip_with_peaks([3.0, 12.0])
+    # make one stretch clearly shaky so SOME candidate can be below median
+    for f in frames:
+        if 10.0 <= f["timestamp_s"] <= 14.0:
+            f["motion_continuity"] = 0.3
+    cands = R.detect_reel_candidates(frames)
+    assert cands, "no candidates from synthetic clip"
+    for c in cands:
+        d = c.to_dict()
+        assert set(d["signals"]) == {"motion", "stability", "burst", "quality"}
+        assert all(0.0 <= v <= 1.0 for v in d["signals"].values())
+        assert isinstance(d["why_low"], str)
+    # round-trips through JSON (what reel_candidates.json will carry)
+    blob = json.dumps([c.to_dict() for c in cands], ensure_ascii=False)
+    back = json.loads(blob)
+    assert "signals" in back[0] and "why_low" in back[0]

@@ -54,7 +54,12 @@ tasks:
 完整源码 + iOS 伴侣 App + Lightroom 插件,均在 GitHub:
 **[github.com/ChrisChen667788/pixcull](https://github.com/ChrisChen667788/pixcull)**
 
-## v0.7 → v2.16 主要更新
+## v0.7 → v2.17 主要更新
+- **v2.17**:**玻璃盒到达视频侧** —— 照片自 v2.9 起有逐轴「为什么低」,reel 候选却只有
+  一个分数。现在每个候选带**逐窗子信号分解**(运镜/稳定=窗口均值、峰值=窗口 max)+
+  确定性 **why-low 话术**(「运镜平稳度拖分:0.32,低于全片中位 0.78」)——生成时从窗口
+  自身信号算出、零新模型;审片面板渲染三条 mini-bar + 琥珀 why-low,旧 run JSON 优雅
+  降级。与照片侧 `_axisWhyLow` 同一契约。详见 `docs/ROADMAP-v2.17-charter.md`。
 
 - **v2.16**:**偿还巨石债·第一刀** —— 审计首推主题(v2.4 承诺、拖了 11 个版本):
   serve_demo.py 里 7 个内联 HTML 页面巨块(~5,300 行 Python 字符串)抽成

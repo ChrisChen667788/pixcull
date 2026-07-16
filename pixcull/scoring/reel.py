@@ -266,6 +266,64 @@ def compose_why(window: dict, *, max_fragments: int = 3) -> str:
 
 
 # ==========================================================================
+# v2.17-P0 — per-window sub-signal breakdown + "why low" (the video glass
+# box: photos got per-axis why-low prose in v2.9–v2.12; reel candidates
+# only had the positive `why`. Same philosophy — deterministic, from the
+# window's own signals, no models.)
+# ==========================================================================
+
+_SIGNAL_ZH = {
+    "motion":    "运镜平稳度",
+    "stability": "画面稳定度",
+    "burst":     "峰值瞬间",
+    "quality":   "画质均分",
+}
+
+
+def window_signals(window: dict) -> dict:
+    """The three temporal sub-signals + photo quality for ONE window.
+
+    motion / stability are window means (they describe the stretch);
+    burst is the window max (it is a peak signal — one great instant
+    carries the clip). Mirrors compose_why()'s aggregation.
+    """
+    frames = window.get("frames", [])
+    quality = round(float(window.get("mean_score_final", 0.0)), 4)
+    if not frames:
+        return {"motion": 0.0, "stability": 0.0, "burst": 0.0,
+                "quality": quality}
+    return {
+        "motion": round(float(np.mean(
+            [_get(f, "motion_continuity", 1.0) for f in frames])), 4),
+        "stability": round(float(np.mean(
+            [_get(f, "temporal_stability", 1.0) for f in frames])), 4),
+        "burst": round(max(_get(f, "burst_event") for f in frames), 4),
+        "quality": quality,
+    }
+
+
+def compose_why_low(signals: dict, medians: dict,
+                    *, min_gap: float = 0.05) -> str:
+    """One prose line naming the sub-signal that drags this window below
+    the clip median — or "" when nothing meaningfully does (a strong
+    window needs no excuse). Deterministic, mirrors the photo side's
+    _axisWhyLow contract."""
+    worst = None
+    worst_gap = 0.0
+    for key in ("motion", "stability", "burst", "quality"):
+        med, val = medians.get(key), signals.get(key)
+        if med is None or val is None:
+            continue
+        gap = med - val
+        if gap > worst_gap + 1e-9:
+            worst_gap, worst = gap, key
+    if worst is None or worst_gap < min_gap:
+        return ""
+    return (f"{_SIGNAL_ZH[worst]}拖分:{signals[worst]:.2f},"
+            f"低于全片中位 {medians[worst]:.2f}")
+
+
+# ==========================================================================
 # Candidate dataclass + selection
 # ==========================================================================
 
@@ -284,6 +342,10 @@ class ReelCandidate:
     best_frame_id: str | None
     best_frame_score: float
     frame_ids: list[str] = field(default_factory=list)
+    # v2.17-P0 — the glass box: per-window sub-signal values + one line on
+    # which signal (if any) drags this window below the clip median.
+    signals: dict = field(default_factory=dict)
+    why_low: str = ""
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -300,6 +362,14 @@ def select_candidates(
     pool = [w for w in windows if w.get("frames")]
     for w in pool:
         w["_base"] = w["window_score_norm"] * w["confidence"]
+        w["_signals"] = window_signals(w)   # v2.17-P0
+    # v2.17-P0 — clip-level medians (across candidate windows) give the
+    # why-low its reference point: "below the clip median" is meaningful
+    # to the shooter in a way an absolute threshold isn't.
+    _sig_medians = {
+        key: round(float(np.median([w["_signals"][key] for w in pool])), 4)
+        for key in ("motion", "stability", "burst", "quality")
+    } if pool else {}
 
     selected: list[dict] = []
     while pool and len(selected) < n_max:
@@ -344,6 +414,8 @@ def select_candidates(
             best_frame_id=w["best_frame_id"],
             best_frame_score=w["best_frame_score"],
             frame_ids=w["frame_ids"],
+            signals=w["_signals"],
+            why_low=compose_why_low(w["_signals"], _sig_medians),
         ))
     return out
 
