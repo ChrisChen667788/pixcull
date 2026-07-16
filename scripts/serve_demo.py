@@ -716,6 +716,19 @@ def _build_video_payload(run_id: str) -> dict | None:
             })
     if not frames:
         return None
+    # v2.19-P2 — audio events for the lightbox scrubber's bottom lane.
+    audio_events = []
+    try:
+        ap = run_dir / "audio_events.json"
+        if ap.exists():
+            _aud = json.loads(ap.read_text("utf-8"))
+            audio_events = [
+                {"kind": e.get("kind"), "start_s": e.get("start_s"),
+                 "end_s": e.get("end_s"), "confidence": e.get("confidence")}
+                for e in (_aud.get("events") or [])
+            ]
+    except (OSError, ValueError):
+        audio_events = []
     reel = []
     reel_path = run_dir / "reel_candidates.json"
     if reel_path.exists():
@@ -734,7 +747,7 @@ def _build_video_payload(run_id: str) -> dict | None:
                 })
         except (OSError, ValueError):
             pass
-    return {"frames": frames, "reel": reel}
+    return {"frames": frames, "reel": reel, "audio": audio_events}
 
 
 def _render_video_review_html(rid: str) -> str:
@@ -7109,8 +7122,19 @@ class _Handler(BaseHTTPRequestHandler):
                 manifest = {}
         try:
             temporal = json.loads(temporal_path.read_text("utf-8"))
-        except (OSError, ValueError):
+        except (OSError, json.JSONDecodeError):
             temporal = {}
+        # v2.19-P2(视频玻璃盒) — audio events ride along when the run has
+        # them (laughter / applause / music from audio_events.json); the
+        # review timeline draws them as a bottom-lane overlay. None when
+        # absent — the UI hides the lane.
+        audio = None
+        try:
+            ap = run_dir / "audio_events.json"
+            if ap.exists():
+                audio = json.loads(ap.read_text("utf-8"))
+        except (OSError, ValueError):
+            audio = None
         reel = []
         reel_path = run_dir / "reel_candidates.json"
         if reel_path.exists():
@@ -7152,6 +7176,7 @@ class _Handler(BaseHTTPRequestHandler):
             "manifest": manifest,
             "temporal": temporal,
             "reel": reel,
+            "audio": audio,
             "grades": grades,
             "gps": gps_payload,
         }, ensure_ascii=False).encode("utf-8")

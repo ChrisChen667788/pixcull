@@ -2,6 +2,7 @@
     const V = PAYLOAD.video;
     if (!V || !Array.isArray(V.frames) || !V.frames.length) return;
     const frames = V.frames, reel = V.reel || [];
+    const audio = V.audio || [];   // v2.19-P2 — bottom-lane events
     const fnIdx = new Map(frames.map((f, i) => [f.filename, i]));
     const t0 = frames[0].t, tEnd = frames[frames.length - 1].t || (t0 + 1);
     let playing = 0, speed = 1, timer = null;
@@ -40,6 +41,17 @@
           + 'opacity="' + (0.12 + 0.22 * Math.min(1, +c.score || 0)).toFixed(2) + '"/>';
         s += '<text x="' + (x1 + 2).toFixed(1) + '" y="11" fill="#d8cebf" '
           + 'font-size="9">#' + c.rank + '</text>';
+      });
+      // v2.19-P2 — audio-event lane (mirrors the /video review page).
+      const AUD_FILL = { laughter: "var(--keep)", applause: "var(--accent-hi)",
+                         music: "var(--muted)" };
+      audio.forEach((e) => {
+        const f = AUD_FILL[e.kind]; if (!f) return;
+        const x1 = tx(+e.start_s), x2 = tx(+e.end_s);
+        s += '<rect x="' + x1.toFixed(1) + '" y="55" width="'
+          + Math.max(2, x2 - x1).toFixed(1) + '" height="4" rx="1.5" fill="' + f
+          + '" opacity="0.9"><title>' + e.kind + " "
+          + (+e.start_s).toFixed(1) + "–" + (+e.end_s).toFixed(1) + "s</title></rect>";
       });
       let area = "0,60", line = "";
       frames.forEach((f, i) => {

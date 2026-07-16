@@ -86,3 +86,6 @@ docs/screenshots/.ms_upload_cache
 
 # v2.14 — local labeling sheets (may contain real photo filenames; keep private)
 label_sheet*.csv
+
+# v2.19 — local wheel build output
+dist_wheel/

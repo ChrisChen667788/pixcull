@@ -157,7 +157,7 @@ padding:1px 6px;font-size:11px;color:var(--ink)}
 "use strict";
 const RUN_ID = "__RUN_ID__";
 const $ = (id)=>document.getElementById(id);
-let DATA=null, FRAMES=[], REEL=[], cur=0, playing=0, speed=1, timer=null, GRADE='none';
+let DATA=null, FRAMES=[], REEL=[], cur=0, playing=0, speed=1, timer=null, GRADE='none', AUDIO=[];
 let t0=0, tEnd=1, dragging=false;
 
 document.getElementById('backlink').href = '/results/'+RUN_ID;
@@ -180,6 +180,7 @@ function init(d){
       sT:0, sF:null, mC:0, tS:0, bE:0}));
   }
   REEL = (d.reel||[]).slice().sort((a,b)=>(a.rank||0)-(b.rank||0));
+  AUDIO = ((d.audio&&d.audio.events)||[]);
   if(!FRAMES.length){ $('main').innerHTML='<div class="err">该视频没有帧。</div>'; return; }
   t0=FRAMES[0].t; tEnd=FRAMES[FRAMES.length-1].t || (t0+1);
   const m=d.manifest||{};
@@ -259,6 +260,19 @@ function drawTimeline(){
     const op=0.10+0.22*Math.min(1,(+c.score||0));
     s+='<rect x="'+x1.toFixed(1)+'" y="0" width="'+Math.max(2,(x2-x1)).toFixed(1)+'" height="'+H+'" fill="#c4b9a9" opacity="'+op.toFixed(2)+'"/>';
     s+='<text x="'+(x1+3).toFixed(1)+'" y="13" fill="#d8cebf" font-size="10">#'+c.rank+'</text>';
+  });
+  // v2.19-P2 — audio-event bottom lane (laughter/applause/music). Same
+  // deterministic glass-box philosophy: the shooter SEES what the audio
+  // tagger heard, aligned to the frames it heard it under.
+  const AUD_STYLE={laughter:['#6faa78','😄 笑声'],applause:['#dcb87e','👏 掌声'],music:['#9aa6b4','🎵 音乐']};
+  AUDIO.forEach(e=>{
+    const st=AUD_STYLE[e.kind]; if(!st) return;
+    const x1=tx(+e.start_s), x2=tx(+e.end_s);
+    const w=Math.max(3,(x2-x1));
+    s+='<g class="aud"><title>'+st[1]+' '+(+e.start_s).toFixed(1)+'–'+(+e.end_s).toFixed(1)+'s · 置信 '+(+e.confidence||0).toFixed(2)+'</title>'+
+       '<rect x="'+x1.toFixed(1)+'" y="'+(H-7)+'" width="'+w.toFixed(1)+'" height="5" rx="2" fill="'+st[0]+'" opacity="0.85"/>'+
+       (w>26?('<text x="'+(x1+2).toFixed(1)+'" y="'+(H-10)+'" fill="'+st[0]+'" font-size="9">'+st[1]+'</text>'):'')+
+       '</g>';
   });
   // baseline grid
   for(let g=0;g<=4;g++){ const y=H-g/4*H; s+='<line x1="0" y1="'+y+'" x2="1000" y2="'+y+'" stroke="#23262e" stroke-width="0.5"/>'; }

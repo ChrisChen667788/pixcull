@@ -54,7 +54,13 @@ tasks:
 完整源码 + iOS 伴侣 App + Lightroom 插件,均在 GitHub:
 **[github.com/ChrisChen667788/pixcull](https://github.com/ChrisChen667788/pixcull)**
 
-## v0.7 → v2.18 主要更新
+## v0.7 → v2.19 主要更新
+- **v2.19**:**音频事件上时间线 + 首个可发行产物** —— v2.1 就学出的笑声/掌声/音乐事件
+  终于画出来:/video 审片页与 lightbox scrubber 双时间线底部事件车道(按类着色 + emoji
+  标签 + 区间/置信 tooltip),数据随 /video/data 与 PAYLOAD.video 附带、缺失优雅隐藏;
+  发行主题落第一步:**`make wheel`** 一条命令出经过验证的 pixcull-2.19.0 wheel(模板/
+  校准数据全打包、entry point 完好、干净 venv 烟测通过、版本单源化+一致性守卫)——
+  发 PyPI/GitHub Release 只剩 owner 一条命令。详见 `docs/ROADMAP-v2.19-charter.md`。
 - **v2.18**:**5k 性能债还清:渐进水合** —— v0.13.5 建好的 /rows 分页端点终于接上前端:
   大 run 只内联首片(默认 800 行),页面后台分片水合进同一个 rows 数组,进度 chip 实时
   显示、完成后全量重建侧栏+网格、失败诚实降级;summary/聚类仍按全量算,首屏计数即正确。

@@ -18,3 +18,14 @@ def test_review_template_renders_glassbox_hooks():
     # both injections are ternary-guarded on the field's presence.
     assert "(c.signals?(" in t
     assert "(c.why_low?(" in t
+
+
+def test_audio_overlay_hooks_present():
+    """v2.19-P2 — audio-event lane on both timelines."""
+    t = _TPL.read_text(encoding="utf-8")
+    assert "AUDIO" in t and "d.audio" in t          # data wire-in
+    assert "AUD_STYLE" in t and "laughter" in t     # kind→style map
+    assert 'class="aud"' in t                       # lane group + tooltip
+    mod = (_TPL.parent / "src" / "modules" / "05-video-scrub.js")
+    m = mod.read_text(encoding="utf-8")
+    assert "V.audio" in m and "AUD_FILL" in m       # lightbox lane

@@ -62,3 +62,9 @@ goldenset:
 
 goldenset-dryrun:
 	$(PYTHON) scripts/build_goldenset.py --dry-run
+
+# v2.19 — build the distributable wheel (owner publishes with:
+#   pixcull/.venv/bin/python -m twine upload dist_wheel/*.whl
+# or attaches it to a GitHub Release).
+wheel:
+	pixcull/.venv/bin/python -m build --wheel -o dist_wheel .

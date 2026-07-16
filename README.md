@@ -52,6 +52,18 @@
 
 ## What's new
 
+**v2.19** — **audio reaches the timelines + the first shippable artifact**
+(see [`docs/ROADMAP-v2.19-charter.md`](docs/ROADMAP-v2.19-charter.md)). The
+learned audio tagger's events (laughter / applause / music) have been computed
+since v2.1 and never drawn — both timelines now carry a bottom event lane
+(kind-colored bands, emoji labels, span+confidence tooltips) on the /video
+review page and the lightbox scrubber, riding along in /video/data and
+PAYLOAD.video with graceful absence. And the distribution theme gets its first
+concrete step: **`make wheel`** builds a verified `pixcull-2.19.0` wheel
+(all templates/calibration data packaged, entry point intact, clean-venv
+import smoke-tested; version single-sourced with a lockstep guard test) —
+publishing to PyPI / a GitHub Release is a one-command owner action.
+
 **v2.18** — **the 5k performance debt is paid** (see
 [`docs/ROADMAP-v2.18-charter.md`](docs/ROADMAP-v2.18-charter.md)). The /rows
 pagination endpoint was built in v0.13.5 "as the foundation for virtual

@@ -2,7 +2,13 @@
 
 import sys
 
-__version__ = "0.1.0"
+# v2.19 — single-source the version from package metadata (pyproject);
+# the literal is only the fallback for running from a raw source tree.
+try:
+    from importlib.metadata import version as _pkg_version
+    __version__ = _pkg_version("pixcull")
+except Exception:
+    __version__ = "2.19.0"
 
 
 def _check_numpy_compatibility() -> None:
