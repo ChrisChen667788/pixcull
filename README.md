@@ -52,6 +52,17 @@
 
 ## What's new
 
+**DESIGN-AUDIT 2030Q3** — **the post-v2.14–v2.20 full-body recheck** (see
+[`docs/DESIGN-AUDIT-2030Q3.md`](docs/DESIGN-AUDIT-2030Q3.md)). Five lenses
+re-read the code and regrade every dimension: **3.1/5 overall (Q2: 3.0)** —
+core UX 3.5→3.8, intelligence 3.1→3.5, architecture 2.5→3.2, reach 2.5→2.8,
+plus a new release-&-CI-hygiene lens at 2.0 (no tag, no GitHub Release, no
+published artifact since v0.7.0). The sharpest pure-code finding: the v2.15
+session-close flow — Q2's own declared top-gap fix — renders entirely in
+hardcoded Chinese for non-Chinese users, bypassing the mature 13-locale
+`_t()` shim. Four ranked v2.21 candidates (i18n gap-fill · release rail ·
+English-first first-run · CSS module split) plus the owner-only unlock list.
+
 **v2.20** — **the video theme closes its loop + three long-standing tails**
 (see [`docs/ROADMAP-v2.20-charter.md`](docs/ROADMAP-v2.20-charter.md)). Reel
 candidates' `why` now mentions overlapping audio events (现场笑声/掌声/配乐);
