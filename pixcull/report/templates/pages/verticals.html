@@ -5,11 +5,11 @@
   <title>PixCull — 垂类样本采集</title>
   <style>
     :root {
-      --bg: #161310; --bg-card: #1e1a14; --bg-card-hi: #272118;
-      --fg: #e9ecf2; --muted: #a8b2c1; --accent: #c4b9a9;
-      --accent-hi: #d8cebf; --border: #2b241a;
-      --keep: #4ade80; --maybe: #d9a30c; --cull: #cf6f5b;
-      --focus-ring: rgba(216,206,191,0.55);
+      --bg: #161616; --bg-card: #1d1d1d; --bg-card-hi: #242424;
+      --fg: #e9ecf2; --muted: #a8b2c1; --accent: #d5b584;
+      --accent-hi: #eaca98; --border: #262626;
+      --keep: #4ade80; --maybe: #d9a30c; --cull: #e0604e;
+      --focus-ring: rgba(234,202,152,0.55);
     }
     * { box-sizing: border-box; }
     body {
@@ -50,8 +50,8 @@
     }
     .vtab:hover { color: var(--fg); background: rgba(255,255,255,0.04); }
     .vtab.active {
-      color: var(--accent-hi); background: rgba(196,185,169,0.12);
-      border-color: rgba(196,185,169,0.30);
+      color: var(--accent-hi); background: rgba(213,181,132,0.12);
+      border-color: rgba(213,181,132,0.30);
     }
     .vsort { display: inline-flex; align-items: center; gap: 6px;
               font-size: 12px; color: var(--muted); }
@@ -143,14 +143,14 @@
     .vstats .pill.tuned {
       color: var(--accent-hi);
       border-color: rgba(96,165,250,0.4);
-      background: rgba(196,185,169,0.10);
+      background: rgba(213,181,132,0.10);
       cursor: help;
     }
     /* V17.5 — AI phrase override pill */
     .vstats .pill.phrased {
-      color: #d8cebf;
-      border-color: rgba(196,185,169,0.40);
-      background: rgba(196,185,169,0.10);
+      color: #eaca98;
+      border-color: rgba(213,181,132,0.40);
+      background: rgba(213,181,132,0.10);
       cursor: help;
     }
     /* V17.7 — two-row button layout. The previous flex:1 / 6-buttons
@@ -174,7 +174,7 @@
       transition: border-color 120ms, background 120ms, color 120ms;
     }
     .vactions button:hover {
-      border-color: var(--accent); background: rgba(196,185,169,0.08);
+      border-color: var(--accent); background: rgba(213,181,132,0.08);
     }
     /* Row 1 — primary action buttons. Coded green / red so the user
        immediately reads "add good / add bad" from color alone. */
@@ -213,7 +213,7 @@
       border-color: var(--accent); color: var(--accent-hi);
     }
     .vactions .row.secondary button.llm-phrases:hover {
-      border-color: #d8cebf; color: #d8cebf;
+      border-color: #eaca98; color: #eaca98;
     }
     .vactions .row.secondary button.eval:hover {
       border-color: var(--keep); color: var(--keep);
@@ -268,7 +268,7 @@
       cursor: pointer; transition: border-color 120ms, background 120ms;
     }
     .drop-zone:hover, .drop-zone.over {
-      border-color: var(--accent); background: rgba(196,185,169,0.05);
+      border-color: var(--accent); background: rgba(213,181,132,0.05);
       color: var(--fg);
     }
     .sample-grid {

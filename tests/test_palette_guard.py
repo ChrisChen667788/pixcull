@@ -61,8 +61,8 @@ def test_no_legacy_palette_in_ui_source():
                 offenders.append(f"{f.name}:{line}  [{label}]  {m.group(0)!r}")
     assert not offenders, (
         "Legacy pre-v2.3 palette reintroduced — use editorial-warm "
-        "stone/brass (var(--accent) / #c4b9a9 / #dcb87e / #d8cebf) or the "
-        "terracotta danger (#cf6f5b) instead:\n  " + "\n  ".join(offenders))
+        "champagne/bronze (var(--accent) / #d5b584 / #eaca98 / #93743f) or the "
+        "studio-neutral danger (#e0604e) instead:\n  " + "\n  ".join(offenders))
 
 
 # v2.5 — the leak the UI guard above can't see: the brand drifted in the

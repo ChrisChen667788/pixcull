@@ -10,9 +10,9 @@
        remap it to the new --accent (indigo) color. */
     :root {
       --bg-grad: radial-gradient(1200px 600px at 50% -200px,
-                 rgba(196,185,169,0.10), transparent 60%),
+                 rgba(213,181,132,0.10), transparent 60%),
                  radial-gradient(900px 500px at 90% 110%,
-                 rgba(196,185,169,0.05), transparent 60%);
+                 rgba(213,181,132,0.05), transparent 60%);
       /* legacy button paddings kept; existing buttons reference them */
       --btn-pad-s: 4px 10px;
       --btn-pad-m: 7px 14px;
@@ -137,7 +137,7 @@
        wordmark (matches results.html brand-mark .wordmark span). */
     .hero-wordmark b {
       font-weight: 700;
-      background: linear-gradient(135deg, #c4b9a9 0%, #6a6052 100%);
+      background: linear-gradient(135deg, #d5b584 0%, #93743f 100%);
       -webkit-background-clip: text;
       background-clip: text;
       color: transparent;
@@ -153,7 +153,7 @@
       /* v0.9-P0-3 — hero title uses the signature gradient instead
          of the previous flat white→gray.  Pure visual brand anchor
          on the first surface every new user sees. */
-      background: linear-gradient(135deg, #c4b9a9 0%, #6a6052 60%, #ffffff 100%);
+      background: linear-gradient(135deg, #d5b584 0%, #93743f 60%, #ffffff 100%);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
@@ -191,16 +191,16 @@
                   transform 180ms cubic-bezier(0.16,1,0.3,1);
     }
     .hero-feature:hover {
-      border-color: #c4b9a9;
-      background: rgba(196,185,169,0.06);
+      border-color: #d5b584;
+      background: rgba(213,181,132,0.06);
       transform: translateY(-2px);
     }
     .hero-feature-icon {
       display: inline-flex; align-items: center; justify-content: center;
       width: 32px; height: 32px;
       border-radius: 8px;
-      background: rgba(196,185,169,0.14);
-      color: #d8cebf;
+      background: rgba(213,181,132,0.14);
+      color: #eaca98;
       margin-bottom: 10px;
     }
     .hero-feature-title {
@@ -241,7 +241,7 @@
     }
     .drop-zone:hover, .drop-zone.dragover {
       border-color: var(--accent);
-      background: linear-gradient(180deg, rgba(196,185,169,0.06), transparent);
+      background: linear-gradient(180deg, rgba(213,181,132,0.06), transparent);
       box-shadow: 0 0 0 4px var(--accent-glow);
     }
     .drop-zone .big {
@@ -408,7 +408,7 @@
     .tabs .tab:hover { color: var(--fg); }
 
     .scan-explain {
-      background: rgba(196, 185, 169, 0.08);
+      background: rgba(213,181,132, 0.08);
       border-left: 3px solid var(--accent);
       padding: 10px 14px; border-radius: 4px;
       font-size: 12px; color: var(--fg); line-height: 1.6;
@@ -559,7 +559,7 @@
     .browser-body .name { flex: 1; min-width: 0;
         overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .browser-body .badge {
-      background: rgba(196,185,169,0.15); color: #d8cebf;
+      background: rgba(213,181,132,0.15); color: #eaca98;
       padding: 1px 6px; font-size: 10px; border-radius: 2px;
       flex-shrink: 0;
     }
@@ -646,8 +646,8 @@
       <defs>
         <linearGradient id="pcBrandGradHero"
                         x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%"   stop-color="#c4b9a9"/>
-          <stop offset="100%" stop-color="#6a6052"/>
+          <stop offset="0%"   stop-color="#d5b584"/>
+          <stop offset="100%" stop-color="#93743f"/>
         </linearGradient>
       </defs>
       <circle cx="4"  cy="5"  r="1.6" fill="currentColor" opacity="0.32"/>
@@ -744,7 +744,7 @@
            the "wait, do I need to install something first" gate. -->
       <button id="sampleBtn" class="secondary"
               title="用 6 张示例数据立刻进入 /results 体验,不需要装环境"
-              style="margin-left:auto;background:rgba(196,185,169,0.15);border-color:#c4b9a9;color:#d8cebf">
+              style="margin-left:auto;background:rgba(213,181,132,0.15);border-color:#d5b584;color:#eaca98">
         ⚡ 用示例数据立刻体验
       </button>
       <span id="hint" style="color:var(--muted);font-size:12px"></span>
@@ -1001,7 +1001,7 @@
     // Float a small 👋 pill — non-blocking, dismissible.
     const pill = document.createElement("button");
     pill.className = "shortcuts-hint";   // reuse existing floating-pill style
-    pill.style.cssText = "bottom: 60px; right: 18px; cursor: pointer; border: 0; background: rgba(196,185,169,0.92); color: white;";
+    pill.style.cssText = "bottom: 60px; right: 18px; cursor: pointer; border: 0; background: rgba(213,181,132,0.92); color: white;";
     pill.type = "button";
     pill.setAttribute("aria-label", "打开新手引导");
     pill.innerHTML = "👋 30 秒看完核心用法 <span style=\"opacity:0.6;margin-left:8px;font-size:11px\">✕</span>";
@@ -1057,7 +1057,7 @@
           : '<span style="color:var(--muted-soft);margin-left:6px;font-size:10px">点击切换</span>';
         return `<div data-uid="${u.user_id}" class="user-row"
                 style="padding:8px 10px;border-radius:4px;
-                ${u.is_active ? 'background:rgba(111,170,120,0.08);' : 'cursor:pointer;'}
+                ${u.is_active ? 'background:rgba(99,189,127,0.08);' : 'cursor:pointer;'}
                 margin-bottom:4px;display:flex;justify-content:space-between;
                 align-items:center;font-size:12px">
           <span><b>${u.user_id}</b>${tag}</span>

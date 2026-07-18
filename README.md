@@ -52,6 +52,29 @@
 
 ## What's new
 
+**v2.21** — **"Studio Neutral": the research-driven design overhaul** (see
+[`docs/ROADMAP-v2.21-design-charter.md`](docs/ROADMAP-v2.21-design-charter.md)).
+A six-lens survey of the field (Narrative Select, Aftershoot, Imagen,
+FilterPixel, Photo Mechanic, Lightroom, Capture One, plus Linear/Raycast-class
+tool design and dark-UI color science) converged on one hard fact: **a
+warm-tinted surround skews color judgment of the photos themselves**
+(ISO 3664 viewing-surround guidance — every top tool judges on neutral gray;
+PixCull's espresso brown was an industry outlier). The whole UI moves to an
+achromatic studio ramp (#161616 → #1d1d1d → #242424 → #2e2e2e, c=0 in OKLCH)
+with brand warmth concentrated in ONE champagne-gold accent (#d5b584, 3× the
+old brass chroma) reserved strictly for selection/focus/CTA. The v2.3
+"Double-Bezel tray" cards are retired — photos now fill the card edge-to-edge
+with a hairline border, like every reference tool; the every-card amber
+"needs-review" ring is demoted to a whisper; score numbers switch from
+editorial serif to mono tabular; motion returns to flat ease-out (the 6%
+overshoot spring now reserved for signature moments); radii tighten to the
+pro register. The swap ran as a full-tree palette migration (~430
+replacements across 24 files incl. the video surfaces' stray navy
+mini-palette and three latent bugs: a dead `--surface-1` fallback, Tailwind
+amber literals bypassing the semantic system, and the last hex-arithmetic
+score ramp). Both themes stay; light mode becomes neutral paper. The 19-shot
+gallery below still shows the previous skin — recapture is queued.
+
 **DESIGN-AUDIT 2030Q3** — **the post-v2.14–v2.20 full-body recheck** (see
 [`docs/DESIGN-AUDIT-2030Q3.md`](docs/DESIGN-AUDIT-2030Q3.md)). Five lenses
 re-read the code and regrade every dimension: **3.1/5 overall (Q2: 3.0)** —

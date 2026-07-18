@@ -4618,11 +4618,11 @@ class _Handler(BaseHTTPRequestHandler):
             "<!DOCTYPE html><html lang='zh'><head><meta charset='utf-8'>"
             "<title>PixCull · 偏差审计</title>"
             "<style>"
-            "body{margin:0;background:#161310;color:#fff;"
+            "body{margin:0;background:#161616;color:#fff;"
             "font:13px/1.55 system-ui,-apple-system;padding:32px;}"
             "h1{margin:0 0 4px;letter-spacing:-0.02em;}"
             ".meta{color:#888;font-size:11.5px;margin-bottom:32px;}"
-            ".meta a{color:#c4b9a9;text-decoration:none;margin-left:14px;}"
+            ".meta a{color:#d5b584;text-decoration:none;margin-left:14px;}"
             "section{margin:24px 0;}"
             ".findings .finding{padding:14px;border-radius:8px;margin:10px 0;"
             "background:rgba(220,38,38,0.10);"
@@ -4639,11 +4639,11 @@ class _Handler(BaseHTTPRequestHandler):
             "border-bottom:1px solid rgba(255,255,255,0.10);}"
             "th{color:#a0a4b0;font-weight:600;}"
             "tr.under{opacity:0.45;}"
-            ".family h2{font-size:14px;color:#c4b9a9;"
+            ".family h2{font-size:14px;color:#d5b584;"
             "letter-spacing:0.02em;text-transform:uppercase;}"
             "</style></head><body>"
             "<h1>偏差审计"
-            + (f" · <span style='color:#c4b9a9;font-size:18px'>"
+            + (f" · <span style='color:#d5b584;font-size:18px'>"
                f"@{_esc(user_filter)}</span>"
                if user_filter else "")
             + "</h1>"
@@ -4654,13 +4654,13 @@ class _Handler(BaseHTTPRequestHandler):
                 "&nbsp;&nbsp;|&nbsp;&nbsp;<span style='color:#888'>"
                 + "切片:</span> "
                 + ("<a href='/admin/bias' style='" +
-                   (("color:#c4b9a9" if user_filter else
+                   (("color:#d5b584" if user_filter else
                      "color:#fff;text-decoration:underline"))
                    + "'>全部</a>"
                    + "".join(
                        f" · <a href='/admin/bias?user={_esc(u)}' style='"
                        + (("color:#fff;text-decoration:underline" if u == user_filter
-                           else "color:#c4b9a9"))
+                           else "color:#d5b584"))
                        + f"'>{_esc(u)}</a>"
                        for u in annotators[:10]))
                 if annotators else ""
@@ -4817,19 +4817,19 @@ class _Handler(BaseHTTPRequestHandler):
             "<!DOCTYPE html><html lang='zh'><head><meta charset='utf-8'>"
             "<title>PixCull · 分歧解析</title>"
             "<style>"
-            "body{margin:0;background:#161310;color:#fff;"
+            "body{margin:0;background:#161616;color:#fff;"
             "font:13px/1.55 system-ui,-apple-system;padding:32px;}"
             "h1{margin:0 0 4px;letter-spacing:-0.02em;}"
             ".meta{color:#888;font-size:11.5px;margin-bottom:24px;}"
-            ".meta a{color:#c4b9a9;text-decoration:none;margin-left:14px;}"
+            ".meta a{color:#d5b584;text-decoration:none;margin-left:14px;}"
             "section{margin:24px 0;}"
             "table{border-collapse:collapse;width:100%;font-size:12px;}"
             "th,td{padding:6px 10px;text-align:left;"
             "border-bottom:1px solid rgba(255,255,255,0.10);}"
             "th{color:#a0a4b0;font-weight:600;}"
-            "a{color:#c4b9a9;text-decoration:none;}"
+            "a{color:#d5b584;text-decoration:none;}"
             "a:hover{text-decoration:underline;}"
-            "h2{font-size:14px;color:#c4b9a9;"
+            "h2{font-size:14px;color:#d5b584;"
             "letter-spacing:0.02em;text-transform:uppercase;}"
             "</style></head><body>"
             "<h1>分歧解析</h1>"
@@ -4885,14 +4885,14 @@ class _Handler(BaseHTTPRequestHandler):
             "<html lang='zh'><head><meta charset='utf-8'>"
             "<title>PixCull · 副屏</title>"
             "<style>"
-            "html,body{margin:0;background:#161310;color:#fff;"
+            "html,body{margin:0;background:#161616;color:#fff;"
             "font:13px/1.4 system-ui,-apple-system;height:100%;}"
             "body{display:flex;flex-direction:column;}"
             ".bar{display:flex;align-items:center;gap:10px;"
             "padding:8px 14px;background:rgba(28,30,38,0.85);"
             "backdrop-filter:saturate(180%) blur(12px);}"
-            ".bar .badge{background:rgba(196,185,169,0.18);"
-            "color:#c4b9a9;padding:2px 10px;border-radius:999px;"
+            ".bar .badge{background:rgba(213,181,132,0.18);"
+            "color:#d5b584;padding:2px 10px;border-radius:999px;"
             "font-size:11px;font-weight:600;}"
             ".bar .fn{color:#aaa;font-family:ui-monospace,SF Mono,"
             "Menlo,monospace;font-size:11.5px;flex:1;overflow:hidden;"
@@ -4970,8 +4970,8 @@ class _Handler(BaseHTTPRequestHandler):
             "start_url":        "/history",
             "scope":            "/",
             "display":          "standalone",
-            "background_color": "#161310",
-            "theme_color":      "#c4b9a9",
+            "background_color": "#161616",
+            "theme_color":      "#d5b584",
             "orientation":      "any",
             "categories":       ["photo", "productivity", "utilities"],
             "icons": [
@@ -5841,9 +5841,9 @@ class _Handler(BaseHTTPRequestHandler):
     --fg: #e8eaed; --fg-2: #c6c9cf; --muted: #8a8e96; --muted-soft: #6b7280;
     --border: rgba(255,255,255,0.10);
     --border-hi: rgba(255,255,255,0.18);
-    --brand-gradient: linear-gradient(135deg, #c4b9a9 0%, #988b78 50%, #6a6052 100%);
-    --brand-gradient-soft: linear-gradient(135deg, rgba(196,185,169,0.18) 0%, rgba(106,96,82,0.18) 100%);
-    --accent: #988b78;
+    --brand-gradient: linear-gradient(135deg, #d5b584 0%, #b5945f 50%, #93743f 100%);
+    --brand-gradient-soft: linear-gradient(135deg, rgba(213,181,132,0.18) 0%, rgba(106,96,82,0.18) 100%);
+    --accent: #b5945f;
     --font-serif: "Charter","Iowan Old Style","PT Serif","Source Serif Pro","Cambria",Georgia,"Songti SC",serif;
     --font-sans: -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
     --ease-out: cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -5969,8 +5969,8 @@ class _Handler(BaseHTTPRequestHandler):
   }}
   .ph-card:hover {{
     transform: translateY(-3px);
-    border-color: rgba(196,185,169,0.55);
-    box-shadow: 0 12px 28px rgba(196,185,169,0.25);
+    border-color: rgba(213,181,132,0.55);
+    box-shadow: 0 12px 28px rgba(213,181,132,0.25);
   }}
   .ph-card img {{
     display: block; width: 100%; aspect-ratio: 3/2;
@@ -6014,7 +6014,7 @@ class _Handler(BaseHTTPRequestHandler):
   }}
   .ph-comment-form textarea:focus {{
     outline: 0; border-color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(196,185,169,0.20);
+    box-shadow: 0 0 0 3px rgba(213,181,132,0.20);
   }}
   .ph-comment-form-row {{
     display: flex; gap: 10px; margin-top: 10px;
@@ -6029,7 +6029,7 @@ class _Handler(BaseHTTPRequestHandler):
     padding: 0 18px; font-size: 13px; font-weight: 600;
     background: var(--brand-gradient); color: #ffffff;
     border: 0; border-radius: 8px; cursor: pointer;
-    box-shadow: 0 4px 14px rgba(196,185,169,0.35);
+    box-shadow: 0 4px 14px rgba(213,181,132,0.35);
     transition: filter 160ms var(--ease-out),
                 transform 160ms var(--ease-out);
   }}
@@ -6144,8 +6144,8 @@ class _Handler(BaseHTTPRequestHandler):
       <svg viewBox="0 0 24 24" fill="none">
         <defs>
           <linearGradient id="pcSharePg" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%"   stop-color="#c4b9a9"/>
-            <stop offset="100%" stop-color="#6a6052"/>
+            <stop offset="0%"   stop-color="#d5b584"/>
+            <stop offset="100%" stop-color="#93743f"/>
           </linearGradient>
         </defs>
         <circle cx="4"  cy="5"  r="1.6" fill="currentColor" opacity="0.32"/>
@@ -7337,7 +7337,7 @@ class _Handler(BaseHTTPRequestHandler):
             body = (
                 "<!DOCTYPE html><meta charset='utf-8'>"
                 "<title>PixCull · 视频审片</title>"
-                "<body style='background:#161310;color:#e6e6e6;"
+                "<body style='background:#161616;color:#e6e6e6;"
                 "font:14px/1.6 system-ui;padding:48px;text-align:center'>"
                 "<h2>这不是一个视频 run</h2>"
                 "<p>该 run 缺少 <code>temporal.json</code>。请先运行 "
@@ -7937,7 +7937,7 @@ class _Handler(BaseHTTPRequestHandler):
             'alt="" style="width:300px;max-width:80vw;height:auto;'
             'border-radius:16px;margin-bottom:18px;'
             'box-shadow:0 16px 48px rgba(0,0,0,0.4),'
-            '0 0 0 1px rgba(196,185,169,0.18) inset;"'
+            '0 0 0 1px rgba(213,181,132,0.18) inset;"'
             ' onerror="this.style.display=\'none\'">'
         )
         cards_html = "\n".join(cards) if cards else (
@@ -7958,8 +7958,8 @@ class _Handler(BaseHTTPRequestHandler):
               '<button id="historyTryDemoBtn" '
               'style="padding:11px 22px;border-radius:999px;border:0;'
               'font-weight:600;font-size:13px;cursor:pointer;'
-              'background:linear-gradient(135deg,#c4b9a9 0%,#6a6052 100%);'
-              'color:#fff;box-shadow:0 4px 14px rgba(196,185,169,0.40)" '
+              'background:linear-gradient(135deg,#d5b584 0%,#93743f 100%);'
+              'color:#fff;box-shadow:0 4px 14px rgba(213,181,132,0.40)" '
               'onclick="(async()=>{this.disabled=true;this.textContent=\'载入中…\';'
               'try{const r=await fetch(\'/sample_demo\',{method:\'POST\'});'
               'const d=await r.json();if(d.ok&&d.run_id){location.href=\'/results/\'+d.run_id;}'
@@ -8775,13 +8775,13 @@ class _Handler(BaseHTTPRequestHandler):
                 '<div id="videoReviewCta" style="position:fixed;right:18px;'
                 'bottom:18px;z-index:9999;display:flex;gap:8px;align-items:center">'
                 f'<a href="/timeline/{rid_safe}" title="照片+视频联合时间线" '
-                'style="background:#14161b;color:#d8cebf;border:1px solid #c4b9a9;'
+                'style="background:#14161b;color:#eaca98;border:1px solid #d5b584;'
                 'text-decoration:none;padding:9px 13px;border-radius:22px;'
                 'font:12px system-ui">🗓 联合时间线</a>'
                 f'<a href="/video/{rid_safe}" title="视频原生审片 · 时间线 scrubber" '
-                'style="background:#c4b9a9;color:#fff;text-decoration:none;'
+                'style="background:#d5b584;color:#fff;text-decoration:none;'
                 'padding:10px 16px;border-radius:22px;font:13px system-ui;'
-                'box-shadow:0 4px 16px rgba(196,185,169,.5)">🎬 视频审片 →</a></div>'
+                'box-shadow:0 4px 16px rgba(213,181,132,.5)">🎬 视频审片 →</a></div>'
             )
             html = html.replace("</body>", badge + "</body>", 1)
         self._send_html(200, html.encode("utf-8"))
@@ -12473,43 +12473,45 @@ _VERTICAL_BULK_HTML = _read_template("pages/vertical_bulk.html")
 _DESIGN_TOKENS_CSS = r"""
   @font-face{font-family:"Geist Variable";font-style:normal;font-weight:100 900;font-display:swap;src:url("/docs/brand/geist-variable.woff2") format("woff2");unicode-range:U+0000-2E7F;}
   :root {
-    /* surfaces — v2.2 Taste: deep calm gallery ground (was LR-grade gray) */
-    --bg:           #161310;
-    --bg-card:      #1e1a14;
-    --bg-card-hi:   #272118;
-    --surface-2:    #272118;
-    --surface-3:    #322a1e;
-    --chrome:       #100d0a;
-    /* text */
-    --fg:           #f1f3f7;
-    --fg-2:         #c5cad4;
-    --muted:        #a8b2c1;
-    --muted-soft:   #7a8696;
+    /* surfaces — v2.21 Studio Neutral: achromatic ramp, aligned
+       with results.css (the photo surround carries no hue) */
+    --bg:           #161616;
+    --bg-card:      #1d1d1d;
+    --bg-card-hi:   #242424;
+    --surface-2:    #242424;
+    --surface-3:    #2e2e2e;
+    --chrome:       #0f0f0f;
+    /* text — neutral ramp (was a stray cool blue-gray set that never
+       matched the main workspace) */
+    --fg:           #e6e6e6;
+    --fg-2:         #c6c6c6;
+    --muted:        #9b9b9b;
+    --muted-soft:   #707070;
     /* borders */
-    --border:       #2b241a;
-    --border-hi:    #3a3122;
-    /* accent — v2.2 brand violet (was stock indigo #c4b9a9) */
-    --accent:       #c4b9a9;
-    --accent-hi:    #d8cebf;
-    --accent-soft:  rgba(196,185,169,0.15);
-    --accent-glow:  rgba(196,185,169,0.42);
-    --focus-ring:   rgba(216,206,191,0.55);
+    --border:       #262626;
+    --border-hi:    #363636;
+    /* accent — v2.21 champagne gold */
+    --accent:       #d5b584;
+    --accent-hi:    #eaca98;
+    --accent-soft:  rgba(213,181,132,0.15);
+    --accent-glow:  rgba(213,181,132,0.42);
+    --focus-ring:   rgba(234,202,152,0.55);
     /* semantic palette */
-    --c-success:        #6faa78;
-    --c-success-tint:   rgba(111,170,120,0.14);
-    --c-success-border: rgba(111,170,120,0.40);
+    --c-success:        #63bd7f;
+    --c-success-tint:   rgba(99,189,127,0.14);
+    --c-success-border: rgba(99,189,127,0.40);
     --c-warn:           #d6a443;
     --c-warn-tint:      rgba(214,164,67,0.14);
     --c-warn-border:    rgba(214,164,67,0.40);
-    --c-danger:         #cf6f5b;
-    --c-danger-tint:    rgba(207,111,91,0.14);
-    --c-danger-border:  rgba(207,111,91,0.40);
-    --c-info:           #6ea2b0;
-    --c-info-tint:      rgba(110,162,176,0.14);
-    --c-info-border:    rgba(110,162,176,0.40);
-    --c-neutral:        #a8b2c1;
-    --c-neutral-tint:   rgba(168,178,193,0.10);
-    --c-neutral-border: rgba(168,178,193,0.30);
+    --c-danger:         #e0604e;
+    --c-danger-tint:    rgba(224,96,78,0.14);
+    --c-danger-border:  rgba(224,96,78,0.40);
+    --c-info:           #6fa7bd;
+    --c-info-tint:      rgba(111,167,189,0.14);
+    --c-info-border:    rgba(111,167,189,0.40);
+    --c-neutral:        #9b9b9b;
+    --c-neutral-tint:   rgba(155,155,155,0.10);
+    --c-neutral-border: rgba(155,155,155,0.30);
     /* legacy alias for V14 callers */
     --keep:  var(--c-success);
     --maybe: var(--c-warn);
@@ -12534,9 +12536,9 @@ _DESIGN_TOKENS_CSS = r"""
     --space-1: 4px;  --space-2: 8px;  --space-3: 12px;
     --space-4: 16px; --space-5: 20px; --space-6: 24px;
     --space-7: 32px; --space-8: 48px;
-    /* radius — v2.2 softer (Semi/CapCut) */
-    --radius-sm: 6px;  --radius-md: 9px;  --radius-lg: 13px;
-    --radius-xl: 18px; --radius-pill: 999px;
+    /* radius — v2.21 tightened pro register */
+    --radius-sm: 5px;  --radius-md: 8px;  --radius-lg: 11px;
+    --radius-xl: 14px; --radius-pill: 999px;
     /* shadows — v2.2 softer + wider "expensive" elevation */
     --shadow-sm: 0 1px 3px rgba(0,0,0,0.34);
     --shadow-md: 0 6px 22px rgba(0,0,0,0.36);
@@ -12556,27 +12558,27 @@ _DESIGN_TOKENS_CSS = r"""
   /* Light theme override — same shape as results.html */
   html[data-theme="light"] {
     /* v2.2 — warm paper-and-ink editorial, mirrors results.html light */
-    --bg:           #fbf9f5;
+    --bg:           #f7f7f7;
     --bg-card:      #ffffff;
-    --bg-card-hi:   #f4eee4;
-    --surface-2:    #f0ebe1;
-    --surface-3:    #e6dfd2;
+    --bg-card-hi:   #eeeeee;
+    --surface-2:    #e9e9e9;
+    --surface-3:    #dddddd;
     --chrome:       #ffffff;
-    --fg:           #1a1d24;
-    --fg-2:         #3c4250;
-    --muted:        #5b6473;
-    --muted-soft:   #8c95a3;
-    --border:       #e3ddcf;
-    --border-hi:    #c9c0ad;
-    --accent:       #473a29;
-    --accent-hi:    #62513a;
+    --fg:           #171717;
+    --fg-2:         #3a3a3c;
+    --muted:        #616165;
+    --muted-soft:   #8f8f93;
+    --border:       #e2e2e2;
+    --border-hi:    #c9c9c9;
+    --accent:       #6c501f;
+    --accent-hi:    #866939;
     --accent-soft:  rgba(71,58,41,0.10);
     --accent-glow:  rgba(71,58,41,0.30);
     --focus-ring:   rgba(71,58,41,0.45);
-    --shadow-sm: 0 1px 2px  rgba(89,54,18,0.07);
-    --shadow-md: 0 4px 14px rgba(89,54,18,0.09);
-    --shadow-lg: 0 14px 34px rgba(89,54,18,0.10);
-    --shadow-xl: 0 28px 60px rgba(89,54,18,0.12);
+    --shadow-sm: 0 1px 2px  rgba(0,0,0,0.07);
+    --shadow-md: 0 4px 14px rgba(0,0,0,0.09);
+    --shadow-lg: 0 14px 34px rgba(0,0,0,0.10);
+    --shadow-xl: 0 28px 60px rgba(0,0,0,0.12);
   }
   @media (prefers-reduced-motion: reduce) {
     :root {
@@ -12587,9 +12589,9 @@ _DESIGN_TOKENS_CSS = r"""
      on every page that uses _DESIGN_TOKENS_CSS (upload / admin / share).
      Defined here so the token name + curve are project-wide single source. */
   :root {
-    --brand-gradient:       linear-gradient(135deg, #c4b9a9 0%, #6a6052 100%);
+    --brand-gradient:       linear-gradient(135deg, #d5b584 0%, #93743f 100%);
     --brand-gradient-soft:  linear-gradient(135deg,
-                              rgba(196,185,169,0.18) 0%,
+                              rgba(213,181,132,0.18) 0%,
                               rgba(106,96,82,0.18) 100%);
   }
   /* Primary CTA: signature gradient backdrop, white text, soft glow.
@@ -12599,7 +12601,7 @@ _DESIGN_TOKENS_CSS = r"""
     background: var(--brand-gradient) !important;
     color: #ffffff !important;
     border: 0 !important;
-    box-shadow: 0 4px 14px rgba(196, 185, 169, 0.35);
+    box-shadow: 0 4px 14px rgba(213,181,132, 0.35);
     transition: filter 120ms var(--ease-out, ease-out),
                 transform 120ms var(--ease-out, ease-out),
                 box-shadow 220ms var(--ease-out, ease-out);
@@ -12608,7 +12610,7 @@ _DESIGN_TOKENS_CSS = r"""
   .btn-brand-gradient:hover {
     filter: brightness(1.08);
     transform: translateY(-1px);
-    box-shadow: 0 6px 20px rgba(196, 185, 169, 0.45);
+    box-shadow: 0 6px 20px rgba(213,181,132, 0.45);
   }
   button.btn-primary:active,
   .btn-brand-gradient:active {
@@ -12706,7 +12708,7 @@ def _render_delivery_audit_html(run_id: str, md: str, preset: str) -> str:
         "<meta charset='utf-8'>"
         f"<title>交付审计 · {_html.escape(run_id)}</title>"
         "<style>"
-        "body{margin:0;background:#161310;color:#e9ecf2;"
+        "body{margin:0;background:#161616;color:#e9ecf2;"
         "font:13px/1.6 -apple-system,Segoe UI,PingFang SC,sans-serif}"
         "header{padding:18px 24px;border-bottom:1px solid #232830;"
         "display:flex;align-items:center;gap:12px;flex-wrap:wrap}"
@@ -12724,7 +12726,7 @@ def _render_delivery_audit_html(run_id: str, md: str, preset: str) -> str:
         "i{color:#7a8696;font-style:normal;font-size:11.5px}"
         "code{font-family:ui-monospace,monospace;font-size:11.5px;"
         "padding:1px 5px;background:#11141a;border-radius:3px;"
-        "color:#d8cebf}"
+        "color:#eaca98}"
         "table{width:100%;border-collapse:collapse;font-size:12px;"
         "background:#11141a;border:1px solid #232830;border-radius:6px;"
         "overflow:hidden;margin:6px 0 16px}"
@@ -12808,7 +12810,7 @@ def _render_face_audit_html(payload: dict) -> str:
         "<meta charset='utf-8'>"
         f"<title>face 库审计 · {run_id}</title>"
         "<style>"
-        "body{margin:0;background:#161310;color:#e9ecf2;"
+        "body{margin:0;background:#161616;color:#e9ecf2;"
         "font:13px/1.5 -apple-system,Segoe UI,PingFang SC,sans-serif}"
         "header{padding:18px 24px;border-bottom:1px solid #232830}"
         "h1{margin:0;font-size:16px;font-weight:700}"
@@ -12824,8 +12826,8 @@ def _render_face_audit_html(payload: dict) -> str:
         "border-radius:6px;font-size:11.5px}"
         ".kpi b{font-size:14px;color:#fff;display:block;line-height:1.1}"
         ".kpi.warn b{color:#d6a443}"
-        ".kpi.bad b{color:#cf6f5b}"
-        ".kpi.good b{color:#6faa78}"
+        ".kpi.bad b{color:#e0604e}"
+        ".kpi.good b{color:#63bd7f}"
         "table{width:100%;border-collapse:collapse;font-size:12px;"
         "background:#11141a;border:1px solid #232830;border-radius:6px;"
         "overflow:hidden}"
@@ -12835,7 +12837,7 @@ def _render_face_audit_html(payload: dict) -> str:
         "border-bottom:1px solid #232830}"
         "td{padding:7px 12px;border-bottom:1px solid #1c2027}"
         "tr:last-child td{border-bottom:none}"
-        "tr.polluted{background:rgba(207,111,91,0.06)}"
+        "tr.polluted{background:rgba(224,96,78,0.06)}"
         "tr.polluted td:last-child{color:#ff9a9a}"
         "tr.clean td:last-child{color:#7fe1b8}"
         "footer{padding:18px 24px;color:#7a8696;font-size:11.5px;"

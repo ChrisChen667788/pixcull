@@ -43,13 +43,13 @@
            Diagonal version drives 1-D stroke + dot fills; vertical drives
            the area-under-the-curve fill in the inspector sparkline. -->
       <linearGradient id="aiBrandGrad" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%"   stop-color="#c4b9a9"/>
-        <stop offset="55%"  stop-color="#988b78"/>
-        <stop offset="100%" stop-color="#6a6052"/>
+        <stop offset="0%"   stop-color="#d5b584"/>
+        <stop offset="55%"  stop-color="#b5945f"/>
+        <stop offset="100%" stop-color="#93743f"/>
       </linearGradient>
       <linearGradient id="aiBrandGradV" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%"   stop-color="#c4b9a9"/>
-        <stop offset="100%" stop-color="#6a6052"/>
+        <stop offset="0%"   stop-color="#d5b584"/>
+        <stop offset="100%" stop-color="#93743f"/>
       </linearGradient>
       <!-- Archive / bucket — for the P-UX-22 deliverable buckets toggle -->
       <symbol id="icon-archive" viewBox="0 0 24 24" fill="none"
@@ -223,7 +223,7 @@
               stroke-linecap="round" stroke-linejoin="round">
         <!-- floor shadow -->
         <ellipse cx="80" cy="103" rx="50" ry="5"
-                 fill="rgba(196,185,169,0.10)"/>
+                 fill="rgba(213,181,132,0.10)"/>
         <!-- main inbox tray -->
         <path d="M30 55l10-32a4 4 0 0 1 4-3h72a4 4 0 0 1 4 3l10 32"
               stroke="var(--muted)" stroke-width="2"/>
@@ -233,7 +233,7 @@
         <!-- inbox slot -->
         <path d="M30 55h32l4 8h28l4-8h32"
               stroke="var(--accent)" stroke-width="2.5"
-              fill="rgba(196,185,169,0.16)"/>
+              fill="rgba(213,181,132,0.16)"/>
         <!-- subtle "dust" — sparkles drifting in to show "nothing here yet" -->
         <circle cx="48" cy="34" r="1.5" fill="var(--accent)" opacity="0.6"/>
         <circle cx="112" cy="38" r="1.2" fill="var(--accent)" opacity="0.5"/>
@@ -244,7 +244,7 @@
       <symbol id="art-no-match" viewBox="0 0 160 120" fill="none"
               stroke-linecap="round" stroke-linejoin="round">
         <ellipse cx="80" cy="103" rx="50" ry="5"
-                 fill="rgba(196,185,169,0.10)"/>
+                 fill="rgba(213,181,132,0.10)"/>
         <!-- empty result strip (suggests photos that COULD match) -->
         <rect x="22" y="48" width="22" height="22" rx="3"
               stroke="var(--muted-soft)" stroke-width="1.5"
@@ -285,7 +285,7 @@
            ============================================================
            Same 160×120 viewport + two-tone palette (var(--muted) for
            outlines, var(--accent) for the "this is the meaningful
-           thing" highlight, rgba(196,185,169,X) for soft wash) as the
+           thing" highlight, rgba(213,181,132,X) for soft wash) as the
            v0.4 P1 (3/4) trio above, so the art system reads as a
            single coherent family across all empty surfaces.
            ============================================================ -->
@@ -295,7 +295,7 @@
       <symbol id="art-empty-buckets" viewBox="0 0 160 120" fill="none"
               stroke-linecap="round" stroke-linejoin="round">
         <ellipse cx="80" cy="103" rx="50" ry="5"
-                 fill="rgba(196,185,169,0.10)"/>
+                 fill="rgba(213,181,132,0.10)"/>
         <!-- Background buckets (muted, drift away to suggest "more await") -->
         <path d="M28 50h28l-3 38a3 3 0 0 1-3 3H34a3 3 0 0 1-3-3z"
               stroke="var(--muted-soft)" stroke-width="1.6"
@@ -306,7 +306,7 @@
         <!-- Centre bucket (accent — the one the user would create) -->
         <path d="M64 44h32l-4 46a4 4 0 0 1-4 4H72a4 4 0 0 1-4-4z"
               stroke="var(--accent)" stroke-width="2.4"
-              fill="rgba(196,185,169,0.16)"/>
+              fill="rgba(213,181,132,0.16)"/>
         <path d="M64 48h32" stroke="var(--accent)" stroke-width="1.6" opacity="0.5"/>
         <!-- Tiny "+" sign hovering above the centre bucket — implies "add one" -->
         <path d="M80 28v10M75 33h10"
@@ -318,7 +318,7 @@
       <symbol id="art-empty-history" viewBox="0 0 160 120" fill="none"
               stroke-linecap="round" stroke-linejoin="round">
         <ellipse cx="80" cy="103" rx="50" ry="5"
-                 fill="rgba(196,185,169,0.10)"/>
+                 fill="rgba(213,181,132,0.10)"/>
         <!-- Clock body -->
         <circle cx="80" cy="58" r="32"
                 fill="var(--surface-2)" stroke="var(--muted)"
@@ -342,7 +342,7 @@
       <symbol id="art-no-peer" viewBox="0 0 160 120" fill="none"
               stroke-linecap="round" stroke-linejoin="round">
         <ellipse cx="80" cy="103" rx="50" ry="5"
-                 fill="rgba(196,185,169,0.10)"/>
+                 fill="rgba(213,181,132,0.10)"/>
         <!-- Three concentric arcs (signal ripples), outer two muted -->
         <path d="M44 78a40 40 0 0 1 72 0"
               stroke="var(--muted-soft)" stroke-width="2" opacity="0.45"/>
@@ -368,7 +368,7 @@
       <symbol id="art-no-annotations" viewBox="0 0 160 120" fill="none"
               stroke-linecap="round" stroke-linejoin="round">
         <ellipse cx="80" cy="103" rx="50" ry="5"
-                 fill="rgba(196,185,169,0.10)"/>
+                 fill="rgba(213,181,132,0.10)"/>
         <!-- Clipboard body -->
         <rect x="48" y="20" width="64" height="74" rx="5"
               fill="var(--surface-2)" stroke="var(--muted)"
@@ -383,7 +383,7 @@
         <!-- Pencil hovering over the third line (mid-thought, no ink yet) -->
         <path d="M104 66l16-16 6 6-16 16zM118 52l4 4"
               stroke="var(--accent)" stroke-width="2"
-              fill="rgba(196,185,169,0.16)"/>
+              fill="rgba(213,181,132,0.16)"/>
         <circle cx="100" cy="70" r="2" fill="var(--accent)"/>
         <!-- Star outline — implies "ratings would go here" -->
         <path d="M58 84l3 6 6 1-4 4 1 6-5-3-5 3 1-6-4-4 6-1z"
@@ -400,7 +400,7 @@
       <symbol id="art-no-search" viewBox="0 0 160 120" fill="none"
               stroke-linecap="round" stroke-linejoin="round">
         <ellipse cx="80" cy="103" rx="50" ry="5"
-                 fill="rgba(196,185,169,0.10)"/>
+                 fill="rgba(213,181,132,0.10)"/>
         <!-- Search input rectangle (suggests the text field that fired) -->
         <rect x="22" y="62" width="116" height="28" rx="14"
               fill="var(--surface-2)" stroke="var(--muted)"
@@ -453,8 +453,8 @@
           <defs>
             <linearGradient id="pcBrandGrad"
                             x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0%"   stop-color="#c4b9a9"/>
-              <stop offset="100%" stop-color="#6a6052"/>
+              <stop offset="0%"   stop-color="#d5b584"/>
+              <stop offset="100%" stop-color="#93743f"/>
             </linearGradient>
           </defs>
           <!-- the crowd -->
@@ -1181,15 +1181,15 @@
           <div class="shortcut-row"><span class="keys">拖动图片</span><span class="desc">在 1:1 模式下平移</span></div>
           <div class="shortcut-row"><span class="keys">滚轮</span><span class="desc">以光标为中心放大/缩小</span></div>
           <!-- v0.13.4 — surface v0.11-v0.13 new keys -->
-          <div class="shortcut-row"><span class="keys"><kbd>A</kbd></span><span class="desc"><span style="color:#c4b9a9">v0.13</span> · 6 轴 AI attribution heatmap</span></div>
-          <div class="shortcut-row"><span class="keys"><kbd>H</kbd></span><span class="desc"><span style="color:#c4b9a9">v0.12</span> · EXIF / 直方图 overlay</span></div>
-          <div class="shortcut-row"><span class="keys"><kbd>\</kbd></span><span class="desc"><span style="color:#c4b9a9">v0.12</span> · 一键打开同 burst 组 A/B 比较</span></div>
-          <div class="shortcut-row"><span class="keys">底部 1px 条</span><span class="desc"><span style="color:#c4b9a9">v0.11</span> · 拖动 scrub 所有可见照片(DaVinci-style)</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>A</kbd></span><span class="desc"><span style="color:#d5b584">v0.13</span> · 6 轴 AI attribution heatmap</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>H</kbd></span><span class="desc"><span style="color:#d5b584">v0.12</span> · EXIF / 直方图 overlay</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>\</kbd></span><span class="desc"><span style="color:#d5b584">v0.12</span> · 一键打开同 burst 组 A/B 比较</span></div>
+          <div class="shortcut-row"><span class="keys">底部 1px 条</span><span class="desc"><span style="color:#d5b584">v0.11</span> · 拖动 scrub 所有可见照片(DaVinci-style)</span></div>
         </div>
         <!-- v0.13.4 — grid: marquee + v0.12 bulk -->
         <div class="shortcut-section" data-ctx="grid">
           <div class="shortcut-section-title">批量(v0.11+)</div>
-          <div class="shortcut-row"><span class="keys">网格空白处拖框</span><span class="desc"><span style="color:#c4b9a9">v0.11</span> · marquee 框选;底部弹出批量工具栏</span></div>
+          <div class="shortcut-row"><span class="keys">网格空白处拖框</span><span class="desc"><span style="color:#d5b584">v0.11</span> · marquee 框选;底部弹出批量工具栏</span></div>
           <div class="shortcut-row"><span class="keys"><kbd>⌘</kbd>+<kbd>A</kbd></span><span class="desc">全选当前可见</span></div>
           <div class="shortcut-row"><span class="keys"><kbd>Esc</kbd></span><span class="desc">取消所有 marquee 选择</span></div>
           <div class="shortcut-row"><span class="keys"><kbd>⌘</kbd>+<kbd>K</kbd></span><span class="desc">命令面板(模糊搜索动作)</span></div>

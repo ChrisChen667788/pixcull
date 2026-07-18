@@ -3,14 +3,14 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>PixCull · 视频审片</title>
 <style>
-:root{--bg:#161310;--panel:rgba(30,26,20,0.74);--panel-solid:#1e1a14;
---line:#2b241a;--ink:#f1f3f7;--dim:#9aa6b4;--indigo:#c4b9a9;
---indigo2:#d8cebf;--pink:#6a6052;--keep:#6faa78;--cull:#cf6f5b;
+:root{--bg:#161616;--panel:rgba(29,29,29,0.74);--panel-solid:#1d1d1d;
+--line:#262626;--ink:#e6e6e6;--dim:#9b9b9b;--indigo:#d5b584;
+--indigo2:#eaca98;--pink:#93743f;--keep:#63bd7f;--cull:#e0604e;
 --radius:13px;--ease:cubic-bezier(0.34,1.56,0.64,1);
 --serif:"Charter","Iowan Old Style","PT Serif",Georgia,"Songti SC",serif}
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;background:
-radial-gradient(1200px 600px at 80% -10%,rgba(196,185,169,0.10),transparent 60%),
+radial-gradient(1200px 600px at 80% -10%,rgba(213,181,132,0.10),transparent 60%),
 var(--bg);color:var(--ink);
 font:13px/1.55 -apple-system,"SF Pro Text",system-ui,"PingFang SC",sans-serif}
 body{display:flex;flex-direction:column}
@@ -24,26 +24,26 @@ font-size:12px;border:1px solid var(--line);padding:5px 10px;border-radius:7px}
 header a:hover{border-color:var(--indigo)}
 .gradewrap{margin-left:auto;color:var(--dim);font-size:12px;
 display:flex;align-items:center;gap:6px}
-.gradewrap select{background:#1b1e26;color:var(--ink);
+.gradewrap select{background:#1d1d1d;color:var(--ink);
 border:1px solid var(--line);border-radius:7px;padding:5px 8px;font-size:12px}
 .cand .thumb{width:100%;height:64px;object-fit:cover;border-radius:6px;
-margin-top:7px;background:#1b1e26;border:1px solid var(--line)}
+margin-top:7px;background:#1d1d1d;border:1px solid var(--line)}
 main{flex:1;display:flex;min-height:0}
 .stage{flex:1;display:flex;flex-direction:column;min-width:0}
 .viewer-wrap{flex:1;position:relative;display:flex;align-items:center;
 justify-content:center;background:#000;overflow:hidden}
 .viewer-wrap img{max-width:100%;max-height:100%;object-fit:contain}
-.hud{position:absolute;left:14px;top:12px;background:rgba(10,11,13,.7);
+.hud{position:absolute;left:14px;top:12px;background:rgba(10,10,10,.7);
 backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:10px;
 padding:10px 12px;font-variant-numeric:tabular-nums;min-width:188px}
 .hud .t{font-size:18px;font-weight:600}
 .hud .fid{color:var(--dim);font-size:11px;margin-bottom:8px}
 .bar{display:flex;align-items:center;gap:6px;margin-top:4px;font-size:11px}
 .bar .lbl{width:64px;color:var(--dim)}
-.bar .track{flex:1;height:6px;background:#1c1f27;border-radius:4px;overflow:hidden}
+.bar .track{flex:1;height:6px;background:#242424;border-radius:4px;overflow:hidden}
 .bar .fill{height:100%;border-radius:4px;background:linear-gradient(90deg,var(--indigo),var(--indigo2))}
 .bar .val{width:34px;text-align:right;color:var(--ink)}
-.badge{position:absolute;right:14px;top:12px;background:rgba(196,185,169,.16);
+.badge{position:absolute;right:14px;top:12px;background:rgba(213,181,132,.16);
 border:1px solid var(--indigo);color:var(--indigo2);padding:5px 10px;
 border-radius:20px;font-size:11px;display:none}
 .transport{display:flex;align-items:center;gap:8px;padding:10px 16px;
@@ -55,7 +55,7 @@ transition:transform .18s var(--ease),border-color .18s,background .18s}
 .transport button:hover{border-color:var(--indigo);transform:translateY(-1px)}
 .transport button:active{transform:translateY(0) scale(.96)}
 .transport button.on{background:var(--indigo);border-color:var(--indigo);color:#fff;
-box-shadow:0 4px 16px rgba(196,185,169,.4)}
+box-shadow:0 4px 16px rgba(213,181,132,.4)}
 .transport .spacer{flex:1}
 .transport .count{color:var(--dim);font-variant-numeric:tabular-nums}
 .scrub{padding:8px 16px 14px;background:var(--panel);border-top:1px solid var(--line);
@@ -70,12 +70,12 @@ color:var(--dim);margin:0;padding:12px 14px;border-bottom:1px solid var(--line)}
 .gpsmap{border-bottom:1px solid var(--line);padding:11px 14px 12px}
 .gpsmap h2{font-size:12px;text-transform:uppercase;letter-spacing:.6px;
 color:var(--dim);margin:0 0 8px;padding:0;border:0}
-.gpsmap svg{width:100%;height:auto;display:block;background:#15120d;
+.gpsmap svg{width:100%;height:auto;display:block;background:#141414;
 border:1px solid var(--line);border-radius:9px}
 .gpsmeta{color:var(--dim);font-size:11px;margin-top:6px;font-variant-numeric:tabular-nums}
 .cand{padding:10px 14px;border-bottom:1px solid var(--line);cursor:pointer}
-.cand:hover{background:#1a1d24}
-.cand.active{background:#1d2030;box-shadow:inset 3px 0 0 var(--indigo)}
+.cand:hover{background:#171717}
+.cand.active{background:#242424;box-shadow:inset 3px 0 0 var(--indigo)}
 .cand .row1{display:flex;align-items:center;gap:8px}
 .cand .rank{background:var(--indigo);color:#fff;border-radius:6px;
 padding:1px 7px;font-size:11px;font-weight:600}
@@ -90,16 +90,16 @@ padding:1px 7px;font-size:11px;font-weight:600}
 .cand .sig u{display:block;height:100%;background:var(--indigo);text-decoration:none}
 .cand .whylow{margin-top:4px;font-size:11px;color:var(--cull)}
 .cand .acts{margin-top:7px;display:flex;gap:6px}
-.cand .acts button{flex:1;border:1px solid var(--line);background:#15171d;
+.cand .acts button{flex:1;border:1px solid var(--line);background:#1a1a1a;
 color:var(--dim);border-radius:7px;padding:4px 0;font-size:11px;cursor:pointer}
-.cand .acts button.keep.on{background:rgba(111,170,120,.18);
+.cand .acts button.keep.on{background:rgba(99,189,127,.18);
 border-color:var(--keep);color:var(--keep)}
-.cand .acts button.cull.on{background:rgba(248,113,113,.16);
+.cand .acts button.cull.on{background:rgba(224,96,78,.16);
 border-color:var(--cull);color:var(--cull)}
 .cand.culled{opacity:.5}
 footer{padding:7px 14px;border-top:1px solid var(--line);color:var(--dim);
 font-size:11px;background:var(--panel)}
-kbd{background:#1b1e26;border:1px solid var(--line);border-radius:5px;
+kbd{background:#1d1d1d;border:1px solid var(--line);border-radius:5px;
 padding:1px 6px;font-size:11px;color:var(--ink)}
 .err{padding:48px;text-align:center;color:var(--dim)}
 </style></head>
@@ -232,12 +232,12 @@ function drawGPS(){
   if(!g || !g.points || g.points.length<2){ $('gpsmap').style.display='none'; return; }
   $('gpsmap').style.display='block';
   const p=g.points, p0=p[0], pN=p[p.length-1];
-  let s='<path d="'+g.path+'" fill="none" stroke="#c4b9a9" stroke-width="2" '
+  let s='<path d="'+g.path+'" fill="none" stroke="#d5b584" stroke-width="2" '
       +'stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/>';
-  s+='<circle cx="'+p0.x+'" cy="'+p0.y+'" r="4" fill="#6faa78"/>';
-  s+='<circle cx="'+pN.x+'" cy="'+pN.y+'" r="4" fill="#cf6f5b"/>';
-  s+='<circle id="gpsdot" cx="'+p0.x+'" cy="'+p0.y+'" r="5.5" fill="#dcb87e" '
-      +'stroke="#161310" stroke-width="1.5"/>';
+  s+='<circle cx="'+p0.x+'" cy="'+p0.y+'" r="4" fill="#63bd7f"/>';
+  s+='<circle cx="'+pN.x+'" cy="'+pN.y+'" r="4" fill="#e0604e"/>';
+  s+='<circle id="gpsdot" cx="'+p0.x+'" cy="'+p0.y+'" r="5.5" fill="#d5b584" '
+      +'stroke="#161616" stroke-width="1.5"/>';
   $('gpssvg').innerHTML=s;
   const km=(g.distance_km!=null && g.distance_km>0)?(g.distance_km.toFixed(2)+' km · '):'';
   $('gpsmeta').textContent=km+g.n+' 点'+(g.source?(' · '+g.source):'');
@@ -258,13 +258,13 @@ function drawTimeline(){
   REEL.forEach(c=>{
     const x1=tx(+c.start_s), x2=tx(+c.end_s);
     const op=0.10+0.22*Math.min(1,(+c.score||0));
-    s+='<rect x="'+x1.toFixed(1)+'" y="0" width="'+Math.max(2,(x2-x1)).toFixed(1)+'" height="'+H+'" fill="#c4b9a9" opacity="'+op.toFixed(2)+'"/>';
-    s+='<text x="'+(x1+3).toFixed(1)+'" y="13" fill="#d8cebf" font-size="10">#'+c.rank+'</text>';
+    s+='<rect x="'+x1.toFixed(1)+'" y="0" width="'+Math.max(2,(x2-x1)).toFixed(1)+'" height="'+H+'" fill="#d5b584" opacity="'+op.toFixed(2)+'"/>';
+    s+='<text x="'+(x1+3).toFixed(1)+'" y="13" fill="#eaca98" font-size="10">#'+c.rank+'</text>';
   });
   // v2.19-P2 — audio-event bottom lane (laughter/applause/music). Same
   // deterministic glass-box philosophy: the shooter SEES what the audio
   // tagger heard, aligned to the frames it heard it under.
-  const AUD_STYLE={laughter:['#6faa78','😄 笑声'],applause:['#dcb87e','👏 掌声'],music:['#9aa6b4','🎵 音乐']};
+  const AUD_STYLE={laughter:['#63bd7f','😄 笑声'],applause:['#d5b584','👏 掌声'],music:['#9b9b9b','🎵 音乐']};
   AUDIO.forEach(e=>{
     const st=AUD_STYLE[e.kind]; if(!st) return;
     const x1=tx(+e.start_s), x2=tx(+e.end_s);
@@ -275,21 +275,21 @@ function drawTimeline(){
        '</g>';
   });
   // baseline grid
-  for(let g=0;g<=4;g++){ const y=H-g/4*H; s+='<line x1="0" y1="'+y+'" x2="1000" y2="'+y+'" stroke="#23262e" stroke-width="0.5"/>'; }
+  for(let g=0;g<=4;g++){ const y=H-g/4*H; s+='<line x1="0" y1="'+y+'" x2="1000" y2="'+y+'" stroke="#242424" stroke-width="0.5"/>'; }
   // score_temporal area
   let area='0,'+H; let line='';
   FRAMES.forEach((f,i)=>{ const x=tx(f.t).toFixed(1), y=(H-(f.sT||0)*H).toFixed(1);
     area+=' '+x+','+y; line+=(i?' L':'M')+x+' '+y; });
   area+=' 1000,'+H;
-  s+='<polygon points="'+area+'" fill="rgba(196,185,169,0.22)"/>';
-  s+='<path d="'+line+'" fill="none" stroke="#d8cebf" stroke-width="1.6"/>';
+  s+='<polygon points="'+area+'" fill="rgba(213,181,132,0.22)"/>';
+  s+='<path d="'+line+'" fill="none" stroke="#eaca98" stroke-width="1.6"/>';
   // score_final faint line
   let lf=''; let any=false;
   FRAMES.forEach((f,i)=>{ if(f.sF==null) return; any=true; const x=tx(f.t).toFixed(1), y=(H-f.sF*H).toFixed(1); lf+=(lf?' L':'M')+x+' '+y; });
-  if(any) s+='<path d="'+lf+'" fill="none" stroke="#3f4658" stroke-width="1" stroke-dasharray="3 3"/>';
+  if(any) s+='<path d="'+lf+'" fill="none" stroke="#3f3f3f" stroke-width="1" stroke-dasharray="3 3"/>';
   // playhead
-  s+='<line id="ph" x1="0" y1="0" x2="0" y2="'+H+'" stroke="#6a6052" stroke-width="2"/>';
-  s+='<circle id="phd" cx="0" cy="6" r="5" fill="#6a6052"/>';
+  s+='<line id="ph" x1="0" y1="0" x2="0" y2="'+H+'" stroke="#93743f" stroke-width="2"/>';
+  s+='<circle id="phd" cx="0" cy="6" r="5" fill="#93743f"/>';
   svg.innerHTML=s;
   svg.addEventListener('pointerdown',seekEvt);
   svg.addEventListener('pointermove',e=>{ if(dragging) seekEvt(e); });

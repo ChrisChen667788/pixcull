@@ -54,7 +54,18 @@ tasks:
 完整源码 + iOS 伴侣 App + Lightroom 插件,均在 GitHub:
 **[github.com/ChrisChen667788/pixcull](https://github.com/ChrisChen667788/pixcull)**
 
-## v0.7 → v2.20 主要更新
+## v0.7 → v2.21 主要更新
+- **v2.21**:**「Studio Neutral 中性影室」调研驱动的设计全面翻新** —— 先做 6 视角
+  全网调研(Narrative Select / Aftershoot / Imagen / FilterPixel / Lightroom /
+  Capture One + Linear/Raycast 级工具设计 + 暗色 UI 色彩科学),拿到一个硬结论:
+  **暖色环境会系统性扭曲照片判色**(ISO 3664 观片环境标准;头部工具全部用中性灰,
+  旧浓缩咖啡棕是业内孤例)。整个 UI 迁移到无彩影室灰梯(#161616→#1d1d1d→#242424,
+  OKLCH c=0),品牌暖意收缩为**一道香槟金**(#d5b584,彩度 3× 旧黄铜)专用于
+  选中/焦点/CTA;v2.3 双 bezel 装饰卡退役,照片占满卡面 + 发丝线;每卡琥珀
+  「待审」环降为耳语级;分数改等宽数字;运动回归扁平 ease(弹簧只留签名时刻);
+  半径收紧到 pro 档。全仓色板迁移 ~430 处、24 个文件(含视频页潜伏的蓝灰小色板
+  与 3 个顺手捡出的潜伏 bug)。亮暗双主题保留,亮色变中性纸。gallery 截图仍是
+  旧皮肤,重摄已排队。详见 `docs/ROADMAP-v2.21-design-charter.md`。
 - **DESIGN-AUDIT 2030Q3**:**七版收口后的全局复检** —— 5 视角真读代码重新打分:
   **总评 3.1/5(Q2:3.0)**——核心 UX 3.5→3.8、智能 3.1→3.5、架构 2.5→3.2、触达
   2.5→2.8,新增「发布与 CI 卫生」视角 2.0(v0.7.0 之后无 tag、无 Release、无已

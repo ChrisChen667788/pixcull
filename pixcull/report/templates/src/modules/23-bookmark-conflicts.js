@@ -33,7 +33,7 @@
           badge.style.cssText = (
             "position:absolute;top:6px;right:6px;width:22px;height:22px;" +
             "display:flex;align-items:center;justify-content:center;" +
-            "background:rgba(196,185,169,0.85);color:#fff;" +
+            "background:rgba(213,181,132,0.85);color:#fff;" +
             "border-radius:4px;font-size:14px;z-index:2;" +
             "pointer-events:none;box-shadow:0 1px 4px rgba(0,0,0,0.4);"
           );

@@ -67,7 +67,7 @@
         histCtx.clearRect(0, 0, cv.width, cv.height);
         const maxB = Math.max(...bins, 1);
         const bw = cv.width / 64;
-        histCtx.fillStyle = "rgba(196,185,169,0.75)";
+        histCtx.fillStyle = "rgba(213,181,132,0.75)";
         for (let i = 0; i < 64; i++) {
           const h = (bins[i] / maxB) * cv.height;
           histCtx.fillRect(i * bw, cv.height - h, bw - 0.5, h);

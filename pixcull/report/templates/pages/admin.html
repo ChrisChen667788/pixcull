@@ -348,7 +348,7 @@ PYTHONPATH=. python scripts/eval_on_golden_set.py golden/ \
       const k = r.kv != null ? r.kv.toFixed(2) : "--";
       const c = r.cv != null ? r.cv.toFixed(2) : "--";
       const d = r.diff != null
-        ? `<b style="color:${r.diff > 1.5 ? '#6faa78' : r.diff > 0.5 ? '#d6a443' : 'var(--muted)'}">${r.diff >= 0 ? '+' : ''}${r.diff.toFixed(2)}</b>`
+        ? `<b style="color:${r.diff > 1.5 ? '#63bd7f' : r.diff > 0.5 ? '#d6a443' : 'var(--muted)'}">${r.diff >= 0 ? '+' : ''}${r.diff.toFixed(2)}</b>`
         : "--";
       return `<tr><td>${r.label}</td><td>${k}</td><td>${c}</td><td>${d}</td></tr>`;
     }).join("");
@@ -387,7 +387,7 @@ PYTHONPATH=. python scripts/eval_on_golden_set.py golden/ \
         // Mode tag: 'scan' = no copies, only derived data. Reassures
         // the user that deleting a scan run won't touch their originals.
         const modeP = r.mode === "scan"
-          ? `<span class="pill" style="background:rgba(196,185,169,0.18);color:#d8cebf" title="扫描模式 — 只存派生数据,删除不影响原图">scan</span>`
+          ? `<span class="pill" style="background:rgba(213,181,132,0.18);color:#eaca98" title="扫描模式 — 只存派生数据,删除不影响原图">scan</span>`
           : `<span class="pill" style="background:rgba(255,255,255,0.06);color:var(--muted)" title="上传模式 — 原图副本存在 input/">upload</span>`;
         const isRunning = r.state === "running";
         return `<tr data-id="${r.run_id}">

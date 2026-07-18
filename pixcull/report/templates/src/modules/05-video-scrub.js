@@ -10,13 +10,13 @@
     st.textContent =
       "#lbVideoBar{position:absolute;left:50%;transform:translateX(-50%);"
       + "bottom:104px;width:min(72%,900px);z-index:42;background:rgba(10,11,13,.86);"
-      + "backdrop-filter:blur(8px);border:1px solid #23262e;border-radius:12px;"
+      + "backdrop-filter:blur(8px);border:1px solid #242424;border-radius:12px;"
       + "padding:8px 12px 10px;display:none}"
       + ".lightbox.show #lbVideoBar{display:block}"
       + "#lbVideoBar .vbc{display:flex;gap:8px;align-items:center;margin-bottom:5px}"
-      + "#lbVideoBar button{background:#1b1e26;border:1px solid #23262e;color:#e8e8ea;"
+      + "#lbVideoBar button{background:#1d1d1d;border:1px solid #242424;color:#e8e8ea;"
       + "border-radius:7px;padding:4px 11px;font-size:13px;cursor:pointer}"
-      + "#lbVideoBar button.on{background:#c4b9a9;border-color:#c4b9a9;color:#fff}"
+      + "#lbVideoBar button.on{background:#d5b584;border-color:#d5b584;color:#fff}"
       + "#lbVideoBar .vbr{margin-left:auto;color:#9aa0aa;font:11px ui-monospace,monospace}"
       + "#vbTl{width:100%;height:54px;display:block;cursor:pointer;touch-action:none}";
     document.head.appendChild(st);
@@ -37,9 +37,9 @@
       reel.forEach((c) => {
         const x1 = tx(+c.start_s), x2 = tx(+c.end_s);
         s += '<rect x="' + x1.toFixed(1) + '" y="0" width="'
-          + Math.max(2, x2 - x1).toFixed(1) + '" height="60" fill="#c4b9a9" '
+          + Math.max(2, x2 - x1).toFixed(1) + '" height="60" fill="#d5b584" '
           + 'opacity="' + (0.12 + 0.22 * Math.min(1, +c.score || 0)).toFixed(2) + '"/>';
-        s += '<text x="' + (x1 + 2).toFixed(1) + '" y="11" fill="#d8cebf" '
+        s += '<text x="' + (x1 + 2).toFixed(1) + '" y="11" fill="#eaca98" '
           + 'font-size="9">#' + c.rank + '</text>';
       });
       // v2.19-P2 — audio-event lane (mirrors the /video review page).
@@ -59,9 +59,9 @@
         area += " " + x + "," + y; line += (i ? " L" : "M") + x + " " + y;
       });
       area += " 1000,60";
-      s += '<polygon points="' + area + '" fill="rgba(196,185,169,0.22)"/>';
-      s += '<path d="' + line + '" fill="none" stroke="#c4b9a9" stroke-width="1.4"/>';
-      s += '<line id="vbPh" x1="0" y1="0" x2="0" y2="60" stroke="#6a6052" stroke-width="2"/>';
+      s += '<polygon points="' + area + '" fill="rgba(213,181,132,0.22)"/>';
+      s += '<path d="' + line + '" fill="none" stroke="#d5b584" stroke-width="1.4"/>';
+      s += '<line id="vbPh" x1="0" y1="0" x2="0" y2="60" stroke="#93743f" stroke-width="2"/>';
       tl.innerHTML = s;
     }
     const curIdx = () => fnIdx.has(_lbCurrentFn) ? fnIdx.get(_lbCurrentFn) : 0;

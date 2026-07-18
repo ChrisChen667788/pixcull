@@ -38,7 +38,7 @@
           "border-left:3px solid #f59e0b;font-size:11.5px"
         );
         banner.innerHTML = (
-          "<div style='color:#fbbf24;font-weight:600;margin-bottom:2px'>" +
+          "<div style='color:#d6a443;font-weight:600;margin-bottom:2px'>" +
           "⚠ 你之前选了不同决策</div>" +
           "<div style='color:#bbb;line-height:1.5'>" +
           "Run <code style='font-family:ui-monospace,Menlo;" +

@@ -28,8 +28,8 @@
     chip.style.cssText = (
       "display:inline-flex;align-items:center;gap:6px;" +
       "padding:3px 9px;border-radius:999px;" +
-      "background:rgba(196,185,169,0.14);color:#c4b9a9;" +
-      "border:1px dashed rgba(196,185,169,0.40);" +
+      "background:rgba(213,181,132,0.14);color:#d5b584;" +
+      "border:1px dashed rgba(213,181,132,0.40);" +
       "font-size:10.5px;font-weight:500;cursor:help;" +
       "margin-left:8px;"
     );

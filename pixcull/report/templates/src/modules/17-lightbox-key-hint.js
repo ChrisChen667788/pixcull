@@ -19,28 +19,28 @@
         "padding:14px 22px;border-radius:12px;z-index:8;" +
         "font:13px/1.6 system-ui;text-align:center;" +
         "box-shadow:0 12px 32px rgba(0,0,0,0.45);" +
-        "border:1px solid rgba(196,185,169,0.30);" +
+        "border:1px solid rgba(213,181,132,0.30);" +
         "max-width:min(560px,90vw);" +
         "opacity:0;transition:opacity 320ms cubic-bezier(0.2,0.8,0.2,1)," +
         "transform 320ms cubic-bezier(0.34,1.56,0.64,1);"
       );
       toast.innerHTML = (
-        "<div style='font-weight:600;color:#c4b9a9;margin-bottom:6px;" +
+        "<div style='font-weight:600;color:#d5b584;margin-bottom:6px;" +
         "font-size:11px;letter-spacing:0.04em;text-transform:uppercase'>" +
         "✨ 这是你第一次打开 lightbox</div>" +
         "<div>三个 PixCull 专属键位:</div>" +
         "<div style='margin-top:8px;display:flex;justify-content:center;gap:18px;flex-wrap:wrap'>" +
-        "<span><kbd style='background:rgba(196,185,169,0.20);padding:3px 8px;" +
+        "<span><kbd style='background:rgba(213,181,132,0.20);padding:3px 8px;" +
         "border-radius:4px;font-family:ui-monospace,Menlo;color:#fff;" +
-        "border:1px solid rgba(196,185,169,0.40);font-size:11px'>A</kbd> " +
+        "border:1px solid rgba(213,181,132,0.40);font-size:11px'>A</kbd> " +
         "<span style='color:#aaa;font-size:11.5px'>AI heatmap</span></span>" +
-        "<span><kbd style='background:rgba(196,185,169,0.20);padding:3px 8px;" +
+        "<span><kbd style='background:rgba(213,181,132,0.20);padding:3px 8px;" +
         "border-radius:4px;font-family:ui-monospace,Menlo;color:#fff;" +
-        "border:1px solid rgba(196,185,169,0.40);font-size:11px'>H</kbd> " +
+        "border:1px solid rgba(213,181,132,0.40);font-size:11px'>H</kbd> " +
         "<span style='color:#aaa;font-size:11.5px'>EXIF + 直方图</span></span>" +
-        "<span><kbd style='background:rgba(196,185,169,0.20);padding:3px 8px;" +
+        "<span><kbd style='background:rgba(213,181,132,0.20);padding:3px 8px;" +
         "border-radius:4px;font-family:ui-monospace,Menlo;color:#fff;" +
-        "border:1px solid rgba(196,185,169,0.40);font-size:11px'>\\</kbd> " +
+        "border:1px solid rgba(213,181,132,0.40);font-size:11px'>\\</kbd> " +
         "<span style='color:#aaa;font-size:11.5px'>burst 比较</span></span>" +
         "</div>" +
         "<div style='margin-top:8px;color:#888;font-size:10.5px'>" +

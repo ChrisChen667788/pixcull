@@ -63,11 +63,11 @@
         "padding:9px 12px;border-radius:8px;" +
         "font:11.5px/1.5 system-ui;max-width:230px;" +
         "box-shadow:0 6px 20px rgba(0,0,0,0.40);" +
-        "border:1px solid rgba(196,185,169,0.30);"
+        "border:1px solid rgba(213,181,132,0.30);"
       );
       const reasons = _explainRow(row);
       popover.innerHTML = (
-        "<div style='font-weight:600;color:#c4b9a9;margin-bottom:4px'>" +
+        "<div style='font-weight:600;color:#d5b584;margin-bottom:4px'>" +
         "⌬ model 不确定</div>" +
         reasons.map((r, i) => (
           `<div style='color:${i === 0 ? "#fff" : "#aaa"}'>${

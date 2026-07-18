@@ -3,8 +3,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>PixCull · 照片 + 视频时间线</title>
 <style>
-:root{--bg:#161310;--panel:#1e1a14;--line:#2b241a;--ink:#f1f3f7;
---dim:#9aa6b4;--indigo:#c4b9a9;--indigo2:#d8cebf;--pink:#6a6052;}
+:root{--bg:#161616;--panel:#1d1d1d;--line:#262626;--ink:#e6e6e6;
+--dim:#9b9b9b;--indigo:#d5b584;--indigo2:#eaca98;--pink:#93743f;}
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--ink);
 font:13px/1.5 system-ui,-apple-system,sans-serif}
@@ -21,9 +21,9 @@ flex-shrink:0;font-size:12px;padding-top:4px}
 .body{flex:1;min-width:0}
 .photos{display:flex;flex-wrap:wrap;gap:5px}
 .photos img{width:78px;height:58px;object-fit:cover;border-radius:5px;
-background:#1b1e26;border:1px solid var(--line)}
-.photos img.keep{border-color:#6faa78}.photos img.cull{opacity:.4}
-.vcard{display:flex;align-items:center;gap:14px;background:#161a24;
+background:#1d1d1d;border:1px solid var(--line)}
+.photos img.keep{border-color:#63bd7f}.photos img.cull{opacity:.4}
+.vcard{display:flex;align-items:center;gap:14px;background:#1a1a1a;
 border:1px solid var(--indigo);border-radius:12px;padding:12px 16px}
 .vcard .ic{font-size:26px}
 .vcard .t{font-weight:600}
@@ -43,7 +43,7 @@ text-decoration:none;padding:7px 14px;border-radius:8px;font-size:12px}
 </header>
 <div class="wrap">
   <div class="legend">
-    <span><span class="dot" style="background:#d8cebf"></span>照片(本 run)</span>
+    <span><span class="dot" style="background:#eaca98"></span>照片(本 run)</span>
     <span><span class="dot" style="background:var(--pink)"></span>视频片段(可审片)</span>
     <span id="tally"></span>
   </div>

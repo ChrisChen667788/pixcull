@@ -2068,7 +2068,7 @@
         if (al) {
           activeLearningBadge =
             `<div style="position:absolute;top:6px;left:6px;
-             background:linear-gradient(90deg,#c4b9a9,#c4b9a9);
+             background:linear-gradient(90deg,#d5b584,#d5b584);
              color:#fff;padding:2px 8px;border-radius:3px;
              font-size:10px;font-weight:600;z-index:5;
              box-shadow:0 1px 4px rgba(0,0,0,0.4)"
@@ -3727,10 +3727,11 @@
         return '<span class="ax-cell empty" title="缺失"></span>';
       }
       const t = Math.max(0, Math.min(1, (v - 1) / 4));
-      // 6a6052 (graphite) → dcb87e (brass) — editorial-warm score ramp
-      const r = Math.round(0x6a + (0xdc - 0x6a) * t);
-      const g = Math.round(0x60 + (0xb8 - 0x60) * t);
-      const b = Math.round(0x52 + (0x7e - 0x52) * t);
+      // 707070 (neutral graphite) → d5b584 (champagne) — v2.21 score
+      // ramp: low scores stay achromatic, high scores earn the accent
+      const r = Math.round(0x70 + (0xd5 - 0x70) * t);
+      const g = Math.round(0x70 + (0xb5 - 0x70) * t);
+      const b = Math.round(0x70 + (0x84 - 0x70) * t);
       const op = (0.30 + 0.60 * t).toFixed(2);
       return `<span class="ax-cell" title="${v.toFixed(2)}" ` +
              `style="background:rgba(${r},${g},${b},${op})">` +
@@ -3784,7 +3785,7 @@
     const _peakReason = r.burst_peak_reason ? ` — ${r.burst_peak_reason}` : "";
     const peakBadge = (r.is_burst_peak && _clusterSize >= 2)
       ? `<span class="badge keep" title="此连拍组的最佳一张(共 ${_clusterSize} 张)${esc(_peakReason)}" `
-        + `style="background:linear-gradient(90deg,#d4a843,#b88a2e);color:#1a1d24">`
+        + `style="background:linear-gradient(90deg,#d4a843,#b88a2e);color:#171717">`
         + `<svg class="icon icon--sm"><use href="#icon-trophy"/></svg>`
         + `<span>连拍峰值</span></span>`
       : '';
@@ -3814,9 +3815,9 @@
       let fg = "var(--muted)";
       let bd = "rgba(148,148,160,0.35)";
       if (d <= 0.15)      { bg = "rgba(74,222,128,0.18)"; fg = "#88e0a6"; bd = "rgba(74,222,128,0.35)"; }
-      else if (d <= 0.30) { bg = "rgba(196,185,169,0.18)"; fg = "#c4b9a9"; bd = "rgba(196,185,169,0.35)"; }
+      else if (d <= 0.30) { bg = "rgba(213,181,132,0.18)"; fg = "#d5b584"; bd = "rgba(213,181,132,0.35)"; }
       else if (d <= 0.50) { bg = "rgba(217,163,12,0.20)"; fg = "#e3c25e"; bd = "rgba(217,163,12,0.40)"; }
-      else                { bg = "rgba(248,113,113,0.20)"; fg = "#ee8888"; bd = "rgba(248,113,113,0.40)"; }
+      else                { bg = "rgba(224,96,78,0.20)"; fg = "#ea8073"; bd = "rgba(224,96,78,0.40)"; }
       return {bg, fg, bd};
     }
     function _styleChip(label, d, tip) {
@@ -3866,8 +3867,8 @@
                      lamSrc.startsWith('auto:') ?
                        '基于 docs/STYLE-V2-BENCHMARK.md 推荐表自动选择' :
                        '可点击在 0.0 / 0.3 / 0.5 / 0.7 / 1.0 之间循环'}"
-                   style="background:rgba(196,185,169,0.10);color:#c4b9a9;
-                          border:1px dashed rgba(196,185,169,0.40);
+                   style="background:rgba(213,181,132,0.10);color:#d5b584;
+                          border:1px dashed rgba(213,181,132,0.40);
                           font-size:9.5px;cursor:pointer;font-family:inherit">
              λ ${curLam.toFixed(2)}${srcLabel}
            </button>`);
@@ -9084,7 +9085,7 @@
       "background:rgba(20,18,14,0.96);color:#fff;" +
       "padding:14px 16px;border-radius:8px;" +
       "min-width:260px;max-width:340px;" +
-      "border:1px solid rgba(196,185,169,0.30);" +
+      "border:1px solid rgba(213,181,132,0.30);" +
       "box-shadow:0 12px 32px rgba(0,0,0,0.45);" +
       "font:12px/1.5 system-ui;"
     );
@@ -9105,12 +9106,12 @@
     }
     const maxD = Math.max(v1 || 0, v2 || 0, blend || 0, 1.0);
     pop.innerHTML = (
-      `<div style='font-weight:600;color:#c4b9a9;margin-bottom:8px;` +
+      `<div style='font-weight:600;color:#d5b584;margin-bottom:8px;` +
       `letter-spacing:0.02em;text-transform:uppercase;font-size:10.5px'>` +
       `视觉距离细分 · ${row.filename.slice(0, 30)}</div>` +
-      _bar("V1 · axis-MAD", v1, maxD, "#c4b9a9") +
-      _bar("V2 · CLIP cosine", v2, maxD, "#6a6052") +
-      _bar("综合 blend", blend, maxD, "#c4b9a9") +
+      _bar("V1 · axis-MAD", v1, maxD, "#d5b584") +
+      _bar("V2 · CLIP cosine", v2, maxD, "#93743f") +
+      _bar("综合 blend", blend, maxD, "#d5b584") +
       "<div id='styleRefBreakdown' style='margin-top:10px'>" +
       "<div style='color:#888;font-size:10.5px;margin-bottom:6px'>" +
       "<span class='dots-load'>↻ 加载逐张参考贡献…</span></div></div>" +
@@ -9144,7 +9145,7 @@
         const top = d.refs.slice(0, 8);
         const maxRefD = Math.max(...top.map(r => r.distance), 0.01);
         const html = (
-          "<div style='font-size:10.5px;color:#c4b9a9;margin-bottom:6px;" +
+          "<div style='font-size:10.5px;color:#d5b584;margin-bottom:6px;" +
           "letter-spacing:0.02em;text-transform:uppercase'>" +
           `Top ${top.length} ref by similarity</div>` +
           top.map(r => {
@@ -9162,7 +9163,7 @@
               "<div style='height:3px;background:rgba(255,255,255,0.08);" +
               "border-radius:2px;margin-top:2px'>" +
               `<div style='height:100%;width:${pct.toFixed(0)}%;` +
-              `background:#6a6052;border-radius:2px'></div></div></div>` +
+              `background:#93743f;border-radius:2px'></div></div></div>` +
               `<span style='color:#fff;font-family:ui-monospace;font-size:9.5px'>` +
               `${r.distance.toFixed(3)}</span></div>`
             );

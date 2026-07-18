@@ -76,7 +76,7 @@
       menuEl.innerHTML = items.map((c, i) =>
         `<div class="slash-item${i === selectedIndex ? " sel" : ""}" ` +
         ` style="padding:6px 12px;cursor:pointer;` +
-        ` ${i === selectedIndex ? "background:var(--accent-soft, rgba(196,185,169,0.16));" : ""}"` +
+        ` ${i === selectedIndex ? "background:var(--accent-soft, rgba(213,181,132,0.16));" : ""}"` +
         ` data-key="${c.key}">` +
         `  <span style="color:var(--accent);margin-right:6px">/</span>` +
         `  <b>${c.key}</b>` +

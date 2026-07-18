@@ -38,7 +38,7 @@
         "Tab 在轴间跳 · 1-5 直接给当前轴打星 · 一张全维度评分通常 &lt; 5 秒。" +
         "</div>" +
         "<button id='rubricIntroDismiss' type='button' " +
-        "style='background:linear-gradient(135deg,#c4b9a9,#6a6052);color:#fff;" +
+        "style='background:linear-gradient(135deg,#d5b584,#93743f);color:#fff;" +
         "border:0;padding:9px 22px;border-radius:999px;font-weight:600;" +
         "font-size:13px;cursor:pointer'>开始 →</button>"
       );
