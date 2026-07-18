@@ -171,5 +171,16 @@
   "toast.session_done": "🎉 Todo revisado — pulsa \"Exportar XMP\" en la barra para llevar tus decisiones a Lightroom",
   "toast.maybes_cleared": "Maybes resueltos ✓ — resolución completa",
   "toast.resolve_mode_enter": "◐ Modo resolución: {n} maybes, los más dudosos primero — pulsa 1/2/3 para decidir",
-  "toast.resolve_mode_blocked": "Tus filtros de escena/personas ocultan todos los maybes — quítalos o vuelve a pulsar para salir"
+  "toast.resolve_mode_blocked": "Tus filtros de escena/personas ocultan todos los maybes — quítalos o vuelve a pulsar para salir",
+  "onboard.aria": "Consejos iniciales",
+  "onboard.title": "Primeros pasos",
+  "onboard.close": "Cerrar consejos",
+  "onboard.tip1": "marca keep / maybe / cull y avanza solo (~1-2 s c/u; ⏩ lo desactiva)",
+  "onboard.tip2": "ver todos los atajos (resaltados según la vista actual)",
+  "onboard.tip3": "🪣 cubo arriba a la derecha: arrastra fotos para armar la entrega",
+  "onboard.dismiss": "Entendido, no mostrar de nuevo",
+  "workspace.disagree_review": "⚖ Revisar discrepancias",
+  "toast.disagree_mode_enter": "⚖ Revisión de discrepancias: {n} fotos donde el modelo y las reglas difieren, las más seguras primero — pulsa 1/2/3; tus decisiones alimentan el set de corrección",
+  "toast.disagree_mode_blocked": "Tus filtros ocultan todas las discrepancias — quítalos o vuelve a pulsar para salir",
+  "toast.disagree_cleared": "Revisión completa ✓ — tus decisiones están en el set de corrección"
 }

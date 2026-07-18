@@ -76,14 +76,52 @@
   let I18N_STRINGS = {};        // key → translated string (current lang)
   let I18N_CURRENT = "zh_CN";   // current language code
 
-  // v0.8-P2-1 — supported locale cycle.
-  const I18N_CYCLE = ["zh_CN", "en_US", "ja_JP"];
-  // Single-char chip label per locale (what the switcher shows).
-  const I18N_CHIP_LABEL = {zh_CN: "中", en_US: "EN", ja_JP: "あ"};
+  // v2.23-P1 — the full supported locale cycle (was 3 of 13: an
+  // English or Japanese user could reach only zh→en→ja and the other
+  // ten shipped locales were unreachable from the switcher).
+  const I18N_CYCLE = ["zh_CN", "en_US", "ja_JP", "ko_KR", "es_ES",
+    "de_DE", "fr_FR", "it_IT", "pt_BR", "nl_NL", "tr_TR", "ru_RU", "ar_SA"];
+  // Short chip label per locale (what the switcher shows).
+  const I18N_CHIP_LABEL = {
+    zh_CN: "中", en_US: "EN", ja_JP: "あ", ko_KR: "한", es_ES: "ES",
+    de_DE: "DE", fr_FR: "FR", it_IT: "IT", pt_BR: "PT", nl_NL: "NL",
+    tr_TR: "TR", ru_RU: "RU", ar_SA: "ع",
+  };
+  // BCP-47 tag per locale for the html[lang] attribute (:lang() CSS,
+  // screen readers).  Arabic also flips direction (handled at apply).
+  const I18N_HTML_LANG = {
+    zh_CN: "zh-CN", en_US: "en", ja_JP: "ja", ko_KR: "ko", es_ES: "es",
+    de_DE: "de", fr_FR: "fr", it_IT: "it", pt_BR: "pt-BR", nl_NL: "nl",
+    tr_TR: "tr", ru_RU: "ru", ar_SA: "ar",
+  };
+  // v2.23-P1 — mirror pixcull/i18n.py::_normalize_lang: fold a browser
+  // language tag (navigator.language, e.g. "en-GB", "pt-PT", "zh-Hans")
+  // onto one of the supported locales.  Kept in lockstep with the server
+  // so first-run detection and the /api/v1/locale endpoint never disagree.
+  function _normalizeLang(tag) {
+    if (!tag) return "zh_CN";
+    const s = String(tag).toLowerCase().replace(/_/g, "-").split(",")[0].trim();
+    const pref = [
+      ["zh", "zh_CN"], ["en", "en_US"], ["ja", "ja_JP"], ["ko", "ko_KR"],
+      ["es", "es_ES"], ["de", "de_DE"], ["fr", "fr_FR"], ["it", "it_IT"],
+      ["pt", "pt_BR"], ["nl", "nl_NL"], ["tr", "tr_TR"], ["ru", "ru_RU"],
+      ["ar", "ar_SA"],
+    ];
+    for (const [p, loc] of pref) if (s.startsWith(p)) return loc;
+    return "zh_CN";
+  }
   function _getStoredLang() {
+    // Explicit user choice wins and is sticky; otherwise fall back to
+    // the browser's language (v2.23-P1 — a non-Chinese photographer's
+    // first run used to be forced to zh_CN regardless of navigator).
     try {
       const v = localStorage.getItem(I18N_KEY);
-      return I18N_CYCLE.includes(v) ? v : "zh_CN";
+      if (I18N_CYCLE.includes(v)) return v;
+    } catch (_e) { /* private mode — fall through to detection */ }
+    try {
+      const nav = (navigator.languages && navigator.languages[0])
+        || navigator.language || "";
+      return _normalizeLang(nav);
     } catch (_e) { return "zh_CN"; }
   }
   function _setStoredLang(lang) {
@@ -132,9 +170,12 @@
       lblEl.textContent = I18N_CHIP_LABEL[next] || "EN";
     }
     // Update html lang attr so screen-readers + CSS :lang() rules work
-    const _htmlLang = {zh_CN: "zh-CN", en_US: "en", ja_JP: "ja"};
     document.documentElement.setAttribute("lang",
-      _htmlLang[I18N_CURRENT] || "en");
+      I18N_HTML_LANG[I18N_CURRENT] || "en");
+    // v2.23-P1 — Arabic is RTL; flip the document direction so the
+    // switcher can actually reach it (the strings already exist).
+    document.documentElement.setAttribute("dir",
+      I18N_CURRENT === "ar_SA" ? "rtl" : "ltr");
   }
 
   async function _applyLang(lang) {
@@ -157,6 +198,12 @@
       if (rp) rp.outerHTML = _reviewChipHtml();
       const rb = document.getElementById("resolveMaybesBtn");
       if (rb) rb.innerHTML = _t("workspace.resolve_maybes", "◐ 决议 maybe");
+      const db = document.getElementById("disagreeReviewBtn");
+      if (db) {
+        const n = db.querySelector('b[data-stat="disagree"]')?.textContent || "0";
+        db.innerHTML = `${_t("workspace.disagree_review", "⚖ 异议复核")}`
+          + ` <b data-stat="disagree">${n}</b>`;
+      }
     } catch (_e) { /* non-results contexts have neither element */ }
     return true;
   }
@@ -179,8 +226,10 @@
       lblEl.textContent = I18N_CHIP_LABEL[next] || "EN";
     }
     if (stored !== "zh_CN") {
-      // The HTML is rendered server-side in zh — only fetch if the
-      // user previously chose non-default.
+      // The HTML is rendered server-side in zh — fetch + repaint when
+      // the resolved locale isn't zh, whether it came from an explicit
+      // stored choice OR (v2.23-P1) navigator-language detection on a
+      // fresh visit.
       _applyLang(stored);
     }
     const btn = document.getElementById("langSwitcher");
@@ -558,6 +607,11 @@
   let _reviewDoneCelebrated = false;   // completion toast fires once
   let _resolveMaybesActive = false;    // maybe-resolution queue on?
   let _rmPrev = null;                  // {decision, sort} to restore on exit
+  // v2.23-P2 — shadow-rescorer disagreement review queue. Same shape as
+  // the maybe queue but routes the model↔rule disagreements (the
+  // highest-value correction labels) into the annotate flow.
+  let _disagreeActive = false;
+  let _drPrev = null;                  // {decision, sort} to restore on exit
 
   const stats = [
     // v0.9-P0-2 — primary total renders with brand gradient (signature
@@ -578,6 +632,14 @@
     `<button class="resolve-maybes-btn" id="resolveMaybesBtn"`
     + ` title="只看 maybe,按『模型最拿不准』排序 — 从最难的开始,1/2/3 直接判">`
     + `${_t("workspace.resolve_maybes", "◐ 决议 maybe")}</button>`,
+    // v2.23-P2 — disagreement review: only meaningful when the shadow
+    // rescorer ran AND disagreed with the rule stack somewhere. Rendered
+    // hidden by default; _updateReviewProgress() unhides it when there's
+    // something to review (mirrors the resolve-maybes button lifecycle).
+    `<button class="resolve-maybes-btn disagree-btn" id="disagreeReviewBtn" hidden`
+    + ` title="只看模型与规则判定不一致的照片,最有把握的分歧排最前 — 这些是最有价值的纠正标签">`
+    + `${_t("workspace.disagree_review", "⚖ 异议复核")}`
+    + ` <b data-stat="disagree">${summary.rescorer_n_disagrees || 0}</b></button>`,
     `<span class="stat-aux">耗时 <b>${ela}</b></span>`,
   ];
   if (summary.rescorer_active) {
@@ -692,6 +754,9 @@
   });
   document.getElementById("resolveMaybesBtn")?.addEventListener("click", () => {
     _toggleResolveMaybes();
+  });
+  document.getElementById("disagreeReviewBtn")?.addEventListener("click", () => {
+    _toggleDisagreeReview();
   });
   // Initial paint (hides the resolve button when there are no maybes,
   // shows the done state when the run loads fully reviewed).
@@ -1680,6 +1745,15 @@
         return (typeof p === "number") ? Math.abs(p - 0.5) : 99;
       };
       a.sort((x, y) => u(x) - u(y));
+    }
+    // v2.23-P2 — MOST-confident disagreement first: |P(keep)−0.5|
+    // DESCENDING (the opposite of "uncertain"). When the model is very
+    // sure and still contradicts the rule, that split is the strongest
+    // correction signal — surface it at the top of the review queue.
+    else if (s === "disagree") {
+      const c = (r) => (typeof r.rescorer_prob_keep === "number")
+        ? Math.abs(r.rescorer_prob_keep - 0.5) : -1;
+      a.sort((x, y) => c(y) - c(x));
     } else {
       // default: keep > maybe > cull, then descending score
       a.sort((x, y) => {
@@ -1807,6 +1881,27 @@
       _toggleResolveMaybes();   // restores the pre-queue filter + sort
       showToast(_t("toast.maybes_cleared", "maybe 清零 ✓ — 决议完成"), "success");
     }
+    // v2.23-P2 — same lifecycle for the disagreement review button, but
+    // the count is LIVE: a disagreement resolves the moment the user's
+    // decision matches the model's prediction (rescorer_pred === decision),
+    // so recompute from rows rather than the fixed run-time summary count.
+    const dbtn = document.getElementById("disagreeReviewBtn");
+    if (dbtn) {
+      let nDis = 0;
+      for (const r of rows) {
+        if (r.rescorer_pred && r.rescorer_pred !== r.decision) nDis++;
+      }
+      const dcount = dbtn.querySelector('b[data-stat="disagree"]');
+      if (dcount && dcount.textContent !== String(nDis)) {
+        dcount.textContent = String(nDis);
+      }
+      dbtn.hidden = (nDis === 0 && !_disagreeActive);
+      if (_disagreeActive && nDis === 0) {
+        _toggleDisagreeReview();   // restores the pre-queue filter + sort
+        showToast(_t("toast.disagree_cleared",
+          "分歧复核完成 ✓ — 你的改判已写入纠正集"), "success");
+      }
+    }
   }
 
   // Mark one photo as human-reviewed (idempotent). Accepts the filename so
@@ -1828,10 +1923,19 @@
   // restoring the pre-queue snapshot later would silently clobber it —
   // exit the mode, keep their choice.
   function _exitResolveMaybesSilently() {
-    if (!_resolveMaybesActive) return;
-    _resolveMaybesActive = false;
-    _rmPrev = null;
-    document.getElementById("resolveMaybesBtn")?.classList.remove("active");
+    if (_resolveMaybesActive) {
+      _resolveMaybesActive = false;
+      _rmPrev = null;
+      document.getElementById("resolveMaybesBtn")?.classList.remove("active");
+    }
+    // v2.23-P2 — the disagreement queue is the same kind of transient
+    // filter mode; a wholesale filter replacement must drop it too, or
+    // its snapshot would later clobber the user's new choice.
+    if (_disagreeActive) {
+      _disagreeActive = false;
+      _drPrev = null;
+      document.getElementById("disagreeReviewBtn")?.classList.remove("active");
+    }
   }
 
   // One-click maybe-resolution queue: filter to the maybe band, sorted
@@ -1875,6 +1979,46 @@
     render();
   }
 
+  // v2.23-P2 — enter/exit the disagreement review queue. Modeled on
+  // _toggleResolveMaybes: filter to the model↔rule splits, sort the
+  // most-confident split first, and restore the prior filter+sort on
+  // exit. The 1/2/3 keys the user presses in this view already POST
+  // /annotation, so every call lands in the correction set for free.
+  function _toggleDisagreeReview() {
+    const btn = document.getElementById("disagreeReviewBtn");
+    if (!_disagreeActive) {
+      // leaving the maybe queue and entering this one is fine; snapshot
+      // whatever the *current* (possibly already-restored) state is.
+      _drPrev = { decision: filterState.decision, sort: filterState.sort };
+      filterState.decision = "disagree";
+      filterState.sort = "disagree";
+      _disagreeActive = true;
+      _track("disagree_review");
+      btn?.classList.add("active");
+      const n = summary.rescorer_n_disagrees || 0;
+      showToast(_t("toast.disagree_mode_enter",
+        "⚖ 异议复核:{n} 张模型与规则判定不一致,最有把握的分歧排最前 — 1/2/3 直接判,你的改判进纠正集")
+        .replace("{n}", String(n)), "info");
+      setTimeout(() => {
+        if (_disagreeActive && n > 0 && !grid.querySelector(".card")) {
+          showToast(_t("toast.disagree_mode_blocked",
+            "当前筛选挡住了所有分歧 — 清掉那些筛选,或再点一次退出复核"), "info");
+        }
+      }, 0);
+    } else {
+      filterState.decision = (_drPrev && _drPrev.decision) || "all";
+      filterState.sort = (_drPrev && _drPrev.sort) || "default";
+      _drPrev = null;
+      _disagreeActive = false;
+      btn?.classList.remove("active");
+    }
+    document.querySelectorAll("#decisionPills .pill").forEach(el =>
+      el.classList.toggle("active", el.dataset.d === filterState.decision));
+    const sortSel = document.getElementById("sortBy");
+    if (sortSel) sortSel.value = filterState.sort;
+    render();
+  }
+
   // v0.4 P1 (2/4) — quick fade flash when filter state changes.
   // Adds `.filtering` to .grid for one paint frame so the user
   // perceives "the filter applied" rather than a paint glitch.
@@ -1898,6 +2042,13 @@
     // here rather than monkey-patching render() from setupSelectsMode's closure.
     if (filterState.decision === "selects") {
       filtered = filtered.filter(r => r.decision === "keep" || r.decision === "maybe");
+    } else if (filterState.decision === "disagree") {
+      // v2.23-P2 — the shadow rescorer's keep/maybe prediction differs
+      // from the rule stack's decision. These are the labels worth the
+      // owner's time (a rule↔model split is where the learned head can
+      // actually change a fate once adjudicate is on).
+      filtered = filtered.filter(r =>
+        r.rescorer_pred && r.rescorer_pred !== r.decision);
     } else if (filterState.decision !== "all") {
       filtered = filtered.filter(r => r.decision === filterState.decision);
     }

@@ -171,5 +171,16 @@
   "toast.session_done": "🎉 全部已审 — 点工作条的「导出 XMP」把结果带回 Lightroom",
   "toast.maybes_cleared": "maybe 清零 ✓ — 决议完成",
   "toast.resolve_mode_enter": "◐ 决议模式:{n} 张 maybe,最拿不准的排最前 — 1/2/3 直接判",
-  "toast.resolve_mode_blocked": "当前场景/人物等筛选挡住了所有 maybe — 清掉那些筛选,或再点一次退出决议模式"
+  "toast.resolve_mode_blocked": "当前场景/人物等筛选挡住了所有 maybe — 清掉那些筛选,或再点一次退出决议模式",
+  "onboard.aria": "新用户提示",
+  "onboard.title": "新手提示",
+  "onboard.close": "关闭提示",
+  "onboard.tip1": "标 keep / maybe / cull 并自动跳下一张(连标 ~1-2 秒/张;⏩ 可关)",
+  "onboard.tip2": "看所有快捷键(根据当前视图自动高亮)",
+  "onboard.tip3": "右上角 🪣 桶:拖卡片进去整理交付包",
+  "onboard.dismiss": "知道了,不再提示",
+  "workspace.disagree_review": "⚖ 异议复核",
+  "toast.disagree_mode_enter": "⚖ 异议复核:{n} 张模型与规则判定不一致,最有把握的分歧排最前 — 1/2/3 直接判,你的改判进纠正集",
+  "toast.disagree_mode_blocked": "当前筛选挡住了所有分歧 — 清掉那些筛选,或再点一次退出复核",
+  "toast.disagree_cleared": "分歧复核完成 ✓ — 你的改判已写入纠正集"
 }

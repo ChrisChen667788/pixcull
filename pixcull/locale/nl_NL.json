@@ -171,5 +171,16 @@
   "toast.session_done": "🎉 Alles beoordeeld — klik \"XMP exporteren\" in de balk om je keuzes naar Lightroom te brengen",
   "toast.maybes_cleared": "Maybes afgehandeld ✓ — ronde voltooid",
   "toast.resolve_mode_enter": "◐ Afhandelmodus: {n} maybes, meest onzekere eerst — druk 1/2/3 om te beslissen",
-  "toast.resolve_mode_blocked": "Je scène-/gezichtsfilters verbergen alle maybes — verwijder ze of klik opnieuw om te stoppen"
+  "toast.resolve_mode_blocked": "Je scène-/gezichtsfilters verbergen alle maybes — verwijder ze of klik opnieuw om te stoppen",
+  "onboard.aria": "Starttips",
+  "onboard.title": "Aan de slag",
+  "onboard.close": "Tips sluiten",
+  "onboard.tip1": "markeer keep / maybe / cull en ga automatisch verder (~1-2 s per foto; ⏩ zet uit)",
+  "onboard.tip2": "bekijk alle sneltoetsen (automatisch gemarkeerd voor de huidige weergave)",
+  "onboard.tip3": "🪣 emmer rechtsboven: sleep foto’s erin om een levering samen te stellen",
+  "onboard.dismiss": "Begrepen, niet meer tonen",
+  "workspace.disagree_review": "⚖ Verschillen bekijken",
+  "toast.disagree_mode_enter": "⚖ Verschilcontrole: {n} foto’s waar model en regels het oneens zijn, meest zekere eerst — druk 1/2/3; jouw keuzes voeden de correctieset",
+  "toast.disagree_mode_blocked": "Je filters verbergen alle verschillen — verwijder ze of klik opnieuw om te stoppen",
+  "toast.disagree_cleared": "Verschilcontrole klaar ✓ — je keuzes staan in de correctieset"
 }

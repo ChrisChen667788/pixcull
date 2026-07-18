@@ -171,5 +171,16 @@
   "toast.session_done": "🎉 Tudo revisado — clique em \"Exportar XMP\" na barra para levar suas decisões ao Lightroom",
   "toast.maybes_cleared": "Maybes resolvidos ✓ — resolução concluída",
   "toast.resolve_mode_enter": "◐ Modo resolução: {n} maybes, os mais incertos primeiro — tecle 1/2/3 para decidir",
-  "toast.resolve_mode_blocked": "Seus filtros de cena/rostos ocultam todos os maybes — remova-os ou clique de novo para sair"
+  "toast.resolve_mode_blocked": "Seus filtros de cena/rostos ocultam todos os maybes — remova-os ou clique de novo para sair",
+  "onboard.aria": "Dicas iniciais",
+  "onboard.title": "Primeiros passos",
+  "onboard.close": "Fechar dicas",
+  "onboard.tip1": "marque keep / maybe / cull e avance sozinho (~1-2 s cada; ⏩ desativa)",
+  "onboard.tip2": "ver todos os atalhos (destacados conforme a visão atual)",
+  "onboard.tip3": "🪣 balde no canto superior direito: arraste fotos para montar a entrega",
+  "onboard.dismiss": "Entendi, não mostrar de novo",
+  "workspace.disagree_review": "⚖ Revisar divergências",
+  "toast.disagree_mode_enter": "⚖ Revisão de divergências: {n} fotos em que modelo e regras discordam, as mais confiantes primeiro — tecle 1/2/3; suas escolhas alimentam o conjunto de correção",
+  "toast.disagree_mode_blocked": "Seus filtros ocultam todas as divergências — remova-os ou clique de novo para sair",
+  "toast.disagree_cleared": "Revisão concluída ✓ — suas escolhas estão no conjunto de correção"
 }

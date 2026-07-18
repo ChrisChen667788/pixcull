@@ -248,3 +248,98 @@ def test_session_close_call_sites_use_t():
           / "templates" / "src" / "results.js").read_text("utf-8")
     for key in _SESSION_CLOSE_KEYS:
         assert f'_t("{key}"' in js, f"results.js call site for {key!r} gone"
+
+
+# ── v2.23-P1 — English-first first-run path ──────────────────────────
+import re as _re
+from pathlib import Path as _Path
+
+_RESULTS_JS = (_Path(__file__).resolve().parent.parent / "pixcull" / "report"
+               / "templates" / "src" / "results.js").read_text("utf-8")
+
+
+def test_i18n_cycle_covers_every_shipped_locale():
+    """The switcher cycle must reach all 13 locale files — v2.23 expanded
+    it from 3 (zh/en/ja) so the other ten weren't dead weight."""
+    m = _re.search(r"const I18N_CYCLE = \[([^\]]*)\]", _RESULTS_JS, _re.S)
+    assert m, "I18N_CYCLE not found in results.js"
+    cycle = set(_re.findall(r'"([a-z]{2}_[A-Z]{2})"', m.group(1)))
+    shipped = set(SUPPORTED_LOCALES)
+    assert cycle == shipped, (
+        f"cycle {cycle ^ shipped} differs from shipped locales")
+
+
+def test_js_normalize_lang_mirrors_server():
+    """results.js::_normalizeLang must fold browser tags onto the same
+    locale the server's _normalize_lang picks — otherwise first-run
+    detection and the /api/v1/locale endpoint disagree. We can't run JS
+    here, so assert the JS prefix table matches the server for every
+    supported prefix + a few real-world regional tags."""
+    m = _re.search(r"const pref = \[(.*?)\];", _RESULTS_JS, _re.S)
+    assert m, "_normalizeLang pref table not found"
+    js_pairs = dict(_re.findall(r'\["([a-z]{2})",\s*"([a-z]{2}_[A-Z]{2})"\]',
+                                m.group(1)))
+    from pixcull.i18n import _normalize_lang
+    # every prefix the JS knows must resolve identically server-side
+    for prefix, js_loc in js_pairs.items():
+        assert _normalize_lang(prefix) == js_loc, (
+            f"prefix {prefix!r}: JS→{js_loc} but server→{_normalize_lang(prefix)}")
+    # real regional tags a browser actually sends
+    for tag, expect in [("en-GB", "en_US"), ("pt-PT", "pt_BR"),
+                        ("zh-Hans-CN", "zh_CN"), ("de-AT", "de_DE"),
+                        ("es-MX", "es_ES"), ("fr-CA", "fr_FR")]:
+        assert _normalize_lang(tag) == expect
+        # and the JS table would map the same 2-char prefix there too
+        assert js_pairs.get(tag[:2]) == expect
+
+
+def test_onboarding_strings_wired_through_i18n():
+    """The 5 onboarding strings (audit: a non-zh user's very first
+    interaction) must carry data-i18n* attrs so _applyLangToDom repaints
+    them, and the keys must exist in every locale."""
+    onb = (_Path(__file__).resolve().parent.parent / "pixcull" / "report"
+           / "templates" / "src" / "modules" / "10-onboarding.js").read_text("utf-8")
+    keys = ["onboard.title", "onboard.dismiss", "onboard.tip1",
+            "onboard.tip2", "onboard.tip3", "onboard.aria", "onboard.close"]
+    for k in keys:
+        assert k in onb, f"10-onboarding.js no longer references {k!r}"
+    for loc in SUPPORTED_LOCALES:
+        d = load_locale(loc)
+        for k in keys:
+            assert isinstance(d.get(k), str) and d[k].strip(), (
+                f"{loc} missing onboarding key {k!r}")
+
+
+# ── v2.23-P2 — shadow-rescorer disagreement review queue ─────────────
+_DISAGREE_KEYS = [
+    "workspace.disagree_review",
+    "toast.disagree_mode_enter",
+    "toast.disagree_mode_blocked",
+    "toast.disagree_cleared",
+]
+
+
+def test_disagree_keys_present_in_every_locale():
+    for loc in SUPPORTED_LOCALES:
+        d = load_locale(loc)
+        for k in _DISAGREE_KEYS:
+            assert isinstance(d.get(k), str) and d[k].strip(), (
+                f"{loc} missing disagreement-review key {k!r}")
+
+
+def test_disagree_mode_enter_carries_count_placeholder():
+    for loc in SUPPORTED_LOCALES:
+        assert "{n}" in load_locale(loc)["toast.disagree_mode_enter"], (
+            f"{loc}: toast.disagree_mode_enter lost the {{n}} placeholder")
+
+
+def test_disagree_queue_filter_and_sort_wired():
+    """The queue must (a) filter to model↔rule splits and (b) sort the
+    most-confident split first — assert both hooks exist in results.js
+    so a refactor can't silently drop the shadow-queue routing."""
+    js = _RESULTS_JS
+    assert 'filterState.decision === "disagree"' in js, "disagree filter gone"
+    assert 'r.rescorer_pred && r.rescorer_pred !== r.decision' in js, (
+        "disagree filter predicate changed — must be pred≠decision")
+    assert 's === "disagree"' in js, "disagree sort branch gone"
+    assert '_toggleDisagreeReview' in js, "disagree toggle gone"

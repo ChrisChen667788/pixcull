@@ -171,5 +171,16 @@
   "toast.session_done": "🎉 Tutto rivisto — premi \"Esporta XMP\" nella barra per portare le decisioni in Lightroom",
   "toast.maybes_cleared": "Maybe risolti ✓ — risoluzione completata",
   "toast.resolve_mode_enter": "◐ Modalità risoluzione: {n} maybe, prima i più incerti — premi 1/2/3 per decidere",
-  "toast.resolve_mode_blocked": "I filtri scena/volti nascondono tutti i maybe — rimuovili o clicca di nuovo per uscire"
+  "toast.resolve_mode_blocked": "I filtri scena/volti nascondono tutti i maybe — rimuovili o clicca di nuovo per uscire",
+  "onboard.aria": "Suggerimenti iniziali",
+  "onboard.title": "Per iniziare",
+  "onboard.close": "Chiudi i suggerimenti",
+  "onboard.tip1": "segna keep / maybe / cull e passa avanti da solo (~1-2 s l’una; ⏩ disattiva)",
+  "onboard.tip2": "vedi tutte le scorciatoie (evidenziate in base alla vista attuale)",
+  "onboard.tip3": "🪣 secchio in alto a destra: trascina le foto per comporre la consegna",
+  "onboard.dismiss": "Ho capito, non mostrare più",
+  "workspace.disagree_review": "⚖ Rivedi le divergenze",
+  "toast.disagree_mode_enter": "⚖ Revisione divergenze: {n} foto dove modello e regole non concordano, prima le più sicure — premi 1/2/3; le tue scelte alimentano il set di correzione",
+  "toast.disagree_mode_blocked": "I tuoi filtri nascondono tutte le divergenze — rimuovili o clicca di nuovo per uscire",
+  "toast.disagree_cleared": "Revisione completata ✓ — le tue scelte sono nel set di correzione"
 }

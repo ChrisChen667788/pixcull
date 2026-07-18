@@ -171,5 +171,16 @@
   "toast.session_done": "🎉 すべて確認済み — ワークバーの「XMP 書き出し」で結果を Lightroom へ",
   "toast.maybes_cleared": "maybe ゼロ ✓ — 解決完了",
   "toast.resolve_mode_enter": "◐ 解決モード:maybe {n} 枚、判定が最も難しい順 — 1/2/3 で即決",
-  "toast.resolve_mode_blocked": "現在のシーン/人物フィルタが maybe をすべて隠しています — フィルタを解除するか、もう一度クリックで終了"
+  "toast.resolve_mode_blocked": "現在のシーン/人物フィルタが maybe をすべて隠しています — フィルタを解除するか、もう一度クリックで終了",
+  "onboard.aria": "初回ヒント",
+  "onboard.title": "はじめに",
+  "onboard.close": "ヒントを閉じる",
+  "onboard.tip1": "keep / maybe / cull を付けて自動で次へ(1〜2秒/枚;⏩ でオフ)",
+  "onboard.tip2": "全ショートカットを表示(現在のビューに応じて自動ハイライト)",
+  "onboard.tip3": "右上の 🪣 バケツ:カードをドラッグして納品セットを作成",
+  "onboard.dismiss": "了解、今後は表示しない",
+  "workspace.disagree_review": "⚖ 相違レビュー",
+  "toast.disagree_mode_enter": "⚖ 相違レビュー:モデルとルールが食い違う {n} 枚、確信度の高い相違から — 1/2/3 で判定、あなたの判断は補正セットへ",
+  "toast.disagree_mode_blocked": "現在のフィルタが相違をすべて隠しています — 解除するか、もう一度クリックで終了",
+  "toast.disagree_cleared": "相違レビュー完了 ✓ — あなたの判断を補正セットに記録"
 }

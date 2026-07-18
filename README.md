@@ -52,6 +52,29 @@
 
 ## What's new
 
+**v2.23** — **`pip install pixcull` gets its rails + the audit queue closes**
+(see [`docs/ROADMAP-v2.23-charter.md`](docs/ROADMAP-v2.23-charter.md)). Three
+threads land together. **PyPI rail**: the package metadata is PyPI-ready with
+a dedicated `README-PYPI.md` (the repo README's relative-path screenshots
+render broken on pypi.org), the 13 locale JSONs now ship inside the wheel
+(they load at runtime — without them `_t()` falls back to keys), `twine check`
+passes on both wheel and sdist, and `release.yml` gains a token-gated
+`Publish to PyPI` step so a `v*` tag auto-publishes once the owner adds a
+`PYPI_API_TOKEN` secret (clean skip until then). **English-first first-run**
+(2030Q3 audit): a fresh non-Chinese browser used to be forced into Chinese —
+now `_getStoredLang()` detects `navigator.language` (with a `_normalizeLang()`
+that mirrors the server's fold, parity-tested), the switcher cycle expands
+from 3 to all 13 locales (+ RTL for Arabic), and the onboarding card — a new
+user's very first interaction — speaks every locale via `_t()`. Verified: an
+en-US browser boots to English onboarding ("Getting started"), review chip
+("To review N"), the lot. **Shadow-queue unlock** (audit): the shadow
+rescorer's model↔rule disagreements — the highest-value correction labels,
+computed every run but never routed anywhere — now have a **⚖ Review
+disagreements** button that opens a queue sorted most-confident-split-first;
+deciding there writes straight to the correction set. (Flipping the rescorer
+to *adjudicate* stays owner-gated — it needs those real disagreement labels
+first; this ships the flow that collects them.)
+
 **v2.22** — **the audit queue lands + the gallery wears the new skin** (see
 [`docs/ROADMAP-v2.22-charter.md`](docs/ROADMAP-v2.22-charter.md)). The three
 2030Q3-audit themes ship in one release: **i18n gap-fill** — the v2.15

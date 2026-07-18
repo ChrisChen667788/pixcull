@@ -171,5 +171,16 @@
   "toast.session_done": "🎉 Alles geprüft — mit „XMP exportieren\" in der Leiste die Entscheidungen zurück nach Lightroom bringen",
   "toast.maybes_cleared": "Maybes geklärt ✓ — Durchgang abgeschlossen",
   "toast.resolve_mode_enter": "◐ Klärungsmodus: {n} Maybes, die unsichersten zuerst — mit 1/2/3 direkt entscheiden",
-  "toast.resolve_mode_blocked": "Deine Szenen-/Personenfilter verbergen alle Maybes — Filter entfernen oder erneut klicken zum Beenden"
+  "toast.resolve_mode_blocked": "Deine Szenen-/Personenfilter verbergen alle Maybes — Filter entfernen oder erneut klicken zum Beenden",
+  "onboard.aria": "Erste Hinweise",
+  "onboard.title": "Erste Schritte",
+  "onboard.close": "Hinweise schließen",
+  "onboard.tip1": "keep / maybe / cull setzen und automatisch weiter (~1-2 s je Bild; ⏩ schaltet ab)",
+  "onboard.tip2": "alle Tastenkürzel ansehen (passend zur aktuellen Ansicht hervorgehoben)",
+  "onboard.tip3": "🪣 Eimer oben rechts: Karten hineinziehen für das Lieferpaket",
+  "onboard.dismiss": "Verstanden, nicht mehr anzeigen",
+  "workspace.disagree_review": "⚖ Abweichungen prüfen",
+  "toast.disagree_mode_enter": "⚖ Abweichungsprüfung: {n} Fotos, bei denen Modell und Regeln uneinig sind, sicherste zuerst — 1/2/3 entscheiden; deine Urteile fließen in den Korrektursatz",
+  "toast.disagree_mode_blocked": "Deine Filter verbergen alle Abweichungen — entfernen oder erneut klicken zum Beenden",
+  "toast.disagree_cleared": "Abweichungsprüfung fertig ✓ — deine Urteile sind im Korrektursatz"
 }

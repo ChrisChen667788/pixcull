@@ -36,10 +36,11 @@ jobs:
           python-version: '3.12'
           cache: pip
 
-      - name: Build wheel
+      - name: Build wheel + sdist
         run: |
-          pip install --upgrade pip build
-          python -m build --wheel --outdir dist_wheel
+          pip install --upgrade pip build twine
+          python -m build --outdir dist_wheel
+          twine check dist_wheel/*
 
       - name: Smoke-test the wheel in a clean venv
         run: |
@@ -47,16 +48,32 @@ jobs:
           /tmp/wheel_smoke/bin/pip install --quiet dist_wheel/*.whl
           /tmp/wheel_smoke/bin/python -c "import pixcull; print('pixcull', pixcull.__version__)"
 
-      - name: Create GitHub Release + attach wheel
+      - name: Create GitHub Release + attach wheel & sdist
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="${GITHUB_REF_NAME}"
           if gh release view "$tag" >/dev/null 2>&1; then
-            echo "release $tag exists — re-uploading wheel"
-            gh release upload "$tag" dist_wheel/*.whl --clobber
+            echo "release $tag exists — re-uploading artifacts"
+            gh release upload "$tag" dist_wheel/*.whl dist_wheel/*.tar.gz --clobber
           else
-            gh release create "$tag" dist_wheel/*.whl \
+            gh release create "$tag" dist_wheel/*.whl dist_wheel/*.tar.gz \
               --title "PixCull $tag" \
               --generate-notes
           fi
+
+      # v2.23-P0 — publish to PyPI so `pip install pixcull` works. Gated
+      # on the PYPI_API_TOKEN secret: until the owner adds it (Settings →
+      # Secrets → Actions, value = a pypi.org API token), this step is a
+      # clean skip — it never fails the release. Once the secret exists,
+      # every v* tag ships to PyPI automatically.
+      - name: Publish to PyPI (if token configured)
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          if [ -z "$TWINE_PASSWORD" ]; then
+            echo "::warning::PYPI_API_TOKEN not set — skipping PyPI publish (add the secret to enable pip install pixcull)"
+            exit 0
+          fi
+          twine upload --non-interactive dist_wheel/*.whl dist_wheel/*.tar.gz

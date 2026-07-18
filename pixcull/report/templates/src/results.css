@@ -949,6 +949,23 @@
       font-weight: 600;
     }
     .stats .resolve-maybes-btn[hidden] { display: none; }
+    /* v2.23-P2 — the disagreement-review button uses the info (steel)
+       palette so it reads distinct from the maybe/amber resolve button;
+       both share the pill shape. The <b> count sits a touch bolder. */
+    .stats .disagree-btn {
+      background: color-mix(in srgb, var(--c-info) 10%, transparent);
+      border-color: color-mix(in srgb, var(--c-info) 40%, transparent);
+      color: var(--c-info);
+    }
+    .stats .disagree-btn:hover {
+      background: color-mix(in srgb, var(--c-info) 20%, transparent);
+      border-color: var(--c-info);
+    }
+    .stats .disagree-btn.active {
+      background: color-mix(in srgb, var(--c-info) 28%, transparent);
+      border-color: var(--c-info);
+    }
+    .stats .disagree-btn b { font-weight: 700; font-variant-numeric: tabular-nums; }
     @media (prefers-reduced-motion: reduce) {
       .stats .review-progress.pulse-done { animation: none; }
     }

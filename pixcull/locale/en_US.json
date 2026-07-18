@@ -171,5 +171,16 @@
   "toast.session_done": "🎉 All reviewed — click \"Export XMP\" in the workbar to take your decisions back to Lightroom",
   "toast.maybes_cleared": "Maybes cleared ✓ — resolution complete",
   "toast.resolve_mode_enter": "◐ Resolve mode: {n} maybes, most uncertain first — press 1/2/3 to decide",
-  "toast.resolve_mode_blocked": "Your current scene/face filters hide every maybe — clear them, or click again to exit resolve mode"
+  "toast.resolve_mode_blocked": "Your current scene/face filters hide every maybe — clear them, or click again to exit resolve mode",
+  "onboard.aria": "New user tips",
+  "onboard.title": "Getting started",
+  "onboard.close": "Dismiss tips",
+  "onboard.tip1": "mark keep / maybe / cull and auto-advance (~1-2s each; ⏩ toggles off)",
+  "onboard.tip2": "see every shortcut (auto-highlighted for the current view)",
+  "onboard.tip3": "top-right 🪣 bucket: drag cards in to build a delivery set",
+  "onboard.dismiss": "Got it, don’t show again",
+  "workspace.disagree_review": "⚖ Review disagreements",
+  "toast.disagree_mode_enter": "⚖ Disagreement review: {n} photos where the model and the rules disagree, most-confident splits first — press 1/2/3 to decide; your calls feed the correction set",
+  "toast.disagree_mode_blocked": "Your current filters hide every disagreement — clear them, or click again to exit review",
+  "toast.disagree_cleared": "Disagreement review done ✓ — your calls are in the correction set"
 }

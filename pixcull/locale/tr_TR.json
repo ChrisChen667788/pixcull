@@ -171,5 +171,16 @@
   "toast.session_done": "🎉 Tümü incelendi — kararları Lightroom’a taşımak için çubuktaki \"XMP dışa aktar\"a tıklayın",
   "toast.maybes_cleared": "Maybe’ler çözüldü ✓ — tur tamamlandı",
   "toast.resolve_mode_enter": "◐ Çözüm modu: {n} maybe, en kararsızlar önce — karar için 1/2/3’e basın",
-  "toast.resolve_mode_blocked": "Sahne/yüz filtreleri tüm maybe’leri gizliyor — filtreleri kaldırın ya da çıkmak için tekrar tıklayın"
+  "toast.resolve_mode_blocked": "Sahne/yüz filtreleri tüm maybe’leri gizliyor — filtreleri kaldırın ya da çıkmak için tekrar tıklayın",
+  "onboard.aria": "Başlangıç ipuçları",
+  "onboard.title": "Başlarken",
+  "onboard.close": "İpuçlarını kapat",
+  "onboard.tip1": "keep / maybe / cull işaretle ve otomatik ilerle (~1-2 sn/foto; ⏩ kapatır)",
+  "onboard.tip2": "tüm kısayolları gör (geçerli görünüme göre vurgulanır)",
+  "onboard.tip3": "sağ üstteki 🪣 kova: teslim seti oluşturmak için kartları sürükle",
+  "onboard.dismiss": "Anladım, bir daha gösterme",
+  "workspace.disagree_review": "⚖ Uyuşmazlıkları incele",
+  "toast.disagree_mode_enter": "⚖ Uyuşmazlık incelemesi: model ile kuralların ayrıştığı {n} fotoğraf, en emin olanlar önce — 1/2/3 ile karar ver; seçimlerin düzeltme setine işlenir",
+  "toast.disagree_mode_blocked": "Filtrelerin tüm uyuşmazlıkları gizliyor — kaldır ya da çıkmak için tekrar tıkla",
+  "toast.disagree_cleared": "İnceleme tamam ✓ — seçimlerin düzeltme setinde"
 }

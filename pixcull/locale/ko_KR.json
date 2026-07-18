@@ -171,5 +171,16 @@
   "toast.session_done": "🎉 모두 검토됨 — 워크바의 \"XMP 내보내기\"로 결과를 Lightroom에 반영하세요",
   "toast.maybes_cleared": "maybe 정리 완료 ✓",
   "toast.resolve_mode_enter": "◐ 정리 모드: maybe {n}장, 가장 애매한 순 — 1/2/3으로 바로 판정",
-  "toast.resolve_mode_blocked": "현재 장면/인물 필터가 모든 maybe를 숨기고 있습니다 — 필터를 해제하거나 다시 클릭해 종료하세요"
+  "toast.resolve_mode_blocked": "현재 장면/인물 필터가 모든 maybe를 숨기고 있습니다 — 필터를 해제하거나 다시 클릭해 종료하세요",
+  "onboard.aria": "첫 사용 안내",
+  "onboard.title": "시작하기",
+  "onboard.close": "안내 닫기",
+  "onboard.tip1": "keep / maybe / cull 표시 후 자동으로 다음 장(장당 ~1-2초; ⏩ 로 끄기)",
+  "onboard.tip2": "모든 단축키 보기(현재 화면에 맞춰 자동 강조)",
+  "onboard.tip3": "우측 상단 🪣 버킷: 카드를 끌어다 납품 세트 구성",
+  "onboard.dismiss": "확인, 다시 표시 안 함",
+  "workspace.disagree_review": "⚖ 이견 검토",
+  "toast.disagree_mode_enter": "⚖ 이견 검토: 모델과 규칙이 다른 {n}장, 확신도 높은 이견부터 — 1/2/3으로 판정, 당신의 결정은 보정 세트로",
+  "toast.disagree_mode_blocked": "현재 필터가 모든 이견을 숨기고 있습니다 — 필터를 해제하거나 다시 클릭해 종료하세요",
+  "toast.disagree_cleared": "이견 검토 완료 ✓ — 당신의 결정이 보정 세트에 기록되었습니다"
 }

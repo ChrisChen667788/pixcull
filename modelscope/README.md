@@ -54,7 +54,17 @@ tasks:
 完整源码 + iOS 伴侣 App + Lightroom 插件,均在 GitHub:
 **[github.com/ChrisChen667788/pixcull](https://github.com/ChrisChen667788/pixcull)**
 
-## v0.7 → v2.22 主要更新
+## v0.7 → v2.23 主要更新
+- **v2.23**:**`pip install pixcull` 铺轨 + 审计队列收尾** —— 三线并进:
+  **PyPI 发行轨**(元数据 PyPI 就绪 + 专用 README-PYPI;13 个 locale JSON 补进
+  wheel——运行时加载,缺了 `_t()` 回退键名;`twine check` wheel+sdist 双过;
+  release.yml 加 token-gated PyPI 发布步骤,配好 `PYPI_API_TOKEN` 后 v* tag
+  自动上 PyPI,未配则干净跳过)· **英文首跑**(非中文浏览器首访不再被强制中文:
+  `navigator.language` 探测 + 与服务端一致的归一化,语言循环 3→13 + 阿语 RTL,
+  onboarding 首卡走 `_t()` 全语言;实测 en-US 启动即英文)· **Shadow-queue 解锁**
+  (shadow rescorer 的模型↔规则分歧——每 run 算出却从未接入——现在有「⚖ 异议复核」
+  按钮,进队列按最有把握分歧优先排序,判定直接写纠正集;翻 adjudicate 仍
+  owner-gated,本轮先把收集分歧标注的流打通)。详见 `docs/ROADMAP-v2.23-charter.md`。
 - **v2.22**:**审计队列三连落地 + gallery 换新皮肤** —— 2030Q3 审计排的三个主题
   一轮做完:**i18n 收口**(v2.15 收尾闭环 9 条文案终于会说 13 种语言,9 新键 ×
   13 locale 母语级翻译;顺手修掉一个会让整个修复失效的启动时序 bug——动态串在

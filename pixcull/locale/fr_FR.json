@@ -171,5 +171,16 @@
   "toast.session_done": "🎉 Tout vérifié — cliquez « Export XMP » dans la barre pour ramener vos décisions dans Lightroom",
   "toast.maybes_cleared": "Maybes tranchés ✓ — résolution terminée",
   "toast.resolve_mode_enter": "◐ Mode résolution : {n} maybes, les plus incertains d’abord — 1/2/3 pour trancher",
-  "toast.resolve_mode_blocked": "Vos filtres scène/visages masquent tous les maybes — retirez-les ou cliquez à nouveau pour quitter"
+  "toast.resolve_mode_blocked": "Vos filtres scène/visages masquent tous les maybes — retirez-les ou cliquez à nouveau pour quitter",
+  "onboard.aria": "Conseils de démarrage",
+  "onboard.title": "Pour commencer",
+  "onboard.close": "Fermer les conseils",
+  "onboard.tip1": "marquez keep / maybe / cull et passez à la suivante (~1-2 s/photo ; ⏩ désactive)",
+  "onboard.tip2": "voir tous les raccourcis (surlignés selon la vue actuelle)",
+  "onboard.tip3": "🪣 seau en haut à droite : glissez des photos pour composer la livraison",
+  "onboard.dismiss": "Compris, ne plus afficher",
+  "workspace.disagree_review": "⚖ Revoir les écarts",
+  "toast.disagree_mode_enter": "⚖ Revue des écarts : {n} photos où le modèle et les règles divergent, les plus sûres d’abord — 1/2/3 pour trancher ; vos choix alimentent le jeu de correction",
+  "toast.disagree_mode_blocked": "Vos filtres masquent tous les écarts — retirez-les ou cliquez à nouveau pour quitter",
+  "toast.disagree_cleared": "Revue des écarts terminée ✓ — vos choix sont dans le jeu de correction"
 }

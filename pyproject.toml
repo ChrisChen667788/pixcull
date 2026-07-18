@@ -1,8 +1,10 @@
 [project]
 name = "pixcull"
-version = "2.22.0"
+version = "2.23.0"
 description = "Local-first AI photo culling for professional photographers — 6-axis rubric, XMP/IPTC export, Lightroom & Capture One ready."
-readme = "README.md"
+# v2.23 — dedicated PyPI readme: the repo README leans on relative-path
+# screenshots and GitHub-only markup that render broken on pypi.org.
+readme = "README-PYPI.md"
 requires-python = ">=3.11,<3.13"
 license = "MIT"
 authors = [
@@ -129,6 +131,7 @@ include = [
     "pixcull/report/templates/*.j2",
     "pixcull/report/templates/*.html",   # V19.4.1 — results.html is loaded from disk at runtime
     "pixcull/report/templates/pages/*.html",  # v2.16-P0 — serve_demo page templates (extracted blobs)
+    "pixcull/locale/*.json",             # v2.23 — 13-locale i18n strings load at runtime; without these _t() falls back to keys
 ]
 
 [tool.ruff]
