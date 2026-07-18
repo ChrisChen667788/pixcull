@@ -55,10 +55,14 @@ jobs:
         env:
           MODELSCOPE_API_TOKEN: ${{ secrets.MODELSCOPE_TOKEN }}
         run: |
+          # v2.22 — a missing secret is a SKIP, not a failure.  This
+          # workflow was red on every push while the owner hadn't
+          # configured the token, which buried real failures in noise
+          # (2030Q3 audit).  Once the secret exists the sync runs for
+          # real; until then we annotate and exit green.
           if [ -z "$MODELSCOPE_API_TOKEN" ]; then
-            echo "::error::MODELSCOPE_TOKEN secret not configured"
-            echo "::error::See modelscope/UPLOAD.md § 路径 0 for setup"
-            exit 1
+            echo "::warning::MODELSCOPE_TOKEN secret not configured — skipping ModelScope sync (README mirror will lag until the secret is added; see modelscope/UPLOAD.md § 路径 0)"
+            exit 0
           fi
           python scripts/sync_modelscope_readme.py \
             --commit-message "chore(docs): mirror from GitHub ${{ github.sha }}"

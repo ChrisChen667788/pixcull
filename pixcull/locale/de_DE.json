@@ -1,7 +1,6 @@
 {
   "lang.name": "Deutsch",
   "lang.switcher.aria": "Sprache wechseln",
-
   "workspace.crumb.results": "Analyseergebnisse",
   "workspace.crumb.upload_again": "← Anderen Stapel hochladen",
   "workspace.search.placeholder": "🔎 Semantische Suche",
@@ -10,7 +9,6 @@
   "workspace.stats.cull": "Aussortieren",
   "workspace.stats.total": "Gesamt",
   "workspace.stats.elapsed": "Dauer",
-
   "library.title": "Bibliothek",
   "library.group.decision": "Entscheidung",
   "library.group.scene": "Szene",
@@ -23,13 +21,11 @@
   "library.collapse.aria": "Seitenleiste einklappen",
   "library.expand.aria": "Seitenleiste ausklappen",
   "library.filter.reset": "Filter zurücksetzen",
-
   "decision.all": "Alle",
   "decision.keep": "Behalten",
   "decision.maybe": "Vielleicht",
   "decision.cull": "Aussortieren",
   "decision.unset": "Nicht beschriftet",
-
   "buckets.title": "🪣 Lieferungs-Buckets",
   "buckets.toggle.aria": "Bucket-Panel öffnen / schließen",
   "buckets.new.placeholder": "Neuer Bucket-Name (Eingabe zum Anlegen)",
@@ -43,7 +39,6 @@
   "buckets.action.clear": "Leeren",
   "buckets.action.delete": "Bucket löschen",
   "buckets.reorder.title": "Ziehen zum Sortieren",
-
   "lightbox.close.aria": "Lightbox schließen",
   "lightbox.close.title": "Schließen (Esc)",
   "lightbox.prev": "Vorheriges",
@@ -70,7 +65,6 @@
   "lightbox.toolbar.keep.title": "Behalten (1)",
   "lightbox.toolbar.maybe.title": "Vielleicht (2)",
   "lightbox.toolbar.cull.title": "Aussortieren (3) · optional einen Grund auswählen",
-
   "shortcuts.title": "Tastenkürzel",
   "shortcuts.hint": "? Kürzel",
   "shortcuts.hint.title": "? Alle Tastenkürzel anzeigen (auch ? drücken)",
@@ -82,7 +76,6 @@
   "shortcuts.context.grid": "Rasteransicht",
   "shortcuts.context.lightbox": "Lightbox",
   "shortcuts.context.compare": "A/B-Vergleich",
-
   "export.menu": "📥 Export",
   "export.menu.title": "Exportieren / herunterladen / Auto-Bildunterschrift",
   "export.xmp_zip": "XMP herunterladen",
@@ -104,16 +97,13 @@
   "export.style_train.title": "Aktuelle Keeps als Referenz verwenden — persönliches Stilprofil lernen",
   "export.sync_event": "📡 Kollaborative Sitzung",
   "export.sync_event.title": "Kollaborationslink generieren, damit ein zweiter Fotograf / Editor an derselben Sitzung teilnehmen kann",
-
   "save_view": "★ Ansicht speichern",
   "save_view.title": "Aktuelle Filter + Sortierung + Aussortierungs-Grund-Kombination als benannte Vorlage speichern",
   "view_preset.dropdown": "Ansichts-Voreinstellungen ▾",
   "view_preset.export": "↓ Voreinstellungen exportieren",
   "view_preset.import": "↑ Voreinstellungen importieren",
-
   "filter.reset": "Filter zurücksetzen",
   "filter.no_match": "Keine Fotos entsprechen den aktuellen Filtern",
-
   "sort.default": "Standard",
   "sort.score_desc": "Bewertung hoch → niedrig",
   "sort.score_asc": "Bewertung niedrig → hoch",
@@ -121,12 +111,10 @@
   "sort.datetime_desc": "Aufnahmezeit (neueste → älteste)",
   "sort.cluster": "Nach Serien-Cluster",
   "sort.style_distance_asc": "🎨 Mein Stil zuerst",
-
   "footer.history": "🕒 Verlauf",
   "footer.tether": "📡 Tethered Live",
   "footer.admin": "Speicher",
   "footer.tour": "Tour wiederholen",
-
   "annotation.title": "Rubrik-Annotation",
   "annotation.save": "Speichern",
   "annotation.cancel": "Abbrechen",
@@ -134,14 +122,12 @@
   "annotation.next.title": "Nach Active-Learning-Priorität beschriften",
   "annotation.batch": "Stapel-Beschriftung",
   "annotation.batch.title": "Massen-Beschriftung keep/cull nach Score-Schwelle",
-
   "share.brand.subtitle": "PixCull · Kunden-Auslieferungs-Vorschau",
   "share.brand.photographer": "Fotograf",
   "share.brand.client": "Kunde",
   "share.empty": "Der Fotograf hat die Auswahl noch nicht getroffen — bitte später erneut prüfen.",
   "share.count.suffix": "Auswahlen",
   "share.powered_by": "Bereitgestellt von",
-
   "tether.title": "Tethered Live",
   "tether.sub": "Tether-Ordner überwachen — neue Fotos werden bei Ankunft analysiert, das Raster wird live aktualisiert.",
   "tether.start": "▶ Start",
@@ -156,13 +142,11 @@
   "tether.stat.failed": "Fehlgeschlagen",
   "tether.stat.uptime": "Laufzeit",
   "tether.stat.last_event": "Letztes Ereignis",
-
   "history.title": "Verlaufs-Zeitleiste",
   "history.sub": "Alle vergangenen Sitzungen · nach Datum sortiert · Karte klicken, um zurück zum Raster zu springen",
   "history.empty": "Noch keine Sitzungen.",
   "history.back_to_upload": "← Upload-Seite",
   "history.count.suffix": "Sitzungen",
-
   "toast.saved": "Gespeichert",
   "toast.copied": "In die Zwischenablage kopiert",
   "toast.copy_failed": "Schreiben in Zwischenablage fehlgeschlagen — Browser hat es möglicherweise blockiert",
@@ -178,5 +162,14 @@
   "tour.row.personal": "🎯 Personalisierung",
   "tour.row.heatmap": "🔥 Attributions-Heatmap",
   "tour.row.sheet": "📇 Kontaktbogen",
-  "tour.foot": "Alle Tastenkürzel unter ? · alles läuft 100 % lokal"
+  "tour.foot": "Alle Tastenkürzel unter ? · alles läuft 100 % lokal",
+  "workspace.resolve_maybes": "◐ Maybes klären",
+  "workspace.stats.unreviewed": "Zu prüfen",
+  "workspace.stats.all_done": "Alles geprüft ✓ · XMP exportieren",
+  "workspace.hydration.loading": "Lädt",
+  "workspace.hydration.incomplete": "Unvollständig geladen",
+  "toast.session_done": "🎉 Alles geprüft — mit „XMP exportieren\" in der Leiste die Entscheidungen zurück nach Lightroom bringen",
+  "toast.maybes_cleared": "Maybes geklärt ✓ — Durchgang abgeschlossen",
+  "toast.resolve_mode_enter": "◐ Klärungsmodus: {n} Maybes, die unsichersten zuerst — mit 1/2/3 direkt entscheiden",
+  "toast.resolve_mode_blocked": "Deine Szenen-/Personenfilter verbergen alle Maybes — Filter entfernen oder erneut klicken zum Beenden"
 }

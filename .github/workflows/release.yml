@@ -1,0 +1,62 @@
+# v2.22-P1 — the release rail.
+#
+# Before this workflow existed, every version since v0.7.0 shipped with
+# no git tag, no GitHub Release, and no artifact (2030Q3 audit): the
+# README release badge was permanently stale and `pip install pixcull`
+# had nothing to point at.  This closes the rail with ZERO external
+# secrets — the built-in GITHUB_TOKEN is enough for `gh release create`.
+#
+# Usage (owner):
+#   git tag v2.22.0 && git push origin v2.22.0
+# → wheel is built from the tagged tree and attached to a GitHub
+#   Release with auto-generated notes.  Idempotent: re-running on an
+#   existing release just re-uploads the wheel (--clobber).
+#
+# PyPI publish stays a manual owner step (twine upload) until a
+# PYPI_API_TOKEN secret is configured — this workflow never needs it.
+
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write   # gh release create needs to write releases
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    if: github.repository == 'ChrisChen667788/pixcull'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Build wheel
+        run: |
+          pip install --upgrade pip build
+          python -m build --wheel --outdir dist_wheel
+
+      - name: Smoke-test the wheel in a clean venv
+        run: |
+          python -m venv /tmp/wheel_smoke
+          /tmp/wheel_smoke/bin/pip install --quiet dist_wheel/*.whl
+          /tmp/wheel_smoke/bin/python -c "import pixcull; print('pixcull', pixcull.__version__)"
+
+      - name: Create GitHub Release + attach wheel
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "release $tag exists — re-uploading wheel"
+            gh release upload "$tag" dist_wheel/*.whl --clobber
+          else
+            gh release create "$tag" dist_wheel/*.whl \
+              --title "PixCull $tag" \
+              --generate-notes
+          fi

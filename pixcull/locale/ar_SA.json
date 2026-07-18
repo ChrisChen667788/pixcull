@@ -1,7 +1,6 @@
 {
   "lang.name": "العربية",
   "lang.switcher.aria": "تغيير اللغة",
-
   "workspace.crumb.results": "نتائج التحليل",
   "workspace.crumb.upload_again": "← رفع دفعة أخرى",
   "workspace.search.placeholder": "🔎 بحث دلالي",
@@ -10,7 +9,6 @@
   "workspace.stats.cull": "استبعد",
   "workspace.stats.total": "المجموع",
   "workspace.stats.elapsed": "الوقت المنقضي",
-
   "library.title": "المكتبة",
   "library.group.decision": "القرار",
   "library.group.scene": "المشهد",
@@ -23,13 +21,11 @@
   "library.collapse.aria": "طي الشريط الجانبي",
   "library.expand.aria": "توسيع الشريط الجانبي",
   "library.filter.reset": "إعادة تعيين الفلاتر",
-
   "decision.all": "الكل",
   "decision.keep": "احتفظ",
   "decision.maybe": "ربما",
   "decision.cull": "استبعد",
   "decision.unset": "غير مصنف",
-
   "buckets.title": "🪣 سلال التسليم",
   "buckets.toggle.aria": "فتح / إغلاق لوحة السلال",
   "buckets.new.placeholder": "اسم سلة جديدة (Enter للإنشاء)",
@@ -43,7 +39,6 @@
   "buckets.action.clear": "إفراغ",
   "buckets.action.delete": "حذف السلة",
   "buckets.reorder.title": "اسحب لإعادة الترتيب",
-
   "lightbox.close.aria": "إغلاق العارض",
   "lightbox.close.title": "إغلاق (Esc)",
   "lightbox.prev": "السابق",
@@ -70,7 +65,6 @@
   "lightbox.toolbar.keep.title": "احتفظ (1)",
   "lightbox.toolbar.maybe.title": "ربما (2)",
   "lightbox.toolbar.cull.title": "استبعد (3) · اختر سبباً اختيارياً",
-
   "shortcuts.title": "اختصارات لوحة المفاتيح",
   "shortcuts.hint": "? الاختصارات",
   "shortcuts.hint.title": "? عرض جميع الاختصارات",
@@ -82,7 +76,6 @@
   "shortcuts.context.grid": "عرض الشبكة",
   "shortcuts.context.lightbox": "العارض",
   "shortcuts.context.compare": "مقارنة A/B",
-
   "export.menu": "📥 تصدير",
   "export.menu.title": "تصدير / تنزيل / تعليق تلقائي",
   "export.xmp_zip": "تنزيل XMP",
@@ -104,16 +97,13 @@
   "export.style_train.title": "استخدام الـ Keep الحالية كمراجع",
   "export.sync_event": "📡 جلسة تعاونية",
   "export.sync_event.title": "رابط للمصور الثاني / المحرر",
-
   "save_view": "★ حفظ العرض",
   "save_view.title": "حفظ الفلتر + الترتيب الحالي كإعداد مسبق",
   "view_preset.dropdown": "إعدادات مسبقة ▾",
   "view_preset.export": "↓ تصدير الإعدادات",
   "view_preset.import": "↑ استيراد الإعدادات",
-
   "filter.reset": "إعادة تعيين الفلاتر",
   "filter.no_match": "لا توجد صور تطابق الفلاتر الحالية",
-
   "sort.default": "افتراضي",
   "sort.score_desc": "النقاط من الأعلى للأدنى",
   "sort.score_asc": "النقاط من الأدنى للأعلى",
@@ -121,12 +111,10 @@
   "sort.datetime_desc": "وقت التصوير (الأحدث → الأقدم)",
   "sort.cluster": "حسب مجموعة اللقطات",
   "sort.style_distance_asc": "🎨 نمطي أولاً",
-
   "footer.history": "🕒 السجل",
   "footer.tether": "📡 Tethered Live",
   "footer.admin": "التخزين",
   "footer.tour": "إعادة الجولة",
-
   "annotation.title": "تعليق الروبريك",
   "annotation.save": "حفظ",
   "annotation.cancel": "إلغاء",
@@ -134,14 +122,12 @@
   "annotation.next.title": "تسمية حسب أولوية التعلم النشط",
   "annotation.batch": "تسمية بالجملة",
   "annotation.batch.title": "تسمية جماعية keep/cull حسب عتبة النقاط",
-
   "share.brand.subtitle": "PixCull · معاينة التسليم للعميل",
   "share.brand.photographer": "المصور",
   "share.brand.client": "العميل",
   "share.empty": "لم يقم المصور بالاختيار بعد — عد لاحقاً.",
   "share.count.suffix": "اختيارات",
   "share.powered_by": "مدعوم بـ",
-
   "tether.title": "Tethered Live",
   "tether.sub": "مراقبة مجلد tether — الصور الجديدة تُحلل عند الوصول.",
   "tether.start": "▶ ابدأ",
@@ -156,13 +142,11 @@
   "tether.stat.failed": "فشل",
   "tether.stat.uptime": "وقت التشغيل",
   "tether.stat.last_event": "آخر حدث",
-
   "history.title": "خط زمني للسجل",
   "history.sub": "جميع الجلسات السابقة · مرتبة حسب التاريخ",
   "history.empty": "لا جلسات بعد.",
   "history.back_to_upload": "← صفحة الرفع",
   "history.count.suffix": "جلسات",
-
   "toast.saved": "تم الحفظ",
   "toast.copied": "تم النسخ إلى الحافظة",
   "toast.copy_failed": "فشل النسخ إلى الحافظة",
@@ -178,5 +162,14 @@
   "tour.row.personal": "🎯 التخصيص",
   "tour.row.heatmap": "🔥 خريطة الإسناد الحرارية",
   "tour.row.sheet": "📇 ورقة اتصال",
-  "tour.foot": "قائمة الاختصارات تحت ? · كل شيء يعمل محلياً 100%"
+  "tour.foot": "قائمة الاختصارات تحت ? · كل شيء يعمل محلياً 100%",
+  "workspace.resolve_maybes": "◐ حسم صور maybe",
+  "workspace.stats.unreviewed": "بانتظار المراجعة",
+  "workspace.stats.all_done": "تمت مراجعة الكل ✓ · تصدير XMP",
+  "workspace.hydration.loading": "جارٍ التحميل",
+  "workspace.hydration.incomplete": "تحميل غير مكتمل",
+  "toast.session_done": "🎉 تمت مراجعة الكل — اضغط \"تصدير XMP\" في الشريط لنقل قراراتك إلى Lightroom",
+  "toast.maybes_cleared": "تم حسم صور maybe ✓ — اكتملت الجولة",
+  "toast.resolve_mode_enter": "◐ وضع الحسم: {n} صورة maybe، الأكثر التباسًا أولًا — اضغط 1/2/3 للحكم",
+  "toast.resolve_mode_blocked": "مرشحات المشهد/الوجوه تخفي كل صور maybe — أزلها أو اضغط مجددًا للخروج"
 }

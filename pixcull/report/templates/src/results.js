@@ -147,6 +147,17 @@
     I18N_CURRENT = lang;
     _setStoredLang(lang);
     _applyLangToDom();
+    // v2.22-P0 — the session-close strings are DYNAMIC (built via _t()
+    // during init, which runs before this async fetch resolves, so they
+    // rendered with the zh fallback).  Rebuild them now that
+    // I18N_STRINGS is live.  outerHTML swap is safe: the chip's click
+    // handler is delegated to statsEl (the v2.15 lesson).
+    try {
+      const rp = document.getElementById("reviewProgress");
+      if (rp) rp.outerHTML = _reviewChipHtml();
+      const rb = document.getElementById("resolveMaybesBtn");
+      if (rb) rb.innerHTML = _t("workspace.resolve_maybes", "◐ 决议 maybe");
+    } catch (_e) { /* non-results contexts have neither element */ }
     return true;
   }
 
@@ -566,7 +577,7 @@
     // |score_final−0.5|), so the end-of-session cleanup has an order.
     `<button class="resolve-maybes-btn" id="resolveMaybesBtn"`
     + ` title="只看 maybe,按『模型最拿不准』排序 — 从最难的开始,1/2/3 直接判">`
-    + `◐ 决议 maybe</button>`,
+    + `${_t("workspace.resolve_maybes", "◐ 决议 maybe")}</button>`,
     `<span class="stat-aux">耗时 <b>${ela}</b></span>`,
   ];
   if (summary.rescorer_active) {
@@ -1585,7 +1596,8 @@
     chip.id = "hydration";
     chip.title = "大批量 run:首屏只内联首片,其余分片后台加载 — 期间筛选/排序作用于已加载部分";
     statsEl?.appendChild(chip);
-    const upd = () => { chip.textContent = `加载 ${rows.length}/${meta.total}…`; };
+    const upd = () => { chip.textContent =
+      `${_t("workspace.hydration.loading", "加载")} ${rows.length}/${meta.total}…`; };
     upd();
     const lim = Math.max(1, Math.min(1000, meta.slice || 1000));
     try {
@@ -1612,7 +1624,8 @@
       render();
       chip.remove();
     } catch (err) {
-      chip.textContent = `⚠ 加载不完整 ${rows.length}/${meta.total}`;
+      chip.textContent =
+        `⚠ ${_t("workspace.hydration.incomplete", "加载不完整")} ${rows.length}/${meta.total}`;
       chip.title = `后台分片加载失败(${err.message})— 刷新重试;` +
         `当前筛选/排序只作用于已加载的 ${rows.length} 张`;
     }
@@ -1749,12 +1762,12 @@
     if (total > 0 && left === 0) {
       return `<span class="stat-aux review-progress done" id="reviewProgress"`
         + ` title="每张照片都有人工确认的判定 — 点击下载 XMP zip,带着结果回 Lightroom">`
-        + `全部已审 ✓ · 导出 XMP</span>`;
+        + `${_t("workspace.stats.all_done", "全部已审 ✓ · 导出 XMP")}</span>`;
     }
     return `<span class="stat-aux review-progress" id="reviewProgress"`
       + ` title="还没有人工确认判定的照片数(键盘 1/2/3、lightbox 或批量框选都算确认)。`
       + `清零后这里变成 XMP 导出入口">`
-      + `待审 <b data-stat="unreviewed">${left}</b></span>`;
+      + `${_t("workspace.stats.unreviewed", "待审")} <b data-stat="unreviewed">${left}</b></span>`;
   }
 
   function _updateReviewProgress() {
@@ -1771,7 +1784,8 @@
           if (!_reviewDoneCelebrated) {
             _reviewDoneCelebrated = true;
             _track("review_all_done");
-            showToast("🎉 全部已审 — 点工作条的「导出 XMP」把结果带回 Lightroom", "success");
+            showToast(_t("toast.session_done",
+              "🎉 全部已审 — 点工作条的「导出 XMP」把结果带回 Lightroom"), "success");
           }
         }
       } else if (wasDone) {
@@ -1791,7 +1805,7 @@
     if (btn) btn.hidden = (nMaybe === 0 && !_resolveMaybesActive);
     if (_resolveMaybesActive && nMaybe === 0) {
       _toggleResolveMaybes();   // restores the pre-queue filter + sort
-      showToast("maybe 清零 ✓ — 决议完成", "success");
+      showToast(_t("toast.maybes_cleared", "maybe 清零 ✓ — 决议完成"), "success");
     }
   }
 
@@ -1833,7 +1847,9 @@
       _resolveMaybesActive = true;
       _track("resolve_maybes");
       btn?.classList.add("active");
-      showToast(`◐ 决议模式:${summary.n_maybe || 0} 张 maybe,最拿不准的排最前 — 1/2/3 直接判`, "info");
+      showToast(_t("toast.resolve_mode_enter",
+        "◐ 决议模式:{n} 张 maybe,最拿不准的排最前 — 1/2/3 直接判")
+        .replace("{n}", String(summary.n_maybe || 0)), "info");
       // v2.15 — the maybe filter COMPOSES with scene/face/style filters (a
       // feature: resolve maybes within a scene). But if those hide every
       // maybe the queue looks broken — say why. Deferred one tick so it
@@ -1841,7 +1857,8 @@
       setTimeout(() => {
         if (_resolveMaybesActive && (summary.n_maybe || 0) > 0
             && !grid.querySelector(".card")) {
-          showToast("当前场景/人物等筛选挡住了所有 maybe — 清掉那些筛选,或再点一次退出决议模式", "info");
+          showToast(_t("toast.resolve_mode_blocked",
+            "当前场景/人物等筛选挡住了所有 maybe — 清掉那些筛选,或再点一次退出决议模式"), "info");
         }
       }, 0);
     } else {
@@ -9201,16 +9218,12 @@
 @@MODULE:14-confidence-modal.js@@
 
   // ==================================================================
-  // v0.13.12 — Cmd+Z undo stack for decisions.
-  //
-  // Maintain a LIFO stack of the most recent N decisions.  Each
-  // `setDecision(fn, newDec)` push remembers the prior decision +
-  // the filename + the timestamp.  Cmd+Z pops the top entry and
-  // calls setDecision again with the prior value.  Cmd+Shift+Z
-  // redoes.  Bounded to 50 entries (memory safe; covers a
-  // half-day's worth of culling).
+  // (v2.22 — the v0.13.12 "20-undo-stack" module was DELETED here: it
+  // wrapped window.setDecision, but nothing ever assigned setDecision
+  // onto window, so its guard never fired and the whole module was
+  // inert since birth.  The undo that actually works is the main
+  // closure's pushUndo/performUndo above.  2030Q3 audit finding.)
   // ==================================================================
-@@MODULE:20-undo-stack.js@@
 
   // ==================================================================
   // v0.13.12 — Selects mode (Cmd+1 → keep+maybe only).

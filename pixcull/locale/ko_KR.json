@@ -1,7 +1,6 @@
 {
   "lang.name": "한국어",
   "lang.switcher.aria": "언어 전환",
-
   "workspace.crumb.results": "분석 결과",
   "workspace.crumb.upload_again": "← 다른 배치 업로드",
   "workspace.search.placeholder": "🔎 의미 검색",
@@ -10,7 +9,6 @@
   "workspace.stats.cull": "제외",
   "workspace.stats.total": "전체",
   "workspace.stats.elapsed": "경과",
-
   "library.title": "라이브러리",
   "library.group.decision": "판정",
   "library.group.scene": "장면",
@@ -23,13 +21,11 @@
   "library.collapse.aria": "사이드바 접기",
   "library.expand.aria": "사이드바 펼치기",
   "library.filter.reset": "필터 재설정",
-
   "decision.all": "전체",
   "decision.keep": "선택",
   "decision.maybe": "보류",
   "decision.cull": "제외",
   "decision.unset": "미분류",
-
   "buckets.title": "🪣 배달 버킷",
   "buckets.toggle.aria": "버킷 패널 열기 / 닫기",
   "buckets.new.placeholder": "새 버킷 이름 (Enter로 생성)",
@@ -43,7 +39,6 @@
   "buckets.action.clear": "비우기",
   "buckets.action.delete": "버킷 삭제",
   "buckets.reorder.title": "끌어서 재정렬",
-
   "lightbox.close.aria": "라이트박스 닫기",
   "lightbox.close.title": "닫기 (Esc)",
   "lightbox.prev": "이전",
@@ -70,7 +65,6 @@
   "lightbox.toolbar.keep.title": "선택 (1)",
   "lightbox.toolbar.maybe.title": "보류 (2)",
   "lightbox.toolbar.cull.title": "제외 (3) · 제외 사유 선택 가능",
-
   "shortcuts.title": "키보드 단축키",
   "shortcuts.hint": "? 단축키",
   "shortcuts.hint.title": "? 전체 단축키 표시 (또는 ? 키)",
@@ -82,7 +76,6 @@
   "shortcuts.context.grid": "그리드 뷰",
   "shortcuts.context.lightbox": "라이트박스",
   "shortcuts.context.compare": "A/B 비교",
-
   "export.menu": "📥 내보내기",
   "export.menu.title": "내보내기 / 다운로드 / 자동 캡션",
   "export.xmp_zip": "XMP 다운로드",
@@ -104,16 +97,13 @@
   "export.style_train.title": "현재 선택을 참조로 사용 — 개인 스타일 프로필 학습",
   "export.sync_event": "📡 협업 세션",
   "export.sync_event.title": "협업 링크 생성 — 보조 촬영자 / 편집자가 같은 런에 참여 가능",
-
   "save_view": "★ 뷰 저장",
   "save_view.title": "현재 필터 + 정렬 + 제외 사유 조합을 이름 있는 프리셋으로 저장",
   "view_preset.dropdown": "뷰 프리셋 ▾",
   "view_preset.export": "↓ 프리셋 내보내기",
   "view_preset.import": "↑ 프리셋 가져오기",
-
   "filter.reset": "필터 재설정",
   "filter.no_match": "현재 필터와 일치하는 사진이 없습니다",
-
   "sort.default": "기본",
   "sort.score_desc": "점수 높음 → 낮음",
   "sort.score_asc": "점수 낮음 → 높음",
@@ -121,12 +111,10 @@
   "sort.datetime_desc": "촬영 시간 (최신 → 오래된)",
   "sort.cluster": "연속 클러스터별",
   "sort.style_distance_asc": "🎨 내 스타일 먼저",
-
   "footer.history": "🕒 기록",
   "footer.tether": "📡 라이브 테더링",
   "footer.admin": "저장 공간",
   "footer.tour": "투어 재생",
-
   "annotation.title": "루브릭 주석",
   "annotation.save": "저장",
   "annotation.cancel": "취소",
@@ -134,14 +122,12 @@
   "annotation.next.title": "능동 학습 우선순위로 라벨링",
   "annotation.batch": "일괄 라벨",
   "annotation.batch.title": "점수 임계값으로 keep/cull 일괄 라벨",
-
   "share.brand.subtitle": "PixCull · 클라이언트 배달 미리보기",
   "share.brand.photographer": "사진작가",
   "share.brand.client": "클라이언트",
   "share.empty": "사진작가가 아직 선택을 마치지 않았습니다 — 잠시 후 다시 확인하세요.",
   "share.count.suffix": "선택",
   "share.powered_by": "Powered by",
-
   "tether.title": "라이브 테더링",
   "tether.sub": "테더링 폴더를 감시 — 새 사진이 도착할 때마다 분석 + 그리드 실시간 갱신.",
   "tether.start": "▶ 시작",
@@ -156,13 +142,11 @@
   "tether.stat.failed": "실패",
   "tether.stat.uptime": "가동 시간",
   "tether.stat.last_event": "마지막 이벤트",
-
   "history.title": "기록 타임라인",
   "history.sub": "모든 과거 런 · 날짜순 정렬 · 카드를 클릭하여 해당 그리드로 이동",
   "history.empty": "아직 런이 없습니다.",
   "history.back_to_upload": "← 업로드 페이지",
   "history.count.suffix": "런",
-
   "toast.saved": "저장됨",
   "toast.copied": "클립보드에 복사됨",
   "toast.copy_failed": "클립보드 쓰기 실패 — 브라우저가 차단했을 수 있음",
@@ -178,5 +162,14 @@
   "tour.row.personal": "🎯 개인화",
   "tour.row.heatmap": "🔥 어트리뷰션 히트맵",
   "tour.row.sheet": "📇 콘택트 시트",
-  "tour.foot": "전체 단축키는 ? · 모든 기능 100% 로컬 실행"
+  "tour.foot": "전체 단축키는 ? · 모든 기능 100% 로컬 실행",
+  "workspace.resolve_maybes": "◐ maybe 정리",
+  "workspace.stats.unreviewed": "검토 대기",
+  "workspace.stats.all_done": "모두 검토됨 ✓ · XMP 내보내기",
+  "workspace.hydration.loading": "불러오는 중",
+  "workspace.hydration.incomplete": "일부만 로드됨",
+  "toast.session_done": "🎉 모두 검토됨 — 워크바의 \"XMP 내보내기\"로 결과를 Lightroom에 반영하세요",
+  "toast.maybes_cleared": "maybe 정리 완료 ✓",
+  "toast.resolve_mode_enter": "◐ 정리 모드: maybe {n}장, 가장 애매한 순 — 1/2/3으로 바로 판정",
+  "toast.resolve_mode_blocked": "현재 장면/인물 필터가 모든 maybe를 숨기고 있습니다 — 필터를 해제하거나 다시 클릭해 종료하세요"
 }

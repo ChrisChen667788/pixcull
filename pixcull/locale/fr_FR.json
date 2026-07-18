@@ -1,7 +1,6 @@
 {
   "lang.name": "Français",
   "lang.switcher.aria": "Changer de langue",
-
   "workspace.crumb.results": "Résultats d'analyse",
   "workspace.crumb.upload_again": "← Téléverser un autre lot",
   "workspace.search.placeholder": "🔎 Recherche sémantique",
@@ -10,7 +9,6 @@
   "workspace.stats.cull": "Écarter",
   "workspace.stats.total": "Total",
   "workspace.stats.elapsed": "Durée",
-
   "library.title": "Bibliothèque",
   "library.group.decision": "Décision",
   "library.group.scene": "Scène",
@@ -23,13 +21,11 @@
   "library.collapse.aria": "Réduire la barre latérale",
   "library.expand.aria": "Étendre la barre latérale",
   "library.filter.reset": "Réinitialiser les filtres",
-
   "decision.all": "Tous",
   "decision.keep": "Garder",
   "decision.maybe": "Peut-être",
   "decision.cull": "Écarter",
   "decision.unset": "Non étiqueté",
-
   "buckets.title": "🪣 Lots de livraison",
   "buckets.toggle.aria": "Ouvrir / fermer le panneau des lots",
   "buckets.new.placeholder": "Nom du nouveau lot (Entrée pour créer)",
@@ -43,7 +39,6 @@
   "buckets.action.clear": "Vider",
   "buckets.action.delete": "Supprimer le lot",
   "buckets.reorder.title": "Glisser pour réorganiser",
-
   "lightbox.close.aria": "Fermer la lightbox",
   "lightbox.close.title": "Fermer (Échap)",
   "lightbox.prev": "Précédent",
@@ -70,7 +65,6 @@
   "lightbox.toolbar.keep.title": "Garder (1)",
   "lightbox.toolbar.maybe.title": "Peut-être (2)",
   "lightbox.toolbar.cull.title": "Écarter (3) · choisir une raison optionnelle",
-
   "shortcuts.title": "Raccourcis clavier",
   "shortcuts.hint": "? raccourcis",
   "shortcuts.hint.title": "? Afficher tous les raccourcis clavier (ou appuyer sur ?)",
@@ -82,7 +76,6 @@
   "shortcuts.context.grid": "Vue grille",
   "shortcuts.context.lightbox": "Lightbox",
   "shortcuts.context.compare": "Comparaison A/B",
-
   "export.menu": "📥 Exporter",
   "export.menu.title": "Exporter / télécharger / légende automatique",
   "export.xmp_zip": "Télécharger XMP",
@@ -104,16 +97,13 @@
   "export.style_train.title": "Utiliser les keeps actuels comme références — apprendre votre profil de style personnel",
   "export.sync_event": "📡 Session collaborative",
   "export.sync_event.title": "Générer un lien de collaboration pour qu'un second photographe / éditeur rejoigne la même session",
-
   "save_view": "★ Sauvegarder la vue",
   "save_view.title": "Sauvegarder la combinaison filtre + tri + raison-d'écart actuelle comme préréglage nommé",
   "view_preset.dropdown": "Préréglages de vue ▾",
   "view_preset.export": "↓ Exporter préréglages",
   "view_preset.import": "↑ Importer préréglages",
-
   "filter.reset": "Réinitialiser les filtres",
   "filter.no_match": "Aucune photo ne correspond aux filtres actuels",
-
   "sort.default": "Par défaut",
   "sort.score_desc": "Score décroissant",
   "sort.score_asc": "Score croissant",
@@ -121,12 +111,10 @@
   "sort.datetime_desc": "Heure de prise (plus récent → plus ancien)",
   "sort.cluster": "Par cluster de rafale",
   "sort.style_distance_asc": "🎨 Mon style en premier",
-
   "footer.history": "🕒 Historique",
   "footer.tether": "📡 Tethered Live",
   "footer.admin": "Stockage",
   "footer.tour": "Rejouer la visite",
-
   "annotation.title": "Annotation par rubrique",
   "annotation.save": "Enregistrer",
   "annotation.cancel": "Annuler",
@@ -134,14 +122,12 @@
   "annotation.next.title": "Étiqueter par priorité d'apprentissage actif",
   "annotation.batch": "Étiquetage en lot",
   "annotation.batch.title": "Étiquetage en masse keep/cull par seuil de score",
-
   "share.brand.subtitle": "PixCull · aperçu de livraison client",
   "share.brand.photographer": "Photographe",
   "share.brand.client": "Client",
   "share.empty": "Le photographe n'a pas encore fait sa sélection — revenez bientôt.",
   "share.count.suffix": "sélections",
   "share.powered_by": "Propulsé par",
-
   "tether.title": "Tethered Live",
   "tether.sub": "Surveiller un dossier tether — les nouvelles photos sont analysées à l'arrivée, la grille se rafraîchit en direct.",
   "tether.start": "▶ Démarrer",
@@ -156,13 +142,11 @@
   "tether.stat.failed": "Échoués",
   "tether.stat.uptime": "Durée de fonctionnement",
   "tether.stat.last_event": "Dernier événement",
-
   "history.title": "Chronologie historique",
   "history.sub": "Toutes les sessions passées · triées par date · cliquer sur une carte pour revenir à sa grille",
   "history.empty": "Aucune session pour le moment.",
   "history.back_to_upload": "← Page de téléversement",
   "history.count.suffix": "sessions",
-
   "toast.saved": "Enregistré",
   "toast.copied": "Copié dans le presse-papiers",
   "toast.copy_failed": "Échec de l'écriture dans le presse-papiers — le navigateur l'a peut-être bloquée",
@@ -178,5 +162,14 @@
   "tour.row.personal": "🎯 Personnalisation",
   "tour.row.heatmap": "🔥 Carte d'attribution",
   "tour.row.sheet": "📇 Planche contact",
-  "tour.foot": "Raccourcis complets sous ? · tout fonctionne 100 % en local"
+  "tour.foot": "Raccourcis complets sous ? · tout fonctionne 100 % en local",
+  "workspace.resolve_maybes": "◐ Trancher les maybes",
+  "workspace.stats.unreviewed": "À vérifier",
+  "workspace.stats.all_done": "Tout vérifié ✓ · Export XMP",
+  "workspace.hydration.loading": "Chargement",
+  "workspace.hydration.incomplete": "Chargement incomplet",
+  "toast.session_done": "🎉 Tout vérifié — cliquez « Export XMP » dans la barre pour ramener vos décisions dans Lightroom",
+  "toast.maybes_cleared": "Maybes tranchés ✓ — résolution terminée",
+  "toast.resolve_mode_enter": "◐ Mode résolution : {n} maybes, les plus incertains d’abord — 1/2/3 pour trancher",
+  "toast.resolve_mode_blocked": "Vos filtres scène/visages masquent tous les maybes — retirez-les ou cliquez à nouveau pour quitter"
 }

@@ -204,3 +204,47 @@ def test_lang_name_strings_are_human_readable():
     # display name of the language ITSELF, not the key.
     assert "中文" in t("lang.name", "zh_CN")
     assert "English" in t("lang.name", "en_US")
+
+
+# ── v2.22-P0 — session-close / hydration strings wired through _t() ──
+# The 2030Q3 audit found the v2.15 session-close flow (Q2's declared
+# top-gap fix) rendered in hardcoded Chinese for non-zh users: 9 dynamic
+# strings bypassed the locale shim entirely.  These keys now exist in
+# every locale and the JS call sites go through _t(key, zh_fallback).
+_SESSION_CLOSE_KEYS = [
+    "workspace.resolve_maybes",
+    "workspace.stats.unreviewed",
+    "workspace.stats.all_done",
+    "workspace.hydration.loading",
+    "workspace.hydration.incomplete",
+    "toast.session_done",
+    "toast.maybes_cleared",
+    "toast.resolve_mode_enter",
+    "toast.resolve_mode_blocked",
+]
+
+
+def test_session_close_keys_present_in_every_locale():
+    for loc in SUPPORTED_LOCALES:
+        d = load_locale(loc)
+        for key in _SESSION_CLOSE_KEYS:
+            assert isinstance(d.get(key), str) and d[key].strip(), (
+                f"{loc} missing/empty session-close key {key!r}")
+
+
+def test_resolve_mode_enter_carries_count_placeholder():
+    """The one parameterised string must keep its {n} slot in every
+    locale — a translation that drops it silently loses the count."""
+    for loc in SUPPORTED_LOCALES:
+        assert "{n}" in load_locale(loc)["toast.resolve_mode_enter"], (
+            f"{loc}: toast.resolve_mode_enter lost the {{n}} placeholder")
+
+
+def test_session_close_call_sites_use_t():
+    """The 9 strings must stay wired through _t() in results.js —
+    a regression back to a bare Chinese literal fails here."""
+    from pathlib import Path
+    js = (Path(__file__).resolve().parent.parent / "pixcull" / "report"
+          / "templates" / "src" / "results.js").read_text("utf-8")
+    for key in _SESSION_CLOSE_KEYS:
+        assert f'_t("{key}"' in js, f"results.js call site for {key!r} gone"

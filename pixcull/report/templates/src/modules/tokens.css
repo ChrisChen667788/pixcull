@@ -1,0 +1,370 @@
+  @font-face{font-family:"Geist Variable";font-style:normal;font-weight:100 900;font-display:swap;src:url("/docs/brand/geist-variable.woff2") format("woff2");unicode-range:U+0000-2E7F;}
+    /* ============================================================
+       v0.4 P0 · DESIGN TOKENS
+       ============================================================
+       Single source of truth for visual style.  Every chip / pill /
+       button / surface / typography decision references one of
+       these tokens.  Replaces the ~12 ad-hoc colors and 6 hard-
+       coded chip palettes that accreted through v0.2 / v0.3 prep.
+       Charter: docs/ROADMAP-v0.4-charter.md
+       ============================================================ */
+    :root {
+      /* ============================================================
+         v2.8-DESIGN P2 · LCH/OKLCH THREE-VARIABLE COLOR SYSTEM
+         ============================================================
+         Each theme defines exactly three root variables:
+
+           --base     the ground surface color (darkest in dark, lightest in light)
+           --accent   the brand brass / brass-dark tone
+           --contrast the primary text color
+
+         Surface elevation layers are derived via CSS OKLCH relative-color
+         syntax:  oklch(from var(--base) calc(l + δ) c h)
+         Accent variants are similarly derived from --accent.
+
+         This replaces the old per-theme hard-coded hex cascade for
+         --bg-card / --bg-card-hi / --surface-2 / --surface-3 /
+         --accent-hi / --accent-soft.
+
+         Two rules keep the visuals stable:
+           • δ values are tuned to match the previous hex values within
+             a few OKLCH lightness units (visual diff imperceptible).
+           • editorial-warm hue family (~74-85°, warm yellows/ochres)
+             is preserved; the hue channel h is inherited from --base.
+
+         Chromium supports oklch() + relative-color since Chrome 111.
+         ============================================================ */
+
+      /* —— THREE ROOT VARIABLES (dark / studio-neutral theme) ————
+         v2.21 "Studio Neutral" — the photo surround must be
+         ACHROMATIC (c=0).  ISO 3664 viewing-surround guidance +
+         chromatic adaptation: a warm-tinted surround skews color
+         judgment of the photos themselves (the previous espresso
+         #161310 sat at h=77° — an industry outlier; Capture One,
+         Lightroom, Aftershoot, Imagen all judge on neutral gray).
+         Brand warmth now lives in ONE place: the champagne-gold
+         accent, reserved for selection/focus/CTA. */
+      --base:     oklch(0.200 0 0);         /* neutral studio ground #161616 */
+      --accent:   oklch(0.790 0.075 78);    /* champagne gold        #d5b584 */
+      --contrast: oklch(0.925 0 0);         /* soft white (no glare) #e6e6e6 */
+
+      /* —— SURFACES: derived from --base via relative-color ————————
+         Each elevation step lifts L by ~0.031 (v2.21 neutral ramp —
+         matches the industry ladder #121212→#1e1e1e→#242424):
+           --bg         = --base itself           (#161616  L≈0.200)
+           --bg-card    = base + 0.031            (#1d1d1d  L≈0.231)
+           --bg-card-hi = base + 0.062            (#242424  L≈0.262)
+           --surface-2  = base + 0.062            (#242424  L≈0.262)
+           --surface-3  = base + 0.101            (#2e2e2e  L≈0.301)
+           --chrome     = base - 0.030            (#0f0f0f  L≈0.170) */
+      --bg:           var(--base);
+      --bg-card:      oklch(from var(--base) calc(l + 0.031) c h);
+      --bg-card-hi:   oklch(from var(--base) calc(l + 0.062) c h);
+      --surface-2:    oklch(from var(--base) calc(l + 0.062) c h);
+      --surface-3:    oklch(from var(--base) calc(l + 0.101) c h);
+      --chrome:       oklch(from var(--base) calc(l - 0.030) c h);
+
+      /* —— TEXT —— neutral ramp (Linear-style, achromatic) ————— */
+      --fg:           var(--contrast);  /* soft white primary  #e6e6e6 */
+      --fg-2:         #c6c6c6;          /* secondary (chip labels) */
+      --muted:        #9b9b9b;
+      --muted-soft:   #707070;
+
+      /* —— BORDERS ——— neutral hairline —————————————————————— */
+      --border:       #262626;
+      --border-hi:    #363636;
+
+      /* —— BRAND + ACCENT ————————————————————————————————————
+         v2.21 Studio Neutral — ONE champagne-gold accent, chroma
+         3× the old brass (#c4b9a9 sat at c=0.0254 — near-gray, it
+         read as an accident rather than a decision).  Role is now
+         STRICT: selection ring, focus ring, primary CTA, active
+         state.  Structure (headers, dividers, resting icons) is
+         achromatic — the accent only ever means "this is chosen /
+         active".
+
+         Accent variants derived from --accent via relative-color:
+           --accent-hi  = accent + 0.064 L  (#eaca98  L≈0.854)
+           --accent-soft = accent at 16% alpha
+           --accent-glow = accent at 40% alpha
+           --focus-ring  = accent-hi at 55% alpha
+      */
+      /* --accent is already declared above as the root oklch value */
+      --accent-hi:    oklch(from var(--accent) calc(l + 0.064) c h);
+      --accent-soft:  oklch(from var(--accent) l c h / 0.16);
+      --accent-glow:  oklch(from var(--accent) l c h / 0.40);
+      --focus-ring:   oklch(from var(--accent) calc(l + 0.064) c h / 0.55);
+
+      /* —— SEMANTIC COLOR PALETTE ————————————————————————————
+         5 states for the unified `.chip` system.  Each state has
+         (a) a base color, (b) a translucent tint for backgrounds,
+         (c) a border tint.  All chips look the same shape; only
+         the palette changes. */
+      /* v2.21 — dark-mode calibrated signal colors (the industry
+         convention: desaturate ~20-30% + lighten vs light-mode
+         equivalents, so they read clearly without neon-vibrating
+         on dark).  Keep = clear green (Lightroom/Imagen use green
+         for AI-pick), cull = clear red, maybe keeps the ochre-amber
+         (PixCull's signature third state). */
+      --c-success:        #63bd7f;   /* keep green */
+      --c-success-tint:   rgba(99,189,127,0.15);
+      --c-success-border: rgba(99,189,127,0.42);
+      --c-warn:           #d6a443;   /* ochre-amber (maybe) */
+      --c-warn-tint:      rgba(214,164,67,0.15);
+      --c-warn-border:    rgba(214,164,67,0.42);
+      --c-danger:         #e0604e;   /* cull red */
+      --c-danger-tint:    rgba(224,96,78,0.15);
+      --c-danger-border:  rgba(224,96,78,0.42);
+      --c-info:           #6fa7bd;   /* steel blue (info) */
+      --c-info-tint:      rgba(111,167,189,0.15);
+      --c-info-border:    rgba(111,167,189,0.42);
+      --c-neutral:        #9b9b9b;
+      --c-neutral-tint:   rgba(155,155,155,0.10);
+      --c-neutral-border: rgba(155,155,155,0.30);
+
+      /* —— LEGACY KEEP / MAYBE / CULL ————————————————————————
+         These remain for V14 backwards compat (badges in results
+         data are keyed on "keep" / "maybe" / "cull").  They alias
+         to the semantic palette so any future palette tweak
+         flows through. */
+      --keep:  var(--c-success);
+      --maybe: var(--c-warn);
+      --cull:  var(--c-danger);
+      --keep-cb:  #0ea5e9;     /* P-UX-23 color-blind palette unchanged */
+      --maybe-cb: #f59e0b;
+      --cull-cb:  #d946ef;
+
+      /* —— TYPOGRAPHY SCALE ——————————————————————————————————
+         Modern product rhythm: hero 28px at top, section 18px,
+         body 13px, small 11.5px, tiny 10.5px.  Line-heights
+         tightened for headlines, loosened for body. */
+      --font-display:
+        "Geist Variable", -apple-system, BlinkMacSystemFont,
+        "Segoe UI Variable", "Segoe UI", "PingFang SC",
+        "Microsoft Yahei UI", "Noto Sans SC", sans-serif;
+      --font-body:
+        "Geist Variable", -apple-system, BlinkMacSystemFont,
+        "Segoe UI Variable", "Segoe UI", "PingFang SC",
+        "Microsoft Yahei UI", "Noto Sans SC", sans-serif;
+      --font-mono:
+        ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+      /* v0.9-P0-3 — serif accent for hero numbers + headlines.
+         Pure-system stack (Charter + Iowan Old Style ship with
+         macOS; PT Serif / Source Serif are widely installed via
+         Office / browsers).  No webfont download — keeps the
+         "zero external dep" promise.  Used on .stat-value-large,
+         hero h1, large score numbers in /share + /history. */
+      --font-serif:
+        "Charter", "Iowan Old Style", "PT Serif", "Source Serif Pro",
+        "Source Serif 4", "Cambria", Georgia, "Songti SC",
+        "STZhongsong", serif;
+      --t-hero:    28px;
+      --t-h2:      18px;
+      --t-h3:      14px;
+      --t-body:    13px;
+      --t-small:   11.5px;
+      --t-tiny:    10.5px;
+      --lh-tight:  1.25;
+      --lh-normal: 1.55;
+      --lh-loose:  1.7;
+
+      /* —— SPACING ——————————————————————————————————————————
+         Existing scale kept (v0.2 chip CSS already references it).
+         Add space-7 / space-8 for hero-level padding. */
+      --space-1: 4px;  --space-2: 8px;  --space-3: 12px;
+      --space-4: 16px; --space-5: 20px; --space-6: 24px;
+      --space-7: 32px; --space-8: 48px;
+
+      /* —— RADIUS ——————————————————————————————————————————— */
+      /* v2.21 — tightened to pro-tool register (Linear/Raycast run
+         4-12px; the old 9/13/18 "CapCut soft" read consumer). */
+      --radius-sm:  5px;
+      --radius-md:  8px;
+      --radius-lg:  11px;
+      --radius-xl:  14px;
+      --radius-pill: 999px;
+
+      /* —— SHADOWS ——————————————————————————————————————————
+         Soft layered shadows tuned for dark surfaces.  Each ramps
+         in shadow + blur for elevation depth. */
+      /* v2.2 — softer, wider "expensive" elevation (lower opacity,
+         more blur, a faint ambient layer). */
+      /* v2.21 — neutral black shadows (the surround must carry no
+         hue, same rule as the surfaces). */
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.36);
+      --shadow-md: 0 6px 22px rgba(0,0,0,0.40);
+      --shadow-lg: 0 18px 48px rgba(0,0,0,0.50);
+      --shadow-xl: 0 32px 72px rgba(0,0,0,0.58);
+
+      /* —— MOTION ——————————————————————————————————————————
+         v0.4 will sprinkle these into chip toggle / modal / filter
+         transitions in P1.  Single duration scale + ease values
+         so motion feels consistent across surfaces. */
+      --duration-fast:   120ms;
+      --duration-normal: 220ms;
+      --duration-slow:   320ms;
+      /* v2.21 — motion discipline reversal.  v0.9 put a 6%
+         overshoot spring on EVERY --ease-out usage; on 200+
+         transitions at once the bounce reads busy, not alive
+         (Linear/Raycast run flat ease-out on chrome and reserve
+         spring for signature moments).  --ease-out is flat again;
+         --ease-spring keeps the overshoot for the few moments that
+         earn it (decision confirm, completion chip). */
+      --ease-out:        cubic-bezier(0.16, 1, 0.3, 1);
+      --ease-out-flat:   cubic-bezier(0.16, 1, 0.3, 1);
+      --ease-in-out:     cubic-bezier(0.4, 0, 0.2, 1);
+      --ease-spring:     cubic-bezier(0.34, 1.56, 0.64, 1);
+      /* v0.9-P0-2 (provisional, refined in v0.9-P0-3) — signature
+         brand gradient.  Purple→pink, ~LR Develop tonal-curve
+         feel, harmonises with existing indigo accent.  Lives in
+         logo wordmark, primary CTAs, loading bars, QR brand-frame,
+         large score numbers.  "See the gradient, know it's PixCull." */
+      /* v2.21 — champagne→bronze tonal.  Brand signature lives in
+         the wordmark / hero numbers / primary CTA only. */
+      --brand-gradient:  linear-gradient(135deg, #d5b584 0%, #93743f 100%);
+      --brand-gradient-soft: linear-gradient(135deg,
+                              rgba(213,181,132,0.16) 0%,
+                              rgba(147,116,63,0.16) 100%);
+    }
+    /* Honor system color-scheme + reduce-motion preferences */
+    @media (prefers-reduced-motion: reduce) {
+      :root {
+        --duration-fast: 1ms;
+        --duration-normal: 1ms;
+        --duration-slow: 1ms;
+      }
+    }
+
+    /* ============================================================
+       v0.4 P2 (1/4) · LIGHT THEME    (v0.9-P2-1 ←  V2 polish)
+       ============================================================
+       Token overrides applied via data-theme="light" on <html>.
+       Auto-applied when (a) the user toggles via the new
+       theme-toggle pill, OR (b) prefers-color-scheme: light AND
+       the user hasn't explicitly chosen "dark" (persisted in
+       localStorage[pixcull_theme]).
+
+       V2 (v0.9-P2-1) tuning — V1 was an "invert the dark theme"
+       afterthought; V2 is a deliberately *warm* palette so light
+       mode feels like a paper-and-ink editorial, not bleached-out
+       dark mode.  Three shifts:
+
+         1. SHADOWS are warm (slate→amber undertone) instead of
+            cold blue-grey.  Photographers spend their work life
+            looking at warm-balanced skin tones; cold shadows on
+            white feel like a bad backlight.  See --shadow-* below.
+         2. SURFACE-2/-3 carry a faint sand tint instead of being
+            "darker grey of grey" — the surfaces now feel layered
+            rather than just shaded.
+         3. TYPE WEIGHT bumps on the largest text — light bgs need
+            ~30g more body to feel solid against bright surrounds.
+            See --weight-display / --weight-body below.
+
+       Same semantic colors (success / warn / danger / info /
+       neutral) — only the tint + border alphas shift.
+       ============================================================ */
+    html[data-theme="light"] {
+      /* —— THREE ROOT VARIABLES (light / neutral-paper theme) ————
+         v2.21 — same three-variable system as dark; only base/accent/
+         contrast differ.  All surface and accent derivatives are re-
+         computed automatically via the same relative-color rules.
+         Neutral for the same reason as dark: the photo surround
+         must not tint color judgment.
+
+           --base     = neutral paper         (#f7f7f7  L≈0.975)
+           --accent   = deep bronze           (#6c501f  L≈0.450)
+           --contrast = near-black            (#171717  L≈0.205)
+
+         Surface derivation (inverted — each step DECREASES L):
+           --bg         = --base itself       (#f7f7f7  L≈0.975)
+           --bg-card    = base + 0.018        (#fdfdfd  L≈0.993)
+           --bg-card-hi = base − 0.032        (≈#eeeeee L≈0.943)
+           --surface-2  = base − 0.042        (#e9e9e9  L≈0.933)
+           --surface-3  = base − 0.077        (#dddddd  L≈0.898)
+           --chrome     = base + 0.018        (#fdfdfd  L≈0.993)
+      */
+      --base:     oklch(0.975 0 0);         /* neutral paper #f7f7f7 */
+      --accent:   oklch(0.450 0.075 78);    /* deep bronze   #6c501f */
+      --contrast: oklch(0.205 0 0);         /* near-black    #171717 */
+
+      /* —— SURFACES: derived from --base (v2.21 neutral) ————————— */
+      --bg:           var(--base);
+      --bg-card:      oklch(from var(--base) calc(l + 0.018) c h);   /* #fdfdfd */
+      --bg-card-hi:   oklch(from var(--base) calc(l - 0.032) c h);   /* ≈#eeeeee */
+      --surface-2:    oklch(from var(--base) calc(l - 0.042) c h);   /* #e9e9e9 */
+      --surface-3:    oklch(from var(--base) calc(l - 0.077) c h);   /* #dddddd */
+      --chrome:       oklch(from var(--base) calc(l + 0.018) c h);   /* #fdfdfd */
+
+      /* —— TEXT —— */
+      --fg:           var(--contrast);   /* near-black  #171717 */
+      --fg-2:         #3a3a3c;
+      --muted:        #616165;
+      --muted-soft:   #8f8f93;
+      /* —— BORDERS (neutral hairline) —— */
+      --border:       #e2e2e2;
+      --border-hi:    #c9c9c9;
+      /* —— ACCENT variants: derived from --accent ——————————————
+         Same rules as dark theme; --accent is deeper so +L lifts:
+           --accent-hi  = accent + 0.088 L  (#866939  L≈0.538)
+           --accent-soft = accent at 10% alpha
+           --accent-glow = accent at 30% alpha
+           --focus-ring  = accent at 45% alpha
+      */
+      --accent-hi:    oklch(from var(--accent) calc(l + 0.088) c h);
+      --accent-soft:  oklch(from var(--accent) l c h / 0.10);
+      --accent-glow:  oklch(from var(--accent) l c h / 0.30);
+      --focus-ring:   oklch(from var(--accent) l c h / 0.45);
+      /* —— SEMANTIC TINTS (lighter alpha to read on white) —— */
+      --c-success-tint:   rgba(16,185,129,0.10);
+      --c-success-border: rgba(16,185,129,0.30);
+      --c-success:        #059669;
+      --c-warn-tint:      rgba(217,119,6,0.10);
+      --c-warn-border:    rgba(217,119,6,0.30);
+      --c-warn:           #c2410c;
+      --c-danger-tint:    rgba(220,38,38,0.08);
+      --c-danger-border:  rgba(220,38,38,0.28);
+      --c-danger:         #dc2626;
+      --c-info-tint:      rgba(14,165,233,0.10);
+      --c-info-border:    rgba(14,165,233,0.32);
+      --c-info:           #0e7490;   /* v2.21 — was brass #c4b9a9 by
+                                        mistake; info must read info */
+      --c-neutral-tint:   rgba(75,85,99,0.06);
+      --c-neutral-border: rgba(75,85,99,0.22);
+      --c-neutral:        #4b5563;
+      /* —— SHADOWS (v2.21 — neutral, no undertone; the surround
+         carries no hue in either theme) —— */
+      --shadow-sm: 0 1px 2px  rgba(0, 0, 0, 0.06);
+      --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.08);
+      --shadow-lg: 0 14px 34px rgba(0, 0, 0, 0.09);
+      --shadow-xl: 0 28px 60px rgba(0, 0, 0, 0.11);
+      /* —— TYPE WEIGHT (V2 — display bumps to 600/700 on light) ——
+         Cheap visual trick: white surfaces eat ~30g of perceived
+         weight (the "halo" of bright pixels around a glyph blooms
+         on retina + thins the stroke).  We pre-compensate by
+         bumping display weights one step on the light theme only —
+         dark mode still feels right at the original weight. */
+      --weight-display: 700;     /* h1 / hero numerals */
+      --weight-emph:    600;     /* h2 / section heads */
+      --weight-body:    450;     /* body — gets 50g over the default 400 */
+    }
+
+    /* v2.8.1 — pre-relative-color fallback. oklch(from ...) needs Chrome 111+
+       / Safari 16.4+ / Firefox 128+; older engines drop those declarations,
+       leaving the derived surface/accent tokens unset (no background). Restore
+       the hand-tuned hex the OKLCH derivations were calibrated to match, so the
+       UI still renders. @supports-not means modern engines skip this block
+       entirely and keep the live OKLCH derivation. */
+    @supports not (background: oklch(from red l c h)) {
+      :root {
+        --bg-card: #1d1d1d; --bg-card-hi: #242424; --surface-2: #242424;
+        --surface-3: #2e2e2e; --chrome: #0f0f0f; --fg: #e6e6e6;
+        --accent-hi: #eaca98; --accent-soft: rgba(213,181,132,0.16);
+        --accent-glow: rgba(213,181,132,0.40); --focus-ring: rgba(234,202,152,0.55);
+      }
+      html[data-theme="light"] {
+        --bg-card: #fdfdfd; --bg-card-hi: #eeeeee; --surface-2: #e9e9e9;
+        --surface-3: #dddddd; --chrome: #fdfdfd; --fg: #171717;
+        --accent-hi: #866939; --accent-soft: rgba(108,80,31,0.10);
+        --accent-glow: rgba(108,80,31,0.30); --focus-ring: rgba(108,80,31,0.45);
+      }
+    }

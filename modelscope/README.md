@@ -54,7 +54,18 @@ tasks:
 完整源码 + iOS 伴侣 App + Lightroom 插件,均在 GitHub:
 **[github.com/ChrisChen667788/pixcull](https://github.com/ChrisChen667788/pixcull)**
 
-## v0.7 → v2.21 主要更新
+## v0.7 → v2.22 主要更新
+- **v2.22**:**审计队列三连落地 + gallery 换新皮肤** —— 2030Q3 审计排的三个主题
+  一轮做完:**i18n 收口**(v2.15 收尾闭环 9 条文案终于会说 13 种语言,9 新键 ×
+  13 locale 母语级翻译;顺手修掉一个会让整个修复失效的启动时序 bug——动态串在
+  locale 异步拉取前渲染、事后无人重建;删除出生即惰性的 20-undo-stack 死模块)·
+  **发布轨道**(tag 触发 release.yml:build wheel + 干净 venv 烟测 + GitHub
+  Release,零外部 secret;sync-modelscope 缺 secret 改安静跳过不再每推必红;
+  pixcull.spec 版本从 pyproject 单源读取;版本推进 2.22.0)· **CSS 拆分**
+  (`_assemble_css()` 与 JS 侧同契约,tokens.css 370 行 + lightbox.css 651 行
+  首批出仓,产物字节级一致)· **gallery 用 Studio Neutral 新皮肤重摄**(从
+  源盘重建真实博物馆文物 run,01–17/20–22 全部换新;18/19 视频两张待 owner
+  批准的素材后补)。详见 `docs/ROADMAP-v2.22-charter.md`。
 - **v2.21**:**「Studio Neutral 中性影室」调研驱动的设计全面翻新** —— 先做 6 视角
   全网调研(Narrative Select / Aftershoot / Imagen / FilterPixel / Lightroom /
   Capture One + Linear/Raycast 级工具设计 + 暗色 UI 色彩科学),拿到一个硬结论:

@@ -4,7 +4,7 @@
 
 .PHONY: tokens tokens-check lint-design tests serve clean help \
         modelscope-dryrun modelscope-sync \
-        goldenset goldenset-dryrun results-html
+        goldenset goldenset-dryrun results-html wheel
 
 PYTHON ?= python
 

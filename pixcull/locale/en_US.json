@@ -1,7 +1,6 @@
 {
   "lang.name": "English",
   "lang.switcher.aria": "Switch language",
-
   "workspace.crumb.results": "Analysis results",
   "workspace.crumb.upload_again": "← Upload another batch",
   "workspace.search.placeholder": "🔎 Semantic search",
@@ -10,7 +9,6 @@
   "workspace.stats.cull": "Cull",
   "workspace.stats.total": "Total",
   "workspace.stats.elapsed": "Elapsed",
-
   "library.title": "Library",
   "library.group.decision": "Decision",
   "library.group.scene": "Scene",
@@ -23,13 +21,11 @@
   "library.collapse.aria": "Collapse sidebar",
   "library.expand.aria": "Expand sidebar",
   "library.filter.reset": "Reset filters",
-
   "decision.all": "All",
   "decision.keep": "Keep",
   "decision.maybe": "Maybe",
   "decision.cull": "Cull",
   "decision.unset": "Unlabeled",
-
   "buckets.title": "🪣 Delivery buckets",
   "buckets.toggle.aria": "Open / close buckets panel",
   "buckets.new.placeholder": "New bucket name (Enter to create)",
@@ -43,7 +39,6 @@
   "buckets.action.clear": "Clear",
   "buckets.action.delete": "Delete bucket",
   "buckets.reorder.title": "Drag to reorder",
-
   "lightbox.close.aria": "Close lightbox",
   "lightbox.close.title": "Close (Esc)",
   "lightbox.prev": "Previous",
@@ -70,7 +65,6 @@
   "lightbox.toolbar.keep.title": "Keep (1)",
   "lightbox.toolbar.maybe.title": "Maybe (2)",
   "lightbox.toolbar.cull.title": "Cull (3) · optionally pick a cull reason",
-
   "shortcuts.title": "Keyboard shortcuts",
   "shortcuts.hint": "? shortcuts",
   "shortcuts.hint.title": "? Show full keyboard shortcuts (also press ?)",
@@ -82,7 +76,6 @@
   "shortcuts.context.grid": "Grid view",
   "shortcuts.context.lightbox": "Lightbox",
   "shortcuts.context.compare": "A/B compare",
-
   "export.menu": "📥 Export",
   "export.menu.title": "Export / download / auto caption",
   "export.xmp_zip": "Download XMP",
@@ -104,16 +97,13 @@
   "export.style_train.title": "Use the current keeps as references — learn your personal-style profile",
   "export.sync_event": "📡 Collaborative session",
   "export.sync_event.title": "Generate a collaboration link so a second-shooter / editor can join the same run",
-
   "save_view": "★ Save view",
   "save_view.title": "Save the current filter + sort + cull-reason combo as a named preset",
   "view_preset.dropdown": "View presets ▾",
   "view_preset.export": "↓ Export presets",
   "view_preset.import": "↑ Import presets",
-
   "filter.reset": "Reset filters",
   "filter.no_match": "No photos match the current filters",
-
   "sort.default": "Default",
   "sort.score_desc": "Score high → low",
   "sort.score_asc": "Score low → high",
@@ -121,12 +111,10 @@
   "sort.datetime_desc": "Capture time (newest → oldest)",
   "sort.cluster": "By burst cluster",
   "sort.style_distance_asc": "🎨 My style first",
-
   "footer.history": "🕒 History",
   "footer.tether": "📡 Tethered live",
   "footer.admin": "Storage",
   "footer.tour": "Replay tour",
-
   "annotation.title": "Rubric annotation",
   "annotation.save": "Save",
   "annotation.cancel": "Cancel",
@@ -134,14 +122,12 @@
   "annotation.next.title": "Label by active-learning priority",
   "annotation.batch": "Batch label",
   "annotation.batch.title": "Bulk-label keep/cull by score threshold",
-
   "share.brand.subtitle": "PixCull · client delivery preview",
   "share.brand.photographer": "Photographer",
   "share.brand.client": "Client",
   "share.empty": "The photographer hasn't picked the selects yet — check back soon.",
   "share.count.suffix": "selects",
   "share.powered_by": "Powered by",
-
   "tether.title": "Tethered Live",
   "tether.sub": "Watch a tether folder — new photos are analyzed on landing, grid refreshes live.",
   "tether.start": "▶ Start",
@@ -156,13 +142,11 @@
   "tether.stat.failed": "Failed",
   "tether.stat.uptime": "Uptime",
   "tether.stat.last_event": "Last event",
-
   "history.title": "History timeline",
   "history.sub": "All past runs · sorted by date · click a card to jump back to its grid",
   "history.empty": "No runs yet.",
   "history.back_to_upload": "← Upload page",
   "history.count.suffix": "runs",
-
   "toast.saved": "Saved",
   "toast.copied": "Copied to clipboard",
   "toast.copy_failed": "Clipboard write failed — browser may have blocked it",
@@ -178,5 +162,14 @@
   "tour.row.personal": "🎯 Personalisation",
   "tour.row.heatmap": "🔥 Attribution heatmap",
   "tour.row.sheet": "📇 Contact sheet",
-  "tour.foot": "Full shortcut list under ? · everything runs 100% locally"
+  "tour.foot": "Full shortcut list under ? · everything runs 100% locally",
+  "workspace.resolve_maybes": "◐ Resolve maybes",
+  "workspace.stats.unreviewed": "To review",
+  "workspace.stats.all_done": "All reviewed ✓ · Export XMP",
+  "workspace.hydration.loading": "Loading",
+  "workspace.hydration.incomplete": "Partial load",
+  "toast.session_done": "🎉 All reviewed — click \"Export XMP\" in the workbar to take your decisions back to Lightroom",
+  "toast.maybes_cleared": "Maybes cleared ✓ — resolution complete",
+  "toast.resolve_mode_enter": "◐ Resolve mode: {n} maybes, most uncertain first — press 1/2/3 to decide",
+  "toast.resolve_mode_blocked": "Your current scene/face filters hide every maybe — clear them, or click again to exit resolve mode"
 }

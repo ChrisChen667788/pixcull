@@ -1,7 +1,6 @@
 {
   "lang.name": "Русский",
   "lang.switcher.aria": "Изменить язык",
-
   "workspace.crumb.results": "Результаты анализа",
   "workspace.crumb.upload_again": "← Загрузить другую партию",
   "workspace.search.placeholder": "🔎 Семантический поиск",
@@ -10,7 +9,6 @@
   "workspace.stats.cull": "Отбраковать",
   "workspace.stats.total": "Всего",
   "workspace.stats.elapsed": "Прошло",
-
   "library.title": "Библиотека",
   "library.group.decision": "Решение",
   "library.group.scene": "Сцена",
@@ -23,13 +21,11 @@
   "library.collapse.aria": "Свернуть боковую панель",
   "library.expand.aria": "Развернуть боковую панель",
   "library.filter.reset": "Сбросить фильтры",
-
   "decision.all": "Все",
   "decision.keep": "Сохранить",
   "decision.maybe": "Возможно",
   "decision.cull": "Отбраковать",
   "decision.unset": "Без метки",
-
   "buckets.title": "🪣 Корзины доставки",
   "buckets.toggle.aria": "Открыть / закрыть панель корзин",
   "buckets.new.placeholder": "Имя новой корзины (Enter для создания)",
@@ -43,7 +39,6 @@
   "buckets.action.clear": "Очистить",
   "buckets.action.delete": "Удалить корзину",
   "buckets.reorder.title": "Перетащите для упорядочивания",
-
   "lightbox.close.aria": "Закрыть лайтбокс",
   "lightbox.close.title": "Закрыть (Esc)",
   "lightbox.prev": "Предыдущее",
@@ -70,7 +65,6 @@
   "lightbox.toolbar.keep.title": "Сохранить (1)",
   "lightbox.toolbar.maybe.title": "Возможно (2)",
   "lightbox.toolbar.cull.title": "Отбраковать (3) · опционально укажите причину",
-
   "shortcuts.title": "Горячие клавиши",
   "shortcuts.hint": "? клавиши",
   "shortcuts.hint.title": "? Показать все горячие клавиши",
@@ -82,7 +76,6 @@
   "shortcuts.context.grid": "Вид сетки",
   "shortcuts.context.lightbox": "Лайтбокс",
   "shortcuts.context.compare": "Сравнение A/B",
-
   "export.menu": "📥 Экспорт",
   "export.menu.title": "Экспорт / скачать / автоподпись",
   "export.xmp_zip": "Скачать XMP",
@@ -104,16 +97,13 @@
   "export.style_train.title": "Использовать текущие Keep как референсы",
   "export.sync_event": "📡 Совместная сессия",
   "export.sync_event.title": "Ссылка для совместной работы",
-
   "save_view": "★ Сохранить вид",
   "save_view.title": "Сохранить текущий фильтр + сортировку",
   "view_preset.dropdown": "Пресеты ▾",
   "view_preset.export": "↓ Экспорт пресетов",
   "view_preset.import": "↑ Импорт пресетов",
-
   "filter.reset": "Сбросить фильтры",
   "filter.no_match": "Нет фото, соответствующих текущим фильтрам",
-
   "sort.default": "По умолчанию",
   "sort.score_desc": "Балл по убыванию",
   "sort.score_asc": "Балл по возрастанию",
@@ -121,12 +111,10 @@
   "sort.datetime_desc": "Время съёмки (новые → старые)",
   "sort.cluster": "По кластеру серии",
   "sort.style_distance_asc": "🎨 Мой стиль сначала",
-
   "footer.history": "🕒 История",
   "footer.tether": "📡 Tethered Live",
   "footer.admin": "Хранилище",
   "footer.tour": "Повторить тур",
-
   "annotation.title": "Аннотация рубрики",
   "annotation.save": "Сохранить",
   "annotation.cancel": "Отмена",
@@ -134,14 +122,12 @@
   "annotation.next.title": "Метка по приоритету активного обучения",
   "annotation.batch": "Пакетная маркировка",
   "annotation.batch.title": "Массовая метка keep/cull по порогу баллов",
-
   "share.brand.subtitle": "PixCull · предпросмотр доставки клиенту",
   "share.brand.photographer": "Фотограф",
   "share.brand.client": "Клиент",
   "share.empty": "Фотограф ещё не сделал выбор — загляните позже.",
   "share.count.suffix": "выбрано",
   "share.powered_by": "На базе",
-
   "tether.title": "Tethered Live",
   "tether.sub": "Мониторинг папки tether — новые фото анализируются по прибытии.",
   "tether.start": "▶ Старт",
@@ -156,13 +142,11 @@
   "tether.stat.failed": "Ошибки",
   "tether.stat.uptime": "Время работы",
   "tether.stat.last_event": "Последнее событие",
-
   "history.title": "Временная шкала истории",
   "history.sub": "Все прошлые сессии · по дате",
   "history.empty": "Нет сессий.",
   "history.back_to_upload": "← Страница загрузки",
   "history.count.suffix": "сессий",
-
   "toast.saved": "Сохранено",
   "toast.copied": "Скопировано в буфер обмена",
   "toast.copy_failed": "Не удалось скопировать в буфер",
@@ -178,5 +162,14 @@
   "tour.row.personal": "🎯 Персонализация",
   "tour.row.heatmap": "🔥 Тепловая карта",
   "tour.row.sheet": "📇 Контактный лист",
-  "tour.foot": "Все горячие клавиши — ? · всё работает 100% локально"
+  "tour.foot": "Все горячие клавиши — ? · всё работает 100% локально",
+  "workspace.resolve_maybes": "◐ Разобрать maybe",
+  "workspace.stats.unreviewed": "На проверку",
+  "workspace.stats.all_done": "Всё проверено ✓ · Экспорт XMP",
+  "workspace.hydration.loading": "Загрузка",
+  "workspace.hydration.incomplete": "Загружено не всё",
+  "toast.session_done": "🎉 Всё проверено — нажмите «Экспорт XMP» на панели, чтобы вернуть решения в Lightroom",
+  "toast.maybes_cleared": "Maybe разобраны ✓ — готово",
+  "toast.resolve_mode_enter": "◐ Режим разбора: {n} maybe, самые спорные первыми — решайте клавишами 1/2/3",
+  "toast.resolve_mode_blocked": "Фильтры сцен/лиц скрывают все maybe — снимите их или нажмите ещё раз, чтобы выйти"
 }

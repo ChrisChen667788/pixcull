@@ -1,6 +1,6 @@
 [project]
 name = "pixcull"
-version = "2.19.0"
+version = "2.22.0"
 description = "Local-first AI photo culling for professional photographers — 6-axis rubric, XMP/IPTC export, Lightroom & Capture One ready."
 readme = "README.md"
 requires-python = ">=3.11,<3.13"

@@ -34,6 +34,14 @@ block_cipher = None
 # Our spec lives at pixcull/app/pixcull.spec, so SPECPATH == pixcull/app
 # and SPECPATH/.. == project root (pixcull/).
 SPEC = Path(SPECPATH).resolve()  # type: ignore[name-defined]
+
+# v2.22 — single-source the bundle version from pyproject.toml.  The
+# spec used to hardcode CFBundleVersion "4.0.0" while pyproject said
+# 2.19.0 (2030Q3 audit) — a notarized .app would have shipped with a
+# version string from a different universe.
+import tomllib
+with open(SPEC.parent / "pyproject.toml", "rb") as _f:
+    _PIXCULL_VERSION = tomllib.load(_f)["project"]["version"]
 PROJECT = SPEC.parent              # pixcull/
 PACKAGE = PROJECT / "pixcull"
 SCRIPTS = PROJECT / "scripts"
@@ -219,8 +227,8 @@ app = BUNDLE(
     info_plist={
         "CFBundleName": "PixCull",
         "CFBundleDisplayName": "PixCull",
-        "CFBundleVersion": "4.0.0",
-        "CFBundleShortVersionString": "4.0",
+        "CFBundleVersion": _PIXCULL_VERSION,
+        "CFBundleShortVersionString": ".".join(_PIXCULL_VERSION.split(".")[:2]),
         "CFBundleIdentifier": "dev.pixcull.app",
         # Apple silicon only by default — flip if targeting Intel
         "LSMinimumSystemVersion": "12.0",

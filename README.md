@@ -52,6 +52,28 @@
 
 ## What's new
 
+**v2.22** — **the audit queue lands + the gallery wears the new skin** (see
+[`docs/ROADMAP-v2.22-charter.md`](docs/ROADMAP-v2.22-charter.md)). The three
+2030Q3-audit themes ship in one release: **i18n gap-fill** — the v2.15
+session-close flow (待审 counter, completion chip, resolve-maybes queue,
+hydration chips, four end-of-session toasts) finally speaks all 13 locales
+(9 new keys × 13 files, native translations), and fixing it surfaced a
+boot-order bug that would have voided the whole fix (dynamic strings rendered
+before the async locale fetch resolved — now rebuilt after apply); the
+born-dead `20-undo-stack` module (wrapped a `window.setDecision` nothing ever
+assigned) is deleted. **Release rail** — a tag-triggered `release.yml` builds
+the wheel, smoke-tests it in a clean venv and creates a GitHub Release using
+only the built-in token; `sync-modelscope` stops failing red when the secret
+is absent (warn + skip); the PyInstaller spec reads its version from
+pyproject (it hardcoded "4.0.0" against pyproject's 2.19.0); version bumps
+to 2.22.0 in lockstep. **CSS split** — `_assemble_css()` joins its JS twin
+in the build: design tokens (370 lines) and the lightbox block (651 lines)
+now live as `src/modules/*.css` behind `@@CSS:` markers, byte-identical
+artifact, marker-discipline linted. And the **19-shot gallery is recaptured
+on the Studio Neutral skin** with the real museum-artifact run rebuilt from
+the source drive — every screenshot below except the two video frames (18/19,
+pending owner-approved footage) now shows the current design.
+
 **v2.21** — **"Studio Neutral": the research-driven design overhaul** (see
 [`docs/ROADMAP-v2.21-design-charter.md`](docs/ROADMAP-v2.21-design-charter.md)).
 A six-lens survey of the field (Narrative Select, Aftershoot, Imagen,

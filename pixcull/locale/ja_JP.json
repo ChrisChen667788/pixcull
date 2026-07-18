@@ -1,7 +1,6 @@
 {
   "lang.name": "日本語",
   "lang.switcher.aria": "言語切り替え",
-
   "workspace.crumb.results": "解析結果",
   "workspace.crumb.upload_again": "← 別のバッチをアップロード",
   "workspace.search.placeholder": "🔎 セマンティック検索",
@@ -10,7 +9,6 @@
   "workspace.stats.cull": "却下",
   "workspace.stats.total": "合計",
   "workspace.stats.elapsed": "経過時間",
-
   "library.title": "ライブラリ",
   "library.group.decision": "判定",
   "library.group.scene": "シーン",
@@ -23,13 +21,11 @@
   "library.collapse.aria": "サイドバーを折りたたむ",
   "library.expand.aria": "サイドバーを展開",
   "library.filter.reset": "フィルタをリセット",
-
   "decision.all": "すべて",
   "decision.keep": "採用",
   "decision.maybe": "保留",
   "decision.cull": "却下",
   "decision.unset": "未ラベル",
-
   "buckets.title": "🪣 納品バケット",
   "buckets.toggle.aria": "バケットパネルを開く / 閉じる",
   "buckets.new.placeholder": "新規バケット名(Enter で作成)",
@@ -43,7 +39,6 @@
   "buckets.action.clear": "クリア",
   "buckets.action.delete": "バケット削除",
   "buckets.reorder.title": "ドラッグで並び替え",
-
   "lightbox.close.aria": "ライトボックスを閉じる",
   "lightbox.close.title": "閉じる (Esc)",
   "lightbox.prev": "前へ",
@@ -70,7 +65,6 @@
   "lightbox.toolbar.keep.title": "採用 (1)",
   "lightbox.toolbar.maybe.title": "保留 (2)",
   "lightbox.toolbar.cull.title": "却下 (3) · 却下理由を追加可能",
-
   "shortcuts.title": "キーボードショートカット",
   "shortcuts.hint": "? ショートカット",
   "shortcuts.hint.title": "? すべてのキーボードショートカットを表示(? キーでも可)",
@@ -82,7 +76,6 @@
   "shortcuts.context.grid": "グリッド表示",
   "shortcuts.context.lightbox": "ライトボックス",
   "shortcuts.context.compare": "A/B 比較",
-
   "export.menu": "📥 エクスポート",
   "export.menu.title": "エクスポート / ダウンロード / 自動キャプション",
   "export.xmp_zip": "XMP ダウンロード",
@@ -104,16 +97,13 @@
   "export.style_train.title": "現在の採用写真を参照として個人スタイルプロファイルを学習",
   "export.sync_event": "📡 コラボセッション",
   "export.sync_event.title": "セカンド・編集者が同じ run に参加できるコラボリンクを生成",
-
   "save_view": "★ ビュー保存",
   "save_view.title": "現在のフィルタ + ソート + 却下理由の組み合わせを名前付きプリセットとして保存",
   "view_preset.dropdown": "ビュープリセット ▾",
   "view_preset.export": "↓ プリセット出力",
   "view_preset.import": "↑ プリセット取り込み",
-
   "filter.reset": "フィルタをリセット",
   "filter.no_match": "現在のフィルタに一致する写真はありません",
-
   "sort.default": "デフォルト",
   "sort.score_desc": "スコア高 → 低",
   "sort.score_asc": "スコア低 → 高",
@@ -121,12 +111,10 @@
   "sort.datetime_desc": "撮影時刻(新しい → 古い)",
   "sort.cluster": "連写クラスタ順",
   "sort.style_distance_asc": "🎨 自分のスタイル優先",
-
   "footer.history": "🕒 履歴",
   "footer.tether": "📡 テザード Live",
   "footer.admin": "ストレージ",
   "footer.tour": "ツアーを再生",
-
   "annotation.title": "ルーブリック注釈",
   "annotation.save": "保存",
   "annotation.cancel": "キャンセル",
@@ -134,14 +122,12 @@
   "annotation.next.title": "Active learning 優先度でラベル付け",
   "annotation.batch": "一括ラベル",
   "annotation.batch.title": "スコアしきい値で採用 / 却下を一括ラベル",
-
   "share.brand.subtitle": "PixCull · クライアント納品プレビュー",
   "share.brand.photographer": "フォトグラファー",
   "share.brand.client": "クライアント",
   "share.empty": "フォトグラファーがまだ写真を選定していません — また後でご確認ください。",
   "share.count.suffix": "枚の選定",
   "share.powered_by": "Powered by",
-
   "tether.title": "テザード Live",
   "tether.sub": "テザーフォルダを監視 — 新しい写真が到着次第解析、グリッドはライブ更新。",
   "tether.start": "▶ 開始",
@@ -156,13 +142,11 @@
   "tether.stat.failed": "失敗",
   "tether.stat.uptime": "稼働時間",
   "tether.stat.last_event": "最終イベント",
-
   "history.title": "履歴タイムライン",
   "history.sub": "過去の全 run · 日付順 · カードをクリックでグリッドへ",
   "history.empty": "まだ run がありません。",
   "history.back_to_upload": "← アップロードページ",
   "history.count.suffix": "件の run",
-
   "toast.saved": "保存しました",
   "toast.copied": "クリップボードにコピーしました",
   "toast.copy_failed": "クリップボード書き込み失敗 — ブラウザがブロックした可能性",
@@ -178,5 +162,14 @@
   "tour.row.personal": "🎯 パーソナライズ",
   "tour.row.heatmap": "🔥 帰属ヒートマップ",
   "tour.row.sheet": "📇 コンタクトシート",
-  "tour.foot": "ショートカット一覧は ? · すべて 100% ローカル実行"
+  "tour.foot": "ショートカット一覧は ? · すべて 100% ローカル実行",
+  "workspace.resolve_maybes": "◐ maybe を解決",
+  "workspace.stats.unreviewed": "未確認",
+  "workspace.stats.all_done": "すべて確認済み ✓ · XMP 書き出し",
+  "workspace.hydration.loading": "読み込み中",
+  "workspace.hydration.incomplete": "読み込み未完了",
+  "toast.session_done": "🎉 すべて確認済み — ワークバーの「XMP 書き出し」で結果を Lightroom へ",
+  "toast.maybes_cleared": "maybe ゼロ ✓ — 解決完了",
+  "toast.resolve_mode_enter": "◐ 解決モード:maybe {n} 枚、判定が最も難しい順 — 1/2/3 で即決",
+  "toast.resolve_mode_blocked": "現在のシーン/人物フィルタが maybe をすべて隠しています — フィルタを解除するか、もう一度クリックで終了"
 }

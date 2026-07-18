@@ -38,6 +38,37 @@ def test_marker_discipline():
         assert markers.count(name) == 1, f"{name}: marker not unique"
 
 
+# ── v2.22-P2 — the CSS side of the split (@@CSS: markers) ─────────────
+def _css_modules():
+    return sorted(_MOD.glob("*.css"))
+
+
+def test_css_marker_discipline():
+    """Same contract as the JS markers: modules/*.css ↔ @@CSS: markers
+    resolve 1:1, each marker unique.  Build fails on violation too —
+    this test catches it without running the build."""
+    css = (_SRC / "results.css").read_text(encoding="utf-8")
+    markers = re.findall(r"@@CSS:([^@\n]+)@@", css)
+    files = [m.name for m in _css_modules()]
+    assert files, "css module dir empty — the v2.22 split disappeared?"
+    assert sorted(markers) == sorted(files), (
+        f"css marker/file mismatch: markers={sorted(markers)} files={sorted(files)}")
+    for name in files:
+        assert markers.count(name) == 1, f"{name}: css marker not unique"
+
+
+def test_css_modules_are_balanced_blocks():
+    """Each extracted CSS module must be a self-contained region:
+    balanced braces (an unbalanced cut would corrupt every rule after
+    the splice point in the assembled artifact)."""
+    for mod in _css_modules():
+        text = mod.read_text(encoding="utf-8")
+        assert text.strip(), f"{mod.name}: empty module"
+        opens, closes = text.count("{"), text.count("}")
+        assert opens == closes, (
+            f"{mod.name}: unbalanced braces ({opens} open / {closes} close)")
+
+
 def test_each_module_is_one_iife():
     for mod in _modules():
         text = mod.read_text(encoding="utf-8")

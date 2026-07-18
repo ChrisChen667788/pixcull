@@ -1,7 +1,6 @@
 {
   "lang.name": "Türkçe",
   "lang.switcher.aria": "Dili değiştir",
-
   "workspace.crumb.results": "Analiz sonuçları",
   "workspace.crumb.upload_again": "← Başka bir grup yükle",
   "workspace.search.placeholder": "🔎 Semantik arama",
@@ -10,7 +9,6 @@
   "workspace.stats.cull": "Ele",
   "workspace.stats.total": "Toplam",
   "workspace.stats.elapsed": "Geçen süre",
-
   "library.title": "Kitaplık",
   "library.group.decision": "Karar",
   "library.group.scene": "Sahne",
@@ -23,13 +21,11 @@
   "library.collapse.aria": "Yan paneli daralt",
   "library.expand.aria": "Yan paneli genişlet",
   "library.filter.reset": "Filtreleri sıfırla",
-
   "decision.all": "Tümü",
   "decision.keep": "Tut",
   "decision.maybe": "Belki",
   "decision.cull": "Ele",
   "decision.unset": "Etiketsiz",
-
   "buckets.title": "🪣 Teslim kovaları",
   "buckets.toggle.aria": "Kovaları aç / kapat",
   "buckets.new.placeholder": "Yeni kova adı (Enter ile oluştur)",
@@ -43,7 +39,6 @@
   "buckets.action.clear": "Temizle",
   "buckets.action.delete": "Kovayı sil",
   "buckets.reorder.title": "Sıralamak için sürükle",
-
   "lightbox.close.aria": "Lightbox'ı kapat",
   "lightbox.close.title": "Kapat (Esc)",
   "lightbox.prev": "Önceki",
@@ -70,7 +65,6 @@
   "lightbox.toolbar.keep.title": "Tut (1)",
   "lightbox.toolbar.maybe.title": "Belki (2)",
   "lightbox.toolbar.cull.title": "Ele (3) · isteğe bağlı bir neden seçin",
-
   "shortcuts.title": "Klavye kısayolları",
   "shortcuts.hint": "? kısayollar",
   "shortcuts.hint.title": "? Tüm kısayolları göster",
@@ -82,7 +76,6 @@
   "shortcuts.context.grid": "Izgara görünümü",
   "shortcuts.context.lightbox": "Lightbox",
   "shortcuts.context.compare": "A/B karşılaştırma",
-
   "export.menu": "📥 Dışa aktar",
   "export.menu.title": "Dışa aktar / indir / otomatik açıklama",
   "export.xmp_zip": "XMP indir",
@@ -104,16 +97,13 @@
   "export.style_train.title": "Mevcut Keep'leri referans olarak kullan",
   "export.sync_event": "📡 İşbirliği oturumu",
   "export.sync_event.title": "İkinci fotoğrafçı / editör için bağlantı",
-
   "save_view": "★ Görünümü kaydet",
   "save_view.title": "Mevcut filtre + sıralamayı önayar olarak kaydet",
   "view_preset.dropdown": "Görünüm önayarları ▾",
   "view_preset.export": "↓ Önayarları dışa aktar",
   "view_preset.import": "↑ Önayarları içe aktar",
-
   "filter.reset": "Filtreleri sıfırla",
   "filter.no_match": "Hiçbir fotoğraf mevcut filtrelere uymuyor",
-
   "sort.default": "Varsayılan",
   "sort.score_desc": "Puan yüksekten düşüğe",
   "sort.score_asc": "Puan düşükten yükseğe",
@@ -121,12 +111,10 @@
   "sort.datetime_desc": "Çekim zamanı (yeni → eski)",
   "sort.cluster": "Seri çekim kümesine göre",
   "sort.style_distance_asc": "🎨 Önce benim stilim",
-
   "footer.history": "🕒 Geçmiş",
   "footer.tether": "📡 Tethered Live",
   "footer.admin": "Depolama",
   "footer.tour": "Turu tekrarla",
-
   "annotation.title": "Rubric ek açıklama",
   "annotation.save": "Kaydet",
   "annotation.cancel": "İptal",
@@ -134,14 +122,12 @@
   "annotation.next.title": "Aktif öğrenme önceliğine göre etiketle",
   "annotation.batch": "Toplu etiketleme",
   "annotation.batch.title": "Puan eşiğine göre toplu keep/cull etiketleme",
-
   "share.brand.subtitle": "PixCull · istemci teslim önizlemesi",
   "share.brand.photographer": "Fotoğrafçı",
   "share.brand.client": "İstemci",
   "share.empty": "Fotoğrafçı henüz seçim yapmadı — yakında tekrar gel.",
   "share.count.suffix": "seçim",
   "share.powered_by": "Powered by",
-
   "tether.title": "Tethered Live",
   "tether.sub": "Bir tether klasörünü izle — yeni fotoğraflar geldiğinde analiz edilir.",
   "tether.start": "▶ Başlat",
@@ -156,13 +142,11 @@
   "tether.stat.failed": "Başarısız",
   "tether.stat.uptime": "Çalışma süresi",
   "tether.stat.last_event": "Son olay",
-
   "history.title": "Geçmiş zaman çizelgesi",
   "history.sub": "Tüm geçmiş oturumlar · tarihe göre sıralı",
   "history.empty": "Henüz oturum yok.",
   "history.back_to_upload": "← Yükleme sayfası",
   "history.count.suffix": "oturum",
-
   "toast.saved": "Kaydedildi",
   "toast.copied": "Panoya kopyalandı",
   "toast.copy_failed": "Panoya yazma başarısız",
@@ -178,5 +162,14 @@
   "tour.row.personal": "🎯 Kişiselleştirme",
   "tour.row.heatmap": "🔥 Atıf ısı haritası",
   "tour.row.sheet": "📇 Kontak baskı",
-  "tour.foot": "Tüm kısayollar ? altında · her şey %100 yerel çalışır"
+  "tour.foot": "Tüm kısayollar ? altında · her şey %100 yerel çalışır",
+  "workspace.resolve_maybes": "◐ Maybe’leri çöz",
+  "workspace.stats.unreviewed": "İncelenecek",
+  "workspace.stats.all_done": "Tümü incelendi ✓ · XMP dışa aktar",
+  "workspace.hydration.loading": "Yükleniyor",
+  "workspace.hydration.incomplete": "Eksik yükleme",
+  "toast.session_done": "🎉 Tümü incelendi — kararları Lightroom’a taşımak için çubuktaki \"XMP dışa aktar\"a tıklayın",
+  "toast.maybes_cleared": "Maybe’ler çözüldü ✓ — tur tamamlandı",
+  "toast.resolve_mode_enter": "◐ Çözüm modu: {n} maybe, en kararsızlar önce — karar için 1/2/3’e basın",
+  "toast.resolve_mode_blocked": "Sahne/yüz filtreleri tüm maybe’leri gizliyor — filtreleri kaldırın ya da çıkmak için tekrar tıklayın"
 }

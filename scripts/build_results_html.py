@@ -62,11 +62,33 @@ def _assemble_js(src_dir: Path) -> str:
     return js
 
 
+def _assemble_css(src_dir: Path) -> str:
+    """v2.22-P2 — results.css is assembled from modules, same contract
+    as ``_assemble_js``: contiguous regions (design tokens, lightbox)
+    live as files in ``src/modules/*.css`` and are spliced back at
+    ``@@CSS:<file>@@`` marker lines.  Markers must resolve 1:1 — a
+    missing module file or an orphaned module file both fail the build,
+    and the artifact stays byte-identical to the pre-split monolith."""
+    css = (src_dir / "results.css").read_text("utf-8")
+    mod_dir = src_dir / "modules"
+    for mod in sorted(mod_dir.glob("*.css")) if mod_dir.exists() else []:
+        marker = f"@@CSS:{mod.name}@@\n"
+        if marker not in css:
+            raise SystemExit(
+                f"[build-results] orphaned css module (no marker): {mod.name}")
+        css = css.replace(marker, mod.read_text("utf-8"))
+    if "@@CSS:" in css:
+        import re
+        left = re.findall(r"@@CSS:([^@]+)@@", css)
+        raise SystemExit(f"[build-results] unresolved css marker(s): {left}")
+    return css
+
+
 def build(src_dir: Path = SRC_DIR) -> str:
     """Splice src/results.src.html + its @@INLINE parts into one page."""
     shell = (src_dir / "results.src.html").read_text("utf-8")
     parts = {
-        "results.css": (src_dir / "results.css").read_text("utf-8"),
+        "results.css": _assemble_css(src_dir),
         "results.js": _assemble_js(src_dir),
     }
     for name in _MARKERS:

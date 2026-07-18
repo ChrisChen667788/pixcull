@@ -1,7 +1,6 @@
 {
   "lang.name": "Nederlands",
   "lang.switcher.aria": "Taal wijzigen",
-
   "workspace.crumb.results": "Analyseresultaten",
   "workspace.crumb.upload_again": "← Andere batch uploaden",
   "workspace.search.placeholder": "🔎 Semantisch zoeken",
@@ -10,7 +9,6 @@
   "workspace.stats.cull": "Verwerpen",
   "workspace.stats.total": "Totaal",
   "workspace.stats.elapsed": "Verlopen",
-
   "library.title": "Bibliotheek",
   "library.group.decision": "Beslissing",
   "library.group.scene": "Scène",
@@ -23,13 +21,11 @@
   "library.collapse.aria": "Zijbalk inklappen",
   "library.expand.aria": "Zijbalk uitklappen",
   "library.filter.reset": "Filters resetten",
-
   "decision.all": "Alle",
   "decision.keep": "Bewaren",
   "decision.maybe": "Misschien",
   "decision.cull": "Verwerpen",
   "decision.unset": "Geen label",
-
   "buckets.title": "🪣 Leveringsmappen",
   "buckets.toggle.aria": "Open / sluit mappen-paneel",
   "buckets.new.placeholder": "Nieuwe mapnaam (Enter om aan te maken)",
@@ -43,7 +39,6 @@
   "buckets.action.clear": "Leegmaken",
   "buckets.action.delete": "Map verwijderen",
   "buckets.reorder.title": "Sleep om te herordenen",
-
   "lightbox.close.aria": "Lightbox sluiten",
   "lightbox.close.title": "Sluiten (Esc)",
   "lightbox.prev": "Vorige",
@@ -70,7 +65,6 @@
   "lightbox.toolbar.keep.title": "Bewaren (1)",
   "lightbox.toolbar.maybe.title": "Misschien (2)",
   "lightbox.toolbar.cull.title": "Verwerpen (3) · kies optioneel een reden",
-
   "shortcuts.title": "Sneltoetsen",
   "shortcuts.hint": "? sneltoetsen",
   "shortcuts.hint.title": "? Toon alle sneltoetsen",
@@ -82,7 +76,6 @@
   "shortcuts.context.grid": "Rasterweergave",
   "shortcuts.context.lightbox": "Lightbox",
   "shortcuts.context.compare": "A/B-vergelijking",
-
   "export.menu": "📥 Exporteren",
   "export.menu.title": "Exporteren / downloaden / auto-bijschrift",
   "export.xmp_zip": "XMP downloaden",
@@ -104,16 +97,13 @@
   "export.style_train.title": "Gebruik huidige Keeps als referentie",
   "export.sync_event": "📡 Samenwerksessie",
   "export.sync_event.title": "Samenwerkingslink voor tweede fotograaf / editor",
-
   "save_view": "★ Weergave opslaan",
   "save_view.title": "Huidige filter + sortering opslaan als preset",
   "view_preset.dropdown": "Weergavepresets ▾",
   "view_preset.export": "↓ Presets exporteren",
   "view_preset.import": "↑ Presets importeren",
-
   "filter.reset": "Filters resetten",
   "filter.no_match": "Geen foto's voldoen aan de huidige filters",
-
   "sort.default": "Standaard",
   "sort.score_desc": "Score hoog → laag",
   "sort.score_asc": "Score laag → hoog",
@@ -121,12 +111,10 @@
   "sort.datetime_desc": "Opnametijd (nieuwste → oudste)",
   "sort.cluster": "Per burst-cluster",
   "sort.style_distance_asc": "🎨 Mijn stijl eerst",
-
   "footer.history": "🕒 Geschiedenis",
   "footer.tether": "📡 Tethered Live",
   "footer.admin": "Opslag",
   "footer.tour": "Tour opnieuw afspelen",
-
   "annotation.title": "Rubriek-annotatie",
   "annotation.save": "Opslaan",
   "annotation.cancel": "Annuleren",
@@ -134,14 +122,12 @@
   "annotation.next.title": "Label op prioriteit van actief leren",
   "annotation.batch": "Batch-labelen",
   "annotation.batch.title": "Bulk-label keep/cull op score-drempel",
-
   "share.brand.subtitle": "PixCull · klant-leveringsvoorbeeld",
   "share.brand.photographer": "Fotograaf",
   "share.brand.client": "Klant",
   "share.empty": "De fotograaf heeft nog geen selectie gemaakt — kom binnenkort terug.",
   "share.count.suffix": "selecties",
   "share.powered_by": "Powered by",
-
   "tether.title": "Tethered Live",
   "tether.sub": "Monitor een tether-map — nieuwe foto's worden bij aankomst geanalyseerd.",
   "tether.start": "▶ Starten",
@@ -156,13 +142,11 @@
   "tether.stat.failed": "Mislukt",
   "tether.stat.uptime": "Uptime",
   "tether.stat.last_event": "Laatste gebeurtenis",
-
   "history.title": "Geschiedenis-tijdlijn",
   "history.sub": "Alle eerdere sessies · op datum gesorteerd",
   "history.empty": "Nog geen sessies.",
   "history.back_to_upload": "← Uploadpagina",
   "history.count.suffix": "sessies",
-
   "toast.saved": "Opgeslagen",
   "toast.copied": "Gekopieerd naar klembord",
   "toast.copy_failed": "Klembord-schrijven mislukt — browser heeft het mogelijk geblokkeerd",
@@ -178,5 +162,14 @@
   "tour.row.personal": "🎯 Personalisatie",
   "tour.row.heatmap": "🔥 Attributie-heatmap",
   "tour.row.sheet": "📇 Contactvel",
-  "tour.foot": "Volledige sneltoetslijst onder ? · alles draait 100% lokaal"
+  "tour.foot": "Volledige sneltoetslijst onder ? · alles draait 100% lokaal",
+  "workspace.resolve_maybes": "◐ Maybes afhandelen",
+  "workspace.stats.unreviewed": "Te beoordelen",
+  "workspace.stats.all_done": "Alles beoordeeld ✓ · XMP exporteren",
+  "workspace.hydration.loading": "Laden",
+  "workspace.hydration.incomplete": "Onvolledig geladen",
+  "toast.session_done": "🎉 Alles beoordeeld — klik \"XMP exporteren\" in de balk om je keuzes naar Lightroom te brengen",
+  "toast.maybes_cleared": "Maybes afgehandeld ✓ — ronde voltooid",
+  "toast.resolve_mode_enter": "◐ Afhandelmodus: {n} maybes, meest onzekere eerst — druk 1/2/3 om te beslissen",
+  "toast.resolve_mode_blocked": "Je scène-/gezichtsfilters verbergen alle maybes — verwijder ze of klik opnieuw om te stoppen"
 }
