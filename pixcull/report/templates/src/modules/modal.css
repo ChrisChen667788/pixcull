@@ -1,0 +1,283 @@
+    /* ============================================================
+       v0.9-P1-1 — modal visual differentiation.
+       4 modal classes with distinct border-top colour + primary
+       button styling so the user instantly reads what kind of
+       interaction the modal demands.
+
+       Apply by adding ONE of these to the modal's outermost card:
+         .modal-info        — passive (shortcuts / share-URL / cmdk)
+         .modal-action      — saves data (annotation rubric, bucket export)
+         .modal-destructive — irreversible (delete bucket, revoke share)
+         .modal-detail      — pure viewing (A/B compare, history detail)
+
+       Each adds a 3px border-top in the appropriate semantic colour;
+       no other CSS surface needs touching.  ``.modal-destructive``
+       additionally flips the primary/cancel button pair (red confirm
+       + accent cancel) so destructive clicks require deliberation —
+       Apple HIG / GNOME HIG / Linear-product convention.
+       ============================================================ */
+    .modal-info       { border-top: 3px solid rgba(255, 255, 255, 0.10) !important; }
+    .modal-action     {
+      border-top: 3px solid transparent !important;
+      border-image: var(--brand-gradient,
+        linear-gradient(135deg, #d5b584, #93743f)) 1 0 0 0 !important;
+      border-image-slice: 1 !important;
+    }
+    .modal-detail     { border-top: 3px solid var(--accent, #d5b584) !important; }
+    .modal-destructive {
+      border-top: 3px solid var(--c-danger, #ef4444) !important;
+    }
+    /* Primary-button colour overrides per modal class.
+       Targets .btn-primary inside the modal-action / -destructive. */
+    .modal-action .btn-primary,
+    .modal-action button[type="submit"] {
+      background: var(--brand-gradient,
+        linear-gradient(135deg, #d5b584, #93743f));
+      border: 0;
+      color: #ffffff;
+    }
+    .modal-destructive .btn-primary,
+    .modal-destructive button[type="submit"] {
+      background: var(--c-danger, #ef4444) !important;
+      border: 0 !important;
+      color: #ffffff !important;
+    }
+    .modal-destructive .btn-secondary,
+    .modal-destructive button.secondary {
+      background: var(--accent, #d5b584) !important;
+      color: #ffffff !important;
+      /* reverse-pair: cancel becomes the visually-primary button so
+         the user has to deliberately click the red one to confirm */
+    }
+
+    /* v0.10-P0-1 — conflict resolution modal.  Uses the existing
+       .modal-destructive border-top + reverse-pair button styling so
+       the user reads "this is a deliberate choice" not "casual
+       acknowledge".  Each row offers three picks: local / remote /
+       keep both, laid out as a three-up grid so visual weight = "you
+       are equally entitled to either"; we don't preselect a default. */
+    .cflx-list {
+      display: flex; flex-direction: column;
+      gap: 12px;
+    }
+    .cflx-row {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md, 8px);
+      padding: 10px 12px;
+    }
+    .cflx-fn {
+      font-size: 11.5px; color: var(--muted);
+      margin-bottom: 8px;
+    }
+    .cflx-options {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+    }
+    .cflx-options .btn {
+      display: flex; flex-direction: column;
+      align-items: flex-start; gap: 2px;
+      padding: 10px 12px;
+      text-align: left;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: border-color var(--duration-fast) var(--ease-out),
+                  background var(--duration-fast) var(--ease-out);
+    }
+    .cflx-options .btn:hover {
+      border-color: var(--accent);
+      background: var(--surface-3);
+    }
+    .cflx-keep-local:hover  { border-color: var(--keep, #10b981); }
+    .cflx-keep-remote:hover { border-color: var(--accent); }
+    .cflx-keep-both:hover   { border-color: var(--maybe, #d97706); }
+    .cflx-side {
+      font-size: 9.5px; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.06em;
+    }
+    .cflx-dec {
+      font-size: 14px; font-weight: 700;
+      letter-spacing: -0.01em;
+      color: var(--fg);
+    }
+    .cflx-by {
+      font-size: 10.5px; color: var(--muted-soft, var(--muted));
+    }
+    /* On narrow viewports, stack the three options vertically. */
+    @media (max-width: 600px) {
+      .cflx-options { grid-template-columns: 1fr; }
+    }
+
+    /* V16.2 — manual rotate button on each card. Mirrors annotate-btn
+       but lives on the LEFT so it doesn't collide with 标注 / ✓ 已标.
+       Hidden until card hover (same affordance pattern). */
+    .card-rot-btn {
+      position: absolute; top: 6px; left: 6px;
+      width: 26px; height: 22px;
+      background: rgba(0,0,0,0.65); color: white; border: 0;
+      border-radius: 3px; font-size: 13px; line-height: 1;
+      cursor: pointer; opacity: 0; transition: opacity 0.15s;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    .card:hover .card-rot-btn { opacity: 1; }
+    .card-rot-btn:hover { background: var(--accent); }
+    /* P-UX-3 — free-pick A/B compare: card-hover pin button + the
+       pinned-state visual ("A" badge + accent border). The pin
+       lives at top-LEFT next to the rotate button; pressing it once
+       arms the card as photo A, then pressing on a second card
+       opens the compare modal with [A, B]. Shift+click on the
+       thumbnail is the keyboard-friendly equivalent. */
+    .card-cmp-btn {
+      position: absolute; top: 6px; left: 38px;
+      width: 26px; height: 22px;
+      background: rgba(0,0,0,0.65); color: white; border: 0;
+      border-radius: 3px; font-size: 12px; line-height: 1;
+      cursor: pointer; opacity: 0; transition: opacity 0.15s, background 120ms;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    .card:hover .card-cmp-btn { opacity: 1; }
+    .card-cmp-btn:hover { background: var(--accent); }
+    .card.compare-a {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px var(--accent-glow),
+                  0 8px 24px rgba(0,0,0,0.45);
+    }
+    .card.compare-a .card-cmp-btn {
+      opacity: 1;
+      background: var(--accent);
+    }
+    .card.compare-a::after {
+      content: "A";
+      position: absolute; top: 6px; right: 50%;
+      transform: translateX(50%);
+      background: var(--accent); color: #fff;
+      padding: 2px 8px; border-radius: 10px;
+      font-size: 10px; font-weight: 700;
+      letter-spacing: 0.05em;
+      pointer-events: none;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    }
+    /* Floating "已选 A,点选第二张比较" hint pill — appears at the
+       top of the viewport (below the sticky header) once a photo
+       is pinned for compare. Click the × to cancel, or hit Esc. */
+    .cmp-pick-tray {
+      position: fixed; top: 12px; left: 50%;
+      transform: translateX(-50%) translateY(-20px);
+      z-index: 8;
+      display: none;
+      align-items: center; gap: 12px;
+      padding: 8px 14px 8px 16px;
+      background: rgba(213,181,132,0.95);
+      color: #fff;
+      border-radius: 999px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5),
+                  0 0 0 1px rgba(255,255,255,0.15);
+      font-size: 12px; font-weight: 500;
+      opacity: 0; transition: opacity 180ms, transform 180ms;
+      pointer-events: none;
+    }
+    .cmp-pick-tray.show {
+      display: inline-flex;
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+      pointer-events: auto;
+    }
+    .cmp-pick-tray .cmp-pick-fn {
+      font-family: ui-monospace, monospace;
+      font-size: 11.5px;
+      max-width: 280px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      opacity: 0.92;
+    }
+    .cmp-pick-tray .cmp-pick-fn {   /* v2.25 — now the running count */
+      font-weight: 600; opacity: 1;
+    }
+    /* v2.25 — the "open compare" button inside the tray (shown at >=2). */
+    .cmp-pick-tray .cmp-pick-go {
+      background: rgba(0,0,0,0.28);
+      border: 0; color: #fff;
+      padding: 4px 12px; border-radius: 999px;
+      font: inherit; font-weight: 600; cursor: pointer;
+      transition: background 120ms;
+    }
+    .cmp-pick-tray .cmp-pick-go:hover { background: rgba(0,0,0,0.5); }
+    .cmp-pick-tray .cmp-pick-go[hidden] { display: none; }
+    .cmp-pick-tray .cmp-pick-cancel {
+      background: rgba(0,0,0,0.25);
+      border: 0; color: #fff;
+      width: 22px; height: 22px;
+      border-radius: 50%; cursor: pointer;
+      font-size: 14px; line-height: 1;
+      display: inline-flex; align-items: center; justify-content: center;
+      transition: background 120ms;
+    }
+    .cmp-pick-tray .cmp-pick-cancel:hover { background: rgba(0,0,0,0.5); }
+
+    /* P-UX-4 — reject-reason taxonomy. When a photo is culled (via
+       the 3 key, the annotate modal, or any other path), this
+       transient bottom-center pill appears for ~6 seconds asking
+       "why?". Clicking a reason chip persists it via a follow-up
+       annotation POST; ignoring it lets the cull stand without a
+       reason. The picker is opt-in — never blocks the workflow. */
+    .cull-reason-tray {
+      position: fixed; bottom: 18px; left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      z-index: 7;
+      display: none;
+      align-items: center; gap: 6px;
+      padding: 8px 10px 8px 14px;
+      background: rgba(20, 23, 28, 0.96);
+      color: #fff;
+      border-radius: 999px;
+      border: 1px solid var(--cull);
+      box-shadow: 0 12px 36px rgba(0,0,0,0.6),
+                  0 0 0 1px rgba(239,99,99,0.15);
+      font-size: 12px;
+      opacity: 0; transition: opacity 180ms, transform 180ms;
+      pointer-events: none;
+      max-width: calc(100vw - 32px);
+      flex-wrap: wrap;
+    }
+    .cull-reason-tray.show {
+      display: inline-flex;
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+      pointer-events: auto;
+    }
+    .cull-reason-tray .cull-reason-label {
+      color: var(--muted);
+      font-weight: 500;
+    }
+    .cull-reason-tray .reason-pill {
+      background: transparent;
+      border: 1px solid rgba(255,255,255,0.18);
+      color: #fff;
+      font: inherit; font-size: 11.5px;
+      padding: 4px 10px;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: border-color 120ms, background 120ms;
+    }
+    .cull-reason-tray .reason-pill:hover {
+      border-color: var(--cull);
+      background: rgba(239, 99, 99, 0.18);
+    }
+    .cull-reason-tray .reason-skip {
+      background: transparent;
+      border: 0;
+      color: var(--muted);
+      font: inherit; font-size: 11px;
+      padding: 4px 6px 4px 8px;
+      cursor: pointer;
+      margin-left: 2px;
+    }
+    .cull-reason-tray .reason-skip:hover { color: var(--fg); }
+
+    /* P-UX-10 — "review me" chip on rows where the 4 scoring sources
+       (auto / model / vlm / meta) disagree by ≥ 2 stars total stddev.
+       Different from the cull-reason chip semantically: this is the
+       AI saying "I'm not sure about this one" rather than the user
+       tagging an outcome. Gold accent so it stands out without
+       implying a decision. */

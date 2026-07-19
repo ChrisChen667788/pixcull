@@ -1,0 +1,1398 @@
+    /* ============================================================
+       v0.4 P0 (2/3) · UNIFIED CHIP SYSTEM
+       ============================================================
+       Replaces ~6 ad-hoc per-feature chip palettes (cull-reason /
+       review-me / exposure / moment / develop / etc) with one
+       canonical shape + 5 semantic color variants.  Every chip
+       looks like the same family across the UI.
+
+       Usage:
+         <span class="chip chip--warn">⚠ review me</span>
+         <span class="chip chip--info chip--clickable" ...>🪣 桶</span>
+         <span class="chip chip--brand chip--uncertain" ...>💒 ?</span>
+
+       Modifiers:
+         chip--clickable   — pointer cursor + hover-fill
+         chip--active      — filled state (filter is on)
+         chip--uncertain   — dashed border + reduced opacity
+         chip--compact     — tighter padding for in-card row1
+       ============================================================ */
+    .chip {
+      display: inline-flex; align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      font-size: var(--t-tiny);
+      font-weight: 500;
+      letter-spacing: 0.02em;
+      border-radius: var(--radius-pill);
+      border: 1px solid transparent;
+      background: var(--c-neutral-tint);
+      color: var(--c-neutral);
+      border-color: var(--c-neutral-border);
+      cursor: help;
+      transition: background var(--duration-fast) var(--ease-out),
+                  border-color var(--duration-fast) var(--ease-out),
+                  color var(--duration-fast) var(--ease-out),
+                  transform var(--duration-fast) var(--ease-out);
+      max-width: 140px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .chip--success { background: var(--c-success-tint);
+                     color: var(--c-success);
+                     border-color: var(--c-success-border); }
+    .chip--warn    { background: var(--c-warn-tint);
+                     color: var(--c-warn);
+                     border-color: var(--c-warn-border); }
+    .chip--danger  { background: var(--c-danger-tint);
+                     color: var(--c-danger);
+                     border-color: var(--c-danger-border); }
+    .chip--info    { background: var(--c-info-tint);
+                     color: var(--c-info);
+                     border-color: var(--c-info-border); }
+    .chip--neutral { background: var(--c-neutral-tint);
+                     color: var(--c-neutral);
+                     border-color: var(--c-neutral-border); }
+    /* brand = the wedding-moment / brand accent (indigo).
+       Lives separately from the 5 semantic states because it's
+       a feature signal, not a status. */
+    .chip--brand   { background: var(--accent-soft);
+                     color: var(--accent-hi);
+                     border-color: rgba(213,181,132,0.40); }
+    .chip--clickable { cursor: pointer; }
+    .chip--clickable:hover {
+      background: var(--c-info-tint);
+      transform: translateY(-1px);
+    }
+    .chip--success.chip--clickable:hover { background: var(--c-success-tint); filter: brightness(1.15); }
+    .chip--warn.chip--clickable:hover    { background: var(--c-warn-tint);    filter: brightness(1.15); }
+    .chip--danger.chip--clickable:hover  { background: var(--c-danger-tint);  filter: brightness(1.15); }
+    .chip--brand.chip--clickable:hover   { background: rgba(213,181,132,0.24); filter: brightness(1.10); }
+    /* active = "this filter is currently on" — saturated fill +
+       white text for unmistakable contrast against the dim
+       background chips. */
+    .chip--active {
+      background: var(--accent) !important;
+      color: #ffffff !important;
+      border-color: var(--accent-hi) !important;
+    }
+    .chip--uncertain { opacity: 0.7; border-style: dashed; }
+    .chip--compact   { padding: 1px 6px; font-size: 9.5px; }
+    .chip svg { width: 11px; height: 11px; flex-shrink: 0; }
+
+    /* v0.4 P1 (1/4) — generic icon class.  Use inside chips,
+       buttons, toggles, banners — wherever a SVG <use href> was
+       previously an emoji.  Inherits currentColor so the parent
+       semantic class drives the tint. */
+    .icon {
+      display: inline-block;
+      width: 14px; height: 14px;
+      flex-shrink: 0;
+      stroke: currentColor;
+      fill: none;
+      vertical-align: -0.15em;
+    }
+    .icon--sm { width: 11px; height: 11px; }
+    .icon--lg { width: 18px; height: 18px; }
+    .icon--xl { width: 22px; height: 22px; }
+
+    /* ============================================================
+       LEGACY PER-CHIP SELECTORS — kept as aliases that map to the
+       unified .chip variants above so existing render() emissions
+       work without JS changes.  Migration: any new chip should
+       use class="chip chip--<variant>" directly.
+       ============================================================ */
+    .row1 .review-me-chip {
+      /* warn semantics — "AI sources disagree" */
+      display: inline-flex; align-items: center;
+      gap: 4px;
+      font-size: 9.5px; padding: 1px 6px;
+      border-radius: var(--radius-pill);
+      background: var(--c-warn-tint);
+      color: var(--c-warn);
+      border: 1px solid var(--c-warn-border);
+      cursor: help;
+      letter-spacing: 0.02em;
+    }
+    /* v2.21 — unreviewed marker demoted from a 1px amber ring +
+       heavy shadow on EVERY card (when a run starts, that lit the
+       whole grid amber) to a quiet warm hairline on the existing
+       border.  The 待审 counter + filters carry the state; the card
+       only whispers it. */
+    .card.needs-review {
+      border-color: rgba(214, 164, 67, 0.30);
+    }
+    /* Per-axis highlight in the lightbox: dashed border on the axis
+       cells whose source disagreement is above threshold. */
+    .lightbox .axis-grid .ax.noisy {
+      border: 1px dashed var(--c-warn-border);
+      background: var(--c-warn-tint);
+    }
+    /* P-UX-11 — ± half-width rendered under each axis value when we
+       have at least 2 scoring sources for that axis. Lets the user
+       eyeball "this axis is solid (±0.1)" vs "this axis is a guess
+       (±1.4)" without opening the per-source breakdown. */
+    .lightbox .axis-grid .ax .err {
+      display: block; font-size: 9.5px;
+      color: var(--muted); opacity: 0.85;
+      margin-top: 1px;
+      font-family: ui-monospace, monospace;
+    }
+    .lightbox .axis-grid .ax.noisy .err {
+      color: var(--c-warn);
+      opacity: 1;
+    }
+
+    /* P-UX-14 → v0.4: info-variant chip (cool blue) for normal
+       exposure flag, warn-variant when over-exposed. */
+    .row1 .exposure-chip {
+      display: inline-flex; align-items: center;
+      gap: 4px;
+      font-size: 9.5px; padding: 1px 6px;
+      border-radius: var(--radius-pill);
+      background: var(--c-info-tint);
+      color: var(--c-info);
+      border: 1px solid var(--c-info-border);
+      cursor: help;
+      letter-spacing: 0.02em;
+    }
+    .row1 .exposure-chip.over {
+      background: var(--c-warn-tint);
+      color: var(--c-warn);
+      border-color: var(--c-warn-border);
+    }
+    .row1 .exposure-chip.under {
+      /* under-exposure is informational; keep the info palette */
+      opacity: 0.85;
+    }
+
+    /* P-UX-4 → v0.4: danger-variant chip for "this is the reason
+       we culled".  Color ties to the cull state semantically. */
+    .row1 .cull-reason-chip {
+      display: inline-flex; align-items: center;
+      gap: 4px;
+      font-size: 9.5px; padding: 1px 6px;
+      border-radius: var(--radius-pill);
+      background: var(--c-danger-tint);
+      color: var(--c-danger);
+      border: 1px solid var(--c-danger-border);
+      cursor: help;
+      letter-spacing: 0.02em;
+      max-width: 110px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+
+    /* P-PRO-4.1 → v0.4: brand-variant chip (indigo) for wedding
+       moment classification.  Distinct from the 5 status variants
+       because moment is a CATEGORY signal, not a status. */
+    .row1 .moment-chip {
+      display: inline-flex; align-items: center;
+      gap: 4px;
+      font-size: 9.5px; padding: 1px 6px;
+      border-radius: var(--radius-pill);
+      background: var(--accent-soft);
+      color: var(--accent-hi);
+      border: 1px solid rgba(213,181,132, 0.40);
+      cursor: pointer;
+      letter-spacing: 0.02em;
+      max-width: 130px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      transition: background var(--duration-fast) var(--ease-out),
+                  border-color var(--duration-fast) var(--ease-out),
+                  transform var(--duration-fast) var(--ease-out);
+    }
+    .row1 .moment-chip:hover {
+      background: rgba(213,181,132, 0.24);
+      border-color: var(--accent-hi);
+      transform: translateY(-1px);
+    }
+    /* P-UX-27 — saturated when filter is on */
+    .row1 .moment-chip.active {
+      background: var(--accent);
+      color: #ffffff;
+      border-color: var(--accent-hi);
+    }
+    .row1 .moment-chip.uncertain {
+      opacity: 0.7;
+      border-style: dashed;
+    }
+
+    /* P-UX-4 — filter pill for "show only photos culled because X".
+       Same .pill styling as the existing filter groups; just the
+       red-themed accent border. */
+    .filters .filter-group .pill.reason-pill {
+      border-color: rgba(239, 99, 99, 0.35);
+      background: rgba(239, 99, 99, 0.08);
+      color: #ff9a9a;
+    }
+    .filters .filter-group .pill.reason-pill.active {
+      border-color: var(--cull);
+      background: rgba(239, 99, 99, 0.22);
+      color: #fff;
+    }
+
+    /* P-UX-26 — animated onboarding hints. First-ever visit shows
+       three pulse rings (buckets / a11y toggle / shortcuts hint) +
+       a small dismissable tip card at bottom-right.  After the
+       first 1/2/3/f/?/F keystroke, the card auto-fades.  After
+       dismissal we set localStorage[pixcull_onboarded_v1]=1 so
+       repeat users never see it again.  No modal — never blocks
+       the page; if a user knows what they're doing the hints
+       just decorate. */
+    @keyframes pix-onboard-pulse {
+      0%   { box-shadow: 0 0 0 0 rgba(213,181,132,0.65); }
+      70%  { box-shadow: 0 0 0 14px rgba(213,181,132,0); }
+      100% { box-shadow: 0 0 0 0 rgba(213,181,132,0); }
+    }
+    .onboard-pulse {
+      animation: pix-onboard-pulse 1.8s ease-out 3;
+    }
+    .onboard-tip {
+      position: fixed; bottom: 70px; right: 22px;
+      z-index: 12;
+      background: linear-gradient(180deg, rgba(31,41,55,0.97), rgba(20,23,28,0.97));
+      border: 1px solid rgba(213,181,132,0.4);
+      border-radius: 10px;
+      padding: 12px 14px;
+      width: 288px;
+      font-size: 12.5px; line-height: 1.5;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.55);
+      transform: translateY(20px) scale(0.96);
+      opacity: 0;
+      transition: transform 280ms cubic-bezier(0.16,1,0.3,1), opacity 240ms;
+    }
+    .onboard-tip.show { transform: translateY(0) scale(1); opacity: 1; }
+    .onboard-tip .onb-head {
+      display: flex; align-items: center; gap: 8px;
+      font-weight: 600; font-size: 12px;
+      margin-bottom: 8px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .onboard-tip .onb-icon { font-size: 14px; }
+    .onboard-tip .onb-head .onb-title { flex: 1; }
+    .onboard-tip .onb-close {
+      background: transparent; color: var(--muted);
+      border: none; cursor: pointer; padding: 0;
+      font-size: 13px; line-height: 1;
+    }
+    .onboard-tip .onb-close:hover { color: var(--fg); }
+    .onboard-tip .onb-list {
+      list-style: none; padding: 0; margin: 0 0 10px;
+    }
+    .onboard-tip .onb-list li {
+      padding: 4px 0; color: var(--fg);
+    }
+    .onboard-tip .onb-list kbd {
+      display: inline-block; min-width: 18px;
+      padding: 1px 5px;
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-bottom-width: 2px;
+      border-radius: 3px;
+      font-family: ui-monospace, monospace;
+      font-size: 10.5px; font-weight: 500;
+    }
+    .onboard-tip .onb-dismiss {
+      width: 100%;
+      padding: 6px 12px;
+      background: rgba(213,181,132,0.18);
+      color: #eaca98;
+      border: 1px solid rgba(213,181,132,0.35);
+      border-radius: 5px;
+      font-size: 11.5px; font-weight: 500;
+      cursor: pointer;
+    }
+    .onboard-tip .onb-dismiss:hover {
+      background: rgba(213,181,132,0.28);
+    }
+    /* Respect prefers-reduced-motion — flat, no animation */
+    @media (prefers-reduced-motion: reduce) {
+      .onboard-pulse { animation: none; }
+      .onboard-tip { transition: opacity 80ms; }
+    }
+
+    /* P-UX-25 — multi-tab conflict banner. Appears top-center when
+       another tab on the same machine has the same /results/<run_id>
+       page open. Soft amber tint so it's noticed but doesn't drown
+       out the working area; dismissible with the X. Annotation
+       changes from the other tab still apply (via BroadcastChannel
+       → render()), this banner just sets expectations. */
+    .multi-tab-banner {
+      position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+      z-index: 11;
+      max-width: 560px;
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 14px;
+      background: var(--c-warn-tint);
+      border: 1px solid var(--c-warn-border);
+      color: var(--c-warn);
+      border-radius: 8px;
+      font-size: 12px; line-height: 1.4;
+      box-shadow: 0 8px 28px rgba(0,0,0,0.45);
+    }
+    .multi-tab-banner.hidden { display: none; }
+    .multi-tab-banner .mtb-icon { font-size: 14px; }
+    .multi-tab-banner .mtb-msg  { flex: 1; }
+    .multi-tab-banner .mtb-close {
+      background: transparent; color: var(--c-warn);
+      border: 1px solid var(--c-warn-border);
+      width: 22px; height: 22px;
+      border-radius: 4px; cursor: pointer;
+      font-size: 12px; line-height: 1;
+      padding: 0;
+    }
+    .multi-tab-banner .mtb-close:hover {
+      background: var(--c-warn-tint);
+    }
+
+    /* P-CORE-3 — scene-distribution anomaly banner.  Appears at
+       page-open when the run's scene distribution is unusually
+       skewed (one scene > 60% OR > 95% of frames in a small
+       cluster of 2 scenes) — surfaces "your scene classifier
+       might be over-firing, double-check before annotating".
+       Same shape as multi-tab-banner but blue tint to distinguish
+       (informational vs warning). */
+    .scene-anomaly-banner {
+      position: fixed; top: 60px; left: 50%; transform: translateX(-50%);
+      z-index: 10;
+      max-width: 620px;
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 14px;
+      background: rgba(213,181,132, 0.14);
+      border: 1px solid rgba(213,181,132, 0.55);
+      color: #eaca98;
+      border-radius: 8px;
+      font-size: 12px; line-height: 1.4;
+      box-shadow: 0 8px 28px rgba(0,0,0,0.45);
+    }
+    .scene-anomaly-banner.hidden { display: none; }
+    .scene-anomaly-banner .sab-icon  { font-size: 14px; }
+    .scene-anomaly-banner .sab-msg   { flex: 1; }
+    .scene-anomaly-banner .sab-msg b { color: #fff; }
+    .scene-anomaly-banner .sab-close {
+      background: transparent; color: #eaca98;
+      border: 1px solid rgba(213,181,132, 0.4);
+      width: 22px; height: 22px;
+      border-radius: 4px; cursor: pointer;
+      font-size: 12px; line-height: 1;
+      padding: 0;
+    }
+    .scene-anomaly-banner .sab-close:hover {
+      background: rgba(213,181,132, 0.18);
+    }
+    /* P-UX-28 — "查看分布详情" expandable pie chart panel.
+       Slides down beneath the banner when the user clicks the
+       "查看分布详情" link; inline SVG, no external chart lib. */
+    .scene-anomaly-banner .sab-toggle {
+      background: transparent; color: #eaca98;
+      border: 1px solid rgba(213,181,132, 0.40);
+      padding: 2px 8px; font-size: 11px;
+      border-radius: 5px; cursor: pointer;
+      white-space: nowrap;
+    }
+    .scene-anomaly-banner .sab-toggle:hover {
+      background: rgba(213,181,132, 0.14);
+    }
+    .scene-distribution-panel {
+      position: fixed; top: 110px; left: 50%; transform: translateX(-50%);
+      z-index: 10;
+      max-width: 620px; width: 90%;
+      background: rgba(20, 23, 28, 0.97);
+      border: 1px solid rgba(213,181,132, 0.40);
+      border-radius: 10px;
+      padding: 16px 20px;
+      box-shadow: 0 12px 36px rgba(0,0,0,0.55);
+      display: none;
+    }
+    .scene-distribution-panel.show { display: block; }
+    .scene-distribution-panel h4 {
+      margin: 0 0 10px; font-size: 12px; color: var(--muted);
+      letter-spacing: .04em; text-transform: uppercase;
+      font-weight: 600;
+    }
+    .scene-distribution-panel .sdp-content {
+      display: flex; gap: 16px; align-items: center;
+    }
+    .scene-distribution-panel svg {
+      flex-shrink: 0;
+      width: 140px; height: 140px;
+    }
+    .scene-distribution-panel .sdp-legend {
+      flex: 1;
+      font-size: 11.5px;
+      max-height: 200px; overflow-y: auto;
+    }
+    .scene-distribution-panel .sdp-legend-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 2px 0;
+    }
+    .scene-distribution-panel .sdp-swatch {
+      display: inline-block; width: 10px; height: 10px;
+      border-radius: 2px; flex-shrink: 0;
+    }
+    .scene-distribution-panel .sdp-name  { flex: 1; color: var(--fg); }
+    .scene-distribution-panel .sdp-pct   {
+      font-family: ui-monospace, monospace;
+      color: var(--muted); font-size: 11px;
+    }
+
+    /* P-UX-23 — floating accessibility / color-blind toggle.
+       Bottom-left of the viewport (away from the buckets-toggle at
+       top-right). Click → toggle body.a11y-cb + persist preference.
+       Tiny, unobtrusive; the always-on shape glyphs already give
+       the baseline a11y win, this just swaps the palette for users
+       who want it. */
+    .a11y-toggle {
+      position: fixed; bottom: 14px; left: 14px;
+      z-index: 8;
+      background: rgba(20,23,28,0.85);
+      color: var(--muted); border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 5px 11px; font-size: 11px; font-weight: 500;
+      cursor: pointer; opacity: 0.55;
+      transition: opacity 120ms, background 120ms, color 120ms;
+    }
+    .a11y-toggle:hover { opacity: 1; }
+    .a11y-toggle.on {
+      background: rgba(14,165,233,0.18);
+      color: #eaca98; border-color: rgba(14,165,233,0.40);
+      opacity: 1;
+    }
+
+    /* P-UX-22 — deliverable buckets. Collapsible right-side panel
+       for named output baskets ("Client gallery / Final keepers
+       / Marketing reel / Stock submissions"). User drags cards
+       into a bucket; each bucket gets its own download button
+       that zips just its photos.  No server-state — all bucket
+       assignments live in localStorage so they survive a tab
+       reload and don't pollute annotations. */
+    .buckets-toggle {
+      position: fixed; top: 14px; right: 14px;
+      z-index: 8;
+      background: rgba(20,23,28,0.92);
+      color: #fff; border: 1px solid var(--border-hi);
+      border-radius: 999px;
+      padding: 6px 14px; font-size: 11.5px; font-weight: 500;
+      cursor: pointer;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      transition: background 120ms;
+    }
+    .buckets-toggle:hover { background: rgba(20,23,28,1); }
+    .buckets-toggle .bk-pill {
+      display: inline-block; margin-left: 6px;
+      padding: 1px 7px; border-radius: 999px;
+      background: var(--accent); color: #fff;
+      font-size: 10px; font-weight: 700;
+    }
+    .buckets-panel {
+      position: fixed; top: 0; right: 0; bottom: 0;
+      width: 320px; max-width: 90vw;
+      z-index: 9;
+      background: var(--bg-card);
+      border-left: 1px solid var(--border-hi);
+      transform: translateX(100%);
+      transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+    .buckets-panel.show { transform: translateX(0); }
+    .buckets-panel .bk-head {
+      padding: 14px 16px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 10px;
+    }
+    .buckets-panel .bk-head h3 {
+      margin: 0; font-size: 13px; font-weight: 600;
+      flex: 1;
+    }
+    .buckets-panel .bk-close {
+      cursor: pointer; padding: 4px 10px;
+      border-radius: 5px; color: var(--muted);
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.04);
+      font-size: 13px;
+    }
+    .buckets-panel .bk-close:hover { color: var(--fg); }
+    .buckets-panel .bk-list { flex: 1; overflow-y: auto; padding: 8px; }
+    .buckets-panel .bk-item {
+      padding: 10px 12px; margin-bottom: 8px;
+      border: 1px dashed var(--border);
+      border-radius: 6px;
+      background: rgba(255,255,255,0.02);
+      transition: border-color 120ms, background 120ms,
+                  transform 160ms, opacity 160ms;
+      position: relative;
+    }
+    /* v0.6 (4/5) — card-into-bucket drop highlight (existing) */
+    .buckets-panel .bk-item.drag-over {
+      border-color: var(--accent);
+      background: rgba(213,181,132,0.10);
+    }
+    /* v0.6 (4/5) — bucket-reorder visual states */
+    .buckets-panel .bk-item.bk-reordering {
+      opacity: 0.45;
+      transform: scale(0.98);
+    }
+    .buckets-panel .bk-item.bk-drop-above {
+      border-top: 2px solid var(--accent);
+      margin-top: 6px;
+    }
+    .buckets-panel .bk-item.bk-drop-below {
+      border-bottom: 2px solid var(--accent);
+      margin-bottom: 10px;
+    }
+    /* v0.6 (4/5) — six-dot grip handle on the left of each item.
+       Hidden by default to keep visual noise low; reveals on item
+       hover.  Larger tap target (full item height) than the visual
+       dots, so touch / pen drags still pick it up. */
+    .buckets-panel .bk-grip {
+      position: absolute; left: 2px; top: 0; bottom: 0;
+      width: 22px;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--muted);
+      cursor: grab;
+      opacity: 0;
+      transition: opacity 120ms, color 120ms;
+      touch-action: none;
+    }
+    .buckets-panel .bk-grip:active { cursor: grabbing; }
+    .buckets-panel .bk-grip svg { width: 14px; height: 14px; }
+    .buckets-panel .bk-item:hover .bk-grip,
+    .buckets-panel .bk-item:focus-within .bk-grip { opacity: 1; }
+    .buckets-panel .bk-grip:hover { color: var(--fg); }
+    /* Reserve a 22px gutter on the left for the grip handle */
+    .buckets-panel .bk-item .bk-name,
+    .buckets-panel .bk-item .bk-actions { padding-left: 18px; }
+    .buckets-panel .bk-item .bk-name {
+      font-size: 12px; font-weight: 600;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .buckets-panel .bk-item .bk-count {
+      color: var(--muted); font-size: 11px;
+      font-family: ui-monospace, monospace;
+    }
+    .buckets-panel .bk-item .bk-actions {
+      margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap;
+    }
+    .buckets-panel .bk-btn {
+      padding: 3px 9px; font-size: 10.5px;
+      border-radius: 4px; cursor: pointer;
+      background: rgba(255,255,255,0.06);
+      color: var(--fg);
+      border: 1px solid var(--border);
+    }
+    .buckets-panel .bk-btn:hover { border-color: var(--fg); }
+    .buckets-panel .bk-btn.danger { color: #ff9a9a; border-color: rgba(239,99,99,0.4); }
+    .buckets-panel .bk-foot {
+      padding: 10px 16px; border-top: 1px solid var(--border);
+      display: flex; gap: 8px;
+    }
+    .buckets-panel .bk-foot input {
+      flex: 1; padding: 5px 8px; font-size: 11px;
+      background: var(--bg); color: var(--fg);
+      border: 1px solid var(--border); border-radius: 4px;
+    }
+    /* Drag affordance on cards */
+    .card.bk-dragging { opacity: 0.55; }
+    .card.bk-tagged::after {
+      content: attr(data-bk-tags);
+      position: absolute; top: 6px; right: 36px;
+      background: rgba(213,181,132,0.85); color: #fff;
+      padding: 1px 6px; border-radius: 8px;
+      font-size: 9.5px; font-weight: 600;
+      pointer-events: none;
+      max-width: 100px; overflow: hidden; text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* P-UX-5 — similar-photos row in the lightbox info pane. Shows
+       up to 5 thumbnails of visually-similar photos with a tiny
+       reason badge + decision dot. Click to jump; Shift+click to
+       pin for A/B compare so the two flows (P-UX-3 + P-UX-5)
+       chain into a single "find similar → compare" workflow. */
+    .lightbox .info-pane .similar-row {
+      display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px;
+      margin-top: 6px;
+    }
+    .lightbox .info-pane .similar-item {
+      position: relative;
+      background: var(--bg-card-hi);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+      cursor: pointer;
+      aspect-ratio: 1;
+      transition: transform 120ms, border-color 120ms;
+    }
+    .lightbox .info-pane .similar-item:hover {
+      transform: scale(1.04);
+      border-color: var(--fg);
+    }
+    .lightbox .info-pane .similar-item img {
+      width: 100%; height: 100%; object-fit: cover; display: block;
+    }
+    .lightbox .info-pane .similar-item .deco {
+      position: absolute; bottom: 2px; left: 2px; right: 2px;
+      display: flex; gap: 3px; justify-content: space-between;
+      pointer-events: none;
+    }
+    .lightbox .info-pane .similar-item .dec {
+      font-size: 8.5px; padding: 1px 4px; border-radius: 2px;
+      color: #fff; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .lightbox .info-pane .similar-item .dec.keep  { background: var(--keep);  }
+    .lightbox .info-pane .similar-item .dec.maybe { background: var(--maybe); }
+    .lightbox .info-pane .similar-item .dec.cull  { background: var(--cull);  }
+    .lightbox .info-pane .similar-item .sim {
+      font-size: 8.5px; padding: 1px 4px; border-radius: 2px;
+      background: rgba(0,0,0,0.65); color: #fff;
+      font-family: ui-monospace, monospace;
+    }
+    .lightbox .info-pane .similar-loading,
+    .lightbox .info-pane .similar-empty {
+      color: var(--muted-soft); font-size: 11px;
+      padding: 4px 0; font-style: italic;
+    }
+    .lightbox .info-pane .similar-reason-tags {
+      display: flex; flex-wrap: wrap; gap: 4px;
+      margin-top: 6px;
+    }
+    .lightbox .info-pane .similar-reason-tag {
+      font-size: 9.5px; padding: 1px 5px; border-radius: 2px;
+      background: rgba(255,255,255,0.05);
+      color: var(--muted);
+      letter-spacing: 0.02em;
+    }
+    .lightbox .info-pane .similar-hint {
+      font-size: 10.5px; color: var(--muted-soft);
+      margin-top: 8px; line-height: 1.5;
+    }
+
+    /* P-UX-6 — sticky decision toolbar inside the lightbox info pane.
+       Currently keep/maybe/cull are 1/2/3 hotkeys only; mouse users
+       had nothing to click. The toolbar sits at the bottom of the
+       scrollable info pane so it stays in reach while the user
+       reads advice / rubric / similar above it. Three colored
+       buttons + the matching hotkey on each. The current decision
+       gets a filled background; clicking flips it and advances. */
+    .lightbox .info-pane {
+      padding-bottom: 72px;  /* room behind the sticky toolbar */
+    }
+    .lightbox .info-pane .decision-toolbar {
+      position: sticky; bottom: 0;
+      margin: 18px -22px -20px;
+      padding: 12px 22px 16px;
+      background: linear-gradient(180deg,
+        rgba(20,23,28,0.0) 0%,
+        rgba(20,23,28,0.92) 30%,
+        rgba(20,23,28,0.98) 100%);
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+      z-index: 3;
+    }
+    .lightbox .info-pane .decision-btn {
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 2px;
+      padding: 10px 6px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: rgba(255,255,255,0.04);
+      color: var(--fg);
+      font: inherit; cursor: pointer;
+      transition: background 120ms, border-color 120ms, transform 120ms;
+    }
+    .lightbox .info-pane .decision-btn:hover {
+      background: rgba(255,255,255,0.10);
+      transform: translateY(-1px);
+    }
+    .lightbox .info-pane .decision-btn .label {
+      font-size: 12px; font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+    .lightbox .info-pane .decision-btn .hk {
+      font-size: 9.5px; font-family: ui-monospace, monospace;
+      color: var(--muted-soft);
+      padding: 1px 5px; border-radius: 2px;
+      background: rgba(255,255,255,0.06);
+    }
+    .lightbox .info-pane .decision-btn.keep.active {
+      background: var(--keep); color: #062618;
+      border-color: var(--keep);
+    }
+    .lightbox .info-pane .decision-btn.maybe.active {
+      background: var(--maybe); color: #2a1d05;
+      border-color: var(--maybe);
+    }
+    .lightbox .info-pane .decision-btn.cull.active {
+      background: var(--cull); color: #2a0606;
+      border-color: var(--cull);
+    }
+    /* P-UX-23 — glyph prefix on the lightbox decision toolbar so
+       the active button is identifiable even with the colors
+       remapped or muted by an OS-level filter. */
+    .lightbox .info-pane .decision-btn.keep  .label::before { content: "✓ "; }
+    .lightbox .info-pane .decision-btn.maybe .label::before { content: "? "; }
+    .lightbox .info-pane .decision-btn.cull  .label::before { content: "✕ "; }
+    /* P-UX-23 — same glyph treatment on the header stats row
+       (the keep <N> / maybe <N> / cull <N> summary). */
+    .stats .keep::before  { content: "✓ "; opacity: 0.55; }
+    .stats .maybe::before { content: "? "; opacity: 0.55; }
+    .stats .cull::before  { content: "✕ "; opacity: 0.55; }
+    .lightbox .info-pane .decision-btn.active .hk {
+      background: rgba(0,0,0,0.18); color: rgba(0,0,0,0.7);
+    }
+    .lightbox .info-pane .decision-btn:hover.keep  { border-color: var(--keep); }
+    .lightbox .info-pane .decision-btn:hover.maybe { border-color: var(--maybe); }
+    .lightbox .info-pane .decision-btn:hover.cull  { border-color: var(--cull); }
+    /* v2.4 — auto-advance toggle: a secondary, narrow pill in the
+       decision toolbar (not a keep/maybe/cull colour). active = accent. */
+    .lightbox .info-pane .decision-btn.auto-adv {
+      flex: 0 0 auto; min-width: 0; padding-inline: 12px;
+      opacity: 0.6; font-size: 11px;
+    }
+    .lightbox .info-pane .decision-btn.auto-adv.active {
+      opacity: 1; border-color: var(--accent); color: var(--accent-hi);
+    }
+    /* Smooth thumbnail rotation — same easing as the lightbox img
+       so they feel like the same gesture. */
+    .card .thumb { transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1); }
+    @media (prefers-reduced-motion: reduce) {
+      .card .thumb { transition-duration: 0.01ms; }
+    }
+    /* Annotation modal */
+    .ann-modal {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.85);
+      display: none; align-items: flex-start; justify-content: center; z-index: 11;
+      overflow-y: auto; padding: 20px;
+    }
+    .ann-modal.show { display: flex; }
+    /* V14.5 — cross-fade between save → next image. The .ann-card
+       briefly drops to ~40% opacity while the form is rebuilt and
+       the next thumbnail pre-loads, then fades back to full. Avoids
+       the "modal flashes blank then snaps in" feel of the old
+       hard-reset path. */
+    .ann-card {
+      transition: opacity 200ms ease-out, transform 200ms ease-out;
+    }
+    .ann-card.transitioning {
+      opacity: 0.4;
+      transform: translateY(2px) scale(0.998);
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .ann-card { transition-duration: 0.01ms; }
+      .ann-card.transitioning { opacity: 1; transform: none; }
+    }
+
+    /* V14.5 — shortcuts cheat sheet overlay */
+    .shortcuts-modal {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.78);
+      display: none; align-items: center; justify-content: center;
+      z-index: 13; backdrop-filter: blur(6px); padding: 20px;
+    }
+    .shortcuts-modal.show {
+      display: flex; animation: modalBackdropIn 160ms ease-out;
+    }
+    .shortcuts-modal.show .shortcuts-card {
+      animation: modalContentIn 200ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .shortcuts-modal.show, .shortcuts-modal.show .shortcuts-card {
+        animation-duration: 0.01ms;
+      }
+    }
+    .shortcuts-card {
+      background: var(--bg-card); border: 1px solid var(--border-hi);
+      border-radius: 12px; padding: 0;
+      max-width: 540px; width: 100%; max-height: 86vh;
+      overflow: hidden; display: flex; flex-direction: column;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.6);
+    }
+    .shortcuts-header {
+      padding: 16px 20px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 12px; flex-shrink: 0;
+    }
+    .shortcuts-header h3 {
+      margin: 0; font-size: 15px; font-weight: 600; flex: 1;
+    }
+    .shortcuts-header .close {
+      width: 28px; height: 28px; border-radius: 6px;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      color: var(--muted); cursor: pointer; font-size: 14px;
+    }
+    .shortcuts-header .close:hover {
+      color: var(--fg); border-color: var(--border-hi);
+    }
+    .shortcuts-body {
+      padding: 14px 20px; overflow-y: auto; flex: 1 1 auto;
+    }
+    .shortcut-section { margin-bottom: 14px; }
+    .shortcut-section:last-child { margin-bottom: 0; }
+    /* P-UX-24 — context-aware shortcut overlay. Active context's
+       sections get a soft accent ring + the badge in the header
+       labels which context the user is in. Inactive sections stay
+       visible (so the user still has the full reference) but are
+       dimmed and pushed below. Pure CSS state — JS just sets
+       data-active-ctx + reorders via flex-order. */
+    .shortcuts-ctx-badge {
+      display: inline-flex; align-items: center;
+      padding: 3px 10px; border-radius: 999px;
+      font-size: 11px; font-weight: 500; letter-spacing: 0.02em;
+      background: rgba(213,181,132,0.14);
+      color: var(--accent-hi, #eaca98);
+      border: 1px solid rgba(213,181,132,0.34);
+    }
+    .shortcuts-ctx-badge:empty { display: none; }
+    .shortcuts-body { display: flex; flex-direction: column; }
+    .shortcut-section { order: 2; }
+    /* sections that match the current context float to the top */
+    .shortcut-section.ctx-active {
+      order: 1;
+      padding: 10px 12px; margin: 0 0 14px;
+      background: rgba(213,181,132,0.06);
+      border: 1px solid rgba(213,181,132,0.28);
+      border-radius: 6px;
+    }
+    .shortcut-section.ctx-active .shortcut-section-title {
+      color: var(--accent-hi, #eaca98);
+    }
+    /* sections that aren't relevant to the current context stay
+       visible but dimmed; the user can still scroll to reference
+       them */
+    .shortcut-section.ctx-dim {
+      opacity: 0.55;
+    }
+    .shortcut-section.ctx-dim:hover { opacity: 1; }
+    .shortcut-section-title {
+      font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+      color: var(--muted); margin-bottom: 6px; font-weight: 600;
+    }
+    .shortcut-row {
+      display: flex; align-items: center; gap: 16px;
+      padding: 5px 0; font-size: 13px;
+    }
+    .shortcut-row .keys {
+      flex: 0 0 130px; display: flex; gap: 4px; align-items: center;
+      font-size: 11px; color: var(--muted);
+    }
+    .shortcut-row .desc {
+      flex: 1 1 auto; color: var(--fg);
+    }
+    .shortcut-row kbd {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-width: 22px; height: 22px; padding: 0 6px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--border);
+      border-bottom-width: 2px;
+      border-radius: 4px;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 11px; color: var(--fg); font-weight: 500;
+    }
+    .shortcut-row .tag {
+      display: inline-block; padding: 1px 6px; border-radius: 3px;
+      font-size: 11px; font-weight: 500;
+      margin-left: 4px;
+    }
+    .shortcut-row .tag.keep  { background: rgba(74,222,128,0.15); color: var(--keep); }
+    .shortcut-row .tag.maybe { background: rgba(217,163,12,0.18); color: var(--maybe); }
+    .shortcut-row .tag.cull  { background: rgba(248,113,113,0.15); color: var(--cull); }
+    .shortcuts-foot {
+      padding: 10px 20px; border-top: 1px solid var(--border);
+      font-size: 11px; color: var(--muted);
+      flex-shrink: 0;
+    }
+
+    /* Floating "? 快捷键" discoverability pill */
+    .shortcuts-hint {
+      position: fixed; bottom: 16px; right: 16px;
+      background: rgba(0,0,0,0.55);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 6px 12px; border-radius: 20px;
+      font: inherit; font-size: 11px; line-height: 1;
+      cursor: pointer; user-select: none;
+      backdrop-filter: blur(8px);
+      z-index: 7;
+      transition: color 120ms, border-color 120ms, background 120ms;
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    .shortcuts-hint:hover {
+      color: var(--fg);
+      border-color: var(--border-hi);
+      background: rgba(0,0,0,0.7);
+    }
+    .shortcuts-hint kbd {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-width: 18px; height: 18px; padding: 0 4px;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 10px; color: var(--fg);
+    }
+    @media (max-width: 640px) {
+      .shortcuts-hint {
+        bottom: 12px; right: 12px;
+        padding: 8px 14px; font-size: 12px;
+      }
+    }
+
+    /* v0.6 (5/5) — hold-Space cheat-sheet overlay (macOS Finder
+       pattern).  Press-and-hold Space ≥ 350ms surfaces a transient
+       contextual hint strip; release Space (or any other key) hides
+       it.  No focus trap, no Esc handling — purely transient, owned
+       by the hold-Space gesture.
+
+       The strip is small, frosted, anchored centre-bottom so the
+       grid stays readable behind it.  At ≤ 640px it fans out to two
+       rows of pills.  The full shortcuts modal (?) remains the
+       authoritative source — this overlay is a 4-6 pill subset for
+       the *current* context only. */
+    .kbd-cheat {
+      position: fixed;
+      left: 50%; bottom: calc(20px + env(safe-area-inset-bottom));
+      transform: translate(-50%, 12px);
+      opacity: 0; pointer-events: none;
+      display: flex; gap: 8px; align-items: center;
+      padding: 9px 14px;
+      background: var(--chrome, rgba(20,23,28,0.94));
+      backdrop-filter: blur(10px) saturate(140%);
+      -webkit-backdrop-filter: blur(10px) saturate(140%);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      box-shadow: var(--shadow-lg, 0 18px 40px rgba(0,0,0,0.45));
+      transition: opacity 160ms var(--ease-out, ease-out),
+                  transform 200ms var(--ease-out, ease-out);
+      z-index: 60;
+      max-width: calc(100vw - 28px);
+      flex-wrap: wrap; justify-content: center;
+    }
+    .kbd-cheat.show {
+      opacity: 1;
+      transform: translate(-50%, 0);
+    }
+    .kbd-cheat .kbd-ctx {
+      font-size: 10.5px;
+      color: var(--muted);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin-right: 4px;
+      padding-right: 8px;
+      border-right: 1px solid var(--border);
+    }
+    .kbd-cheat .kbd-cell {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 11.5px;
+      color: var(--fg);
+    }
+    .kbd-cheat kbd {
+      display: inline-block;
+      padding: 2px 7px;
+      background: var(--surface-2, rgba(255,255,255,0.06));
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 10.5px;
+      line-height: 1.2;
+      min-width: 18px;
+      text-align: center;
+      color: var(--fg);
+    }
+    .kbd-cheat .kbd-cell .desc { color: var(--fg-2, var(--fg)); }
+    .kbd-cheat .kbd-more {
+      margin-left: 4px; padding-left: 8px;
+      border-left: 1px solid var(--border);
+      font-size: 10.5px; color: var(--muted);
+    }
+    /* prefers-reduced-motion → don't slide; just fade */
+    @media (prefers-reduced-motion: reduce) {
+      .kbd-cheat,
+      .kbd-cheat.show { transition: opacity 120ms linear; transform: translate(-50%, 0); }
+    }
+    @media (max-width: 640px) {
+      .kbd-cheat { padding: 8px 10px; gap: 6px; font-size: 11px; }
+      .kbd-cheat .kbd-ctx { display: none; }
+    }
+
+    /* P-UX-17 — mobile-responsive layout overhaul. The desktop UI is
+       built around mouse + keyboard; phones need:
+         - bigger touch targets (action buttons 36px min)
+         - single-column or 2-column grid (down from auto-fill 220px)
+         - filter row scrollable horizontally with snap points
+         - header compactness (drop secondary stats)
+         - lightbox falls back to single column (info-pane stacks
+           BELOW the image, not to the right)
+       Breakpoint at 640px (iPhone Pro Max landscape) covers all
+       phones in portrait + iPhone in landscape. Tablets stay on
+       desktop layout. */
+    @media (max-width: 640px) {
+      header {
+        padding: 10px 12px 8px;
+      }
+      h1 { font-size: 14px; }
+      .stats {
+        font-size: 11px; gap: 10px;
+        max-height: 1.6em;
+        overflow: hidden;          /* hide secondary stats on phone */
+      }
+      .stats .vertical-badge,
+      .stats .promote-btn {
+        font-size: 10.5px;
+      }
+      .filters {
+        display: flex; flex-wrap: nowrap;
+        overflow-x: auto; overflow-y: hidden;
+        scroll-snap-type: x proximity;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: 6px;
+        margin: 6px -12px 0;        /* bleed to edges so scroll feels native */
+        padding-left: 12px; padding-right: 12px;
+      }
+      .filters::-webkit-scrollbar { display: none; }
+      .filters .pill, .filters .filter-group .pill {
+        flex-shrink: 0;
+        scroll-snap-align: start;
+        min-height: 28px;          /* bigger tap target */
+        line-height: 1.7;
+        font-size: 11.5px;
+      }
+      .filters .filter-divider { display: none; }   /* collapse dividers on phone */
+      .export-menu-trigger,
+      .filters button.export-btn,
+      .filters .sort-select {
+        min-height: 32px; padding: 0 14px;
+        font-size: 12px;
+      }
+      .filters .export-status {
+        flex-basis: 100%;          /* status drops to new line if shown */
+        text-align: center;
+      }
+      .grid {
+        grid-template-columns: 1fr 1fr;    /* 2 cards per row on phone */
+        gap: 8px;
+        padding: 8px 8px 32px;
+      }
+      .card .body { padding: 6px 8px 8px; }
+      .row1 .fn { font-size: 10px; }
+      .row3 {
+        grid-template-columns: repeat(6, 1fr);
+        gap: 2px; font-size: 9px;
+      }
+      .row4, .row5 { font-size: 9.5px; }
+      /* Lightbox: stack info pane BELOW image on phones (image
+         takes ~ 60vh, info pane scrolls below). The desktop
+         "1fr 380px" was unusable on a ≤ 400px wide phone. */
+      .lightbox.show {
+        grid-template-columns: 1fr;
+        grid-template-rows: 60vh 1fr;
+      }
+      .lightbox .info-pane {
+        border-left: 0;
+        border-top: 1px solid var(--border);
+        padding: 12px 14px;
+        max-height: calc(40vh - 24px);
+      }
+      .lightbox .info-pane .decision-toolbar {
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 6px;
+      }
+      .lightbox .info-pane .decision-btn {
+        min-height: 44px;          /* iOS HIG tap target */
+      }
+      .lightbox .close-btn { right: 12px; top: 12px; }
+      .lightbox .nav-btn {
+        width: 32px; height: 44px; font-size: 18px;
+      }
+      .lightbox .nav-prev { left: 8px; }
+      .lightbox .nav-next { right: 8px; }
+      .lightbox .rotate-grp { display: none; }   /* unused on touch */
+      .lightbox .zoom-grp { top: 12px; left: 12px; }
+      .lightbox .zoom-btn { height: 36px; }
+      /* Floating compare/cull-reason trays: keep them at the top
+         but full-width so reasons don't horizontal-overflow. */
+      .cmp-pick-tray, .cull-reason-tray {
+        left: 8px; right: 8px;
+        width: auto;
+        transform: translateY(-20px);
+        max-width: none;
+      }
+      .cmp-pick-tray.show, .cull-reason-tray.show {
+        transform: translateY(0);
+        left: 8px; right: 8px;
+      }
+      .cull-reason-tray .reason-pill {
+        min-height: 30px; padding: 6px 12px;
+      }
+      .cmp-modal .cmp-body {
+        grid-auto-flow: row;       /* on phone, stack cmp cells vertically */
+        grid-auto-columns: 1fr;
+      }
+    }
+    /* v0.7-P0-2 — Annotation rubric modal redesigned for LR Develop-
+       grade visual density. Star bar is bigger + glows when picked,
+       top progress bar tracks how many of 6 axes are rated, inline
+       cull-reason picker replaces the floating tray when overall=
+       cull, and the rationale textarea uses design-token surfaces
+       instead of hardcoded rgba blacks. */
+    .ann-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg, 12px);
+      box-shadow: var(--shadow-xl, 0 24px 80px rgba(0,0,0,0.6));
+      max-width: 920px; width: 100%; padding: 20px;
+      display: grid; grid-template-columns: 280px 1fr;
+      gap: 20px;
+      align-items: start;
+    }
+    /* Top progress bar — spans both columns. Shows how many of 6
+       axes have been rated (lit segment per rated axis). */
+    .ann-progress {
+      grid-column: 1 / -1;
+      display: flex; align-items: center; gap: 10px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 4px;
+    }
+    .ann-progress .ann-progress-track {
+      flex: 1;
+      display: grid; grid-template-columns: repeat(6, 1fr);
+      gap: 3px;
+      height: 4px;
+    }
+    .ann-progress .ann-progress-cell {
+      background: var(--surface-2, rgba(255,255,255,0.05));
+      border-radius: 2px;
+      transition: background var(--duration-normal) var(--ease-out);
+    }
+    .ann-progress .ann-progress-cell.lit {
+      background: var(--accent);
+      box-shadow: 0 0 6px var(--accent-soft, rgba(213,181,132,0.4));
+    }
+    .ann-progress .ann-progress-count {
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 11px;
+      color: var(--muted);
+      min-width: 32px;
+      text-align: right;
+    }
+    .ann-thumb {
+      width: 100%; aspect-ratio: 4/3; object-fit: contain;
+      background: #000;
+      border-radius: var(--radius-md, 6px);
+      box-shadow: var(--shadow-md);
+    }
+    .ann-side h3 {
+      margin: 0 0 4px;
+      font-size: var(--t-h3, 15px);
+      font-weight: 600;
+      color: var(--fg);
+    }
+    .ann-side .rubric-intro {
+      font-size: var(--t-small, 11px);
+      color: var(--muted);
+      margin-bottom: 14px;
+      line-height: 1.55;
+    }
+    .ann-side .why {
+      background: var(--maybe-soft, rgba(217, 163, 12, 0.15));
+      border-left: 3px solid var(--maybe);
+      padding: 8px 12px;
+      border-radius: var(--radius-sm, 4px);
+      font-size: var(--t-small, 11px);
+      color: var(--fg-2, var(--fg));
+      margin-bottom: 14px;
+    }
+    .axis-row {
+      margin-bottom: 14px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .axis-row:last-of-type { border-bottom: 0; margin-bottom: 6px; }
+    .axis-row.focused {
+      /* Visual cue for keyboard navigation — the axis you'd hit
+         with 1-5 is haloed faintly. */
+      background: var(--surface-2, rgba(255,255,255,0.025));
+      border-radius: var(--radius-md, 6px);
+      padding: 8px 10px 10px;
+      margin: 0 -10px 12px;
+      border-bottom: 0;
+    }
+    .axis-row .axis-name {
+      font-size: var(--t-body, 12.5px);
+      font-weight: 600;
+      color: var(--fg);
+      margin-bottom: 2px;
+      display: flex; align-items: baseline; gap: 6px;
+    }
+    .axis-row .axis-name .axis-en {
+      opacity: 0.5; font-weight: 400; font-size: 10px;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    }
+    .axis-row .axis-desc {
+      font-size: var(--t-small, 11px);
+      color: var(--muted);
+      margin-bottom: 6px;
+      line-height: 1.5;
+    }
+    /* v0.7-P0-2 — bigger, more deliberate ★ row. Hover preview
+       still works, but the locked-star treatment is a saturated
+       golden with subtle glow so you see at a glance which axes
+       you've rated. */
+    .stars {
+      display: flex; gap: 5px; margin-bottom: 6px;
+      font-size: 22px;
+      color: var(--surface-3, rgba(255,255,255,0.18));
+      cursor: pointer; user-select: none;
+    }
+    .stars .star {
+      transition: color var(--duration-fast) var(--ease-out),
+                  text-shadow var(--duration-fast) var(--ease-out),
+                  transform var(--duration-fast) var(--ease-out);
+      display: inline-block;
+    }
+    .stars .star:hover { transform: scale(1.1); }
+    .stars .star.on { color: var(--maybe); }
+    .stars .star.locked {
+      color: #f4c430;
+      text-shadow: 0 0 8px rgba(244,196,48,0.4);
+    }
+    .axis-row textarea {
+      width: 100%; min-height: 30px; resize: vertical;
+      background: var(--surface-2, rgba(0,0,0,0.3));
+      border: 1px solid var(--border);
+      color: var(--fg);
+      padding: 6px 9px;
+      border-radius: var(--radius-sm, 4px);
+      font: inherit;
+      font-size: var(--t-small, 11px);
+      transition: border-color var(--duration-fast) var(--ease-out);
+    }
+    .axis-row textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    .axis-row .descriptor {
+      font-size: var(--t-small, 11px);
+      color: var(--keep);
+      margin-top: 4px;
+      margin-bottom: 4px;
+      min-height: 14px;
+      font-style: italic;
+    }
+    .ann-foot {
+      grid-column: 1 / -1;
+      display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+      border-top: 1px solid var(--border);
+      padding-top: 14px;
+      margin-top: 6px;
+    }
+    .ann-foot select,
+    .ann-foot input {
+      background: var(--surface-2, rgba(0,0,0,0.3));
+      border: 1px solid var(--border);
+      color: var(--fg);
+      padding: 7px 11px;
+      border-radius: var(--radius-md, 5px);
+      font: inherit;
+      font-size: var(--t-small, 12px);
+      transition: border-color var(--duration-fast) var(--ease-out);
+    }
+    .ann-foot select:focus,
+    .ann-foot input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    .ann-foot input { flex: 1; min-width: 180px; }
+    .ann-foot button {
+      padding: 8px 16px;
+      font-size: var(--t-small, 12px);
+      border-radius: var(--radius-md, 6px);
+      cursor: pointer;
+      transition: opacity var(--duration-fast) var(--ease-out),
+                  border-color var(--duration-fast) var(--ease-out),
+                  background var(--duration-fast) var(--ease-out);
+    }
+    .ann-foot button.primary {
+      background: var(--accent); color: white;
+      border: 1px solid var(--accent-hi, var(--accent));
+      font-weight: 500;
+    }
+    .ann-foot button.primary:hover { opacity: 0.92; }
+    .ann-foot button.skip {
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--border);
+    }
+    .ann-foot button.skip:hover {
+      color: var(--fg); border-color: var(--border-hi);
+      background: var(--surface-2);
+    }
+    /* v0.7-P0-2 — inline cull-reason picker.  Replaces the
+       floating cullReasonTray when the overall picker says cull —
+       no second modal, no out-of-context picker. Hidden by default
+       (display:none); openAnnotation flips display when overall=cull. */
+    .ann-cull-reasons {
+      grid-column: 1 / -1;
+      display: none;
+      flex-wrap: wrap; gap: 5px;
+      padding: 10px 12px;
+      background: var(--cull-soft, rgba(248,113,113,0.08));
+      border: 1px solid var(--cull-border, rgba(248,113,113,0.28));
+      border-radius: var(--radius-md, 6px);
+      margin-top: 6px;
+    }
+    .ann-cull-reasons.show { display: flex; }
+    .ann-cull-reasons .ann-cull-label {
+      font-size: var(--t-small, 11.5px);
+      color: var(--cull);
+      font-weight: 600;
+      margin-right: 6px;
+      align-self: center;
+    }
+    .ann-cull-reasons .reason-pill {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--fg);
+      font: inherit; font-size: 11.5px;
+      padding: 4px 11px;
+      border-radius: var(--radius-pill, 999px);
+      cursor: pointer;
+      transition: color var(--duration-fast) var(--ease-out),
+                  border-color var(--duration-fast) var(--ease-out),
+                  background var(--duration-fast) var(--ease-out);
+    }
+    .ann-cull-reasons .reason-pill:hover {
+      border-color: var(--cull);
+      background: var(--cull-soft, rgba(248,113,113,0.18));
+    }
+    .ann-cull-reasons .reason-pill.active {
+      background: var(--cull); color: #fff; border-color: var(--cull);
+    }
+    /* Mobile — full-page layout.  Card fills the viewport, thumb
+       stacks above the form, foot becomes sticky-bottom for tap
+       access while keyboard is up. */
+    @media (max-width: 640px) {
+      .ann-modal { padding: 0; }
+      .ann-card {
+        max-width: 100vw;
+        max-height: 100vh;
+        border-radius: 0;
+        grid-template-columns: 1fr;
+        gap: 14px;
+        padding: 14px;
+        overflow-y: auto;
+      }
+      .ann-thumb { aspect-ratio: 16/10; }
+      .ann-foot {
+        position: sticky; bottom: 0;
+        background: var(--bg-card);
+        margin: 0 -14px -14px;
+        padding: 12px 14px;
+        border-top: 1px solid var(--border);
+        z-index: 1;
+      }
+      .stars { font-size: 26px; }
+    }

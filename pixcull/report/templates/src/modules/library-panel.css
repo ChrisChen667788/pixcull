@@ -1,0 +1,142 @@
+    /* ============================================================
+       v0.6 · LR-STYLE LEFT LIBRARY PANEL
+       ============================================================
+       Replaces the V14 top-spanning filter row with a Lightroom-
+       Library-shaped layout: a fixed left sidebar holding
+       collapsible filter groups + a main center pane that owns
+       the grid + a tighter top tools bar (sort / search / save
+       view / density).
+
+       The sidebar can collapse to a 36px rail (icon-only) so
+       photographers reviewing 1500 photos can reclaim screen
+       real-estate for the grid.  Persisted in localStorage.
+
+       Visual reference: Lightroom Library module's "Catalog /
+       Folders / Collections" left panel.
+       ============================================================ */
+    .workspace-layout {
+      display: flex;
+      align-items: stretch;
+      min-height: calc(100vh - 96px);   /* fill below sticky header */
+    }
+    .library-panel {
+      flex-shrink: 0;
+      width: 236px;
+      background: var(--chrome);
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      position: sticky; top: 48px;   /* under workspace-bar */
+      align-self: flex-start;
+      height: calc(100vh - 48px);
+      transition: width var(--duration-normal) var(--ease-out);
+      z-index: 4;
+    }
+    .library-panel.collapsed { width: 36px; }
+    .library-panel.collapsed .lp-scroll,
+    .library-panel.collapsed .lp-title { display: none; }
+    .library-panel.collapsed .lp-collapse svg { transform: rotate(180deg); }
+    .lp-header {
+      display: flex; align-items: center;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      gap: 8px;
+      flex-shrink: 0;
+      height: 40px;
+    }
+    .lp-title {
+      font-family: var(--font-display);
+      font-size: 11.5px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--muted);
+      flex: 1;
+    }
+    .lp-collapse {
+      width: 22px; height: 22px;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: transparent;
+      color: var(--muted-soft);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      cursor: pointer;
+      padding: 0;
+      transition: color var(--duration-fast) var(--ease-out),
+                  border-color var(--duration-fast) var(--ease-out),
+                  background var(--duration-fast) var(--ease-out);
+    }
+    .lp-collapse:hover {
+      color: var(--fg);
+      background: var(--surface-2);
+      border-color: var(--border-hi);
+    }
+    .lp-collapse svg {
+      width: 12px; height: 12px;
+      transition: transform var(--duration-normal) var(--ease-out);
+    }
+    .lp-scroll {
+      flex: 1 1 auto;
+      overflow-y: auto;
+      padding: 6px 0 var(--space-5);
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255,255,255,0.10) transparent;
+    }
+    .lp-scroll::-webkit-scrollbar { width: 6px; }
+    .lp-scroll::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,0.10); border-radius: 999px;
+    }
+    .lp-group {
+      border-bottom: 1px solid var(--border);
+      padding: 0;
+    }
+    .lp-group[style*="display:none"],
+    .lp-group[style*="display: none"] { border-bottom: none; }
+    .lp-group > summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 10px 14px;
+      font-size: 11.5px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+      display: flex; align-items: center; gap: 6px;
+      user-select: none;
+      transition: color var(--duration-fast) var(--ease-out);
+    }
+    .lp-group > summary:hover { color: var(--fg); }
+    .lp-group > summary::-webkit-details-marker { display: none; }
+    .lp-group > summary::before {
+      content: "›";
+      display: inline-block;
+      transition: transform var(--duration-fast) var(--ease-out);
+      color: var(--muted-soft);
+      font-weight: 400;
+      font-size: 13px;
+      line-height: 1;
+    }
+    .lp-group[open] > summary::before { transform: rotate(90deg); }
+    /* v0.9-P2-2 — Notion-style 6px leading color dot per group.
+       Color carries the *semantic family* of the filter (decision =
+       accent indigo, scene = success green, style = warn amber, ...)
+       so 8 groups read as a typed taxonomy at a glance, not eight
+       indistinguishable accordion bars.  Token map kept in sync with
+       the data-group attribute set on each <details> element. */
+    .lp-group > summary {
+      position: relative;
+    }
+    .lp-group > summary::after {
+      content: "";
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--lp-dot, var(--muted-soft));
+      flex: 0 0 6px;
+      margin-left: 4px;
+      box-shadow: 0 0 0 0 var(--lp-dot, transparent);
+      transition: box-shadow var(--duration-fast) var(--ease-out);
+    }
+    .lp-group[open] > summary::after {
+      /* Subtle outer glow when the group is expanded — confirms the
+         dot's color and reinforces "this group is active". */
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--lp-dot) 22%, transparent);
+    }
+

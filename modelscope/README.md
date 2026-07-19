@@ -54,7 +54,15 @@ tasks:
 完整源码 + iOS 伴侣 App + Lightroom 插件,均在 GitHub:
 **[github.com/ChrisChen667788/pixcull](https://github.com/ChrisChen667788/pixcull)**
 
-## v0.7 → v2.26 主要更新
+## v0.7 → v2.27 主要更新
+- **v2.27**:**results.css 继续模块化** —— 承接 v2.22 的 `@@CSS:` 拼接基建,再抽 5 个
+  内聚块出巨石:card(557 行)· modal(283)· chips(1398,统一 chip 系统+legacy)·
+  marquee(183)· library-panel(142)。**results.css 4,812→2,268 行**(原始 5,797;
+  累计 7 个 CSS 模块),产物字节级一致(hash 不变)、标记纪律+括号平衡受 lint。
+  serve_demo 剩余 6 个内联 HTML 方法(`_render_share_html` 等)经评估暂缓:不同于
+  v2.16 抽的静态页,这些是重 f-string 插值的动态处理器(每个 15-55 处插值),安全
+  抽取需动态模板化 + 真实数据夹具做路由字节验证,是独立高风险切片,不宜混入低风险
+  CSS 重构未验证硬做。详见 `docs/ROADMAP-v2.27-charter.md`。
 - **v2.26**:**真去物化:卡片 DOM 与 run 大小解耦** —— v2.24 限住了已解码图片内存,
   这一刀再限住**卡片 DOM 节点数**,补齐窗口化虚拟滚动。P-UX-18 只物化不回收——滚一遍
   10k 婚礼会攒出 ~10k 张卡的 DOM。现在卡片远离视口 >5 屏(相对 ~200% 物化边距有 300%

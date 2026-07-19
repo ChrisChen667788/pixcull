@@ -26,7 +26,12 @@ def _builder():
 def test_sources_exist_and_are_substantial():
     src = ROOT / "pixcull" / "report" / "templates" / "src"
     assert (src / "results.src.html").is_file()
-    assert (src / "results.css").stat().st_size > 100_000   # ~212 KB
+    # v2.22/v2.27 — the CSS is split across results.css + modules/*.css
+    # (spliced at @@CSS: markers), so measure the TOTAL source, not just
+    # the shrinking results.css shell.
+    css_total = (src / "results.css").stat().st_size + sum(
+        f.stat().st_size for f in (src / "modules").glob("*.css"))
+    assert css_total > 100_000   # ~212 KB across shell + css modules
     assert (src / "results.js").stat().st_size > 300_000    # ~458 KB
     shell = (src / "results.src.html").read_text("utf-8")
     assert shell.count("@@INLINE:results.css@@") == 1

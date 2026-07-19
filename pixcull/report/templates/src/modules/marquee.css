@@ -1,0 +1,183 @@
+    /* ============================================================
+       v0.11-P1-2 — Marquee select + bulk toolbar.
+       Press + drag in grid empty space to draw a selection rect;
+       all .card elements intersected are added to the selection.
+       Release → bulk toolbar appears.  Escape clears.
+       ============================================================ */
+    .grid { position: relative; }   /* anchor for absolute marquee */
+    .grid-marquee {
+      position: absolute;
+      pointer-events: none;
+      background: rgba(213,181,132, 0.16);
+      border: 1.5px dashed rgba(213,181,132, 0.95);
+      border-radius: 3px;
+      z-index: 4;
+      will-change: width, height, transform;
+    }
+    .card.marquee-selected {
+      outline: 2px solid var(--accent, #d5b584);
+      outline-offset: -2px;
+      box-shadow: 0 0 0 4px rgba(213,181,132,0.30);
+    }
+    .bulk-toolbar {
+      position: fixed; left: 50%; bottom: 20px;
+      transform: translate(-50%, 24px);
+      display: none;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 14px;
+      border-radius: 999px;
+      background: rgba(28, 30, 38, 0.96);
+      backdrop-filter: saturate(180%) blur(12px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.40),
+                  0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+      z-index: 50;
+      transition: transform var(--duration-md, 220ms) var(--ease-out,
+                    cubic-bezier(0.2, 0.8, 0.2, 1)),
+                  opacity var(--duration-md, 220ms);
+      opacity: 0;
+      color: #fff;
+    }
+    .bulk-toolbar.show {
+      display: flex;
+      opacity: 1;
+      transform: translate(-50%, 0);
+    }
+    .bulk-toolbar .bulk-count {
+      font: 600 13px/1 var(--font-sans, system-ui);
+      padding: 4px 8px;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.10);
+    }
+    .bulk-toolbar .bulk-btn {
+      background: transparent;
+      color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.10);
+      border-radius: 999px;
+      padding: 6px 12px;
+      font: 500 12px/1 var(--font-sans, system-ui);
+      cursor: pointer;
+      transition: background-color var(--duration-fast) var(--ease-out),
+                  border-color var(--duration-fast) var(--ease-out);
+    }
+    .bulk-toolbar .bulk-btn:hover {
+      background: rgba(255, 255, 255, 0.10);
+      border-color: rgba(255, 255, 255, 0.25);
+    }
+    .bulk-toolbar .bulk-btn.bulk-clear {
+      border: none;
+      padding: 4px 8px;
+      font-size: 16px;
+      opacity: 0.7;
+    }
+    .bulk-toolbar .bulk-btn.bulk-clear:hover { opacity: 1; }
+    .bulk-toolbar .bulk-spacer { flex: 1; min-width: 8px; }
+
+    /* v0.7-P1-2 — Inspector mobile bottom-sheet.
+       Replaces the ≤640px "info-pane stacks below image" layout
+       with a LR Mobile-Library-style pull-up drawer. Image keeps
+       the full viewport (so the photo is the hero); the info-pane
+       peeks ~140px from the bottom (filename + decision toolbar
+       are immediately tappable) and expands to ~80vh on tap of
+       the handle / swipe up. Scrim background dims the image
+       when expanded. Desktop / tablet (>640px) layout is
+       untouched. */
+    @media (max-width: 640px) {
+      /* Make .lightbox a positioning context for the drawer */
+      .lightbox.show {
+        grid-template-columns: 1fr;
+        grid-template-rows: 1fr;
+        display: block;   /* override grid for bottom-sheet stacking */
+      }
+      .lightbox .img-pane {
+        position: absolute;
+        inset: 0;
+        bottom: 140px;   /* leave peek space for the drawer */
+        padding: 16px 12px;
+      }
+      .lightbox.with-filmstrip .img-pane { bottom: calc(140px + 64px); }
+      .lightbox.info-expanded .img-pane {
+        /* When expanded, drawer covers the bottom 80vh; image
+           shrinks above. Scrim is via .img-pane::after below. */
+        bottom: 80vh;
+      }
+      .lightbox.with-filmstrip.info-expanded .img-pane { bottom: calc(80vh + 64px); }
+      /* Dimming scrim — appears on the img-pane while drawer is
+         expanded. Keeps the image visible (faint) so the user
+         doesn't lose context. */
+      .lightbox .img-pane::after {
+        content: "";
+        position: absolute; inset: 0;
+        background: rgba(0,0,0,0);
+        pointer-events: none;
+        transition: background var(--duration-normal, 240ms) var(--ease-out);
+      }
+      .lightbox.info-expanded .img-pane::after {
+        background: rgba(0,0,0,0.45);
+      }
+
+      /* The drawer itself */
+      .lightbox .info-pane {
+        position: absolute;
+        left: 0; right: 0; bottom: 0;
+        height: 140px;
+        max-height: 140px;
+        border-top: 1px solid var(--border);
+        border-left: 0;
+        background: var(--bg-card);
+        box-shadow: 0 -10px 30px rgba(0,0,0,0.45);
+        overflow: hidden;
+        transition: height var(--duration-normal, 240ms) var(--ease-out, ease-out),
+                    max-height var(--duration-normal, 240ms) var(--ease-out, ease-out);
+        z-index: 2;
+        padding: 0 16px 12px;
+      }
+      .lightbox.info-expanded .info-pane {
+        height: 80vh;
+        max-height: 80vh;
+        overflow-y: auto;
+      }
+      .lightbox.with-filmstrip .info-pane { bottom: 64px; }
+
+      /* Drag handle bar — sticky at the top of the drawer so the
+         tap target stays under the user's thumb even when the
+         drawer is mid-scroll. Tap toggles expansion. */
+      .lightbox .info-pane::before {
+        content: "";
+        display: block;
+        width: 44px; height: 4px;
+        background: var(--surface-3, rgba(255,255,255,0.18));
+        border-radius: 2px;
+        margin: 8px auto 10px;
+        transition: background var(--duration-fast, 160ms) var(--ease-out);
+      }
+      .lightbox.info-expanded .info-pane::before {
+        background: var(--accent);
+      }
+      /* Hide the chunkier inspector sections when collapsed —
+         the peek shows just the filename + meta-line +
+         decision toolbar. Sections come back when expanded. */
+      .lightbox:not(.info-expanded) .info-pane .inspector-sections {
+        display: none;
+      }
+      /* When collapsed, the meta-line + filename + decision
+         toolbar should all fit in 140px. Tighten them up. */
+      .lightbox:not(.info-expanded) .info-pane h2 {
+        font-size: 13px; margin: 0 0 4px;
+        white-space: nowrap;
+        overflow: hidden; text-overflow: ellipsis;
+      }
+      .lightbox:not(.info-expanded) .info-pane .meta-line {
+        font-size: 11px; gap: 6px;
+        white-space: nowrap;
+        overflow-x: auto;
+      }
+      .lightbox:not(.info-expanded) .info-pane .meta-line::-webkit-scrollbar { display: none; }
+    }
+    /* Drawer should never appear on desktop / tablet — kill the
+       handle there too (it would render through the border-left
+       on the side info-pane). */
+    @media (min-width: 641px) {
+      .lightbox .info-pane::before { display: none; }
+    }
+

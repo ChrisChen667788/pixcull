@@ -52,6 +52,22 @@
 
 ## What's new
 
+**v2.27** — **results.css modularization continues** (see
+[`docs/ROADMAP-v2.27-charter.md`](docs/ROADMAP-v2.27-charter.md)). Building on
+the v2.22 `@@CSS:` splice infrastructure, five more cohesive blocks move out of
+the results.css monolith into `src/modules/*.css`: card (557 lines), modal
+(283), chips (1,398 — the unified chip system + legacy aliases), marquee (183),
+and the left library panel (142). **results.css drops 4,812 → 2,268 lines**
+(from 5,797 originally; seven CSS modules now: tokens / lightbox / card / modal
+/ chips / marquee / library-panel), artifact byte-identical (same hash), marker
+discipline + brace balance linted. The remaining serve_demo inline-HTML methods
+(`_render_share_html` and five others) were assessed and deferred: unlike the
+static pages v2.16 extracted, these are heavily dynamic f-string handlers
+(15–55 interpolations each), whose safe extraction needs a placeholder-not-
+format templating pass plus per-route byte-identical verification with real
+data fixtures — a dedicated slice, not something to bundle into a low-risk CSS
+refactor unverified.
+
 **v2.26** — **true de-materialization: card DOM stays bounded on any run size**
 (see [`docs/ROADMAP-v2.26-charter.md`](docs/ROADMAP-v2.26-charter.md)). v2.24
 bounded decoded-image RAM; this bounds the card DOM node count too, completing

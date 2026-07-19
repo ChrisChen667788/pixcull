@@ -1,0 +1,557 @@
+    /* ============================================================
+       v2.21 Studio Neutral · card = image first
+       ------------------------------------------------------------
+       The v2.3 "Double-Bezel tray" (4px inset + concentric radii +
+       inner ring) is retired: none of the reference tools (Narrative,
+       Aftershoot, FilterPixel, Lightroom, C1) decorate thumbnails —
+       the photo fills the card edge-to-edge, a single hairline
+       defines the boundary, and elevation (not chrome) signals
+       hover.  Decision/selection are the only colored moments.
+       ============================================================ */
+    .card {
+      border-radius: var(--radius-md);
+      padding: 0;
+      box-shadow: var(--shadow-sm);
+    }
+    .card .thumb-wrap {
+      border-radius: 0;          /* card overflow:hidden clips corners */
+      box-shadow: none;
+    }
+    .card .body { padding: 8px 10px 9px; }
+    .grid:not(.dense) .card .body { padding: 9px 11px 10px; }
+    /* Physical press — a touch of scale-down on click. */
+    button:not(:disabled):active,
+    .pill:active, .export-btn:active, .card-action:active, .badge:active {
+      transform: scale(0.96);
+    }
+    /* One consistent keyboard focus ring everywhere (a11y). */
+    :focus-visible {
+      outline: 2px solid var(--focus-ring);
+      outline-offset: 2px;
+    }
+    .card .thumb {
+      width: 100%; height: 100%; object-fit: cover;
+      background: #000; cursor: zoom-in;
+      display: block;
+      transition: filter var(--duration-fast) var(--ease-out),
+                  transform var(--duration-normal) var(--ease-out);
+    }
+    .card:hover .thumb {
+      filter: brightness(1.05);
+      transform: scale(1.015);   /* gentle "press in" feel */
+    }
+    /* Decision glyph — LR Library "flag" pattern. 22×22 chip,
+       backdrop-filter blur, small + monochrome so it never
+       competes with the photo. */
+    .card .thumb-decision-glyph {
+      position: absolute; top: 6px; left: 6px;
+      width: 22px; height: 22px;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-family: var(--font-mono);
+      font-size: 11px; font-weight: 700;
+      border-radius: var(--radius-sm);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      background: rgba(0,0,0,0.45);
+      color: #fff;
+      box-shadow: var(--shadow-sm);
+      z-index: 2;
+      pointer-events: none;
+    }
+    /* v2.8-DESIGN P0-3 — 收敛强调色: 决策字形不再用大色块, 统一深色玻璃底
+       (继承上面的 rgba(0,0,0,0.45)) + 克制的决策色字形. ✓/?/✕ 形状本身
+       已足够区分 (含色盲), 不需要整块填色去抢缩略图的视觉. */
+    .card .thumb-decision-glyph.dg-keep  { color: #6ee7b7; }
+    .card .thumb-decision-glyph.dg-maybe { color: #fcd34d; }
+    .card .thumb-decision-glyph.dg-cull  { color: #fca5a5; }
+    /* v2.4-P1-1 — burst-stack "⧉N" badge.  Top-right (clear of the
+       top-left AL badge + the decision glyph).  The layered offset
+       shadow reads as a literal stack of cards behind it. */
+    .card .burst-stack-badge {
+      position: absolute; top: 6px; right: 6px; z-index: 5;
+      display: inline-flex; align-items: center; gap: 3px;
+      padding: 2px 8px; border-radius: 4px; cursor: pointer;
+      font-size: 11px; font-weight: 600; line-height: 1.4;
+      color: #161616; background: linear-gradient(180deg, #eaca98, #d5b584);
+      border: 1px solid rgba(22,22,22, 0.25);
+      box-shadow: 2px 2px 0 -1px #d5b584, 4px 4px 0 -2px #93743f,
+                  0 2px 6px rgba(0, 0, 0, 0.35);
+      transition: transform 0.12s ease, box-shadow 0.12s ease;
+    }
+    .card .burst-stack-badge:hover {
+      transform: translateY(-1px);
+      box-shadow: 2px 2px 0 -1px #d5b584, 5px 5px 0 -2px #93743f,
+                  0 4px 10px rgba(0, 0, 0, 0.45);
+    }
+    .card .burst-stack-badge:active { transform: translateY(0); }
+
+    /* Bottom gradient strip with filename + score.  Always visible
+       at low opacity; brightens on hover.  Mirrors LR Library's
+       per-thumbnail caption strip. */
+    .card .thumb-overlay {
+      position: absolute; left: 0; right: 0; bottom: 0;
+      display: flex; align-items: center; gap: 8px;
+      padding: 18px 10px 8px;
+      background: linear-gradient(180deg,
+        rgba(0,0,0,0) 0%,
+        rgba(0,0,0,0.65) 60%,
+        rgba(0,0,0,0.85) 100%);
+      color: #f1f3f7;
+      font-size: 10.5px;
+      pointer-events: none;
+      z-index: 2;
+      opacity: 0.75;
+      transition: opacity var(--duration-fast) var(--ease-out);
+    }
+    .card:hover .thumb-overlay { opacity: 1; }
+    .card .thumb-overlay-fn {
+      flex: 1; min-width: 0;
+      font-family: var(--font-mono);
+      font-size: 10px; font-weight: 500;
+      color: rgba(255,255,255,0.92);
+      letter-spacing: 0.02em;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .card .thumb-overlay-score {
+      font-family: var(--font-mono);
+      font-size: 11px; font-weight: 600;
+      color: #fff;
+      padding: 1px 6px;
+      background: rgba(255,255,255,0.10);
+      border: 1px solid rgba(255,255,255,0.20);
+      border-radius: var(--radius-sm);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* v0.5 LR-grade (2/3) — grid DENSITY MODES.
+       Three thumbnail sizes the user picks via a small toolbar
+       in the filter row.  Mirrors LR Library Grid's S/M/L size
+       slider.  Stored in localStorage[pixcull_density]. */
+    .grid.density-s {
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: var(--space-2);
+    }
+    .grid.density-s .card .body { padding: 6px 8px 8px; font-size: 10.5px; }
+    .grid.density-s .row1 { gap: 3px; }
+    .grid.density-s .row1 .badge { font-size: 9px; }
+    .grid.density-s .card .row2 { font-size: 9.5px; }
+    /* In dense mode the bottom overlay carries the filename;
+       no need to repeat in the .body row1.  Hide it. */
+    .grid.density-s .row1 .fn { display: none; }
+    .grid.density-s .annotate-btn { display: none; }
+
+    .grid.density-m {
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: var(--space-3);
+    }
+    .grid.density-l {
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+      gap: var(--space-4);
+    }
+    .grid.density-l .card .thumb-overlay { font-size: 12px; padding: 24px 14px 12px; }
+    .grid.density-l .card .thumb-overlay-fn { font-size: 11.5px; }
+    .grid.density-l .card .thumb-overlay-score { font-size: 12.5px; }
+
+    /* Density toolbar (small button group) lives in the filter row */
+    .density-toolbar {
+      display: inline-flex; gap: 1px;
+      padding: 1px;
+      background: var(--surface-3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      margin-left: auto;   /* push to the right edge of filter row */
+    }
+    .density-toolbar button {
+      padding: 4px 9px;
+      font-size: 11px; font-weight: 500;
+      background: transparent;
+      color: var(--muted);
+      border: none;
+      border-radius: 3px;
+      cursor: pointer;
+      transition: background var(--duration-fast) var(--ease-out),
+                  color var(--duration-fast) var(--ease-out);
+    }
+    .density-toolbar button:hover { color: var(--fg); }
+    .density-toolbar button.active {
+      background: var(--bg-card);
+      color: var(--fg);
+      box-shadow: var(--shadow-sm);
+    }
+    .card .body { padding: 8px 10px 10px; }
+    .row1 { display: flex; align-items: baseline; gap: 6px; }
+    .row1 .fn {
+      font-size: 11px; color: var(--muted); text-overflow: ellipsis;
+      overflow: hidden; white-space: nowrap; flex: 1;
+    }
+    /* v0.4 — decision badge.  Same family as .chip but bolder
+       (it's the row's primary status indicator) and slightly
+       larger padding.  Keep classes (.badge.keep|maybe|cull)
+       unchanged so render() doesn't have to migrate.  */
+    .badge {
+      display: inline-flex; align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      font-size: 10px;
+      font-weight: 600;
+      border-radius: var(--radius-pill);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      box-shadow: var(--shadow-sm);
+    }
+    /* P-UX-23 — always-on shape glyphs on decision badges. Even
+       for users with normal color vision the glyph reads faster
+       than the color, and for the ~8% of men with red-green CVD
+       it's the only reliable signal. The glyph is inserted via
+       ::before so we don't have to touch every render() site. */
+    .badge.keep::before  { content: "✓ "; }
+    .badge.maybe::before { content: "? "; }
+    .badge.cull::before  { content: "✕ "; }
+    /* v2.8-DESIGN P0-3 — 决策徽章改描边式 (透明底 + 细色边 + 色字),
+       不再大面积实心填色, 让强调色回归"强调"本职, 网格立刻安静下来. */
+    .badge.keep  { background: transparent; color: var(--keep);
+                   border: 1px solid color-mix(in srgb, var(--keep) 50%, transparent); box-shadow: none; }
+    .badge.maybe { background: transparent; color: var(--maybe);
+                   border: 1px solid color-mix(in srgb, var(--maybe) 50%, transparent); box-shadow: none; }
+    .badge.cull  { background: transparent; color: var(--cull);
+                   border: 1px solid color-mix(in srgb, var(--cull) 50%, transparent); box-shadow: none; }
+    /* v2.8-DESIGN P0-2 — 卡片减法: 默认收起长尾噪音 (rescorer/meta/style/
+       cull-reason/moment/review/exposure 徽章墙 + reason/advice 文字行).
+       这些细节移交 lightbox inspector 按需查看; 网格常态只保留 缩略图 +
+       决策色 + 文件名 + 综合分 + 六维度. 所有卡等高, 不跳动. */
+    .card .row4,
+    .card .row5,
+    .card .row1 .rs,
+    .card .row1 .style-chip,
+    .card .row1 .cull-reason-chip,
+    .card .row1 .moment-chip,
+    .card .row1 .review-me-chip,
+    .card .row1 .exposure-chip { display: none; }
+    /* P-UX-23 — when the user enables color-blind mode (body.a11y-cb),
+       remap keep/maybe/cull to a deuteranopia-safe palette + add a
+       diagonal-stripe texture to .badge.cull so even a fully
+       achromatic eye can tell cull apart from keep. The class is
+       applied by JS reading localStorage[`pixcull_a11y_pref`]. */
+    body.a11y-cb {
+      --keep:  var(--keep-cb);
+      --maybe: var(--maybe-cb);
+      --cull:  var(--cull-cb);
+    }
+    body.a11y-cb .badge.cull {
+      background-image: repeating-linear-gradient(
+        135deg,
+        rgba(255,255,255,0.0) 0px,
+        rgba(255,255,255,0.0) 4px,
+        rgba(255,255,255,0.22) 4px,
+        rgba(255,255,255,0.22) 6px
+      );
+    }
+    .row1 .rs {
+      font-size: 9px; padding: 1px 5px; border-radius: 2px;
+      background: rgba(255,255,255,0.07); color: var(--muted);
+      font-family: ui-monospace, monospace; cursor: help;
+    }
+    .row1 .rs.dis { background: var(--maybe); color: white; }
+    .row1 .rs.meta { background: rgba(213,181,132, 0.18); color: #eaca98; }
+    .row1 .rs.meta.dis { background: var(--maybe); color: white; }
+    .row2 { display: flex; align-items: center; justify-content: space-between;
+            margin-top: 4px; font-size: 11px; color: var(--muted); }
+    .row2 .scene { color: var(--fg); }
+    .row3 {
+      display: grid; grid-template-columns: repeat(6, 1fr);
+      gap: 3px; margin-top: 6px; font-size: 10px;
+    }
+    .row3 .ax {
+      background: rgba(255,255,255,0.04); padding: 3px 5px;
+      border-radius: 2px; text-align: center; cursor: help;
+    }
+    .row3 .ax .k { color: var(--muted); display: block; font-size: 9px; }
+    .row3 .ax .v { color: var(--fg); font-weight: 600; }
+    .row3 .ax.human { background: rgba(74, 222, 128, 0.18); }
+    .row3 .ax.s1 { color: var(--cull); }
+    .row3 .ax.s2 { color: #ee8888; }
+    .row3 .ax.s3 { color: var(--muted); }
+    .row3 .ax.s4 { color: #88cc88; }
+    .row3 .ax.s5 { color: var(--keep); }
+
+    /* ============================================================
+       v2.2 soft-skill · "calm" card density   (taste-skill VISUAL_DENSITY ≈ 4)
+       ------------------------------------------------------------
+       Audit: the default card stacked FIVE rows — decision badge +
+       filename + up to 7 secondary chips (rescorer / meta / style /
+       cull-reason / wedding-moment / review-me / exposure) + scene +
+       score + a 6-axis grid + a reason line + up to 3 advice lines.
+       The photograph — the thing a culling pro actually reads — was
+       competing with a telemetry dashboard.  That is the "generic
+       dense-dashboard slop" the soft-skill direction exists to undo.
+
+       Calm mode (DEFAULT) is pure Lightroom-Library: the card is the
+       photo + decision badge + one *editorial* score (serif, the lone
+       hero number).  Everything else — the 6 axes, every secondary
+       chip, reason and advice — moves one click away into the
+       lightbox / inspector, which already render the full rubric.
+       `.grid.dense` restores the
+       everything-at-once view — that switch is the VISUAL_DENSITY
+       dial (toolbar toggle, persisted).  No hover-reveal in-flow, so
+       the grid never reflows mid-scan.
+       ============================================================ */
+    .grid:not(.dense) .card .row1 .rs,
+    .grid:not(.dense) .card .row1 .style-chip,
+    .grid:not(.dense) .card .row1 .cull-reason-chip,
+    .grid:not(.dense) .card .row1 .moment-chip,
+    .grid:not(.dense) .card .row1 .review-me-chip,
+    .grid:not(.dense) .card .row1 .exposure-chip,
+    .grid:not(.dense) .card .row4,
+    .grid:not(.dense) .card .row5,
+    .grid:not(.dense) .card .row3,
+    .grid:not(.dense) .card .row2 .scene {
+      display: none;
+    }
+    /* Soft-skill whitespace — let the cards breathe. */
+    .grid:not(.dense) { row-gap: 20px; }
+    .grid:not(.dense) .card .body { padding: 11px 13px 12px; }
+    .grid:not(.dense) .card .row1 { gap: 7px; }
+    .grid:not(.dense) .card .row1 .fn { font-size: 10.5px; opacity: 0.72; }
+    .grid:not(.dense) .card .row2 { margin-top: 5px; justify-content: flex-start; }
+    /* v2.21 — score numbers are instrument readouts: Geist/mono
+       tabular, not editorial serif (serif numerals read decorative;
+       the reference tools all set data in a neutral mono). */
+    .grid:not(.dense) .card .row2 .score-radial .ai-num {
+      font-family: var(--font-mono);
+      font-size: 14px;
+      letter-spacing: 0.01em;
+    }
+    .grid:not(.dense) .card .row2 .score-radial svg {
+      width: 22px; height: 22px; flex-basis: 22px;
+    }
+
+    /* ────────────────────────────────────────────────────────────
+       v0.9-P1-4 — AI visualization
+       ────────────────────────────────────────────────────────────
+       Three small additions that turn raw AI numbers into glanceable
+       visual signals:
+         1. .score-radial  — tiny SVG ring around the score_final
+                              text; ring fill ∝ score, stroke uses
+                              the brand gradient.
+         2. .ai-num        — apply to score_final / similar key
+                              numbers; brand-gradient text fill.
+         3. .row3 .ax      — gains a bottom-up fill bar (linear-
+                              gradient background) so each chip is
+                              already a 6-bar bullet chart even
+                              before reading the numeric value.
+       Lightbox inspector pane reuses the same classes at larger
+       sizes (.score-radial.lg / .row .ax.lg-ax).
+       ──────────────────────────────────────────────────────────── */
+    .ai-num {
+      background: linear-gradient(135deg,
+                  var(--brand-indigo, #d5b584) 0%,
+                  var(--brand-violet, #b5945f) 50%,
+                  var(--brand-pink,   #93743f) 100%);
+      -webkit-background-clip: text;
+              background-clip: text;
+      -webkit-text-fill-color: transparent;
+              color: transparent;
+      font-weight: 700;
+      font-feature-settings: "tnum" 1;       /* tabular nums — no jitter on update */
+    }
+    .score-radial {
+      display: inline-flex; align-items: center; gap: 5px;
+      vertical-align: -3px;
+    }
+    .score-radial svg {
+      width: 18px; height: 18px;
+      flex: 0 0 18px;
+      overflow: visible;
+    }
+    .score-radial .sr-track {
+      fill: none;
+      stroke: rgba(255, 255, 255, 0.08);
+      stroke-width: 2.5;
+    }
+    .score-radial .sr-fill {
+      fill: none;
+      stroke: url(#aiBrandGrad);
+      stroke-width: 2.5;
+      stroke-linecap: round;
+      transform: rotate(-90deg);
+      transform-origin: center;
+      transition: stroke-dashoffset var(--duration-mid, 280ms)
+                  var(--ease-out, cubic-bezier(0.34, 1.56, 0.64, 1));
+    }
+    .score-radial.lg svg { width: 36px; height: 36px; flex-basis: 36px; }
+    .score-radial.lg .sr-track,
+    .score-radial.lg .sr-fill { stroke-width: 3.5; }
+
+    /* Bottom-up fill bar inside each row3 axis chip.  Driven by
+       inline --axis-fill (0..1) — no extra DOM, just a stacked
+       linear-gradient over the existing chip background.  When
+       --axis-fill is unset (legacy rendering / no data) the chip
+       renders unchanged. */
+    .row3 .ax {
+      position: relative;
+      overflow: hidden;            /* contain the fill behind the text */
+    }
+    .row3 .ax::before {
+      content: "";
+      position: absolute; left: 0; right: 0; bottom: 0;
+      height: calc(var(--axis-fill, 0) * 100%);
+      background: linear-gradient(180deg,
+                  rgba(213,181,132, 0.32),
+                  rgba(220, 184, 126, 0.32));
+      pointer-events: none;
+      z-index: 0;
+      transition: height var(--duration-mid, 280ms)
+                  var(--ease-out, cubic-bezier(0.34, 1.56, 0.64, 1));
+    }
+    .row3 .ax > * { position: relative; z-index: 1; }
+    /* The s5 (max) chip gets an extra crown — saturated brand gradient,
+       not the muted wash. */
+    .row3 .ax.s5::before {
+      background: linear-gradient(180deg,
+                  rgba(213,181,132, 0.55),
+                  rgba(220, 184, 126, 0.55));
+    }
+    /* Inspector pane reuses the same .ax pattern at a bigger size
+       — same ::before logic still works thanks to inline --axis-fill. */
+    .info .ax {
+      position: relative;
+      overflow: hidden;
+    }
+    .info .ax::before {
+      content: "";
+      position: absolute; left: 0; right: 0; bottom: 0;
+      height: calc(var(--axis-fill, 0) * 100%);
+      background: linear-gradient(180deg,
+                  rgba(213,181,132, 0.25),
+                  rgba(220, 184, 126, 0.25));
+      pointer-events: none;
+      z-index: 0;
+    }
+    .info .ax > * { position: relative; z-index: 1; }
+
+    /* Inline sparkline for the 6 axis values across the top of the
+       inspector pane — gives a glanceable "shape" of the rubric
+       without the user having to read 6 numbers. */
+    .ai-sparkline {
+      display: block;
+      width: 100%;
+      max-width: 280px;
+      height: 36px;
+      margin: 4px 0 8px;
+    }
+    .ai-sparkline .sp-area {
+      fill: url(#aiBrandGradV);
+      opacity: 0.18;
+    }
+    .ai-sparkline .sp-line {
+      fill: none;
+      stroke: url(#aiBrandGrad);
+      stroke-width: 2;
+      stroke-linejoin: round;
+      stroke-linecap: round;
+    }
+    .ai-sparkline .sp-dot {
+      fill: url(#aiBrandGrad);
+    }
+    .ai-sparkline .sp-axis {
+      stroke: rgba(255, 255, 255, 0.06);
+      stroke-width: 1;
+      stroke-dasharray: 2 3;
+    }
+    .ai-sparkline-lab {
+      display: flex; justify-content: space-between;
+      font-size: 9px; letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-top: -4px;
+      padding: 0 2px;
+    }
+    .row4 { font-size: 10px; color: var(--muted); margin-top: 6px;
+            text-overflow: ellipsis; overflow: hidden; white-space: nowrap; }
+    .row5 { font-size: 10px; margin-top: 4px; line-height: 1.35;
+            text-overflow: ellipsis; overflow: hidden; white-space: nowrap; cursor: help; }
+    .row5.strengths { color: var(--keep); }
+    .row5.fixes { color: var(--maybe); }
+    /* V14.3 — "why maybe" rationale on the card. Subtle accent so it
+       doesn't compete with strengths/fixes. */
+    .row5.rationale-line {
+      color: var(--accent-hi);
+      font-style: italic;
+      opacity: 0.92;
+    }
+    .annotate-btn {
+      position: absolute; top: 6px; right: 6px;
+      background: rgba(0,0,0,0.65); color: white; border: 0;
+      border-radius: 3px; padding: 3px 7px; font-size: 10px;
+      cursor: pointer; opacity: 0; transition: opacity 0.15s;
+    }
+    .card { position: relative; }
+    .card:hover .annotate-btn { opacity: 1; }
+    .annotate-btn:hover { background: var(--accent); }
+    .card.has-human .annotate-btn { opacity: 1; background: rgba(74,222,128,0.5); }
+    /* ============================================================
+       v0.9-P1-1 — card hover floating actions (top-right group).
+       Linear/Trello pattern: a 3-button micro-toolbar appears on
+       hover in the upper-right of each card so the most-frequent
+       discrete actions (zoom · add-to-bucket · compare) are one
+       click away without right-click hunting.
+
+       Sits on the OPPOSITE side from the existing v16.2 rotate /
+       v0.3 compare buttons (top-left), so neither steals from the
+       other.  All 28x28, frosted, brand-gradient on hover.
+       ============================================================ */
+    .card-actions {
+      position: absolute; top: 6px; right: 6px;
+      display: flex; gap: 4px;
+      opacity: 0;
+      transform: translateY(-3px);
+      transition: opacity var(--duration-fast, 160ms) var(--ease-out),
+                  transform var(--duration-fast, 160ms) var(--ease-out);
+      pointer-events: none;  /* avoid intercepting card hovers when hidden */
+      z-index: 4;
+    }
+    .card:hover .card-actions {
+      opacity: 1;
+      transform: translateY(0);
+      pointer-events: auto;
+    }
+    .card-action {
+      width: 28px; height: 28px;
+      border-radius: 7px;
+      background: rgba(20, 23, 28, 0.78);
+      backdrop-filter: blur(8px) saturate(140%);
+      -webkit-backdrop-filter: blur(8px) saturate(140%);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      color: #e8eaed; font-size: 13.5px; line-height: 1;
+      cursor: pointer; padding: 0;
+      display: inline-flex; align-items: center; justify-content: center;
+      transition: filter var(--duration-fast, 160ms) var(--ease-out),
+                  transform var(--duration-fast, 160ms) var(--ease-out),
+                  border-color var(--duration-fast, 160ms) var(--ease-out);
+    }
+    .card-action:hover {
+      background: var(--brand-gradient,
+        linear-gradient(135deg, #d5b584, #93743f));
+      border-color: transparent;
+      color: #ffffff;
+      transform: translateY(-1px) scale(1.06);
+      filter: brightness(1.05);
+    }
+    .card-action:active {
+      transform: translateY(0) scale(1.0);
+      filter: brightness(0.95);
+    }
+    /* SVG inside the button — uniform sizing */
+    .card-action svg {
+      width: 14px; height: 14px;
+      stroke-width: 2;
+      stroke: currentColor; fill: none;
+      stroke-linecap: round; stroke-linejoin: round;
+    }
+    @media (max-width: 640px) {
+      /* On touch the hover never fires; keep the actions visible
+         at slight opacity so they're still discoverable. */
+      .card-actions { opacity: 0.85; transform: none; pointer-events: auto; }
+      .card-action { width: 32px; height: 32px; }   /* WCAG tap target */
+    }
+
