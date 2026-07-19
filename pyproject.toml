@@ -1,6 +1,6 @@
 [project]
 name = "pixcull"
-version = "2.25.0"
+version = "2.26.0"
 description = "Local-first AI photo culling for professional photographers — 6-axis rubric, XMP/IPTC export, Lightroom & Capture One ready."
 # v2.23 — dedicated PyPI readme: the repo README leans on relative-path
 # screenshots and GitHub-only markup that render broken on pypi.org.

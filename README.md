@@ -52,6 +52,23 @@
 
 ## What's new
 
+**v2.26** — **true de-materialization: card DOM stays bounded on any run size**
+(see [`docs/ROADMAP-v2.26-charter.md`](docs/ROADMAP-v2.26-charter.md)). v2.24
+bounded decoded-image RAM; this bounds the card DOM node count too, completing
+windowed virtual scroll. P-UX-18 materialized placeholders on scroll but never
+recycled them — scroll a 10k wedding through and you'd accrete ~10k card DOM
+subtrees. Now a card that recedes past ~5 viewports (a 300% hysteresis gap over
+the ~200% materialize margin, so no boundary thrash) is torn back to a
+placeholder of its measured height and re-materialized on re-approach. The
+correctness-critical part: re-materialization renders **from the current row**
+(`renderCard(segRows[idx])`, not the frozen segment string), so a decision made
+while a card was live survives the recycle — `rows[]` is the source of truth and
+every decision path mutates it. Verified on a 600-row run: scrolling through all
+600 kept the card count at **172** (not 600), back at top it recycled to 100,
+order and filenames intact, zero JS errors; a cull decision persisted across a
+scroll-away-and-back. Together v2.24 + v2.26 decouple both image RAM and DOM
+node count from run size.
+
 **v2.25** — **n-way A/B compare: line up 3–5 near-dups, not just pairs** (see
 [`docs/ROADMAP-v2.25-charter.md`](docs/ROADMAP-v2.25-charter.md)). The compare
 modal was already n-cell internally, but the free-pick entry point opened the

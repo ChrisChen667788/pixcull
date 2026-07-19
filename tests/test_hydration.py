@@ -131,3 +131,27 @@ def test_image_parking_hooks_present_in_results_js():
     assert 'img.setAttribute("src", parked)' in js, "unpark half missing"
     # freshly-materialized cards must be observed too, or they never park
     assert "imgIo.observe(n)" in js, "materialized cards not observed for parking"
+
+
+# ── v2.26 — true de-materialization (recycle far cards to placeholders) ──
+def test_dematerialization_hooks_present_and_correct():
+    """Huge-batch scroll must bound the card DOM node count, not just image
+    RAM: a card that recedes far is torn back to a placeholder and
+    re-materialized on re-approach. The correctness-critical invariant is
+    that re-materialization renders from the CURRENT row (renderCard(
+    segRows[idx])) — NOT the frozen segments[idx] string — so a decision
+    made while the card was live survives the recycle. Guard both."""
+    from pathlib import Path
+    js = (Path(__file__).resolve().parent.parent / "pixcull" / "report"
+          / "templates" / "src" / "results.js").read_text("utf-8")
+    # the parallel row array + both recycle directions exist
+    assert "segRows" in js, "segRows parallel array gone"
+    assert "_dematerialize" in js and "_materialize" in js, "recycle helpers gone"
+    assert "_pcDematObserver" in js, "de-materialize observer gone"
+    # CORRECTNESS: re-materialize from the live row, never the frozen string
+    assert "renderCard(segRows[idx])" in js, (
+        "re-materialization no longer renders from the current row — a "
+        "decision made while a card was live would be lost on recycle")
+    # hysteresis: de-materialize margin must be wider than materialize so
+    # cards don't thrash at the boundary
+    assert '"500% 0px"' in js, "de-materialize hysteresis margin changed"

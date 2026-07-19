@@ -2477,6 +2477,13 @@
     // batches. For ≤200 cards we still render in one shot (no point
     // batching when it's all visible at once).
     const segments = [];
+    // v2.26 — parallel array of the ROW behind each segment (null for
+    // dividers). True de-materialization re-renders a recycled card from
+    // its CURRENT row via renderCard() — NOT the frozen segments[] string
+    // — so a decision made while the card was live survives a
+    // scroll-away-and-back. rows[] is the source of truth (every decision
+    // path writes r.decision), so renderCard(segRows[idx]) is always current.
+    const segRows = [];
     if (filterState.sort === "cluster") {
       // Group rows by cluster_id
       const groups = new Map();
@@ -2493,11 +2500,12 @@
             <span>连拍组 (${members.length} 张) · 最佳: ${esc(best.filename)}</span>
             <span class="compare-btn" data-cluster="${esc(key)}">⊞ 并排比较</span>
           </div>`);
+          segRows.push(null);
         }
-        members.forEach(r => { segments.push(renderCard(r)); });
+        members.forEach(r => { segments.push(renderCard(r)); segRows.push(r); });
       });
     } else {
-      sorted.forEach(r => { segments.push(renderCard(r)); });
+      sorted.forEach(r => { segments.push(renderCard(r)); segRows.push(r); });
     }
     let html = segments.join("");
     // V14.1 — progressive rendering for big batches. Inserting 1500
@@ -2721,27 +2729,71 @@
         }
       }, { rootMargin: "300% 0px", threshold: 0 });
       window._pcImgObserver = imgIo;
-      // Watch the eagerly-rendered first batch too (they're the ones a
-      // user scrolls PAST first, so they're the first to park).
-      grid.querySelectorAll(".card").forEach(c => imgIo.observe(c));
+
+      // v2.26 — true de-materialization. v2.24 bounds decoded IMAGE RAM;
+      // this bounds the card DOM NODE count too. A card that recedes
+      // WAY past the viewport (500% — well beyond the 200% materialize
+      // margin, so the 300% gap prevents boundary thrash) is torn back
+      // down to a placeholder of its measured height; re-approaching
+      // re-materializes it FROM ITS CURRENT ROW (renderCard(segRows[idx]),
+      // not the frozen string), so live DOM stays ~viewport-proportional
+      // no matter how far you scroll a 10k run. Keyboard nav already only
+      // traverses materialized cards (visibleCards()), so recycling a far
+      // card doesn't change the reachable set near the viewport.
+      let _dematIo, _io;
+      const _materialize = (ph) => {
+        const idx = parseInt(ph.dataset.idx || "-1", 10);
+        if (idx < 0 || idx >= segments.length) return;
+        const tmp = document.createElement("div");
+        tmp.innerHTML = (segRows[idx] != null) ? renderCard(segRows[idx]) : segments[idx];
+        const nodes = Array.from(tmp.childNodes);
+        while (tmp.firstChild) ph.parentNode.insertBefore(tmp.firstChild, ph);
+        for (const n of nodes) {
+          if (n.nodeType === 1 && n.classList.contains("card")) {
+            n.dataset.segIdx = String(idx);   // remember where to recycle to
+            imgIo.observe(n);
+            _dematIo.observe(n);
+          }
+        }
+        _io.unobserve(ph);
+        ph.remove();
+      };
+      const _dematerialize = (card) => {
+        const idx = parseInt(card.dataset.segIdx || "-1", 10);
+        if (idx < 0) return;
+        const ph = document.createElement("div");
+        ph.className = "card-placeholder";
+        ph.style.height = (card.offsetHeight || PLACEHOLDER_HEIGHT) + "px";
+        ph.dataset.idx = String(idx);
+        card.parentNode.insertBefore(ph, card);
+        imgIo.unobserve(card);
+        _dematIo.unobserve(card);
+        card.remove();
+        _io.observe(ph);
+      };
+      _dematIo = new IntersectionObserver((entries) => {
+        if (token.cancelled) return;
+        for (const ent of entries) {
+          // Only recycle a card once it has RECEDED past the wide margin.
+          if (!ent.isIntersecting && ent.target.classList.contains("card")) {
+            _dematerialize(ent.target);
+          }
+        }
+      }, { rootMargin: "500% 0px", threshold: 0 });
+      if (window._pcDematObserver) {
+        try { window._pcDematObserver.disconnect(); } catch (_e) {}
+      }
+      window._pcDematObserver = _dematIo;
+
+      // Watch the eagerly-rendered first batch for BOTH parking + recycle.
+      grid.querySelectorAll(".card").forEach(c => {
+        if (!c.dataset.segIdx) c.dataset.segIdx = "-1";  // first batch: never recycled (no seg idx)
+        imgIo.observe(c);
+      });
       const io = new IntersectionObserver((entries) => {
         if (token.cancelled) return;
         for (const ent of entries) {
-          if (!ent.isIntersecting) continue;
-          const ph = ent.target;
-          const idx = parseInt(ph.dataset.idx || "-1", 10);
-          if (idx < 0 || idx >= segments.length) continue;
-          const tmp = document.createElement("div");
-          tmp.innerHTML = segments[idx];
-          // Move the real card into the placeholder's slot, and start
-          // watching any freshly-materialized card for image parking.
-          const nodes = Array.from(tmp.childNodes);
-          while (tmp.firstChild) ph.parentNode.insertBefore(tmp.firstChild, ph);
-          for (const n of nodes) {
-            if (n.nodeType === 1 && n.classList.contains("card")) imgIo.observe(n);
-          }
-          io.unobserve(ph);
-          ph.remove();
+          if (ent.isIntersecting) _materialize(ent.target);
         }
       }, {
         // v0.7-P0-3 — adaptive rootMargin: full 200% ahead at <1k
@@ -2752,6 +2804,7 @@
         rootMargin: _adaptiveRootMargin(rows.length),
         threshold: 0,
       });
+      _io = io;   // _materialize / _dematerialize close over _io
       grid.querySelectorAll(".card-placeholder").forEach(el => io.observe(el));
       window._pcCardObserver = io;
     }
