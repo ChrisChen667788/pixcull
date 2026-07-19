@@ -54,7 +54,16 @@ tasks:
 完整源码 + iOS 伴侣 App + Lightroom 插件,均在 GitHub:
 **[github.com/ChrisChen667788/pixcull](https://github.com/ChrisChen667788/pixcull)**
 
-## v0.7 → v2.23 主要更新
+## v0.7 → v2.24 主要更新
+- **v2.24**:**图片内存虚拟化:已解码缩略图恒定** —— P-UX-18 只限住大 run 的
+  首屏卡片 DOM,但卡片一旦物化,它的缩略图就永久驻留——把 10k 婚礼滚到底就把
+  10k 张 JPEG 解码进内存(`loading="lazy"` 只延迟首次加载、从不回收)。第二个
+  IntersectionObserver 现在把已解码缩略图限制在视口窗口内:卡片远离 >3 屏就
+  **停靠**其 `<img>`(src→data-parked-src、清空 src,浏览器回收解码),回到附近
+  再恢复。卡片元素、决策徽章、键盘索引、焦点全不动——只切 `<img src>`,
+  `.thumb-wrap` 的 aspect-ratio 撑住布局、滚动条不跳。600 行实测:物化卡片从
+  100 涨到 352 时,**已加载缩略图恒定在 ~48-76**(已停靠涨到 276)——图片内存
+  与 run 大小解耦,且刻意不碰脆弱的决策/渲染路径。详见 `docs/ROADMAP-v2.24-charter.md`。
 - **v2.23**:**`pip install pixcull` 铺轨 + 审计队列收尾** —— 三线并进:
   **PyPI 发行轨**(元数据 PyPI 就绪 + 专用 README-PYPI;13 个 locale JSON 补进
   wheel——运行时加载,缺了 `_t()` 回退键名;`twine check` wheel+sdist 双过;

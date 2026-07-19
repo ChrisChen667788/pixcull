@@ -112,3 +112,22 @@ def test_reel_decision_persists_and_profile_rebuilds(server_mod, tmp_path, monke
     assert (rd / "reel_decisions.jsonl").exists()
     prof = _json.loads(prof_path.read_text())
     assert prof["n"] == 2 and prof["pref"]["burst"] == pytest.approx(0.6)
+
+
+# ── v2.24-P0 — image-memory virtualization (offscreen thumbnail parking) ──
+def test_image_parking_hooks_present_in_results_js():
+    """The huge-batch render path must keep decoded thumbnails bounded to
+    a viewport window: a card that recedes far parks its <img> (src →
+    data-parked-src) so the browser reclaims the decode. Assert both the
+    park/unpark logic and the observer wiring survive refactors — without
+    them a 10k run decodes every thumbnail into RAM."""
+    from pathlib import Path
+    js = (Path(__file__).resolve().parent.parent / "pixcull" / "report"
+          / "templates" / "src" / "results.js").read_text("utf-8")
+    assert "data-parked-src" in js, "image-parking attribute gone"
+    assert "_pcImgObserver" in js, "image-parking observer gone"
+    # park moves src → data-parked-src; unpark restores it
+    assert 'img.setAttribute("data-parked-src"' in js, "park half missing"
+    assert 'img.setAttribute("src", parked)' in js, "unpark half missing"
+    # freshly-materialized cards must be observed too, or they never park
+    assert "imgIo.observe(n)" in js, "materialized cards not observed for parking"

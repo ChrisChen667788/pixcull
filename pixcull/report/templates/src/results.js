@@ -2683,6 +2683,45 @@
       if (window._pcCardObserver) {
         try { window._pcCardObserver.disconnect(); } catch (_e) {}
       }
+      // v2.24-P0 — image-memory virtualization. P-UX-18 bounds the
+      // INITIAL card DOM, but once a placeholder materializes into a
+      // card it (and its decoded thumbnail) live forever: scroll a
+      // 10k wedding to the bottom and you've decoded 10k JPEGs into
+      // RAM. `loading="lazy"` only defers the first load; it never
+      // reclaims. This second observer keeps decoded thumbnails to a
+      // window around the viewport — a card that recedes past ~3
+      // viewports "parks" its <img> (src → data-parked-src, src
+      // cleared, so the browser drops the decode); re-approaching
+      // restores it. The card ELEMENT, its decision badge, keyboard
+      // index and focus are untouched — only the <img src> toggles,
+      // and .thumb-wrap's aspect-ratio holds the layout so the
+      // scrollbar never jumps. Bounds image RAM independent of run
+      // size, without touching the fragile decision/render path.
+      if (window._pcImgObserver) {
+        try { window._pcImgObserver.disconnect(); } catch (_e) {}
+      }
+      const _parkImg = (card) => {
+        const img = card.querySelector && card.querySelector("img.thumb");
+        if (img && img.getAttribute("src") && !img.hasAttribute("data-parked-src")) {
+          img.setAttribute("data-parked-src", img.getAttribute("src"));
+          img.removeAttribute("src");
+        }
+      };
+      const _unparkImg = (card) => {
+        const img = card.querySelector && card.querySelector("img.thumb");
+        const parked = img && img.getAttribute("data-parked-src");
+        if (parked) { img.setAttribute("src", parked); img.removeAttribute("data-parked-src"); }
+      };
+      const imgIo = new IntersectionObserver((entries) => {
+        if (token.cancelled) return;
+        for (const ent of entries) {
+          (ent.isIntersecting ? _unparkImg : _parkImg)(ent.target);
+        }
+      }, { rootMargin: "300% 0px", threshold: 0 });
+      window._pcImgObserver = imgIo;
+      // Watch the eagerly-rendered first batch too (they're the ones a
+      // user scrolls PAST first, so they're the first to park).
+      grid.querySelectorAll(".card").forEach(c => imgIo.observe(c));
       const io = new IntersectionObserver((entries) => {
         if (token.cancelled) return;
         for (const ent of entries) {
@@ -2692,8 +2731,13 @@
           if (idx < 0 || idx >= segments.length) continue;
           const tmp = document.createElement("div");
           tmp.innerHTML = segments[idx];
-          // Move the real card into the placeholder's slot.
+          // Move the real card into the placeholder's slot, and start
+          // watching any freshly-materialized card for image parking.
+          const nodes = Array.from(tmp.childNodes);
           while (tmp.firstChild) ph.parentNode.insertBefore(tmp.firstChild, ph);
+          for (const n of nodes) {
+            if (n.nodeType === 1 && n.classList.contains("card")) imgIo.observe(n);
+          }
           io.unobserve(ph);
           ph.remove();
         }

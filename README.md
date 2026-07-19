@@ -52,6 +52,22 @@
 
 ## What's new
 
+**v2.24** — **image-memory virtualization: decoded thumbnails stay bounded**
+(see [`docs/ROADMAP-v2.24-charter.md`](docs/ROADMAP-v2.24-charter.md)). P-UX-18
+bounded the *initial* card DOM on huge runs, but once a placeholder
+materialized its thumbnail lived forever — scroll a 10k wedding to the bottom
+and you'd decoded 10k JPEGs into RAM (`loading="lazy"` only defers the first
+load, it never reclaims). A second IntersectionObserver now keeps decoded
+thumbnails to a window around the viewport: a card that recedes past ~3
+viewports **parks** its `<img>` (src → `data-parked-src`, src cleared, so the
+browser drops the decode) and restores it on re-approach. The card element,
+its decision badge, keyboard index and focus are untouched — only the
+`<img src>` toggles, and `.thumb-wrap`'s aspect-ratio holds the layout so the
+scrollbar never jumps. Measured on a 600-row run: as materialized cards grew
+100 → 352, **live thumbnails stayed pinned at ~48–76** (parked climbed to
+276) — image RAM now decouples from run size, deliberately without touching
+the fragile decision/render path.
+
 **v2.23** — **`pip install pixcull` gets its rails + the audit queue closes**
 (see [`docs/ROADMAP-v2.23-charter.md`](docs/ROADMAP-v2.23-charter.md)). Three
 threads land together. **PyPI rail**: the package metadata is PyPI-ready with
