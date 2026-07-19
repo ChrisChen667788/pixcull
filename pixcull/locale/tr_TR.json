@@ -182,5 +182,13 @@
   "workspace.disagree_review": "⚖ Uyuşmazlıkları incele",
   "toast.disagree_mode_enter": "⚖ Uyuşmazlık incelemesi: model ile kuralların ayrıştığı {n} fotoğraf, en emin olanlar önce — 1/2/3 ile karar ver; seçimlerin düzeltme setine işlenir",
   "toast.disagree_mode_blocked": "Filtrelerin tüm uyuşmazlıkları gizliyor — kaldır ya da çıkmak için tekrar tıkla",
-  "toast.disagree_cleared": "İnceleme tamam ✓ — seçimlerin düzeltme setinde"
+  "toast.disagree_cleared": "İnceleme tamam ✓ — seçimlerin düzeltme setinde",
+  "compare.tray.count": "{n} seçildi",
+  "compare.tray.hint": "daha fazlasını karşılaştırmak için seçmeye devam edin",
+  "compare.tray.open": "{n} karşılaştır",
+  "compare.tray.clear": "Temizle",
+  "toast.compare_added": "Karşılaştırmaya eklendi: {n} · Açmak için Enter, temizlemek için Esc",
+  "toast.compare_need_two": "Karşılaştırmak için en az iki seçin",
+  "compare.modal.title": "A/B karşılaştırma ({n})",
+  "compare.modal.meta": "score_final azalan; solda sistem seçimi. \"Bunu seç\" gerisini cull yapar."
 }

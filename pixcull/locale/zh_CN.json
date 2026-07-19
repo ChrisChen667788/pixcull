@@ -182,5 +182,13 @@
   "workspace.disagree_review": "⚖ 异议复核",
   "toast.disagree_mode_enter": "⚖ 异议复核:{n} 张模型与规则判定不一致,最有把握的分歧排最前 — 1/2/3 直接判,你的改判进纠正集",
   "toast.disagree_mode_blocked": "当前筛选挡住了所有分歧 — 清掉那些筛选,或再点一次退出复核",
-  "toast.disagree_cleared": "分歧复核完成 ✓ — 你的改判已写入纠正集"
+  "toast.disagree_cleared": "分歧复核完成 ✓ — 你的改判已写入纠正集",
+  "compare.tray.count": "已选 {n} 张",
+  "compare.tray.hint": "继续点选可多图比较",
+  "compare.tray.open": "比较 {n} 张",
+  "compare.tray.clear": "清空",
+  "toast.compare_added": "已加入比较:{n} 张 · 回车开图,Esc 清空",
+  "toast.compare_need_two": "至少选两张才能比较",
+  "compare.modal.title": "A/B 比较 ({n} 张)",
+  "compare.modal.meta": "按 score_final 降序;左为系统推荐。点「选这张」把其余标 cull。"
 }

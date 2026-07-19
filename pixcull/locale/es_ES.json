@@ -182,5 +182,13 @@
   "workspace.disagree_review": "⚖ Revisar discrepancias",
   "toast.disagree_mode_enter": "⚖ Revisión de discrepancias: {n} fotos donde el modelo y las reglas difieren, las más seguras primero — pulsa 1/2/3; tus decisiones alimentan el set de corrección",
   "toast.disagree_mode_blocked": "Tus filtros ocultan todas las discrepancias — quítalos o vuelve a pulsar para salir",
-  "toast.disagree_cleared": "Revisión completa ✓ — tus decisiones están en el set de corrección"
+  "toast.disagree_cleared": "Revisión completa ✓ — tus decisiones están en el set de corrección",
+  "compare.tray.count": "{n} seleccionadas",
+  "compare.tray.hint": "sigue eligiendo para comparar más",
+  "compare.tray.open": "Comparar {n}",
+  "compare.tray.clear": "Limpiar",
+  "toast.compare_added": "Añadida a comparar: {n} · Enter para abrir, Esc para limpiar",
+  "toast.compare_need_two": "Elige al menos dos para comparar",
+  "compare.modal.title": "Comparar A/B ({n})",
+  "compare.modal.meta": "Orden por score_final; la izquierda es la elección del sistema. \"Elegir esta\" descarta el resto."
 }

@@ -182,5 +182,13 @@
   "workspace.disagree_review": "⚖ 相違レビュー",
   "toast.disagree_mode_enter": "⚖ 相違レビュー:モデルとルールが食い違う {n} 枚、確信度の高い相違から — 1/2/3 で判定、あなたの判断は補正セットへ",
   "toast.disagree_mode_blocked": "現在のフィルタが相違をすべて隠しています — 解除するか、もう一度クリックで終了",
-  "toast.disagree_cleared": "相違レビュー完了 ✓ — あなたの判断を補正セットに記録"
+  "toast.disagree_cleared": "相違レビュー完了 ✓ — あなたの判断を補正セットに記録",
+  "compare.tray.count": "{n} 枚選択",
+  "compare.tray.hint": "さらに選ぶと複数枚比較",
+  "compare.tray.open": "{n} 枚を比較",
+  "compare.tray.clear": "クリア",
+  "toast.compare_added": "比較に追加:{n} 枚 · Enter で開く、Esc でクリア",
+  "toast.compare_need_two": "比較には最低 2 枚必要です",
+  "compare.modal.title": "A/B 比較 ({n} 枚)",
+  "compare.modal.meta": "score_final 降順;左がシステム推奨。「これを選ぶ」で残りを cull。"
 }

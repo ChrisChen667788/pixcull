@@ -182,5 +182,13 @@
   "workspace.disagree_review": "⚖ 이견 검토",
   "toast.disagree_mode_enter": "⚖ 이견 검토: 모델과 규칙이 다른 {n}장, 확신도 높은 이견부터 — 1/2/3으로 판정, 당신의 결정은 보정 세트로",
   "toast.disagree_mode_blocked": "현재 필터가 모든 이견을 숨기고 있습니다 — 필터를 해제하거나 다시 클릭해 종료하세요",
-  "toast.disagree_cleared": "이견 검토 완료 ✓ — 당신의 결정이 보정 세트에 기록되었습니다"
+  "toast.disagree_cleared": "이견 검토 완료 ✓ — 당신의 결정이 보정 세트에 기록되었습니다",
+  "compare.tray.count": "{n}장 선택",
+  "compare.tray.hint": "계속 선택하면 여러 장 비교",
+  "compare.tray.open": "{n}장 비교",
+  "compare.tray.clear": "지우기",
+  "toast.compare_added": "비교에 추가: {n}장 · Enter로 열기, Esc로 지우기",
+  "toast.compare_need_two": "비교하려면 최소 2장 선택",
+  "compare.modal.title": "A/B 비교 ({n}장)",
+  "compare.modal.meta": "score_final 내림차순; 왼쪽이 시스템 추천. \"이거 선택\"이 나머지를 cull."
 }

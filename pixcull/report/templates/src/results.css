@@ -2682,6 +2682,19 @@
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
       opacity: 0.92;
     }
+    .cmp-pick-tray .cmp-pick-fn {   /* v2.25 — now the running count */
+      font-weight: 600; opacity: 1;
+    }
+    /* v2.25 — the "open compare" button inside the tray (shown at >=2). */
+    .cmp-pick-tray .cmp-pick-go {
+      background: rgba(0,0,0,0.28);
+      border: 0; color: #fff;
+      padding: 4px 12px; border-radius: 999px;
+      font: inherit; font-weight: 600; cursor: pointer;
+      transition: background 120ms;
+    }
+    .cmp-pick-tray .cmp-pick-go:hover { background: rgba(0,0,0,0.5); }
+    .cmp-pick-tray .cmp-pick-go[hidden] { display: none; }
     .cmp-pick-tray .cmp-pick-cancel {
       background: rgba(0,0,0,0.25);
       border: 0; color: #fff;

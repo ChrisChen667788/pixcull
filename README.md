@@ -52,6 +52,19 @@
 
 ## What's new
 
+**v2.25** — **n-way A/B compare: line up 3–5 near-dups, not just pairs** (see
+[`docs/ROADMAP-v2.25-charter.md`](docs/ROADMAP-v2.25-charter.md)). The compare
+modal was already n-cell internally, but the free-pick entry point opened the
+instant you picked a second photo — a pro comparing 4–5 near-identical frames
+across two burst clusters had to do repeated 2-way rounds (a 2030Q3-audit UX
+gap). Picks now **accumulate into a set**: each pick toggles a photo in or out,
+the tray shows the running count with a **Compare (N)** button, and Enter / the
+button open the whole set in one n-cell compare (Esc clears). The lightbox `c`
+key keeps its fast 1:1-check-then-pair flow. Eight new locale keys wire the
+tray and toasts through `_t()`, and the compare modal's own title/meta join
+them (they were hardcoded Chinese). Verified: three picks → "Compare 3" → a
+3-cell modal; re-picking one toggles it back out.
+
 **v2.24** — **image-memory virtualization: decoded thumbnails stay bounded**
 (see [`docs/ROADMAP-v2.24-charter.md`](docs/ROADMAP-v2.24-charter.md)). P-UX-18
 bounded the *initial* card DOM on huge runs, but once a placeholder

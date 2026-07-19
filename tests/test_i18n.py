@@ -343,3 +343,38 @@ def test_disagree_queue_filter_and_sort_wired():
         "disagree filter predicate changed — must be pred≠decision")
     assert 's === "disagree"' in js, "disagree sort branch gone"
     assert '_toggleDisagreeReview' in js, "disagree toggle gone"
+
+
+# ── v2.25 — n-way A/B compare (accumulate a set, open n-cell modal) ──
+_COMPARE_KEYS = [
+    "compare.tray.count", "compare.tray.hint", "compare.tray.open",
+    "compare.tray.clear", "toast.compare_added", "toast.compare_need_two",
+    "compare.modal.title", "compare.modal.meta",
+]
+
+
+def test_compare_keys_present_in_every_locale():
+    for loc in SUPPORTED_LOCALES:
+        d = load_locale(loc)
+        for k in _COMPARE_KEYS:
+            assert isinstance(d.get(k), str) and d[k].strip(), (
+                f"{loc} missing compare key {k!r}")
+
+
+def test_compare_count_placeholders_intact():
+    for loc in SUPPORTED_LOCALES:
+        d = load_locale(loc)
+        for k in ("compare.tray.count", "compare.tray.open",
+                  "toast.compare_added", "compare.modal.title"):
+            assert "{n}" in d[k], f"{loc}: {k} lost the {{n}} placeholder"
+
+
+def test_compare_is_set_based_not_single_pin():
+    """The entry point must accumulate a SET (v2.25) rather than the old
+    single-A auto-open-at-2. Assert the set state + n-way open exist and
+    the legacy single-pin var is gone."""
+    js = _RESULTS_JS
+    assert "_compareSet" in js, "compare set state gone"
+    assert "_openComparePicked" in js, "n-way open helper gone"
+    assert "openCompareCustom(picks)" in js, "set no longer feeds the n-cell modal"
+    assert "_compareA" not in js, "legacy single-pin _compareA resurfaced"

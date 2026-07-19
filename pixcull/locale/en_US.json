@@ -182,5 +182,13 @@
   "workspace.disagree_review": "⚖ Review disagreements",
   "toast.disagree_mode_enter": "⚖ Disagreement review: {n} photos where the model and the rules disagree, most-confident splits first — press 1/2/3 to decide; your calls feed the correction set",
   "toast.disagree_mode_blocked": "Your current filters hide every disagreement — clear them, or click again to exit review",
-  "toast.disagree_cleared": "Disagreement review done ✓ — your calls are in the correction set"
+  "toast.disagree_cleared": "Disagreement review done ✓ — your calls are in the correction set",
+  "compare.tray.count": "{n} selected",
+  "compare.tray.hint": "keep picking to compare more",
+  "compare.tray.open": "Compare {n}",
+  "compare.tray.clear": "Clear",
+  "toast.compare_added": "Added to compare: {n} · Enter to open, Esc to clear",
+  "toast.compare_need_two": "Pick at least two to compare",
+  "compare.modal.title": "A/B compare ({n})",
+  "compare.modal.meta": "Sorted by score_final; left is the system pick. \"Pick this\" culls the rest."
 }

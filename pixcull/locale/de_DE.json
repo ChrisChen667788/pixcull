@@ -182,5 +182,13 @@
   "workspace.disagree_review": "⚖ Abweichungen prüfen",
   "toast.disagree_mode_enter": "⚖ Abweichungsprüfung: {n} Fotos, bei denen Modell und Regeln uneinig sind, sicherste zuerst — 1/2/3 entscheiden; deine Urteile fließen in den Korrektursatz",
   "toast.disagree_mode_blocked": "Deine Filter verbergen alle Abweichungen — entfernen oder erneut klicken zum Beenden",
-  "toast.disagree_cleared": "Abweichungsprüfung fertig ✓ — deine Urteile sind im Korrektursatz"
+  "toast.disagree_cleared": "Abweichungsprüfung fertig ✓ — deine Urteile sind im Korrektursatz",
+  "compare.tray.count": "{n} ausgewählt",
+  "compare.tray.hint": "weiter wählen für Mehrfachvergleich",
+  "compare.tray.open": "{n} vergleichen",
+  "compare.tray.clear": "Leeren",
+  "toast.compare_added": "Zum Vergleich hinzugefügt: {n} · Enter zum Öffnen, Esc zum Leeren",
+  "toast.compare_need_two": "Mindestens zwei zum Vergleichen wählen",
+  "compare.modal.title": "A/B-Vergleich ({n})",
+  "compare.modal.meta": "Nach score_final sortiert; links ist die Systemwahl. „Diese wählen\" cullt den Rest."
 }

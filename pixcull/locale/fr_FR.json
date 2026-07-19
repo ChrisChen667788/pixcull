@@ -182,5 +182,13 @@
   "workspace.disagree_review": "⚖ Revoir les écarts",
   "toast.disagree_mode_enter": "⚖ Revue des écarts : {n} photos où le modèle et les règles divergent, les plus sûres d’abord — 1/2/3 pour trancher ; vos choix alimentent le jeu de correction",
   "toast.disagree_mode_blocked": "Vos filtres masquent tous les écarts — retirez-les ou cliquez à nouveau pour quitter",
-  "toast.disagree_cleared": "Revue des écarts terminée ✓ — vos choix sont dans le jeu de correction"
+  "toast.disagree_cleared": "Revue des écarts terminée ✓ — vos choix sont dans le jeu de correction",
+  "compare.tray.count": "{n} sélectionnées",
+  "compare.tray.hint": "continuez à choisir pour comparer plus",
+  "compare.tray.open": "Comparer {n}",
+  "compare.tray.clear": "Vider",
+  "toast.compare_added": "Ajoutée à comparer : {n} · Entrée pour ouvrir, Échap pour vider",
+  "toast.compare_need_two": "Choisissez au moins deux pour comparer",
+  "compare.modal.title": "Comparaison A/B ({n})",
+  "compare.modal.meta": "Trié par score_final ; à gauche le choix système. « Choisir celle-ci » écarte le reste."
 }

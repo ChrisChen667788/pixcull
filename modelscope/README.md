@@ -54,7 +54,14 @@ tasks:
 完整源码 + iOS 伴侣 App + Lightroom 插件,均在 GitHub:
 **[github.com/ChrisChen667788/pixcull](https://github.com/ChrisChen667788/pixcull)**
 
-## v0.7 → v2.24 主要更新
+## v0.7 → v2.25 主要更新
+- **v2.25**:**n 路 A/B 比较:一次比 3-5 张近似片,不止两两** —— compare modal
+  本已是 n 格,但自由配对入口选到第 2 张就立即开图,一个 pro 要比 4-5 张跨连拍组
+  的近似片得做多轮两两(Q3 审计 UX 缺口)。现在选片**累积成集**:每次点选 toggle
+  进/出,托盘显示计数 + **比较 (N)** 按钮,回车/点按钮把整集在一个 n 格比较里打开
+  (Esc 清空);lightbox `c` 键保留快速 1:1-核对-配对流。8 个新 locale 键把托盘/
+  toast 接进 `_t()`,顺手把 compare modal 标题/说明也接了(之前硬编码中文)。实测:
+  点 3 张 → "Compare 3" → 3 格 modal;再点一张 toggle 移除。详见 `docs/ROADMAP-v2.25-charter.md`。
 - **v2.24**:**图片内存虚拟化:已解码缩略图恒定** —— P-UX-18 只限住大 run 的
   首屏卡片 DOM,但卡片一旦物化,它的缩略图就永久驻留——把 10k 婚礼滚到底就把
   10k 张 JPEG 解码进内存(`loading="lazy"` 只延迟首次加载、从不回收)。第二个

@@ -811,13 +811,18 @@
     </div>
   </aside>
 
+  <!-- v2.25 — n-way compare pick tray. Was a single-A pin that opened
+       the modal on the 2nd click; now it accumulates a set so a pro can
+       line up 3-5 near-dups from different burst clusters in ONE compare.
+       cmpPickFn holds the running count; the open button is enabled at
+       >=2; Enter / the button open, Esc / clear empties. -->
   <div class="cmp-pick-tray" id="cmpPickTray" role="status"
        aria-live="polite">
-    <span>已选 <b>A</b>:</span>
     <span class="cmp-pick-fn" id="cmpPickFn"></span>
-    <span style="opacity:0.85">· 点选第二张比较 (Esc 取消)</span>
+    <span class="cmp-pick-hint" id="cmpPickHint" style="opacity:0.85"></span>
+    <button class="cmp-pick-go" id="cmpPickGo" type="button" hidden></button>
     <button class="cmp-pick-cancel" id="cmpPickCancel"
-            type="button" title="取消比较选择 (Esc)">×</button>
+            type="button" title="清空比较选择 (Esc)">×</button>
   </div>
 
   <!-- P-UX-4 — reject-reason quick picker. Appears after every cull

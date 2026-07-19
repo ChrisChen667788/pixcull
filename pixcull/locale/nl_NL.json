@@ -182,5 +182,13 @@
   "workspace.disagree_review": "⚖ Verschillen bekijken",
   "toast.disagree_mode_enter": "⚖ Verschilcontrole: {n} foto’s waar model en regels het oneens zijn, meest zekere eerst — druk 1/2/3; jouw keuzes voeden de correctieset",
   "toast.disagree_mode_blocked": "Je filters verbergen alle verschillen — verwijder ze of klik opnieuw om te stoppen",
-  "toast.disagree_cleared": "Verschilcontrole klaar ✓ — je keuzes staan in de correctieset"
+  "toast.disagree_cleared": "Verschilcontrole klaar ✓ — je keuzes staan in de correctieset",
+  "compare.tray.count": "{n} geselecteerd",
+  "compare.tray.hint": "blijf kiezen om meer te vergelijken",
+  "compare.tray.open": "{n} vergelijken",
+  "compare.tray.clear": "Wissen",
+  "toast.compare_added": "Toegevoegd om te vergelijken: {n} · Enter om te openen, Esc om te wissen",
+  "toast.compare_need_two": "Kies er minstens twee om te vergelijken",
+  "compare.modal.title": "A/B-vergelijking ({n})",
+  "compare.modal.meta": "Gesorteerd op score_final; links is de systeemkeuze. \"Kies deze\" cullt de rest."
 }

@@ -182,5 +182,13 @@
   "workspace.disagree_review": "⚖ Rivedi le divergenze",
   "toast.disagree_mode_enter": "⚖ Revisione divergenze: {n} foto dove modello e regole non concordano, prima le più sicure — premi 1/2/3; le tue scelte alimentano il set di correzione",
   "toast.disagree_mode_blocked": "I tuoi filtri nascondono tutte le divergenze — rimuovili o clicca di nuovo per uscire",
-  "toast.disagree_cleared": "Revisione completata ✓ — le tue scelte sono nel set di correzione"
+  "toast.disagree_cleared": "Revisione completata ✓ — le tue scelte sono nel set di correzione",
+  "compare.tray.count": "{n} selezionate",
+  "compare.tray.hint": "continua a scegliere per confrontare di più",
+  "compare.tray.open": "Confronta {n}",
+  "compare.tray.clear": "Svuota",
+  "toast.compare_added": "Aggiunta al confronto: {n} · Invio per aprire, Esc per svuotare",
+  "toast.compare_need_two": "Scegli almeno due da confrontare",
+  "compare.modal.title": "Confronto A/B ({n})",
+  "compare.modal.meta": "Ordinato per score_final; a sinistra la scelta del sistema. \"Scegli questa\" scarta il resto."
 }

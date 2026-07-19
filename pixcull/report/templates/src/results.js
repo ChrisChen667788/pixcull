@@ -204,6 +204,8 @@
         db.innerHTML = `${_t("workspace.disagree_review", "⚖ 异议复核")}`
           + ` <b data-stat="disagree">${n}</b>`;
       }
+      // v2.25 — retranslate the compare tray if it's showing.
+      if (typeof _updateCmpPickUI === "function") _updateCmpPickUI();
     } catch (_e) { /* non-results contexts have neither element */ }
     return true;
   }
@@ -5357,9 +5359,9 @@
       if (lb.classList.contains("show")) { lb.classList.remove("show"); return; }
       const bm = document.getElementById("browserModal");
       if (bm && bm.classList.contains("show")) { bm.classList.remove("show"); return; }
-      // P-UX-3 — Esc also cancels a pending A/B compare pick. This
+      // P-UX-3 — Esc also clears a pending A/B compare selection. This
       // is last in the chain so any open modal still takes priority.
-      if (_compareA) { cancelComparePick(); return; }
+      if (_compareSet.length) { cancelComparePick(); return; }
       // P-UX-4 — Esc also dismisses the cull-reason picker tray.
       if (cullReasonTray && cullReasonTray.classList.contains("show")) {
         _hideCullReasonTray(); return;
@@ -5428,21 +5430,21 @@
                        rect.top  + rect.height / 2);
         return;
       }
-      // P-UX-3 — c inside lightbox = pin the current photo for A/B
-      // compare. If A is already pinned, this closes the lightbox
-      // and opens the compare modal with [A, current]; if not, the
-      // current frame becomes A. Lets the user 1:1-check then pin.
+      // P-UX-3 / v2.25 — c inside lightbox adds the current photo to the
+      // compare set. Once the set reaches 2, close the lightbox and open
+      // the compare (the fast 1:1-check-then-pin flow is preserved); if
+      // you've already lined up more from the grid, all of them open.
       if (e.key === "c" || e.key === "C") {
         e.preventDefault();
         if (!_lbCurrentFn) return;
         const cur = _lbCurrentFn;
-        if (_compareA && _compareA !== cur) {
+        const wasPicked = _compareSet.includes(cur);
+        pinForCompare(cur);   // toggles cur in/out of the set
+        if (!wasPicked && _compareSet.length >= 2) {
           lb.classList.remove("show");
           // Defer one tick so the lightbox-close transition starts
           // before the modal animates in.
-          setTimeout(() => pinForCompare(cur), 30);
-        } else {
-          pinForCompare(cur);
+          setTimeout(() => _openComparePicked(), 30);
         }
         return;
       }
@@ -5539,7 +5541,11 @@
     }
     else if (e.key === "Enter") {
       e.preventDefault();
-      if (focusedFn && typeof openAnnotation === "function") {
+      // v2.25 — if a compare set is pending (>=2), Enter opens the
+      // n-way compare; otherwise Enter opens the annotation modal.
+      if (_compareSet.length >= 2) {
+        _openComparePicked();
+      } else if (focusedFn && typeof openAnnotation === "function") {
         openAnnotation(focusedFn);
       }
     }
@@ -7650,48 +7656,68 @@
   // mode (they're cluster-specific and would mis-step).
   // ==================================================================
 
-  let _compareA = null;  // filename of the pinned photo, or null
+  // v2.25 — n-way compare. Was a single pinned "A" that opened the
+  // modal the instant a 2nd photo was picked; the compare modal itself
+  // is n-cell (openCompareCustom takes any list), so the only real cap
+  // was this entry point. Now picks ACCUMULATE into a set: a pro can
+  // line up 3-5 near-dups spanning two burst clusters and open ONE
+  // compare. Enter / the tray button open (at >=2); Esc / clear empties.
+  const _compareSet = [];   // ordered list of picked filenames
   const cmpPickTray   = document.getElementById("cmpPickTray");
   const cmpPickFn     = document.getElementById("cmpPickFn");
+  const cmpPickHint   = document.getElementById("cmpPickHint");
+  const cmpPickGo     = document.getElementById("cmpPickGo");
   const cmpPickCancel = document.getElementById("cmpPickCancel");
 
   function _updateCmpPickUI() {
-    // Reflect _compareA into the floating tray + per-card class.
-    cmpPickTray.classList.toggle("show", _compareA != null);
-    if (_compareA) cmpPickFn.textContent = _compareA;
-    // Sync .compare-a class on visible cards
-    grid.querySelectorAll(".card.compare-a").forEach(c => {
-      if (!_compareA || c.dataset.fn !== _compareA) {
-        c.classList.remove("compare-a");
-      }
-    });
-    if (_compareA) {
-      grid.querySelectorAll(`.card[data-fn]`).forEach(c => {
-        if (c.dataset.fn === _compareA) c.classList.add("compare-a");
-      });
+    const n = _compareSet.length;
+    cmpPickTray.classList.toggle("show", n > 0);
+    if (cmpPickFn) {
+      cmpPickFn.textContent =
+        _t("compare.tray.count", "已选 {n} 张").replace("{n}", String(n));
     }
+    if (cmpPickHint) {
+      cmpPickHint.textContent = "· " + _t("compare.tray.hint", "继续点选可多图比较");
+    }
+    if (cmpPickGo) {
+      cmpPickGo.hidden = (n < 2);
+      cmpPickGo.textContent =
+        _t("compare.tray.open", "比较 {n} 张").replace("{n}", String(n));
+    }
+    // Ring every picked card that's currently in the DOM.
+    const picked = new Set(_compareSet);
+    grid.querySelectorAll(".card[data-fn]").forEach(c => {
+      c.classList.toggle("compare-a", picked.has(c.dataset.fn));
+    });
   }
   function cancelComparePick() {
-    _compareA = null;
+    _compareSet.length = 0;
     _updateCmpPickUI();
   }
   function pinForCompare(filename) {
     if (!filename) return;
-    if (!_compareA) {
-      _compareA = filename;
+    // Toggle: re-picking a selected photo removes it from the set.
+    const at = _compareSet.indexOf(filename);
+    if (at >= 0) {
+      _compareSet.splice(at, 1);
       _updateCmpPickUI();
-      showToast(`已选 A: ${filename} · 点选第二张 (Esc 取消)`, "info");
       return;
     }
-    if (_compareA === filename) {
-      // Re-pinning the same card just cancels.
-      cancelComparePick();
+    _compareSet.push(filename);
+    _updateCmpPickUI();
+    showToast(_t("toast.compare_added",
+      "已加入比较:{n} 张 · 回车开图,Esc 清空").replace("{n}", String(_compareSet.length)),
+      "info");
+  }
+  // Open the accumulated set in the n-cell compare modal, then clear.
+  function _openComparePicked() {
+    if (_compareSet.length < 2) {
+      showToast(_t("toast.compare_need_two", "至少选两张才能比较"), "error");
       return;
     }
-    // Two photos selected → open the compare modal in custom mode.
-    const a = _compareA, b = filename;
+    const picks = _compareSet.slice();
     cancelComparePick();
-    openCompareCustom([a, b]);
+    openCompareCustom(picks);
   }
 
   // Generalized version of openCompare() that accepts an arbitrary
@@ -7708,9 +7734,10 @@
     }
     members.sort((a, b) => (b.score_final ?? 0) - (a.score_final ?? 0));
     const best = members[0];
-    cmpTitle.textContent = `A/B 比较 (${members.length} 张)`;
-    cmpMeta.textContent =
-      `按 score_final 降序;左为系统推荐。点 "选这张" 把另一张标 cull。`;
+    cmpTitle.textContent = _t("compare.modal.title", "A/B 比较 ({n} 张)")
+      .replace("{n}", String(members.length));
+    cmpMeta.textContent = _t("compare.modal.meta",
+      `按 score_final 降序;左为系统推荐。点 "选这张" 把另一张标 cull。`);
 
     const axisAbbr = {technical:"技", subject:"主", composition:"构",
                        light:"光", moment:"瞬", aesthetic:"美"};
@@ -7886,6 +7913,7 @@
   }, true);  // capture phase so we get ahead of the existing thumb-click → openLightbox
 
   cmpPickCancel.addEventListener("click", () => cancelComparePick());
+  cmpPickGo?.addEventListener("click", () => _openComparePicked());
 
   // ==================================================================
   // P-UX-25 — multi-tab annotation conflict guard. Two scenarios this

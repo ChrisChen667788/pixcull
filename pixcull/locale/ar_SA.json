@@ -182,5 +182,13 @@
   "workspace.disagree_review": "⚖ مراجعة الاختلافات",
   "toast.disagree_mode_enter": "⚖ مراجعة الاختلافات: {n} صورة يختلف فيها النموذج عن القواعد، الأعلى ثقة أولًا — اضغط 1/2/3؛ قراراتك تُغذّي مجموعة التصحيح",
   "toast.disagree_mode_blocked": "مرشحاتك تخفي كل الاختلافات — أزلها أو اضغط مجددًا للخروج",
-  "toast.disagree_cleared": "اكتملت المراجعة ✓ — قراراتك في مجموعة التصحيح"
+  "toast.disagree_cleared": "اكتملت المراجعة ✓ — قراراتك في مجموعة التصحيح",
+  "compare.tray.count": "{n} محدد",
+  "compare.tray.hint": "واصل الاختيار لمقارنة المزيد",
+  "compare.tray.open": "قارن {n}",
+  "compare.tray.clear": "مسح",
+  "toast.compare_added": "أُضيفت للمقارنة: {n} · Enter للفتح، Esc للمسح",
+  "toast.compare_need_two": "اختر صورتين على الأقل للمقارنة",
+  "compare.modal.title": "مقارنة A/B ({n})",
+  "compare.modal.meta": "مرتّبة حسب score_final؛ اليسار اختيار النظام. \"اختر هذه\" يستبعد الباقي."
 }
