@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PixCull · Tethered Live</title>
+<style>
+/*__DESIGN_TOKENS_CSS__*/
+  *,*::before,*::after { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; background: var(--bg); color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+                 "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 880px; margin: 0 auto; padding: 48px 24px; }
+  h1 { font-size: 28px; font-weight: 700; margin: 0 0 4px; }
+  h1 .live-dot {
+    display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+    background: var(--c-danger); margin-left: 10px;
+    box-shadow: 0 0 0 0 rgba(248,113,113,0.6);
+    animation: pulse 1.6s var(--ease-out) infinite;
+    vertical-align: middle;
+  }
+  @keyframes pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(248,113,113,0.55); }
+    70%  { box-shadow: 0 0 0 12px rgba(248,113,113,0); }
+    100% { box-shadow: 0 0 0 0 rgba(248,113,113,0); }
+  }
+  .sub { color: var(--muted); margin: 0 0 24px; font-size: 13px; }
+  .panel { background: var(--bg-card); border: 1px solid var(--border);
+           border-radius: var(--radius-lg, 10px); padding: 18px 22px; margin-bottom: 16px; }
+  .panel h2 { font-size: 15px; margin: 0 0 12px; letter-spacing: 0.03em;
+              text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .row label { color: var(--muted); font-size: 12px; min-width: 92px; }
+  input[type=text], select {
+    flex: 1; padding: 8px 12px; background: var(--surface-2, rgba(255,255,255,0.06));
+    border: 1px solid var(--border); border-radius: 6px; color: var(--fg);
+    font-size: 13px; font-family: inherit; min-width: 260px;
+  }
+  button {
+    padding: 8px 18px; border: 1px solid var(--accent); background: var(--accent);
+    color: #fff; border-radius: 6px; cursor: pointer; font-size: 13px;
+    font-weight: 600; font-family: inherit;
+    transition: transform 120ms var(--ease-out), background 120ms var(--ease-out);
+  }
+  button:hover { transform: translateY(-1px); }
+  button.ghost { background: transparent; color: var(--fg); border-color: var(--border); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+  .status-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); gap: 10px;
+    margin-top: 10px;
+  }
+  .stat { background: var(--surface-2, rgba(255,255,255,0.04)); padding: 10px 12px;
+          border-radius: 6px; border: 1px solid var(--border); }
+  .stat .k { color: var(--muted); font-size: 10.5px; letter-spacing: 0.05em;
+             text-transform: uppercase; }
+  .stat .v { color: var(--fg); font-size: 18px; font-weight: 700; margin-top: 2px;
+             font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+  .live-row {
+    background: var(--surface-2, rgba(255,255,255,0.04));
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 10px 14px; font-size: 12px; color: var(--fg-2, var(--fg));
+    display: flex; gap: 12px; align-items: center;
+  }
+  .live-row .dec {
+    padding: 2px 8px; border-radius: 4px; font-weight: 600;
+    font-size: 10.5px; letter-spacing: 0.04em; text-transform: uppercase;
+  }
+  .live-row .dec.keep  { background: var(--c-success); color: #fff; }
+  .live-row .dec.maybe { background: var(--c-warn);    color: #fff; }
+  .live-row .dec.cull  { background: var(--c-danger);  color: #fff; }
+  .live-row .fn { font-family: ui-monospace, "SF Mono", Menlo, monospace; flex: 1; }
+  .live-row .when { color: var(--muted); font-size: 10.5px; }
+  .empty { color: var(--muted); font-size: 12px; padding: 20px; text-align: center; }
+  a.openrun {
+    display: inline-block; margin-top: 12px; padding: 8px 14px;
+    background: transparent; border: 1px solid var(--border); border-radius: 6px;
+    color: var(--fg); text-decoration: none; font-size: 12px;
+  }
+  a.openrun:hover { border-color: var(--accent); }
+  .note { color: var(--muted); font-size: 11.5px; margin-top: 12px; line-height: 1.5; }
+</style>
+</head>
+<body>
+  <main>
+    <h1>Tethered Live <span class="live-dot" id="liveDot" style="display:none"></span></h1>
+    <p class="sub">监听某个 tether 文件夹 — 新照片落地即刻分析,grid 实时刷新。</p>
+
+    <section class="panel">
+      <h2>开始监听</h2>
+      <div class="row">
+        <label for="tetherFolder">文件夹路径</label>
+        <input type="text" id="tetherFolder" placeholder="/Users/you/Pictures/tether 或 拖文件夹到这里"/>
+        <button id="startBtn" type="button">▶ 开始</button>
+      </div>
+      <p class="note">支持本地任意文件夹。session 启动时会快照当前已有文件,只对新增的文件分析(不会重新分析已有照片)。</p>
+    </section>
+
+    <section class="panel">
+      <h2>会话状态</h2>
+      <div id="sessionsWrap"><div class="empty">还没有正在运行的会话。</div></div>
+    </section>
+  </main>
+
+<script>
+  const startBtn = document.getElementById("startBtn");
+  const folderInput = document.getElementById("tetherFolder");
+  const sessionsWrap = document.getElementById("sessionsWrap");
+  const liveDot = document.getElementById("liveDot");
+
+  startBtn.addEventListener("click", async () => {
+    const folder = folderInput.value.trim();
+    if (!folder) { alert("请输入或粘贴文件夹路径"); return; }
+    startBtn.disabled = true; const orig = startBtn.textContent;
+    startBtn.textContent = "启动中…";
+    try {
+      const r = await fetch("/tether/start", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({folder}),
+      });
+      if (!r.ok) {
+        const t = await r.text();
+        throw new Error(`HTTP ${r.status} ${t.slice(0,80)}`);
+      }
+      const d = await r.json();
+      folderInput.value = "";
+      await refresh();
+      // Open the run in a new tab so the user has the live grid
+      // beside this control panel.
+      window.open(d.url, "_blank");
+    } catch (err) {
+      alert("启动失败: " + err.message);
+    } finally {
+      startBtn.disabled = false; startBtn.textContent = orig;
+    }
+  });
+
+  function fmtAge(epochSec) {
+    if (!epochSec) return "—";
+    const ageSec = Math.max(0, Math.floor(Date.now()/1000 - epochSec));
+    if (ageSec < 5)    return "刚刚";
+    if (ageSec < 60)   return `${ageSec} 秒前`;
+    if (ageSec < 3600) return `${Math.floor(ageSec/60)} 分前`;
+    return `${Math.floor(ageSec/3600)} 时前`;
+  }
+
+  async function refresh() {
+    try {
+      const r = await fetch("/tether/sessions");
+      const d = await r.json();
+      const sessions = d.sessions || [];
+      if (!sessions.length) {
+        sessionsWrap.innerHTML = `<div class="empty">还没有正在运行的会话。</div>`;
+        liveDot.style.display = "none";
+        return;
+      }
+      liveDot.style.display = "";
+      sessionsWrap.innerHTML = sessions.map(s => {
+        const last = s.last || {};
+        return `
+        <div class="panel" style="margin-top:8px;padding:14px 18px" data-sid="${s.session_id}">
+          <div style="display:flex;gap:10px;align-items:baseline;justify-content:space-between">
+            <div>
+              <div style="font-weight:600">${escapeHtml(s.folder)}</div>
+              <div style="color:var(--muted);font-size:11px;margin-top:2px">${s.session_id}${s.vertical ? ' · ' + s.vertical : ''}${s.running ? '' : ' · <span style="color:var(--c-warn)">已停止</span>'}</div>
+            </div>
+            <div style="display:flex;gap:6px">
+              <button class="ghost stop-btn" data-sid="${s.session_id}" type="button" ${s.running ? '' : 'disabled'}>⏹ 停止</button>
+              <a class="openrun" href="/results/${s.run_id}" target="_blank">查看 grid →</a>
+            </div>
+          </div>
+          <div class="status-grid">
+            <div class="stat"><div class="k">已分析</div><div class="v">${s.n_analyzed || 0}</div></div>
+            <div class="stat"><div class="k">失败</div><div class="v">${s.n_failed || 0}</div></div>
+            <div class="stat"><div class="k">运行时长</div><div class="v">${fmtDuration(s.elapsed_s)}</div></div>
+            <div class="stat"><div class="k">最后事件</div><div class="v">${fmtAge(last.at)}</div></div>
+          </div>
+          ${last.filename ? `
+          <div class="live-row" style="margin-top:10px">
+            <span class="dec ${last.decision || 'maybe'}">${last.decision || '—'}</span>
+            <span class="fn">${escapeHtml(last.filename)}</span>
+            <span class="when">${fmtAge(last.at)}</span>
+          </div>` : ''}
+        </div>
+      `;
+      }).join("");
+      // Wire stop buttons
+      sessionsWrap.querySelectorAll(".stop-btn").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          if (!confirm("停止这个 tether 会话?")) return;
+          await fetch(`/tether/${btn.dataset.sid}/stop`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+          });
+          refresh();
+        });
+      });
+    } catch (_e) { /* offline / temp error — keep last render */ }
+  }
+  function fmtDuration(sec) {
+    if (!sec) return "—";
+    sec = Math.floor(sec);
+    if (sec < 60) return `${sec}s`;
+    if (sec < 3600) return `${Math.floor(sec/60)}m ${sec%60}s`;
+    return `${Math.floor(sec/3600)}h ${Math.floor((sec%3600)/60)}m`;
+  }
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c =>
+      ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  // Poll every 2s — tight enough to feel live, slack enough to
+  // not drown the server on a long shoot.
+  refresh();
+  setInterval(refresh, 2000);
+</script>
+</body>
+</html>

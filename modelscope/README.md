@@ -54,7 +54,17 @@ tasks:
 完整源码 + iOS 伴侣 App + Lightroom 插件,均在 GitHub:
 **[github.com/ChrisChen667788/pixcull](https://github.com/ChrisChen667788/pixcull)**
 
-## v0.7 → v2.27 主要更新
+## v0.7 → v2.28 主要更新
+- **v2.28**:**serve_demo 内联 HTML 抽取(v2.27 暂缓项,做对)** —— v2.27 评估后暂缓,
+  本轮在**字节级路由验证网**下落地:抓取每条路由抽取前的渲染字节 → 抽取 → 重启 →
+  抓取后字节 → `diff` 必须空。3 个干净静态壳型处理器抽到 `templates/pages/*.html`:
+  `_serve_tether_page`(纯静态 219 行)、`_serve_history_page`、`_serve_disagreement_page`
+  (静态壳 + 少数占位符注入)。模板用**源码块 eval 法**机械生成(动态操作数换占位符
+  字面量再求值,零手抄)。**serve_demo.py 12,909→12,518 行**,3 条路由抽取后字节完全一致。
+  另 3 个处理器(`_render_share_html`/`_serve_bias_audit_page`/`_serve_companion_page`)
+  **刻意留 inline**——重 f-string 交织(多达 ~40 处插值),抽成模板反而更难读,且其动态
+  路径(如 bias 内联 annotator-chip 生成器)从空态路由无法字节验证。理由已写进 CLAUDE.md。
+  详见 `docs/ROADMAP-v2.28-charter.md`。
 - **v2.27**:**results.css 继续模块化** —— 承接 v2.22 的 `@@CSS:` 拼接基建,再抽 5 个
   内聚块出巨石:card(557 行)· modal(283)· chips(1398,统一 chip 系统+legacy)·
   marquee(183)· library-panel(142)。**results.css 4,812→2,268 行**(原始 5,797;

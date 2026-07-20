@@ -66,3 +66,37 @@ def test_design_tokens_actually_spliced(server_mod):
         # ...and the raw template file carries the placeholder instead.
         raw = (_PAGES / _EXPECTED[const]).read_text(encoding="utf-8")
         assert _TOKEN in raw, f"{_EXPECTED[const]}: placeholder missing in file"
+
+
+# ── v2.28 — request-time page templates (loaded in-method, not as module
+# constants): tether (fully static), history + disagreement (static shell
+# + placeholder injections). Guard existence + placeholders so the
+# extraction can't silently regress. Their routes are byte-verified in
+# CI-adjacent manual checks; here we assert the template contract.
+_INMETHOD_PAGES = {
+    "tether.html":       ["/*__DESIGN_TOKENS_CSS__*/"],
+    "history.html":      ["/*__DESIGN_TOKENS_CSS__*/",
+                          "<!--__HISTORY_COUNT__-->", "<!--__HISTORY_CARDS__-->"],
+    "disagreement.html": ["<!--__DIS_NROWS_META__-->",
+                          "<!--__DIS_ROWS__-->", "<!--__DIS_PER_RUN__-->"],
+}
+
+
+def test_inmethod_page_templates_exist_with_placeholders():
+    for fname, placeholders in _INMETHOD_PAGES.items():
+        p = _PAGES / fname
+        assert p.exists(), f"missing in-method template {fname}"
+        text = p.read_text(encoding="utf-8")
+        assert text[:20].lower().startswith("<!doctype html"), fname
+        assert len(text) > 800, f"{fname} suspiciously small"
+        for ph in placeholders:
+            assert text.count(ph) == 1, (
+                f"{fname}: placeholder {ph!r} must appear exactly once "
+                f"(found {text.count(ph)})")
+
+
+def test_inmethod_templates_referenced_by_serve_demo():
+    src = (_REPO / "scripts" / "serve_demo.py").read_text("utf-8")
+    for fname in _INMETHOD_PAGES:
+        assert f'_read_template("pages/{fname}")' in src, (
+            f"serve_demo no longer loads pages/{fname}")

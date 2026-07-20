@@ -97,9 +97,15 @@ Audit the diff before any push (`git -C <repo> diff origin/main..main`):
 - Web demo: `scripts/serve_demo.py` (BaseHTTPRequestHandler;
   `_DEMO_ROOT=/tmp/pixcull_demo`, env-overridable via
   `PIXCULL_DEMO_ROOT`; routes via `if path.startswith(...)`
-  in `do_GET`/`do_POST`; the 7 standalone pages — upload/verticals/admin/…
-  — live as `templates/pages/*.html` since v2.16, loaded via
-  `_read_template`).  UI: `pixcull/report/templates/results.html`
+  in `do_GET`/`do_POST`; the standalone pages — upload/verticals/admin/
+  tether/history/disagreement/… — live as `templates/pages/*.html`
+  (7 static ones since v2.16; v2.28 added tether [static] + history +
+  disagreement [static shell + placeholder injections]), loaded via
+  `_read_template`.  The remaining inline-HTML handlers
+  (`_render_share_html`, `_serve_bias_audit_page`,
+  `_serve_companion_page`) stay inline — heavily f-string-interleaved
+  dynamic builders whose template extraction would reduce readability and
+  can't be byte-verified via the empty-state route alone).  UI: `pixcull/report/templates/results.html`
   (single-file at *runtime*; since v2.5 it is a **built artifact** —
   edit `templates/src/{results.src.html,results.css,results.js}` **or a
   subsystem file in `templates/src/modules/*.js`** (v2.16: spliced back

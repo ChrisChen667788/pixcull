@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PixCull · 历史时间线</title>
+<style>
+/*__DESIGN_TOKENS_CSS__*/
+  *,*::before,*::after { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; background: var(--bg); color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+                 "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  header {
+    padding: 36px 24px 18px; border-bottom: 1px solid var(--border);
+    text-align: center;
+  }
+  header h1 { margin: 0 0 4px; font-size: 26px; font-weight: 700; }
+  header .sub { color: var(--muted); margin: 0; font-size: 13px; }
+  header a.back { color: var(--muted); font-size: 12px;
+                  text-decoration: none; margin-right: 12px; }
+  header a.back:hover { color: var(--fg); }
+  main { padding: 28px 24px; max-width: 1280px; margin: 0 auto; }
+  .count { text-align: center; color: var(--muted); font-size: 12px;
+           margin: 0 0 18px; letter-spacing: 0.04em; text-transform: uppercase; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 14px;
+  }
+  .card {
+    display: block; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: var(--radius-lg, 10px); overflow: hidden;
+    color: inherit; text-decoration: none;
+    transition: transform var(--duration-fast, 160ms) var(--ease-out),
+                border-color var(--duration-fast, 160ms) var(--ease-out);
+  }
+  .card:hover { transform: translateY(-2px); border-color: var(--accent); }
+  .thumb { aspect-ratio: 4/3; background: var(--surface-2, #1a1d22);
+           display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .no-thumb { color: var(--muted); font-size: 32px; opacity: 0.4; }
+  .meta { padding: 12px 14px; }
+  .rid {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 11.5px; color: var(--fg);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .when { color: var(--muted); font-size: 11px; margin-top: 2px; }
+  .when .src { color: var(--fg-2, var(--fg)); }
+  .bar {
+    display: flex; height: 6px; margin: 10px 0 6px;
+    border-radius: 3px; overflow: hidden; background: var(--surface-2, #2a2d33);
+  }
+  .bar .seg { display: inline-block; min-width: 0; height: 100%; }
+  .bar .seg.k { background: var(--c-success); }
+  .bar .seg.m { background: var(--c-warn); }
+  .bar .seg.c { background: var(--c-danger); }
+  .counts { font-size: 11px; color: var(--muted);
+            font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+  .counts .k { color: var(--c-success); }
+  .counts .m { color: var(--c-warn); }
+  .counts .c { color: var(--c-danger); }
+  .empty { text-align: center; color: var(--muted); padding: 60px 12px;
+           font-size: 14px; line-height: 1.6; }
+  @media (max-width: 640px) {
+    header { padding: 22px 14px 14px; }
+    header h1 { font-size: 19px; }
+    main { padding: 16px 12px; }
+    .grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
+  }
+  /* v0.11-P1-5 — history page hero reveal.  Header staggers in
+     above the timeline grid; each card cascades up with a per-card
+     --idx delay so the cull rate "bars" land last (verdict feel). */
+  body.hero-revealing header { animation: histRevH 460ms cubic-bezier(0.2,0.8,0.2,1) both; }
+  body.hero-revealing .count { animation: histRevH 460ms cubic-bezier(0.2,0.8,0.2,1) both;
+                               animation-delay: 80ms; }
+  body.hero-revealing .grid .card {
+    animation: histCardUp 560ms cubic-bezier(0.2,0.8,0.2,1) both;
+    animation-delay: calc(180ms + min(var(--idx, 0), 48) * 28ms);
+  }
+  body.hero-revealing .grid .card .bar {
+    animation: histBarPop 520ms cubic-bezier(0.34,1.56,0.64,1) both;
+    animation-delay: calc(380ms + min(var(--idx, 0), 48) * 28ms);
+    transform-origin: 0 50%;
+  }
+  @keyframes histRevH    { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+  @keyframes histCardUp  { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+  @keyframes histBarPop  { from { opacity: 0; transform: scaleX(0); } 60% { opacity: 1; transform: scaleX(1.06); }
+                           to { opacity: 1; transform: scaleX(1); } }
+  @media (prefers-reduced-motion: reduce) {
+    body.hero-revealing header,
+    body.hero-revealing .count,
+    body.hero-revealing .grid .card,
+    body.hero-revealing .grid .card .bar { animation: none; }
+  }
+</style>
+</head>
+<body class="hero-revealing">
+  <script>setTimeout(() => document.body.classList.remove("hero-revealing"), 1900);
+          /* per-card --idx so the cascade is real */
+          window.addEventListener("DOMContentLoaded", () => {
+            const cards = document.querySelectorAll(".grid .card");
+            cards.forEach((c, i) => c.style.setProperty("--idx", i));
+            /* v0.13.7 — Intl.DateTimeFormat per current locale for
+               every .when[data-iso] element.  Falls back to the SSR
+               string when the ISO attr is empty / parse fails. */
+            try {
+              const lang = (navigator.language || "en").replace("_","-");
+              const fmt = new Intl.DateTimeFormat(lang, {
+                year: "numeric", month: "short", day: "numeric",
+                hour: "2-digit", minute: "2-digit",
+              });
+              document.querySelectorAll(".when[data-iso]").forEach(el => {
+                const iso = el.dataset.iso;
+                if (!iso) return;
+                const d = new Date(iso);
+                if (isNaN(d.getTime())) return;
+                /* keep the trailing " · <src>" span if present */
+                const src = el.querySelector(".src");
+                el.innerHTML = fmt.format(d);
+                if (src) {
+                  el.appendChild(document.createTextNode(" · "));
+                  el.appendChild(src);
+                }
+              });
+            } catch (_e) { /* Intl missing on legacy browsers */ }
+          });</script>
+  <header>
+    <a class="back" href="/">← 上传页</a>
+    <h1>历史时间线</h1>
+    <p class="sub">所有跑过的 run · 按时间排序 · 点卡片跳回 grid</p>
+  </header>
+  <main>
+    <p class="count"><!--__HISTORY_COUNT__--></p>
+    <div class="grid">
+<!--__HISTORY_CARDS__-->
+    </div>
+  </main>
+</body>
+</html>

@@ -52,6 +52,24 @@
 
 ## What's new
 
+**v2.28** — **serve_demo inline-HTML extraction (the v2.27 deferral, done
+right)** (see [`docs/ROADMAP-v2.28-charter.md`](docs/ROADMAP-v2.28-charter.md)).
+v2.27 assessed and deferred this; here it lands behind a byte-identical
+route-diff safety net — capture each route's rendered bytes before, extract,
+restart, capture after, `diff` must be empty. Three cleanly static-shell-shaped
+handlers move out to `templates/pages/*.html`: `_serve_tether_page` (fully
+static, 219 lines), `_serve_history_page` and `_serve_disagreement_page` (static
+shell + a few placeholder injections). Templates are generated mechanically via
+source-block eval (dynamic operands swapped for placeholder literals, then
+evaluated — zero hand-transcription). **serve_demo.py drops 12,909 → 12,518
+lines**; all three routes verified byte-identical after extraction. The other
+three handlers (`_render_share_html`, `_serve_bias_audit_page`,
+`_serve_companion_page`) stay inline **on purpose** — they're heavily
+f-string-interleaved dynamic builders (up to ~40 interpolations) whose template
+extraction would hurt readability, and whose dynamic paths (e.g. bias's inline
+annotator-chip generator) can't be byte-verified from the empty-state route
+alone. The rationale now lives in CLAUDE.md so it isn't re-litigated.
+
 **v2.27** — **results.css modularization continues** (see
 [`docs/ROADMAP-v2.27-charter.md`](docs/ROADMAP-v2.27-charter.md)). Building on
 the v2.22 `@@CSS:` splice infrastructure, five more cohesive blocks move out of
