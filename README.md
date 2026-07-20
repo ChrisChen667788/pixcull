@@ -52,6 +52,21 @@
 
 ## What's new
 
+**DESIGN-AUDIT 2030Q4** — **post v2.21–v2.28 recheck + a frosted-glass
+direction verdict** (see [`docs/DESIGN-AUDIT-2030Q4.md`](docs/DESIGN-AUDIT-2030Q4.md)).
+Overall **3.4/5 (Q3: 3.1)** — every dimension moved up (UX 3.9, intelligence
+3.6, reach+release 2.4→2.9, architecture+perf 3.2→3.6), with reach still the
+laggard behind owner-only actions. The audit answers the frosted-glass
+(毛玻璃) question with an **adopt-scoped** verdict: the UI already carries ~30
+ad-hoc `backdrop-filter` uses with inconsistent values and zero
+`prefers-reduced-transparency` fallback, so the move is to *systematize* glass
+into a tokenized, accessible layer on chrome / panels / overlays / modals —
+**never** on the photo surround or thumbnail mat (that would break the v2.21
+Studio-Neutral color-judgment discipline; even Apple pulled back Liquid Glass's
+transparency in 2026 for legibility). Ranked v2.29 candidates: frosted-glass
+system · results.js modularization · packaged `pixcull serve` · near-dup CLIP
+collapse.
+
 **v2.28** — **serve_demo inline-HTML extraction (the v2.27 deferral, done
 right)** (see [`docs/ROADMAP-v2.28-charter.md`](docs/ROADMAP-v2.28-charter.md)).
 v2.27 assessed and deferred this; here it lands behind a byte-identical

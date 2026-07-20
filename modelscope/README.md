@@ -55,6 +55,15 @@ tasks:
 **[github.com/ChrisChen667788/pixcull](https://github.com/ChrisChen667788/pixcull)**
 
 ## v0.7 → v2.28 主要更新
+- **DESIGN-AUDIT 2030Q4**:**v2.21–v2.28 收口复检 + 毛玻璃方向定案** —— 总评
+  **3.4/5(Q3 3.1)**,五维度全上移(UX 3.9、智能 3.6、触达+发布 2.4→2.9、架构+性能
+  3.2→3.6),触达仍被 owner 动作卡住。对 owner 亲点的毛玻璃(glassmorphism)方向给出
+  **范围采纳**判定:代码已有 ~30 处 ad-hoc `backdrop-filter`(值零散)+ 零
+  `prefers-reduced-transparency` 兜底,所以应把玻璃**系统化**成 token 化、可访问的层,
+  只用在 chrome/面板/浮层/模态,**绝不用在照片周围/缩略图垫层**(否则破坏 v2.21 Studio
+  Neutral 判色纪律;连 Apple 2026 都为可读性回收了 Liquid Glass 透明度)。v2.29 候选:
+  毛玻璃系统 · results.js 模块化 · 打包 `pixcull serve` · 近重复 CLIP 折叠。详见
+  `docs/DESIGN-AUDIT-2030Q4.md`。
 - **v2.28**:**serve_demo 内联 HTML 抽取(v2.27 暂缓项,做对)** —— v2.27 评估后暂缓,
   本轮在**字节级路由验证网**下落地:抓取每条路由抽取前的渲染字节 → 抽取 → 重启 →
   抓取后字节 → `diff` 必须空。3 个干净静态壳型处理器抽到 `templates/pages/*.html`:
