@@ -28,7 +28,8 @@
       padding: 8px 14px;
       border-radius: 999px;
       background: rgba(28, 30, 38, 0.96);
-      backdrop-filter: saturate(180%) blur(12px);
+      backdrop-filter: var(--glass-filter);
+      -webkit-backdrop-filter: var(--glass-filter);
       box-shadow: 0 8px 24px rgba(0, 0, 0, 0.40),
                   0 0 0 1px rgba(255, 255, 255, 0.08) inset;
       z-index: 50;

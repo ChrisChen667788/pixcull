@@ -54,7 +54,17 @@ tasks:
 完整源码 + iOS 伴侣 App + Lightroom 插件,均在 GitHub:
 **[github.com/ChrisChen667788/pixcull](https://github.com/ChrisChen667788/pixcull)**
 
-## v0.7 → v2.28 主要更新
+## v0.7 → v2.29 主要更新
+- **v2.29**:**毛玻璃系统落地(按审计判定:范围采纳)** —— 散布全 UI 的 ~30 处
+  ad-hoc `backdrop-filter`(blur 2/4/6/8/10/12/20px、saturate 140/180% 各写各的)收敛成
+  **一种 token 化材质**:`--glass-filter`(blur 16px · saturate 130%——从会"霓虹震动"的
+  180% 回撤,与 Apple 2026 收敛 Liquid Glass 同向)做磨砂面板、`--glass-scrim-filter`
+  (blur 4px)做模态幕布、`--glass-edge` 顶部 1px 高光做玻璃边(暗色 8% 白/亮色 65%)。
+  7 面板 + 7 幕布收敛;其中 3 个面板(比较头/RGB 读数/键位表)**原底色不透明、旧模糊
+  一直是静默 no-op**——改半透明 chrome 膜后玻璃才真实生效。3 处照片上的微玻璃刻意保留
+  不 token 化(已复核 keeps)。全系统接 `prefers-reduced-transparency`(此前全仓为零
+  兜底),新 lint 禁止任何裸 `backdrop-filter:` 声明防材质再碎片化。照片判读面零改动
+  ——Studio Neutral 判色纪律不破。详见 `docs/ROADMAP-v2.29-charter.md`。
 - **DESIGN-AUDIT 2030Q4**:**v2.21–v2.28 收口复检 + 毛玻璃方向定案** —— 总评
   **3.4/5(Q3 3.1)**,五维度全上移(UX 3.9、智能 3.6、触达+发布 2.4→2.9、架构+性能
   3.2→3.6),触达仍被 owner 动作卡住。对 owner 亲点的毛玻璃(glassmorphism)方向给出

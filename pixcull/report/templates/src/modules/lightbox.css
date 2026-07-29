@@ -1,7 +1,7 @@
     /* V10.1 Lightbox upgrade: image + full evaluation panel side-by-side. */
     .lightbox {
       position: fixed; inset: 0; background: rgba(0,0,0,0.94);
-      display: none; z-index: 9; backdrop-filter: blur(4px);
+      display: none; z-index: 9; backdrop-filter: var(--glass-scrim-filter);
     }
     /* v2.5 hotfix — the two panes are PINNED to their grid cells.
        They used to rely on auto-placement, so any direct child that

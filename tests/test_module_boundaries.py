@@ -182,3 +182,47 @@ def test_cross_module_isolation():
     assert not violations, (
         "modules must communicate via window.PixCull* only:\n  "
         + "\n  ".join(violations))
+
+
+# ── v2.29 — frosted-glass material discipline ─────────────────────────
+# Glass is ONE tokenized material (--glass-filter for panels,
+# --glass-scrim-filter for modal backdrops, --glass-edge highlight),
+# strictly on chrome/overlays — never the photo surround (Studio-Neutral
+# ISO 3664 discipline). Raw backdrop-filter values are only allowed at
+# the three reviewed photo-top micro-glass sites.
+_GLASS_KEEPS = {
+    # (file, substring) — reviewed and deliberately NOT tokenized
+    ("card.css", "blur(6px)"),        # card decision glyph (LR-style badge)
+    ("card.css", "blur(8px) saturate(140%)"),  # card hover action buttons
+    ("lightbox.css", "blur(2px)"),    # lb-faces transparent-tail strip
+}
+
+
+def test_glass_tokens_defined_with_a11y_fallback():
+    tokens = (_MOD / "tokens.css").read_text(encoding="utf-8")
+    for tok in ("--glass-filter:", "--glass-scrim-filter:", "--glass-edge:"):
+        assert tok in tokens, f"glass token {tok} missing"
+    assert "prefers-reduced-transparency" in tokens, (
+        "reduced-transparency fallback gone — glassmorphism's core "
+        "legibility risk is unguarded")
+    # light theme must override the edge (8% white is invisible on light)
+    assert tokens.count("--glass-edge:") >= 2, "light-theme edge override gone"
+
+
+def test_no_raw_backdrop_filter_outside_reviewed_keeps():
+    """Every backdrop-filter must route through the glass tokens so the
+    material stays ONE system (and the reduced-transparency override
+    actually reaches it). New raw blur values fail here."""
+    offenders = []
+    files = [_SRC / "results.css"] + sorted(_MOD.glob("*.css"))
+    for f in files:
+        for i, line in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
+            # declarations only — prose mentions in comments don't count
+            if not re.search(r"backdrop-filter\s*:", line) or "var(--glass" in line:
+                continue
+            if any(f.name == kf and ks in line for kf, ks in _GLASS_KEEPS):
+                continue
+            offenders.append(f"{f.name}:{i}: {line.strip()[:70]}")
+    assert not offenders, (
+        "raw backdrop-filter outside the reviewed keeps — route it through "
+        "--glass-filter / --glass-scrim-filter:\n  " + "\n  ".join(offenders))

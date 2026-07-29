@@ -52,6 +52,26 @@
 
 ## What's new
 
+**v2.29** — **the frosted-glass system lands (adopt-scoped, as the audit
+ruled)** (see [`docs/ROADMAP-v2.29-charter.md`](docs/ROADMAP-v2.29-charter.md)).
+The ~30 ad-hoc `backdrop-filter` uses scattered through the UI (blur
+2/4/6/8/10/12/20px + saturate 140/180% all hand-written) converge into **one
+tokenized material**: `--glass-filter` (blur 16px · saturate 130% — pulled
+back from the neon-vibrating 180%, the same retreat Apple made with Liquid
+Glass in 2026) for frosted panels, `--glass-scrim-filter` (blur 4px) for modal
+backdrops, and `--glass-edge` — the 1px top highlight that makes chrome read
+as real glass (8% white in dark, 65% in light where a faint highlight is
+invisible). Seven panels + seven scrims converged; three of the panels
+(compare header, RGB readout, key cheat-sheet) had **opaque backgrounds that
+made their old blur a silent no-op** — now translucent chrome films so the
+glass is real. Three photo-top micro-glass sites stay deliberately untokenized
+(reviewed keeps). The whole system honors
+`@media (prefers-reduced-transparency: reduce)` — every glass surface falls
+back to solid chrome (the codebase previously had **zero** such fallback), and
+a new lint fails any raw `backdrop-filter:` outside the keeps so the material
+can't fragment again. Photo surround and thumbnail mat: untouched —
+Studio-Neutral color-judgment discipline holds.
+
 **DESIGN-AUDIT 2030Q4** — **post v2.21–v2.28 recheck + a frosted-glass
 direction verdict** (see [`docs/DESIGN-AUDIT-2030Q4.md`](docs/DESIGN-AUDIT-2030Q4.md)).
 Overall **3.4/5 (Q3: 3.1)** — every dimension moved up (UX 3.9, intelligence

@@ -244,6 +244,29 @@
       --brand-gradient-soft: linear-gradient(135deg,
                               rgba(213,181,132,0.16) 0%,
                               rgba(147,116,63,0.16) 100%);
+
+      /* —— GLASS (v2.29) · frosted-chrome material ————————————————
+         Systematizes the ~30 ad-hoc backdrop-filter uses (blur values
+         2/4/6/8/10/12/20 + saturate 140/180 all written by hand) into
+         ONE material. STRICTLY chrome/overlays — header, palettes,
+         trays, toolbars, modal chrome, scrims. NEVER the photo surround
+         or thumbnail mat: v2.21 Studio Neutral keeps the photo-judgment
+         surface achromatic + un-blurred (ISO 3664). Glass changes
+         TEXTURE + DEPTH, not HUE — orthogonal to the neutral color
+         system (the tint film is an achromatic --chrome, no new hue).
+
+         Two filter tiers: --glass-filter for frosted PANELS (the visible
+         chrome surface), --glass-scrim-filter for the dimming BACKDROP
+         behind a modal (subtle, and cheaper to repaint). --glass-edge is
+         the 1px top highlight that reads as a real glass edge.  Saturate
+         is gentle (130%) — 2026 practice pulled back from the 180% that
+         "neon-vibrates"; even Apple reduced Liquid Glass transparency
+         in 2026 for legibility. */
+      --glass-blur:          16px;
+      --glass-sat:           130%;
+      --glass-filter:        blur(var(--glass-blur)) saturate(var(--glass-sat));
+      --glass-scrim-filter:  blur(4px);
+      --glass-edge:          inset 0 1px 0 rgba(255,255,255,0.08);
     }
     /* Honor system color-scheme + reduce-motion preferences */
     @media (prefers-reduced-motion: reduce) {
@@ -251,6 +274,22 @@
         --duration-fast: 1ms;
         --duration-normal: 1ms;
         --duration-slow: 1ms;
+      }
+    }
+    /* v2.29 — a11y: users who ask for less transparency (glassmorphism's
+       core legibility risk) get SOLID chrome instead of frosted glass.
+       Kills the blur/edge everywhere the tokens are used, and forces the
+       frosted panels to an opaque --chrome. 2026 best practice; the whole
+       point of routing glass through tokens is this one clean override. */
+    @media (prefers-reduced-transparency: reduce) {
+      :root, html[data-theme="light"] {
+        --glass-filter: none;
+        --glass-scrim-filter: none;
+        --glass-edge: none;
+      }
+      header, .bulk-toolbar, .kbd-cheat, .toast, .shortcuts-hint,
+      .cmp-header, .cmp-rgb-readout {
+        background: var(--chrome) !important;
       }
     }
 
@@ -365,6 +404,10 @@
       --weight-display: 700;     /* h1 / hero numerals */
       --weight-emph:    600;     /* h2 / section heads */
       --weight-body:    450;     /* body — gets 50g over the default 400 */
+      /* —— GLASS (v2.29) — light theme: the 8% white top-highlight is
+         invisible on a near-white film; a stronger white edge is how
+         light glass reads (Apple's light-mode materials do the same). */
+      --glass-edge:     inset 0 1px 0 rgba(255,255,255,0.65);
     }
 
     /* v2.8.1 — pre-relative-color fallback. oklch(from ...) needs Chrome 111+
@@ -482,8 +525,9 @@
     header {
       position: sticky; top: 0; z-index: 5;
       background: rgba(20, 22, 26, 0.78);    /* matches --chrome with alpha */
-      backdrop-filter: blur(20px) saturate(180%);
-      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      backdrop-filter: var(--glass-filter);
+      -webkit-backdrop-filter: var(--glass-filter);
+      box-shadow: var(--glass-edge);
       border-bottom: 1px solid var(--border);
       padding: 0;
     }
@@ -633,8 +677,8 @@
     .share-url-modal {
       position: fixed; inset: 0; z-index: 60;
       background: rgba(0,0,0,0.72);
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
+      backdrop-filter: var(--glass-scrim-filter);
+      -webkit-backdrop-filter: var(--glass-scrim-filter);
       display: none; align-items: center; justify-content: center;
     }
     .share-url-modal.show { display: flex; }
@@ -882,8 +926,8 @@
     .cmdk-modal {
       position: fixed; inset: 0; z-index: 100;
       background: rgba(0,0,0,0.62);
-      backdrop-filter: blur(10px) saturate(140%);
-      -webkit-backdrop-filter: blur(10px) saturate(140%);
+      backdrop-filter: var(--glass-scrim-filter);
+      -webkit-backdrop-filter: var(--glass-scrim-filter);
       display: none;
       align-items: flex-start; justify-content: center;
       padding-top: 14vh;
@@ -1157,7 +1201,7 @@
       display: none; align-items: flex-start; justify-content: flex-end;
       padding: 64px 16px 0 0;
       background: rgba(8, 10, 14, 0.32);
-      backdrop-filter: blur(2px);
+      backdrop-filter: var(--glass-scrim-filter);
       z-index: 1340;
     }
     #presenceModal.show { display: flex; }
@@ -1733,8 +1777,9 @@
       color: var(--fg);
       font-size: var(--t-body);
       line-height: var(--lh-normal);
-      box-shadow: var(--shadow-lg);
-      backdrop-filter: blur(10px);
+      box-shadow: var(--shadow-lg), var(--glass-edge);
+      backdrop-filter: var(--glass-filter);
+      -webkit-backdrop-filter: var(--glass-filter);
       animation: toastIn var(--duration-normal) var(--ease-out);
       cursor: pointer;
     }
@@ -1797,16 +1842,17 @@
     .cmp-modal {
       position: fixed; inset: 0; background: rgba(0,0,0,0.92);
       display: none; flex-direction: column; z-index: 12;
-      backdrop-filter: blur(8px);
+      backdrop-filter: var(--glass-scrim-filter);
     }
     .cmp-modal.show { display: flex; }
     .cmp-header {
       padding: 10px 22px;
       display: flex; gap: 14px; align-items: center;
       border-bottom: 1px solid var(--border);
-      background: var(--chrome);
-      backdrop-filter: blur(12px) saturate(140%);
-      -webkit-backdrop-filter: blur(12px) saturate(140%);
+      background: color-mix(in srgb, var(--chrome) 78%, transparent);
+      backdrop-filter: var(--glass-filter);
+      -webkit-backdrop-filter: var(--glass-filter);
+      box-shadow: var(--glass-edge);
     }
     .cmp-header h3 {
       margin: 0;
@@ -2011,13 +2057,14 @@
       display: none;
       z-index: 13;
       padding: 7px 9px;
-      background: var(--chrome, rgba(20,23,28,0.95));
+      background: color-mix(in srgb, var(--chrome) 85%, transparent);
       border: 1px solid var(--border);
       border-radius: var(--radius-sm, 5px);
-      box-shadow: var(--shadow-md);
+      box-shadow: var(--shadow-md), var(--glass-edge);
       font: 11px/1.45 ui-monospace, "SF Mono", Menlo, monospace;
       color: var(--fg);
-      backdrop-filter: blur(8px);
+      backdrop-filter: var(--glass-filter);
+      -webkit-backdrop-filter: var(--glass-filter);
       min-width: 130px;
     }
     .cmp-rgb-readout.show { display: block; }
@@ -3951,7 +3998,7 @@
     .shortcuts-modal {
       position: fixed; inset: 0; background: rgba(0,0,0,0.78);
       display: none; align-items: center; justify-content: center;
-      z-index: 13; backdrop-filter: blur(6px); padding: 20px;
+      z-index: 13; backdrop-filter: var(--glass-scrim-filter); padding: 20px;
     }
     .shortcuts-modal.show {
       display: flex; animation: modalBackdropIn 160ms ease-out;
@@ -4076,7 +4123,9 @@
       padding: 6px 12px; border-radius: 20px;
       font: inherit; font-size: 11px; line-height: 1;
       cursor: pointer; user-select: none;
-      backdrop-filter: blur(8px);
+      backdrop-filter: var(--glass-filter);
+      -webkit-backdrop-filter: var(--glass-filter);
+      box-shadow: var(--glass-edge);
       z-index: 7;
       transition: color 120ms, border-color 120ms, background 120ms;
       display: inline-flex; align-items: center; gap: 6px;
@@ -4120,9 +4169,9 @@
       opacity: 0; pointer-events: none;
       display: flex; gap: 8px; align-items: center;
       padding: 9px 14px;
-      background: var(--chrome, rgba(20,23,28,0.94));
-      backdrop-filter: blur(10px) saturate(140%);
-      -webkit-backdrop-filter: blur(10px) saturate(140%);
+      background: color-mix(in srgb, var(--chrome) 88%, transparent);
+      backdrop-filter: var(--glass-filter);
+      -webkit-backdrop-filter: var(--glass-filter);
       border: 1px solid var(--border);
       border-radius: 14px;
       box-shadow: var(--shadow-lg, 0 18px 40px rgba(0,0,0,0.45));
@@ -4561,7 +4610,7 @@
     /* V10.1 Lightbox upgrade: image + full evaluation panel side-by-side. */
     .lightbox {
       position: fixed; inset: 0; background: rgba(0,0,0,0.94);
-      display: none; z-index: 9; backdrop-filter: blur(4px);
+      display: none; z-index: 9; backdrop-filter: var(--glass-scrim-filter);
     }
     /* v2.5 hotfix — the two panes are PINNED to their grid cells.
        They used to rely on auto-placement, so any direct child that
@@ -5346,7 +5395,8 @@
       padding: 8px 14px;
       border-radius: 999px;
       background: rgba(28, 30, 38, 0.96);
-      backdrop-filter: saturate(180%) blur(12px);
+      backdrop-filter: var(--glass-filter);
+      -webkit-backdrop-filter: var(--glass-filter);
       box-shadow: 0 8px 24px rgba(0, 0, 0, 0.40),
                   0 0 0 1px rgba(255, 255, 255, 0.08) inset;
       z-index: 50;
@@ -5816,7 +5866,7 @@
       .library-panel-backdrop {
         position: fixed; inset: 0;
         background: rgba(0,0,0,0.55);
-        backdrop-filter: blur(4px);
+        backdrop-filter: var(--glass-scrim-filter);
         z-index: 29;
         opacity: 0; pointer-events: none;
         transition: opacity var(--duration-fast) var(--ease-out);

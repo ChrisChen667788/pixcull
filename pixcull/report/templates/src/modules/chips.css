@@ -789,7 +789,7 @@
     .shortcuts-modal {
       position: fixed; inset: 0; background: rgba(0,0,0,0.78);
       display: none; align-items: center; justify-content: center;
-      z-index: 13; backdrop-filter: blur(6px); padding: 20px;
+      z-index: 13; backdrop-filter: var(--glass-scrim-filter); padding: 20px;
     }
     .shortcuts-modal.show {
       display: flex; animation: modalBackdropIn 160ms ease-out;
@@ -914,7 +914,9 @@
       padding: 6px 12px; border-radius: 20px;
       font: inherit; font-size: 11px; line-height: 1;
       cursor: pointer; user-select: none;
-      backdrop-filter: blur(8px);
+      backdrop-filter: var(--glass-filter);
+      -webkit-backdrop-filter: var(--glass-filter);
+      box-shadow: var(--glass-edge);
       z-index: 7;
       transition: color 120ms, border-color 120ms, background 120ms;
       display: inline-flex; align-items: center; gap: 6px;
@@ -958,9 +960,9 @@
       opacity: 0; pointer-events: none;
       display: flex; gap: 8px; align-items: center;
       padding: 9px 14px;
-      background: var(--chrome, rgba(20,23,28,0.94));
-      backdrop-filter: blur(10px) saturate(140%);
-      -webkit-backdrop-filter: blur(10px) saturate(140%);
+      background: color-mix(in srgb, var(--chrome) 88%, transparent);
+      backdrop-filter: var(--glass-filter);
+      -webkit-backdrop-filter: var(--glass-filter);
       border: 1px solid var(--border);
       border-radius: 14px;
       box-shadow: var(--shadow-lg, 0 18px 40px rgba(0,0,0,0.45));

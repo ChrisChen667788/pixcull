@@ -225,6 +225,29 @@
       --brand-gradient-soft: linear-gradient(135deg,
                               rgba(213,181,132,0.16) 0%,
                               rgba(147,116,63,0.16) 100%);
+
+      /* —— GLASS (v2.29) · frosted-chrome material ————————————————
+         Systematizes the ~30 ad-hoc backdrop-filter uses (blur values
+         2/4/6/8/10/12/20 + saturate 140/180 all written by hand) into
+         ONE material. STRICTLY chrome/overlays — header, palettes,
+         trays, toolbars, modal chrome, scrims. NEVER the photo surround
+         or thumbnail mat: v2.21 Studio Neutral keeps the photo-judgment
+         surface achromatic + un-blurred (ISO 3664). Glass changes
+         TEXTURE + DEPTH, not HUE — orthogonal to the neutral color
+         system (the tint film is an achromatic --chrome, no new hue).
+
+         Two filter tiers: --glass-filter for frosted PANELS (the visible
+         chrome surface), --glass-scrim-filter for the dimming BACKDROP
+         behind a modal (subtle, and cheaper to repaint). --glass-edge is
+         the 1px top highlight that reads as a real glass edge.  Saturate
+         is gentle (130%) — 2026 practice pulled back from the 180% that
+         "neon-vibrates"; even Apple reduced Liquid Glass transparency
+         in 2026 for legibility. */
+      --glass-blur:          16px;
+      --glass-sat:           130%;
+      --glass-filter:        blur(var(--glass-blur)) saturate(var(--glass-sat));
+      --glass-scrim-filter:  blur(4px);
+      --glass-edge:          inset 0 1px 0 rgba(255,255,255,0.08);
     }
     /* Honor system color-scheme + reduce-motion preferences */
     @media (prefers-reduced-motion: reduce) {
@@ -232,6 +255,22 @@
         --duration-fast: 1ms;
         --duration-normal: 1ms;
         --duration-slow: 1ms;
+      }
+    }
+    /* v2.29 — a11y: users who ask for less transparency (glassmorphism's
+       core legibility risk) get SOLID chrome instead of frosted glass.
+       Kills the blur/edge everywhere the tokens are used, and forces the
+       frosted panels to an opaque --chrome. 2026 best practice; the whole
+       point of routing glass through tokens is this one clean override. */
+    @media (prefers-reduced-transparency: reduce) {
+      :root, html[data-theme="light"] {
+        --glass-filter: none;
+        --glass-scrim-filter: none;
+        --glass-edge: none;
+      }
+      header, .bulk-toolbar, .kbd-cheat, .toast, .shortcuts-hint,
+      .cmp-header, .cmp-rgb-readout {
+        background: var(--chrome) !important;
       }
     }
 
@@ -346,6 +385,10 @@
       --weight-display: 700;     /* h1 / hero numerals */
       --weight-emph:    600;     /* h2 / section heads */
       --weight-body:    450;     /* body — gets 50g over the default 400 */
+      /* —— GLASS (v2.29) — light theme: the 8% white top-highlight is
+         invisible on a near-white film; a stronger white edge is how
+         light glass reads (Apple's light-mode materials do the same). */
+      --glass-edge:     inset 0 1px 0 rgba(255,255,255,0.65);
     }
 
     /* v2.8.1 — pre-relative-color fallback. oklch(from ...) needs Chrome 111+

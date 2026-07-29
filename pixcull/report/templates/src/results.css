@@ -94,8 +94,9 @@
     header {
       position: sticky; top: 0; z-index: 5;
       background: rgba(20, 22, 26, 0.78);    /* matches --chrome with alpha */
-      backdrop-filter: blur(20px) saturate(180%);
-      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      backdrop-filter: var(--glass-filter);
+      -webkit-backdrop-filter: var(--glass-filter);
+      box-shadow: var(--glass-edge);
       border-bottom: 1px solid var(--border);
       padding: 0;
     }
@@ -245,8 +246,8 @@
     .share-url-modal {
       position: fixed; inset: 0; z-index: 60;
       background: rgba(0,0,0,0.72);
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
+      backdrop-filter: var(--glass-scrim-filter);
+      -webkit-backdrop-filter: var(--glass-scrim-filter);
       display: none; align-items: center; justify-content: center;
     }
     .share-url-modal.show { display: flex; }
@@ -494,8 +495,8 @@
     .cmdk-modal {
       position: fixed; inset: 0; z-index: 100;
       background: rgba(0,0,0,0.62);
-      backdrop-filter: blur(10px) saturate(140%);
-      -webkit-backdrop-filter: blur(10px) saturate(140%);
+      backdrop-filter: var(--glass-scrim-filter);
+      -webkit-backdrop-filter: var(--glass-scrim-filter);
       display: none;
       align-items: flex-start; justify-content: center;
       padding-top: 14vh;
@@ -769,7 +770,7 @@
       display: none; align-items: flex-start; justify-content: flex-end;
       padding: 64px 16px 0 0;
       background: rgba(8, 10, 14, 0.32);
-      backdrop-filter: blur(2px);
+      backdrop-filter: var(--glass-scrim-filter);
       z-index: 1340;
     }
     #presenceModal.show { display: flex; }
@@ -1345,8 +1346,9 @@
       color: var(--fg);
       font-size: var(--t-body);
       line-height: var(--lh-normal);
-      box-shadow: var(--shadow-lg);
-      backdrop-filter: blur(10px);
+      box-shadow: var(--shadow-lg), var(--glass-edge);
+      backdrop-filter: var(--glass-filter);
+      -webkit-backdrop-filter: var(--glass-filter);
       animation: toastIn var(--duration-normal) var(--ease-out);
       cursor: pointer;
     }
@@ -1409,16 +1411,17 @@
     .cmp-modal {
       position: fixed; inset: 0; background: rgba(0,0,0,0.92);
       display: none; flex-direction: column; z-index: 12;
-      backdrop-filter: blur(8px);
+      backdrop-filter: var(--glass-scrim-filter);
     }
     .cmp-modal.show { display: flex; }
     .cmp-header {
       padding: 10px 22px;
       display: flex; gap: 14px; align-items: center;
       border-bottom: 1px solid var(--border);
-      background: var(--chrome);
-      backdrop-filter: blur(12px) saturate(140%);
-      -webkit-backdrop-filter: blur(12px) saturate(140%);
+      background: color-mix(in srgb, var(--chrome) 78%, transparent);
+      backdrop-filter: var(--glass-filter);
+      -webkit-backdrop-filter: var(--glass-filter);
+      box-shadow: var(--glass-edge);
     }
     .cmp-header h3 {
       margin: 0;
@@ -1623,13 +1626,14 @@
       display: none;
       z-index: 13;
       padding: 7px 9px;
-      background: var(--chrome, rgba(20,23,28,0.95));
+      background: color-mix(in srgb, var(--chrome) 85%, transparent);
       border: 1px solid var(--border);
       border-radius: var(--radius-sm, 5px);
-      box-shadow: var(--shadow-md);
+      box-shadow: var(--shadow-md), var(--glass-edge);
       font: 11px/1.45 ui-monospace, "SF Mono", Menlo, monospace;
       color: var(--fg);
-      backdrop-filter: blur(8px);
+      backdrop-filter: var(--glass-filter);
+      -webkit-backdrop-filter: var(--glass-filter);
       min-width: 130px;
     }
     .cmp-rgb-readout.show { display: block; }
@@ -2220,7 +2224,7 @@
       .library-panel-backdrop {
         position: fixed; inset: 0;
         background: rgba(0,0,0,0.55);
-        backdrop-filter: blur(4px);
+        backdrop-filter: var(--glass-scrim-filter);
         z-index: 29;
         opacity: 0; pointer-events: none;
         transition: opacity var(--duration-fast) var(--ease-out);
