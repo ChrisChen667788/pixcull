@@ -54,7 +54,18 @@ tasks:
 完整源码 + iOS 伴侣 App + Lightroom 插件,均在 GitHub:
 **[github.com/ChrisChen667788/pixcull](https://github.com/ChrisChen667788/pixcull)**
 
-## v0.7 → v2.29 主要更新
+## v0.7 → v2.32 主要更新
+- **v2.32**:**跨 run 全库检索** —— 单 run 语义搜索回答"这次拍摄里那张逆光的在哪",
+  新的 `/library` 页面 + `pixcull library` 命令回答"**我所有拍摄里**那张在哪"。架构由
+  实测驱动:**不用 ANN**(brute-force 10 万张 8ms、百万张 34.5ms,仍只是每次必付的
+  CLIP 编码 17.4ms 的 ~2 倍;先撞的墙是内存不是速度,未来优化方向是压缩,纯 numpy 也
+  守住零编译依赖的 pip install)· 单一 vectors.npy + mmap 打开 18ms(逐 npz 堆叠要
+  174ms)· 建索引**复用各 run 已有的向量缓存**(搬运而非重编码),按
+  `(run_id, filename, mtime)` 幂等 · **存活性一等公民**:文件不在盘上的命中标记 stale
+  而非静默丢弃(外置盘拔了,该说"找到了但不可达")· 结果按拍摄分组并可跳回原 run ·
+  索引含真实路径,只落 `~/.pixcull/library/`。详见 `docs/ROADMAP-v2.32-charter.md`。
+- **v2.31**:**打包 `pixcull serve`** —— pip 用户终于能开审片工作台(此前只能 git clone)。
+
 - **v2.29**:**毛玻璃系统落地(按审计判定:范围采纳)** —— 散布全 UI 的 ~30 处
   ad-hoc `backdrop-filter`(blur 2/4/6/8/10/12/20px、saturate 140/180% 各写各的)收敛成
   **一种 token 化材质**:`--glass-filter`(blur 16px · saturate 130%——从会"霓虹震动"的

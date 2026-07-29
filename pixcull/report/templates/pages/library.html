@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PixCull · 全库检索</title>
+<style>
+/*__DESIGN_TOKENS_CSS__*/
+  *,*::before,*::after { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; background: var(--bg); color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+                 "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  /* v2.29 glass: this is chrome, never a photo-judgment surface — the
+     search bar floats over results, so it earns the frosted treatment. */
+  header {
+    position: sticky; top: 0; z-index: 5;
+    padding: 22px 24px 16px;
+    border-bottom: 1px solid var(--border);
+    background: color-mix(in srgb, var(--chrome) 78%, transparent);
+    backdrop-filter: var(--glass-filter);
+    -webkit-backdrop-filter: var(--glass-filter);
+    box-shadow: var(--glass-edge);
+  }
+  .head-row { display: flex; align-items: baseline; gap: 14px;
+              max-width: 1180px; margin: 0 auto 12px; }
+  h1 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); font-size: 12px; }
+  a.back { color: var(--muted); font-size: 12px; text-decoration: none;
+           margin-left: auto; }
+  a.back:hover { color: var(--fg); }
+  form.search { display: flex; gap: 8px; max-width: 1180px; margin: 0 auto; }
+  input[type=search] {
+    flex: 1; padding: 10px 14px; font-size: 14px; color: var(--fg);
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: var(--radius-md); font-family: inherit;
+  }
+  input[type=search]:focus { outline: 2px solid var(--focus-ring);
+                             outline-offset: 1px; border-color: var(--accent); }
+  button.go {
+    padding: 10px 20px; font-size: 13px; font-weight: 600; cursor: pointer;
+    color: #161616; background: var(--accent); border: 0;
+    border-radius: var(--radius-md); font-family: inherit;
+  }
+  button.go:hover { background: var(--accent-hi); }
+  button.go:disabled { opacity: 0.5; cursor: progress; }
+  main { padding: 24px; max-width: 1180px; margin: 0 auto; }
+  .empty, .hint {
+    text-align: center; color: var(--muted); font-size: 13px;
+    padding: 48px 24px; line-height: 1.7;
+  }
+  .empty code, .hint code {
+    background: var(--surface-2); padding: 2px 7px;
+    border-radius: 5px; font-size: 12px;
+  }
+  .run-group { margin-bottom: 30px; }
+  .run-head {
+    display: flex; align-items: baseline; gap: 10px;
+    padding-bottom: 8px; margin-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .run-head .rid { font-size: 13px; font-weight: 600; color: var(--fg); }
+  .run-head .n { font-size: 11px; color: var(--muted);
+                 font-variant-numeric: tabular-nums; }
+  .run-head a { margin-left: auto; font-size: 12px; color: var(--accent);
+                text-decoration: none; }
+  .run-head a:hover { text-decoration: underline; }
+  .grid { display: grid; gap: 12px;
+          grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+  .hit {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: var(--radius-md); overflow: hidden;
+    display: flex; flex-direction: column;
+    transition: border-color 120ms, transform 120ms var(--ease-out);
+  }
+  .hit:hover { border-color: var(--border-hi); transform: translateY(-2px); }
+  .hit .thumb-wrap { aspect-ratio: 4/3; background: #000; overflow: hidden; }
+  .hit img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .hit .meta { padding: 8px 10px 9px; display: flex; align-items: center;
+               gap: 8px; }
+  .hit .fn { flex: 1; min-width: 0; font-size: 10.5px;
+             font-family: ui-monospace, "SF Mono", Menlo, monospace;
+             color: var(--fg-2); overflow: hidden;
+             text-overflow: ellipsis; white-space: nowrap; }
+  .hit .sim { font-size: 11px; font-weight: 600; color: var(--accent);
+              font-variant-numeric: tabular-nums; }
+  /* A hit whose file isn't on disk right now: shown, dimmed, labelled —
+     "found it, but the file moved" is information, not an error. */
+  .hit.stale { opacity: 0.55; }
+  .hit.stale .thumb-wrap {
+    display: flex; align-items: center; justify-content: center;
+    color: var(--muted); font-size: 11px; text-align: center; padding: 12px;
+  }
+  .stale-note { font-size: 10px; color: var(--c-warn); }
+  .err { color: var(--c-danger); text-align: center; padding: 32px;
+         font-size: 13px; }
+  .spinner { text-align: center; color: var(--muted); padding: 40px;
+             font-size: 13px; }
+</style>
+</head>
+<body>
+  <header>
+    <div class="head-row">
+      <h1>全库检索</h1>
+      <span class="sub" id="libStat"></span>
+      <a class="back" href="/history">← 历史</a>
+    </div>
+    <form class="search" id="searchForm">
+      <input type="search" id="q" name="q" autofocus
+             placeholder="用自然语言搜遍所有拍摄,例:逆光牵手特写 / fire sparks at night"
+             aria-label="全库语义检索">
+      <button class="go" type="submit" id="goBtn">搜索</button>
+    </form>
+  </header>
+  <main id="results">
+    <div class="hint" id="hint"></div>
+  </main>
+
+<script>
+(function () {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g,
+    (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+  // Library status drives the empty state: an unindexed library should
+  // say how to build it, not just show "no results".
+  fetch("/api/v1/library/status").then(r => r.json()).then(st => {
+    if (!st || !st.ok) return;
+    $("libStat").textContent =
+      `${st.n_photos.toLocaleString()} 张 · ${st.n_runs} 次拍摄` +
+      (st.n_stale ? ` · ${st.n_stale} 张暂不可达` : "");
+    $("hint").innerHTML = st.n_photos
+      ? "输入一句描述,跨所有拍摄找回照片。"
+      : "全库索引还是空的 —— 先跑 <code>pixcull library index</code> " +
+        "把已有拍摄加进来。<br>索引复用每次拍摄已生成的向量缓存,通常是秒级。";
+  }).catch(() => {});
+
+  function render(data) {
+    const root = $("results");
+    if (!data.ok) {
+      root.innerHTML = `<div class="err">${esc(data.error || "检索失败")}</div>`;
+      return;
+    }
+    const hits = data.hits || [];
+    if (!hits.length) {
+      root.innerHTML = '<div class="empty">没有找到相关照片。<br>' +
+        '换个描述试试 —— CLIP 对具体的画面描述最敏感。</div>';
+      return;
+    }
+    // Group by run so the answer reads "from THIS shoot", which is the
+    // question a cross-run search is actually asking.
+    const byRun = new Map();
+    for (const h of hits) {
+      if (!byRun.has(h.run_id)) byRun.set(h.run_id, []);
+      byRun.get(h.run_id).push(h);
+    }
+    let html = "";
+    for (const [runId, group] of byRun) {
+      html += '<section class="run-group"><div class="run-head">' +
+        `<span class="rid">${esc(runId)}</span>` +
+        `<span class="n">${group.length} 张</span>` +
+        `<a href="/results/${encodeURIComponent(runId)}">打开这次拍摄 →</a>` +
+        '</div><div class="grid">';
+      for (const h of group) {
+        const thumb = `/thumb/${encodeURIComponent(h.run_id)}/` +
+                      `${encodeURIComponent(h.filename)}?w=420`;
+        html += `<div class="hit${h.stale ? " stale" : ""}">` +
+          '<div class="thumb-wrap">' +
+          (h.stale
+            ? "照片当前不可达<br>(已移动/删除,或外置盘未连接)"
+            : `<img loading="lazy" src="${thumb}" alt="${esc(h.filename)}">`) +
+          '</div><div class="meta">' +
+          `<span class="fn" title="${esc(h.filename)}">${esc(h.filename)}</span>` +
+          (h.stale ? '<span class="stale-note">离线</span>' : "") +
+          `<span class="sim">${h.similarity.toFixed(3)}</span>` +
+          "</div></div>";
+      }
+      html += "</div></section>";
+    }
+    root.innerHTML = html;
+  }
+
+  $("searchForm").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const q = $("q").value.trim();
+    if (!q) return;
+    $("goBtn").disabled = true;
+    $("results").innerHTML =
+      '<div class="spinner">检索中…<br>首次查询要加载 CLIP 文本编码器,稍慢</div>';
+    fetch("/api/v1/library/search?q=" + encodeURIComponent(q) + "&k=40")
+      .then(r => r.json())
+      .then(render)
+      .catch(err => {
+        $("results").innerHTML =
+          `<div class="err">检索失败:${esc(err.message || err)}</div>`;
+      })
+      .finally(() => { $("goBtn").disabled = false; });
+  });
+})();
+</script>
+</body>
+</html>

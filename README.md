@@ -52,6 +52,26 @@
 
 ## What's new
 
+**v2.32** — **cross-run library search: ask your whole archive at once** (see
+[`docs/ROADMAP-v2.32-charter.md`](docs/ROADMAP-v2.32-charter.md)). Per-run
+semantic search answered "in THIS shoot, where is the backlit shot"; the new
+`/library` page and `pixcull library` commands answer it across every shoot
+you've ever culled. Architecture is measurement-driven
+([the eval](docs/VECTOR-INDEX-EVAL.md)): **no ANN index** — brute-force is 8ms
+at 100k photos and 34.5ms at 1M, still ~2x the 17.4ms CLIP text encoding every
+query already pays, and memory (not speed) is the wall that arrives first, so
+compression is the eventual optimisation and pure numpy keeps `pip install`
+free of compiled deps. One merged `vectors.npy` opened via mmap beats stacking
+per-run caches 18ms vs 174ms. Indexing **reuses each run's existing
+`embeddings.npz`** — a copy, not a re-encode — keyed on
+`(run_id, filename, mtime)` so it's idempotent and a re-scored photo
+re-indexes by itself. Liveness is first-class: a hit whose file is gone comes
+back flagged **stale**, never silently dropped — when an external drive is
+unplugged, "found it, but it's not reachable" is the honest answer. Results
+group by shoot with a jump back into the run. The index stores real absolute
+paths, so it lives only in `~/.pixcull/library/`.
+
+
 **v2.29** — **the frosted-glass system lands (adopt-scoped, as the audit
 ruled)** (see [`docs/ROADMAP-v2.29-charter.md`](docs/ROADMAP-v2.29-charter.md)).
 The ~30 ad-hoc `backdrop-filter` uses scattered through the UI (blur

@@ -4249,6 +4249,10 @@ class _Handler(BaseHTTPRequestHandler):
         "/api/v1/conflicts": "_serve_session_conflicts",
         # standalone pages
         "/history": "_serve_history_page",
+        # v2.32-P1 — cross-run library search
+        "/library": "_serve_library_page",
+        "/api/v1/library/status": "_serve_api_v1_library_status",
+        "/api/v1/library/search": "_serve_api_v1_library_search",
         "/companion": "_serve_companion_page",
         "/tether": "_serve_tether_page",
         "/tether/sessions": "_serve_tether_sessions",
@@ -4853,6 +4857,71 @@ class _Handler(BaseHTTPRequestHandler):
             .replace("<!--__DIS_PER_RUN__-->", per_run_html)
         )
         self._send_html(200, html_body.encode("utf-8"))
+
+    # ── v2.32-P1 — cross-run library search ──────────────────────────
+    def _serve_library_page(self) -> None:
+        """GET /library — search across every indexed shoot at once."""
+        html = _read_template("pages/library.html").replace(
+            "/*__DESIGN_TOKENS_CSS__*/", _DESIGN_TOKENS_CSS)
+        self._send_html(200, html.encode("utf-8"))
+
+    def _serve_api_v1_library_status(self) -> None:
+        """GET /api/v1/library/status — index size + liveness summary."""
+        try:
+            from pixcull.scoring import library_index as LX
+            st = LX.status()
+            payload = {
+                "ok": True,
+                "schema": "pixcull.api.v1.library.status",
+                "n_photos": st["n_photos"],
+                "n_runs": st["n_runs"],
+                "n_stale": st["n_stale"],
+                "disk_bytes": st["disk_bytes"],
+            }
+        except Exception as exc:                       # noqa: BLE001
+            payload = {"ok": False, "error": str(exc)}
+        self._send_json(200, _safe_dumps(payload).encode("utf-8"))
+
+    def _serve_api_v1_library_search(self) -> None:
+        """GET /api/v1/library/search?q=<text>&k=40 — cross-run hits.
+
+        Stale hits (file not on disk right now) are RETURNED with a flag
+        rather than filtered out: an offline drive should read as
+        "found it, but it's not reachable", not as "no such photo".
+        """
+        from urllib.parse import parse_qs, urlparse as _up
+        qs = parse_qs(_up(self.path).query)
+        query = (qs.get("q") or [""])[0].strip()
+        try:
+            k = max(1, min(200, int((qs.get("k") or ["40"])[0])))
+        except ValueError:
+            k = 40
+        if not query:
+            self._send_json(200, _safe_dumps(
+                {"ok": False, "error": "q required"}).encode("utf-8"))
+            return
+        try:
+            from pixcull.scoring import library_index as LX
+            from pixcull.scoring.semantic_search import encode_query
+            if LX.status()["n_photos"] == 0:
+                payload = {"ok": False,
+                           "error": "library index is empty — run "
+                                    "`pixcull library index` first"}
+            else:
+                t0 = time.time()
+                hits = LX.search(encode_query(query), k=k)
+                payload = {
+                    "ok": True,
+                    "schema": "pixcull.api.v1.library.search",
+                    "query": query,
+                    "n_hits": len(hits),
+                    "elapsed_ms": int((time.time() - t0) * 1000),
+                    "hits": hits,
+                }
+        except Exception as exc:                       # noqa: BLE001
+            _dbg("library_search", exc, query)
+            payload = {"ok": False, "error": str(exc)}
+        self._send_json(200, _safe_dumps(payload).encode("utf-8"))
 
     def _serve_companion_page(self) -> None:
         """v0.12-P0-2 — second-monitor companion window.
@@ -12178,6 +12247,15 @@ _DESIGN_TOKENS_CSS = r"""
     /* radius — v2.21 tightened pro register */
     --radius-sm: 5px;  --radius-md: 8px;  --radius-lg: 11px;
     --radius-xl: 14px; --radius-pill: 999px;
+    /* glass — v2.29 shipped these into results.css's token module but not
+       into THIS shared blob, so standalone pages (/library, /tether,
+       /history, upload, admin) silently rendered chrome with no frost.
+       Same values; one material across every surface. */
+    --glass-blur:          16px;
+    --glass-sat:           130%;
+    --glass-filter:        blur(var(--glass-blur)) saturate(var(--glass-sat));
+    --glass-scrim-filter:  blur(4px);
+    --glass-edge:          inset 0 1px 0 rgba(255,255,255,0.08);
     /* shadows — v2.2 softer + wider "expensive" elevation */
     --shadow-sm: 0 1px 3px rgba(0,0,0,0.34);
     --shadow-md: 0 6px 22px rgba(0,0,0,0.36);
@@ -12209,6 +12287,9 @@ _DESIGN_TOKENS_CSS = r"""
     --muted-soft:   #8f8f93;
     --border:       #e2e2e2;
     --border-hi:    #c9c9c9;
+    /* light glass: an 8% white highlight is invisible on a near-white
+       film — light materials read via a stronger edge (as tokens.css). */
+    --glass-edge:   inset 0 1px 0 rgba(255,255,255,0.65);
     --accent:       #6c501f;
     --accent-hi:    #866939;
     --accent-soft:  rgba(71,58,41,0.10);
@@ -12223,6 +12304,14 @@ _DESIGN_TOKENS_CSS = r"""
     :root {
       --duration-fast: 1ms; --duration-normal: 1ms; --duration-slow: 1ms;
     }
+  }
+  /* v2.32 — same a11y contract as results.css: a user who asks for less
+     transparency gets solid chrome, not frosted glass. */
+  @media (prefers-reduced-transparency: reduce) {
+    :root, [data-theme="light"] {
+      --glass-filter: none; --glass-scrim-filter: none; --glass-edge: none;
+    }
+    header { background: var(--chrome) !important; }
   }
   /* v0.9-P0-3 — signature brand-wide gradient + CTA helper, available
      on every page that uses _DESIGN_TOKENS_CSS (upload / admin / share).

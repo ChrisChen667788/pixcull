@@ -67,3 +67,27 @@ def test_dev_shim_still_forwards():
     shim = (_REPO / "scripts" / "serve_demo.py").read_text("utf-8")
     assert "from pixcull.report.serve_app import main" in shim
     assert len(shim.split("\n")) < 60, "shim grew a second implementation"
+
+
+# ── v2.32-P1 — /library page + API ────────────────────────────────────
+def test_library_page_and_api_are_wired():
+    src = _IMPL.read_text("utf-8")
+    for route in ('"/library": "_serve_library_page"',
+                  '"/api/v1/library/status"', '"/api/v1/library/search"'):
+        assert route in src, f"library route missing: {route}"
+    assert '_read_template("pages/library.html")' in src, (
+        "library page no longer loads its extracted template")
+    tmpl = _REPO / "pixcull" / "report" / "templates" / "pages" / "library.html"
+    assert tmpl.is_file() and "/*__DESIGN_TOKENS_CSS__*/" in tmpl.read_text("utf-8")
+
+
+def test_shared_design_tokens_carry_glass():
+    """v2.29 put the glass tokens in results.css's token module only, so
+    standalone pages (/library, /tether, /history, upload, admin) rendered
+    chrome with no frost. One material means BOTH token sources define it —
+    including the reduced-transparency fallback."""
+    src = _IMPL.read_text("utf-8")
+    for tok in ("--glass-filter:", "--glass-scrim-filter:", "--glass-edge:"):
+        assert tok in src, f"shared design-tokens blob missing {tok}"
+    assert "prefers-reduced-transparency" in src, (
+        "standalone pages lost the reduced-transparency fallback")
