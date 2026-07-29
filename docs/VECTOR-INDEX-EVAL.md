@@ -93,5 +93,22 @@ PixCull **当前已经是向量检索**——不是关键词/SQL 查询:
   时间窗剪枝而非 ANN。
 - 👁 **重评触发器**:若产品引入跨 run 全库语义检索,重跑本评估。
 
+## 后续修正(2026-07,owner 指定做跨 run 全库检索后实测)
+
+上文把"跨 run 全库检索"列为 ANN 的重评触发器。**实测后这个预判需要修正**:
+
+| 全库规模 | brute-force 查询 | 内存 |
+|---:|---:|---:|
+| 100,000 张 | 8.0 ms | 195 MB |
+| 300,000 张 | 22.5 ms | 586 MB |
+| 1,000,000 张 | 34.5 ms | 1.9 GB |
+
+**即使百万级,brute-force 也只要 34.5ms**(CLIP 编码 17.4ms 的 2 倍),仍在可接受
+范围。真正先撞的墙是**内存**(百万级 1.9GB 常驻),不是速度。
+
+所以跨库检索首版**仍不需要 ANN**;ANN 的价值转向**压缩**(int8/PQ),触发条件改为
+"库 > 30 万张"。完整方案见
+[`docs/ROADMAP-v2.32-library-search-plan.md`](ROADMAP-v2.32-library-search-plan.md)。
+
 本文数据可复现:向量检索/近重复基准见上表参数(numpy float32、D=512、本机
 Apple silicon),CLIP 编码用 `pixcull.scoring.semantic_search.encode_query`。
