@@ -793,15 +793,23 @@ def serve(
     """
     import sys as _sys
 
-    from pixcull.report import serve_app
-
-    # A pip-installed user has no /tmp/pixcull_demo convention and no repo;
-    # default their runs to a stable home directory instead.
-    if root is None and not os.environ.get("PIXCULL_DEMO_ROOT"):
-        if serve_app._repo_root() is None:      # installed, not a checkout
-            root = Path.home() / ".pixcull" / "runs"
+    # serve_app evaluates _DEMO_ROOT from PIXCULL_DEMO_ROOT AT IMPORT TIME,
+    # so the env must be set BEFORE the import — setting it afterwards
+    # silently served the wrong tree (caught while prepping a real
+    # labeling session: --root pointed at runs the server never listed).
     if root is not None:
         os.environ["PIXCULL_DEMO_ROOT"] = str(Path(root).expanduser())
+    elif not os.environ.get("PIXCULL_DEMO_ROOT"):
+        # A pip-installed user has no /tmp/pixcull_demo convention and no
+        # repo; default their runs to a stable home directory instead.
+        import importlib.util as _ilu
+        _in_checkout = (Path(__file__).resolve().parent.parent
+                        / "pyproject.toml").is_file()
+        if not _in_checkout:
+            os.environ["PIXCULL_DEMO_ROOT"] = str(
+                Path.home() / ".pixcull" / "runs")
+
+    from pixcull.report import serve_app
 
     # serve_app.main() parses sys.argv (argparse) — hand it the flags it
     # expects rather than duplicating its ~30 options here.
