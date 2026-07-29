@@ -31,7 +31,7 @@ _TOKENIZED = {"_UPLOAD_HTML", "_ADMIN_HTML", "_ADMIN_PERF_HTML"}
 @pytest.fixture(scope="module")
 def server_mod():
     spec = importlib.util.spec_from_file_location(
-        "serve_demo_pages_test", _REPO / "scripts" / "serve_demo.py")
+        "serve_demo_pages_test", _REPO / "pixcull" / "report" / "serve_app.py")
     mod = importlib.util.module_from_spec(spec)
     sys.modules["serve_demo_pages_test"] = mod
     spec.loader.exec_module(mod)
@@ -96,7 +96,7 @@ def test_inmethod_page_templates_exist_with_placeholders():
 
 
 def test_inmethod_templates_referenced_by_serve_demo():
-    src = (_REPO / "scripts" / "serve_demo.py").read_text("utf-8")
+    src = (_REPO / "pixcull" / "report" / "serve_app.py").read_text("utf-8")
     for fname in _INMETHOD_PAGES:
         assert f'_read_template("pages/{fname}")' in src, (
             f"serve_demo no longer loads pages/{fname}")

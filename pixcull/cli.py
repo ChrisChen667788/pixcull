@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -768,3 +769,47 @@ def trim_dupes(
 
 if __name__ == "__main__":
     app()
+
+
+@app.command()
+def serve(
+    port: int = typer.Option(8770, help="Preferred port (auto-falls back if busy)"),
+    host: str = typer.Option("127.0.0.1",
+                             help="Bind address. 0.0.0.0 exposes to the LAN — "
+                                  "no auth, only on networks you trust."),
+    root: Optional[Path] = typer.Option(
+        None, "--root",
+        help="Where runs live (default ~/.pixcull/runs for an installed "
+             "PixCull, /tmp/pixcull_demo in a dev checkout)"),
+    open_browser: bool = typer.Option(True, "--open/--no-open",
+                                      help="Open a browser tab on startup"),
+) -> None:
+    """v2.31 — launch the review workspace (the keyboard-first culling
+    grid, lightbox glass box, compare, XMP export).
+
+    Until now this only ran from a git checkout via
+    ``python scripts/serve_demo.py``; the server now ships inside the
+    package, so a ``pip install pixcull`` user gets the same UI.
+    """
+    import sys as _sys
+
+    from pixcull.report import serve_app
+
+    # A pip-installed user has no /tmp/pixcull_demo convention and no repo;
+    # default their runs to a stable home directory instead.
+    if root is None and not os.environ.get("PIXCULL_DEMO_ROOT"):
+        if serve_app._repo_root() is None:      # installed, not a checkout
+            root = Path.home() / ".pixcull" / "runs"
+    if root is not None:
+        os.environ["PIXCULL_DEMO_ROOT"] = str(Path(root).expanduser())
+
+    # serve_app.main() parses sys.argv (argparse) — hand it the flags it
+    # expects rather than duplicating its ~30 options here.
+    argv = ["pixcull-serve", "--port", str(port), "--host", host]
+    if not open_browser:
+        argv.append("--no-open")
+    _saved, _sys.argv = _sys.argv, argv
+    try:
+        serve_app.main()
+    finally:
+        _sys.argv = _saved

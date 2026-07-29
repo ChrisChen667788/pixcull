@@ -21,7 +21,7 @@ import pytest
 def _import_server():
     repo_root = Path(__file__).resolve().parent.parent
     spec = importlib.util.spec_from_file_location(
-        "serve_demo", repo_root / "scripts" / "serve_demo.py")
+        "serve_demo", repo_root / "pixcull" / "report" / "serve_app.py")
     mod = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
     spec.loader.exec_module(mod)

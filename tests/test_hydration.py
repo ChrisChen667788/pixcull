@@ -19,7 +19,7 @@ from tests.test_5k_scale import _synth_scores_csv  # reuse the row factory
 def server_mod():
     repo = Path(__file__).resolve().parent.parent
     spec = importlib.util.spec_from_file_location(
-        "serve_demo_hydration_test", repo / "scripts" / "serve_demo.py")
+        "serve_demo_hydration_test", repo / "pixcull" / "report" / "serve_app.py")
     mod = importlib.util.module_from_spec(spec)
     sys.modules["serve_demo_hydration_test"] = mod
     spec.loader.exec_module(mod)

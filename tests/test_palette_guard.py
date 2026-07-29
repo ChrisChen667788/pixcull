@@ -19,7 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 UI_FILES = [
     ROOT / "pixcull" / "report" / "templates" / "results.html",
-    ROOT / "scripts" / "serve_demo.py",
+    ROOT / "pixcull" / "report" / "serve_app.py",
     ROOT / "pixcull" / "scoring" / "attribution.py",
 ]
 

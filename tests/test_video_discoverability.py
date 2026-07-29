@@ -15,7 +15,7 @@ import pytest
 def _import_server():
     repo = Path(__file__).resolve().parent.parent
     spec = importlib.util.spec_from_file_location(
-        "serve_demo", repo / "scripts" / "serve_demo.py")
+        "serve_demo", repo / "pixcull" / "report" / "serve_app.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod

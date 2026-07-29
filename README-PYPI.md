@@ -34,11 +34,16 @@ pixcull video clip.mp4 -o ./out
 pixcull --help
 ```
 
-The pip package ships the full scoring engine and CLI. The interactive
-review workspace (keyboard-first grid, ⌘K palette, per-axis "why"
-explanations, maybe-resolution queue) currently launches from the
-[GitHub repo](https://github.com/ChrisChen667788/pixcull) — a packaged
-`pixcull serve` is on the roadmap.
+```bash
+# open the review workspace in your browser (v2.31 — now packaged)
+pixcull serve
+```
+
+The pip package ships the full scoring engine, the CLI **and** the
+interactive review workspace: keyboard-first grid, ⌘K palette, per-axis
+"why" explanations, n-way compare, maybe-resolution queue, XMP export.
+`pixcull serve` stores runs under `~/.pixcull/runs` by default
+(`--root` to change, `--host 0.0.0.0` to share on a trusted LAN).
 
 ![PixCull lightbox](https://raw.githubusercontent.com/ChrisChen667788/pixcull/main/docs/screenshots/03-lightbox.png)
 

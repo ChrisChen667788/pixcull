@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parent.parent
 def _load_serve_demo():
     """Import scripts/serve_demo.py as a module without starting the server
     (its socket bind is guarded by ``if __name__ == '__main__'``)."""
-    p = ROOT / "scripts" / "serve_demo.py"
+    p = ROOT / "pixcull" / "report" / "serve_app.py"
     spec = importlib.util.spec_from_file_location("serve_demo", p)
     mod = importlib.util.module_from_spec(spec)
     sys.modules["serve_demo"] = mod        # set before exec for dataclass resolution
