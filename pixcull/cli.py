@@ -821,3 +821,221 @@ def serve(
         serve_app.main()
     finally:
         _sys.argv = _saved
+
+
+# ── v2.32-P0 — cross-run library search ────────────────────────────────
+library_app = typer.Typer(
+    help="Search every shoot at once (v2.32): build and query a "
+         "cross-run semantic index.",
+    no_args_is_help=True)
+app.add_typer(library_app, name="library")
+
+
+def _iter_run_dirs(root: Path):
+    """Yield (run_id, output_dir) for every run under `root`."""
+    if not root.is_dir():
+        return
+    for child in sorted(root.iterdir()):
+        out = child / "output"
+        if out.is_dir() and (out / "scores.csv").is_file():
+            yield child.name, out
+
+
+@library_app.command("index")
+def library_index_cmd(
+    root: Optional[Path] = typer.Option(
+        None, "--root", help="Runs directory (default: PIXCULL_DEMO_ROOT, "
+                             "else ~/.pixcull/runs, else /tmp/pixcull_demo)"),
+    library: Optional[Path] = typer.Option(
+        None, "--library", help="Index location (default ~/.pixcull/library)"),
+    encode_missing: bool = typer.Option(
+        False, "--encode-missing",
+        help="Also CLIP-encode runs that have no embeddings.npz yet. SLOW "
+             "(minutes per thousand photos); off by default so indexing "
+             "stays a near-instant copy of caches search already built."),
+) -> None:
+    """Add every run's photos to the cross-run index.
+
+    Reuses each run's ``output/embeddings.npz`` — the cache per-run
+    semantic search already builds — so this is a copy, not a re-encode.
+    Idempotent: re-running only picks up new or changed photos.
+    """
+    from pixcull.scoring import library_index as LX
+    from pixcull.scoring.semantic_search import (
+        build_embeddings_cache, load_embeddings_cache,
+    )
+
+    if root is None:
+        env = os.environ.get("PIXCULL_DEMO_ROOT")
+        if env:
+            root = Path(env)
+        elif (Path.home() / ".pixcull" / "runs").is_dir():
+            root = Path.home() / ".pixcull" / "runs"
+        else:
+            root = Path("/tmp/pixcull_demo")
+    lib = library or LX.LIBRARY_DIR
+
+    runs = list(_iter_run_dirs(root))
+    if not runs:
+        console.print(f"[yellow]no runs under {root}[/yellow]")
+        raise typer.Exit(0)
+
+    total_added = total_skipped = 0
+    for run_id, out_dir in runs:
+        cache_path = out_dir / "embeddings.npz"
+        cache = load_embeddings_cache(cache_path)
+        if cache is None:
+            if not encode_missing:
+                console.print(
+                    f"[dim]{run_id}: no embeddings.npz — skipped "
+                    f"(--encode-missing to build it)[/dim]")
+                continue
+            paths = _resolve_run_images(out_dir)
+            if not paths:
+                console.print(f"[dim]{run_id}: no readable images[/dim]")
+                continue
+            console.print(f"[cyan]{run_id}: encoding {len(paths)} photos…[/cyan]")
+            cache = build_embeddings_cache(paths, cache_path)
+
+        names = [str(x) for x in cache["filenames"]]
+        entries, rows = [], []
+        for i, fn in enumerate(names):
+            p = _resolve_image_path(out_dir, fn)
+            if p is None:
+                continue          # can't record a path we can't resolve
+            try:
+                mtime = p.stat().st_mtime
+            except OSError:
+                continue
+            entries.append((fn, str(p), mtime))
+            rows.append(i)
+        if not entries:
+            console.print(f"[dim]{run_id}: nothing resolvable[/dim]")
+            continue
+
+        res = LX.append_run(run_id, entries, cache["vectors"][rows],
+                            library_dir=lib, model=cache.get("model", ""))
+        total_added += res["added"]
+        total_skipped += res["skipped"]
+        if res["added"]:
+            console.print(f"[green]{run_id}: +{res['added']}[/green]"
+                          + (f" ({res['skipped']} already indexed)"
+                             if res["skipped"] else ""))
+
+    st = LX.status(lib)
+    console.print(f"\n[bold]library:[/bold] {st['n_photos']:,} photos · "
+                  f"{st['n_runs']} runs · {st['disk_bytes']/1024/1024:.1f} MB"
+                  f"  [dim](+{total_added} this pass, "
+                  f"{total_skipped} unchanged)[/dim]")
+
+
+def _resolve_run_images(out_dir: Path) -> list[Path]:
+    """Best-effort list of a run's source images (manifest, else input/)."""
+    import csv
+    import json as _json
+    manifest = out_dir / "manifest.json"
+    if manifest.is_file():
+        try:
+            m = _json.loads(manifest.read_text(encoding="utf-8"))
+            if isinstance(m, dict):
+                return [Path(v) for v in m.values() if Path(v).is_file()]
+        except (OSError, ValueError):
+            pass
+    inp = out_dir.parent / "input"
+    if inp.is_dir():
+        scores = out_dir / "scores.csv"
+        if scores.is_file():
+            try:
+                with scores.open(encoding="utf-8") as fh:
+                    names = [r["filename"] for r in csv.DictReader(fh)]
+                return [inp / n for n in names if (inp / n).is_file()]
+            except (OSError, KeyError):
+                pass
+    return []
+
+
+def _resolve_image_path(out_dir: Path, filename: str) -> Optional[Path]:
+    """Absolute path of one photo of a run (manifest first, then input/)."""
+    import json as _json
+    manifest = out_dir / "manifest.json"
+    if manifest.is_file():
+        try:
+            m = _json.loads(manifest.read_text(encoding="utf-8"))
+            if isinstance(m, dict) and filename in m:
+                return Path(m[filename])
+        except (OSError, ValueError):
+            pass
+    cand = out_dir.parent / "input" / filename
+    return cand if cand.is_file() else None
+
+
+@library_app.command("status")
+def library_status_cmd(
+    library: Optional[Path] = typer.Option(None, "--library"),
+) -> None:
+    """Show index size, run coverage, and how many photos went missing."""
+    from pixcull.scoring import library_index as LX
+    st = LX.status(library or LX.LIBRARY_DIR)
+    console.print(f"[bold]{st['n_photos']:,}[/bold] photos across "
+                  f"[bold]{st['n_runs']}[/bold] runs · "
+                  f"{st['disk_bytes']/1024/1024:.1f} MB · dim {st['dim']}")
+    console.print(f"[dim]{st['library_dir']}[/dim]")
+    if st["n_stale"]:
+        console.print(
+            f"[yellow]{st['n_stale']} photo(s) not on disk right now[/yellow] "
+            f"[dim](deleted, moved, or an external drive is offline — they "
+            f"stay indexed and come back when the drive does)[/dim]")
+
+
+@library_app.command("search")
+def library_search_cmd(
+    query: str = typer.Argument(..., help='e.g. "backlit hands close-up"'),
+    k: int = typer.Option(20, "-k", help="How many hits"),
+    library: Optional[Path] = typer.Option(None, "--library"),
+) -> None:
+    """Search across every indexed shoot."""
+    from pixcull.scoring import library_index as LX
+    from pixcull.scoring.semantic_search import encode_query
+
+    lib = library or LX.LIBRARY_DIR
+    if LX.status(lib)["n_photos"] == 0:
+        console.print("[yellow]library is empty — run "
+                      "`pixcull library index` first[/yellow]")
+        raise typer.Exit(1)
+
+    hits = LX.search(encode_query(query), k=k, library_dir=lib)
+    if not hits:
+        console.print("[dim]no hits[/dim]")
+        raise typer.Exit(0)
+
+    table = Table(title=f'library search — "{query}"')
+    table.add_column("sim", justify="right")
+    table.add_column("run")
+    table.add_column("photo")
+    table.add_column("")
+    for h in hits:
+        table.add_row(f"{h['similarity']:.3f}", h["run_id"], h["filename"],
+                      "[yellow]missing[/yellow]" if h["stale"] else "")
+    console.print(table)
+
+
+@library_app.command("prune")
+def library_prune_cmd(
+    run: Optional[str] = typer.Option(
+        None, "--run", help="Drop one run's rows instead of the stale ones"),
+    library: Optional[Path] = typer.Option(None, "--library"),
+    yes: bool = typer.Option(False, "--yes", help="Skip confirmation"),
+) -> None:
+    """Remove rows whose photos are gone (or one run's rows)."""
+    from pixcull.scoring import library_index as LX
+    lib = library or LX.LIBRARY_DIR
+    st = LX.status(lib)
+    if run is None and st["n_stale"] and not yes:
+        console.print(
+            f"[yellow]About to drop {st['n_stale']} row(s) whose files "
+            f"aren't on disk.[/yellow] If an external drive is merely "
+            f"offline, reconnect it instead — pruning loses those entries "
+            f"until you re-index. Pass --yes to proceed.")
+        raise typer.Exit(1)
+    res = LX.prune(lib, run_id=run)
+    console.print(f"removed {res['removed']}, {res['remaining']} remaining")

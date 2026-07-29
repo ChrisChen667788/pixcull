@@ -89,3 +89,10 @@ label_sheet*.csv
 
 # v2.19 — local wheel build output
 dist_wheel/
+
+# v2.32 — cross-run library index: records REAL absolute photo paths,
+# private to the machine. Never commit; it lives in ~/.pixcull/library/
+# but guard against a stray local copy too.
+library/
+vectors.npy
+manifest.jsonl
