@@ -375,7 +375,15 @@ def main(argv: list[str] | None = None) -> int:
     api = HubApi()
     try:
         if token:        # non-empty → explicit login
-            api.login(access_token=token)
+            # v2.30 — the modelscope SDK renamed the login kwarg: newer
+            # releases (the version CI's bare `pip install modelscope`
+            # resolves) take the token positionally and raise TypeError
+            # on `access_token=`; older ones (the local venv) require the
+            # keyword. Try new-style first, fall back to legacy.
+            try:
+                api.login(token)
+            except TypeError:
+                api.login(access_token=token)
         # Empty string means "use saved credentials" — HubApi reads
         # ~/.modelscope automatically on first request.
     except Exception as exc:  # noqa: BLE001 — SDK raises broad exc types
