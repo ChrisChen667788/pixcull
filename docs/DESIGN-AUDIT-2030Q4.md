@@ -120,6 +120,23 @@ saturate 140/180% 各写各的)、且全仓零 `prefers-reduced-transparency`(a1
 - **首切片**:用已算的 CLIP 视觉 centroid 距离,在网格里把视觉近重复折叠成堆(复用
   ⧉N 堆叠 badge + 比较入口);阈值可调,默认保守。
 
+## 附:向量索引评估(2026-07,owner 提问)
+
+结论:**当前 brute-force 向量检索更优,不引入 ANN 索引**。完整数据见
+[`docs/VECTOR-INDEX-EVAL.md`](VECTOR-INDEX-EVAL.md)。要点:
+
+- PixCull **已经是向量检索**(CLIP 512 维向量缓存 + 矩阵乘 + argpartition
+  top-k);问题实为"要不要加 ANN 索引层"。
+- **检索不是瓶颈**:5,000 张检索 **0.18ms**,而 CLIP 文本编码 **17.4ms** ——
+  检索仅占端到端 **~1%**,优化它用户无感。
+- **作用域是单 run**(`/api/v1/runs/<id>/semantic_search`),真实 1k–5k 张,
+  ANN 建索引开销 > 查询节省。
+- ANN 有损召回,与近重复"precision over recall"的设计原则冲突;且引入编译型
+  依赖(faiss),违背刚打通的 `pip install` 体验。
+- **唯一真实瓶颈是近重复 O(N²)**(20k 张 2.4s / 50k 张 13s),但正解是**时间窗
+  剪枝**(精确、零依赖),不是 ANN。列为观察项。
+- **重评触发器**:若引入跨 run 全库检索(向量数跳到 100k–1M 级)。
+
 ## Owner 动作清单(无纯代码替代)
 
 1. **补打 tag `v2.24.0`–`v2.28.0`**(或单个 `v2.28.0` 追赶 tag)——五个版本无 Release/
