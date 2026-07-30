@@ -199,6 +199,13 @@ def analyze_one(path: Path) -> Optional[dict]:
         "scene": scene_name,
         "scene_probs": scene.extras["scene_probs"],
         "embedding": dup.extras["embedding"],
+        # v2.34 — CLIP image vector, free rider on scene detection's
+        # forward pass.  The orchestrator writes these to
+        # output/embeddings.npz so semantic search and `pixcull library
+        # index` never have to re-encode the shoot.  ``embedding`` above
+        # is DINOv2 768-d for near-dup clustering — a different space;
+        # they are not interchangeable.
+        "clip_embedding": scene.extras.get("clip_embedding"),
         # P-PRO-4.1 — wedding moment annotation. None on non-wedding
         # frames; the column still exists so CSV round-trips don't
         # have to None-check.

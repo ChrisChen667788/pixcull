@@ -1,5 +1,6 @@
 from functools import cache
 
+import numpy as np
 import torch
 from PIL import Image
 
@@ -175,6 +176,22 @@ class SceneDetector(Detector):
         # softmax — kept for audit + telemetry only.
         result.extras["scene_probs"] = dict(zip(names, calibrated))
         result.extras["scene_probs_raw"] = dict(zip(names, raw_probs_list))
+        # v2.34 — hand out the CLIP image embedding this forward pass
+        # ALREADY computed.  ``model(**inputs)`` projects and L2-normalizes
+        # the image tower before it can form logits_per_image, so
+        # ``out.image_embeds`` is the very same 512-d vector
+        # ``get_image_features`` returns (verified cosine 1.000000) —
+        # semantic search and the cross-run library index were paying to
+        # re-encode photos whose vectors we were throwing away.
+        #
+        # getattr-guarded: the transformers 5.x shape drift that already
+        # bit get_image_features (see pyproject's upper bounds) could
+        # rename this too, and a missing embedding must degrade to
+        # "cache not written", never break scene detection.
+        embeds = getattr(out, "image_embeds", None)
+        if embeds is not None:
+            result.extras["clip_embedding"] = (
+                embeds[0].cpu().numpy().astype(np.float32))
         if abstained:
             # Flagging "scene_uncertain" lets the rescorer ignore
             # the genre adjustment for this frame (treat as generic)

@@ -52,6 +52,27 @@
 
 ## What's new
 
+**v2.34** — **cross-run search works out of the box now** (see
+[`docs/ROADMAP-v2.34-charter.md`](docs/ROADMAP-v2.34-charter.md)). The task was
+"auto-index a shoot after culling", but the investigation found v2.32's library
+was **empty for real CLI users no matter what they ran**: the pipeline never
+wrote `embeddings.npz` (it was lazily built only if you'd already searched that
+shoot), and the path resolver consulted `manifest.json` and an `input/` dir but
+never `scores.csv`'s own `path` column — the one source a plain `pixcull run`
+actually produces. So `pixcull library index` reported "nothing resolvable" and
+indexed zero photos. Both fixed, and the first fix turned out to be free:
+scene detection already runs the full CLIP forward on every photo, and that
+pass must project and L2-normalize the image tower before it can form
+`logits_per_image` — so `out.image_embeds` *is* the 512-d vector semantic
+search was re-encoding the whole shoot to obtain (verified cosine **1.000000**
+against `get_image_features`, pinned by a real-model test). The pipeline now
+persists those vectors at **zero extra inference cost**, which also means a
+shoot's first semantic query no longer re-encodes it. Culling then files the
+shoot into the library automatically — on by default, because searching
+everything is the point of the page; the index is local-only in
+`~/.pixcull/library/`, never synced, and `PIXCULL_NO_AUTO_INDEX=1` turns it
+off.
+
 **v2.33** — **big shoots stop re-rendering themselves** (see
 [`docs/ROADMAP-v2.33-charter.md`](docs/ROADMAP-v2.33-charter.md)). This one
 started by *disproving* its own roadmap: the design audit predicted the DOM

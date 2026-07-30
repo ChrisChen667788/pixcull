@@ -898,9 +898,10 @@ def library_index_cmd(
             cache = build_embeddings_cache(paths, cache_path)
 
         names = [str(x) for x in cache["filenames"]]
+        path_map = _run_path_map(out_dir)      # one pass, not one per photo
         entries, rows = [], []
         for i, fn in enumerate(names):
-            p = _resolve_image_path(out_dir, fn)
+            p = path_map.get(fn)
             if p is None:
                 continue          # can't record a path we can't resolve
             try:
@@ -910,7 +911,9 @@ def library_index_cmd(
             entries.append((fn, str(p), mtime))
             rows.append(i)
         if not entries:
-            console.print(f"[dim]{run_id}: nothing resolvable[/dim]")
+            console.print(
+                f"[dim]{run_id}: {len(names)} vectors but no source photo "
+                f"resolved — moved, or an external drive is offline[/dim]")
             continue
 
         res = LX.append_run(run_id, entries, cache["vectors"][rows],
@@ -929,44 +932,69 @@ def library_index_cmd(
                   f"{total_skipped} unchanged)[/dim]")
 
 
-def _resolve_run_images(out_dir: Path) -> list[Path]:
-    """Best-effort list of a run's source images (manifest, else input/)."""
+def _run_path_map(out_dir: Path) -> dict[str, Path]:
+    """``filename -> absolute source path`` for one run.
+
+    v2.34 — built ONCE per run.  The v2.32 resolvers it replaces read
+    manifest.json again for *every* photo, which is one file parse per
+    photo on a 20,000-image shoot.
+
+    Sources, most authoritative first:
+
+    1. **scores.csv's own ``path`` column** — what the pipeline actually
+       recorded per photo.  This is the only source that works for a
+       plain ``pixcull run``, which writes no manifest.json and has no
+       sibling ``input/`` directory.  v2.32 didn't consult it, so
+       ``pixcull library index`` resolved *nothing* on real CLI runs and
+       reported "nothing resolvable" even with vectors present.
+    2. ``manifest.json`` — the demo server's filename→path map.
+    3. ``<run>/input/<filename>`` — the demo server's on-disk layout.
+
+    Only paths that exist right now are returned: indexing needs an
+    mtime, and the library's own ``stale`` state covers photos that go
+    missing *after* they were indexed.
+    """
     import csv
     import json as _json
+
+    out: dict[str, Path] = {}
+
+    scores = out_dir / "scores.csv"
+    if scores.is_file():
+        try:
+            with scores.open(encoding="utf-8", newline="") as fh:
+                for r in csv.DictReader(fh):
+                    fn, p = r.get("filename"), r.get("path")
+                    if fn and p:
+                        cand = Path(p)
+                        if cand.is_file():
+                            out[fn] = cand
+        except (OSError, ValueError):
+            pass
+
     manifest = out_dir / "manifest.json"
     if manifest.is_file():
         try:
             m = _json.loads(manifest.read_text(encoding="utf-8"))
             if isinstance(m, dict):
-                return [Path(v) for v in m.values() if Path(v).is_file()]
+                for fn, p in m.items():
+                    if fn not in out and isinstance(p, str) and Path(p).is_file():
+                        out[fn] = Path(p)
         except (OSError, ValueError):
             pass
+
     inp = out_dir.parent / "input"
     if inp.is_dir():
-        scores = out_dir / "scores.csv"
-        if scores.is_file():
-            try:
-                with scores.open(encoding="utf-8") as fh:
-                    names = [r["filename"] for r in csv.DictReader(fh)]
-                return [inp / n for n in names if (inp / n).is_file()]
-            except (OSError, KeyError):
-                pass
-    return []
+        for cand in inp.iterdir():
+            if cand.name not in out and cand.is_file():
+                out[cand.name] = cand
+
+    return out
 
 
-def _resolve_image_path(out_dir: Path, filename: str) -> Optional[Path]:
-    """Absolute path of one photo of a run (manifest first, then input/)."""
-    import json as _json
-    manifest = out_dir / "manifest.json"
-    if manifest.is_file():
-        try:
-            m = _json.loads(manifest.read_text(encoding="utf-8"))
-            if isinstance(m, dict) and filename in m:
-                return Path(m[filename])
-        except (OSError, ValueError):
-            pass
-    cand = out_dir.parent / "input" / filename
-    return cand if cand.is_file() else None
+def _resolve_run_images(out_dir: Path) -> list[Path]:
+    """A run's source images, in scores.csv order where available."""
+    return list(_run_path_map(out_dir).values())
 
 
 @library_app.command("status")

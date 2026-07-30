@@ -4,6 +4,7 @@ V0.1 runs sequentially (tqdm progress). V0.3 will add multi-process workers and
 incremental runs via the cache layer.
 """
 
+import os
 from collections import Counter
 from pathlib import Path
 from typing import Callable
@@ -33,6 +34,129 @@ from pixcull.scoring.axis_rescorer import (
 )
 
 console = Console()
+
+
+def _write_clip_cache(df: pd.DataFrame, output: Path) -> int:
+    """Write ``output/embeddings.npz`` from the run's CLIP vectors.
+
+    Best-effort by design: this is a free by-product, so a failure here
+    must never fail a cull that otherwise succeeded — the worst case is
+    that semantic search re-encodes later, exactly as it did before.
+
+    Returns how many vectors were written (0 = nothing to write).
+    """
+    if "clip_embedding" not in df.columns:
+        return 0
+    try:
+        import numpy as np
+
+        names, vecs = [], []
+        for fn, emb in zip(df["filename"], df["clip_embedding"], strict=True):
+            # A photo whose scene detector errored out has no vector; a
+            # row must be dropped rather than zero-filled, or it would
+            # rank as equally-unlike-everything in every future query.
+            if emb is None or not hasattr(emb, "shape"):
+                continue
+            arr = np.asarray(emb, dtype=np.float32).reshape(-1)
+            if arr.size == 0 or not np.isfinite(arr).all():
+                continue
+            names.append(str(fn))
+            vecs.append(arr)
+        if not vecs:
+            return 0
+        if len({v.shape[0] for v in vecs}) != 1:
+            console.print("[yellow]CLIP cache skipped: ragged vector dims[/]")
+            return 0
+
+        arr = np.stack(vecs, axis=0)
+        n = np.linalg.norm(arr, axis=1, keepdims=True)
+        arr = arr / np.where(n == 0, 1.0, n)
+
+        cache_path = output / "embeddings.npz"
+        # NB: np.savez APPENDS ".npz" to a target not already ending in
+        # it, so a ".npz.tmp" temp would land at ".npz.tmp.npz" and the
+        # rename would FileNotFound. Write through a handle — the same
+        # trap semantic_search.py and library_index.py both document.
+        tmp = cache_path.with_suffix(cache_path.suffix + ".tmp")
+        output.mkdir(parents=True, exist_ok=True)
+        with open(tmp, "wb") as fh:
+            np.savez(fh, filenames=np.array(names), vectors=arr,
+                     model=np.array("clip-vit-base-patch32"))
+        tmp.rename(cache_path)
+        console.print(f"[cyan]CLIP cache:[/] {len(names)} vectors "
+                      f"→ {cache_path.name} [dim](semantic search + "
+                      f"library index reuse this)[/dim]")
+        return len(names)
+    except Exception as exc:  # noqa: BLE001 — never fail the run for this
+        console.print(f"[yellow]CLIP cache skipped: {exc}[/]")
+        return 0
+
+
+def _auto_index_library(output: Path) -> None:
+    """File this run into the cross-run library index (``/library``).
+
+    v2.34 — closes the gap v2.32 left: the library only ever had content
+    if the user happened to know to run ``pixcull library index``, so
+    ``/library`` looked broken on a fresh install.  Now that the CLIP
+    vectors are a free by-product of culling (see ``_write_clip_cache``),
+    filing them is a copy measured in milliseconds.
+
+    ON by default because searching *everything* is the entire point of
+    the page, and the index is local-only — ``~/.pixcull/library/``,
+    never synced, never in the repo.  It does record real absolute
+    paths, which is exactly why it stays on this machine.  Opt out with
+    ``PIXCULL_NO_AUTO_INDEX=1``.
+
+    Best-effort like the cache: a cull that succeeded must not report
+    failure because a bonus index write didn't land.
+    """
+    if os.environ.get("PIXCULL_NO_AUTO_INDEX", "").strip().lower() in (
+            "1", "true", "yes", "on"):
+        return
+    try:
+        from pixcull.scoring import library_index as LX
+        from pixcull.scoring.semantic_search import load_embeddings_cache
+
+        cache = load_embeddings_cache(output / "embeddings.npz")
+        if cache is None or cache["vectors"].shape[0] == 0:
+            return
+
+        # run_id must match what `pixcull library index` derives when it
+        # walks the runs directory, or the same shoot would land twice
+        # under two names: <root>/<run_id>/output for the demo-server
+        # layout, else the output dir's own name.
+        run_id = (output.parent.name if output.name == "output"
+                  else output.name)
+
+        from pixcull.cli import _run_path_map
+        path_map = _run_path_map(output)
+        entries, rows = [], []
+        for i, fn in enumerate(str(x) for x in cache["filenames"]):
+            p = path_map.get(fn)
+            if p is None:
+                continue
+            try:
+                entries.append((fn, str(p), p.stat().st_mtime))
+            except OSError:
+                continue
+            rows.append(i)
+        if not entries:
+            return
+
+        # library_dir passed EXPLICITLY, not left to append_run's default:
+        # that default was bound to LIBRARY_DIR at import, so it ignores
+        # any later reassignment of the module attribute — which silently
+        # sent a test's writes into the real ~/.pixcull/library.
+        res = LX.append_run(run_id, entries, cache["vectors"][rows],
+                            library_dir=LX.LIBRARY_DIR,
+                            model=cache.get("model", ""))
+        if res["added"]:
+            console.print(
+                f"[cyan]Library:[/] +{res['added']} photos indexed as "
+                f"'{run_id}' [dim](search every shoot at /library or "
+                f"`pixcull library search`)[/dim]")
+    except Exception as exc:  # noqa: BLE001 — never fail the run for this
+        console.print(f"[yellow]auto-index skipped: {exc}[/]")
 
 
 def run_pipeline(
@@ -456,8 +580,19 @@ def run_pipeline(
                 f"{n_meta_done} non-cull rows (concurrent x8)"
             )
 
-    # Export CSV (drop embedding to keep file small)
-    df_export = df.drop(columns=["embedding"]).copy()
+    # v2.34 — persist the CLIP vectors that scene detection already
+    # produced, in the exact format semantic_search.load_embeddings_cache
+    # reads.  Before this, the first semantic query on a shoot re-encoded
+    # every photo (minutes per thousand) and `pixcull library index`
+    # silently skipped runs with no cache — which is every fresh run.
+    # Now the cache is a by-product of culling, at zero extra inference.
+    _write_clip_cache(df, output)
+
+    # Export CSV (drop embeddings to keep file small)
+    # (auto-index runs after the CSV lands — _run_path_map reads it)
+    df_export = df.drop(columns=["embedding"], errors="ignore").copy()
+    if "clip_embedding" in df_export.columns:
+        df_export = df_export.drop(columns=["clip_embedding"])
     df_export["scene_probs"] = df_export["scene_probs"].apply(str)
     df_export["flags"] = df_export["flags"].apply(lambda x: ",".join(x) if x else "")
     csv_path = output / "scores.csv"
@@ -471,6 +606,9 @@ def run_pipeline(
         f"Cull=[bold]{counts.get('cull', 0)}[/][/]"
     )
     console.print(f"[cyan]CSV:[/] {csv_path}")
+    # After the CSV: _run_path_map reads its ``path`` column to resolve
+    # each photo, so this has to follow the export, not precede it.
+    _auto_index_library(output)
     if progress_cb is not None:
         progress_cb(total, total, "完成")
     return output

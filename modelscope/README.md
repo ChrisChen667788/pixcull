@@ -54,7 +54,19 @@ tasks:
 完整源码 + iOS 伴侣 App + Lightroom 插件,均在 GitHub:
 **[github.com/ChrisChen667788/pixcull](https://github.com/ChrisChen667788/pixcull)**
 
-## v0.7 → v2.33 主要更新
+## v0.7 → v2.34 主要更新
+- **v2.34**:**全库检索终于"开箱即用"**。原任务是"跑完自动入库",查下去发现 v2.32 的
+  全库检索**对真实 CLI 用户怎么跑都是空的**:流水线从不写 `embeddings.npz`(只在你对
+  某次拍摄搜过一次时才懒生成),而路径解析只查 `manifest.json` 和 `input/` 目录,
+  **从不查 scores.csv 自己的 `path` 列** —— 偏偏那是 `pixcull run` 唯一会产出的来源。
+  于是 `pixcull library index` 报 "nothing resolvable",一张都没入库。两个都修了,
+  而且第一个修起来是**免费的**:scene 检测本来就对每张照片跑完整 CLIP 前向,而这个
+  前向要算出 `logits_per_image`,必须先把图像塔投影并 L2 归一化 —— `out.image_embeds`
+  **就是**语义搜索原本要重编码整批才能拿到的那个 512 维向量(与 `get_image_features`
+  实测 cos = **1.000000**,并用真模型测试钉住)。现在流水线**零额外推理成本**把它落盘,
+  连带让某次拍摄的首次语义搜索不再重编码。挑完片自动把这次拍摄归入全库 —— 默认开启,
+  因为"搜所有拍摄"就是这个页面的全部意义;索引只落 `~/.pixcull/library/`、从不同步,
+  `PIXCULL_NO_AUTO_INDEX=1` 可关。详见 `docs/ROADMAP-v2.34-charter.md`。
 - **v2.33**:**大拍摄不再每次请求都重渲染一遍**。这一版先**推翻了自己的路线图**:设计
   审计预判大 run 的瓶颈在 DOM,但 20,000 行实测只有 700 个占位符节点 / 7,362 总节点 /
   30MB 堆 —— v2.18 的分片水合早就兜住了。真瓶颈在服务端:`_build_results()`
