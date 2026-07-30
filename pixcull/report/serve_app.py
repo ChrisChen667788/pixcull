@@ -520,6 +520,12 @@ _DESIGN_TOKENS_CSS = r"""
     /* v2.2 — editorial serif for hero numbers / titles (offline-first) */
     --font-serif:   "Charter", "Iowan Old Style", "PT Serif",
                     "Source Serif Pro", Georgia, "Songti SC", serif;
+    /* v2.37 — the sans counterpart. The shared set defined --font-serif
+       but not this, so every page hand-rolled the same stack; the share
+       page's copy was the last one left. */
+    --font-sans:    -apple-system, BlinkMacSystemFont, "Segoe UI",
+                    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+                    system-ui, sans-serif;
     --t-hero:    28px;  --t-h2:    18px;  --t-h3:    14px;
     --t-body:    13px;  --t-small: 11.5px; --t-tiny:  10.5px;
     --lh-tight:  1.25;  --lh-normal: 1.55; --lh-loose: 1.7;
@@ -1599,7 +1605,23 @@ def _build_results_uncached(run_id: str) -> tuple[list[dict], dict] | None:
     # V14.3 — enumerate so build_advice can pick phrases by batch index
     # rather than filename hash. Renaming a JPG no longer rotates its
     # review text (which the user found confusing).
-    for _idx, (_, r) in enumerate(df.iterrows()):
+    # v2.37 — plain dicts, not df.iterrows().
+    #
+    # The loop body touches ~58 cells per row (44 r.get() + 12 r[...] + 2
+    # r.to_dict()).  Against a pandas Series every one of those is an
+    # Index.get_loc hash lookup into an Arrow array; profiled on a
+    # 20,000-row run that was 1.22M Series.get() calls costing 7.1s of a
+    # 16.3s build — 43% of the time spent looking cells up rather than
+    # doing anything with them.  to_dict("records") pays the conversion
+    # once and makes every access a plain dict lookup.
+    #
+    # NB this also removes iterrows()'s dtype upcast: a Series must have
+    # one dtype, so iterrows() silently turned int columns into floats,
+    # while to_dict("records") preserves each column's own dtype.  That
+    # is a real behaviour difference, so the acceptance bar for this
+    # change was a field-by-field diff of all 20,000 built rows against
+    # the previous implementation, not just a stopwatch.
+    for _idx, r in enumerate(df.to_dict("records")):
         fn = str(r["filename"])
         # Auto rubric stars from CSV columns ('rubric_<axis>_stars')
         auto_stars = {
@@ -1646,7 +1668,7 @@ def _build_results_uncached(run_id: str) -> tuple[list[dict], dict] | None:
         # hash) and fed into _synthesize_maybe_rationale for the
         # 'why is this maybe?' summary line.
         advice = build_advice(
-            row=r.to_dict(),
+            row=r,                    # already a plain dict (v2.37)
             final_stars=final_stars,
             decision=str(r.get("decision", "") or ""),
             meta_inconsistencies=str(r.get("meta_inconsistencies", "") or ""),
@@ -1655,7 +1677,7 @@ def _build_results_uncached(run_id: str) -> tuple[list[dict], dict] | None:
         )
         # V9.0: detected style modes for the UI tag chip
         from pixcull.scoring.style_modes import detect_style_modes
-        sp = detect_style_modes(r.to_dict())
+        sp = detect_style_modes(r)    # plain dict since v2.37
         # cluster_id from duplicate detector — used by V9.0 grouping
         cluster_id = r.get("cluster_id")
         try:
@@ -5066,33 +5088,33 @@ class _Handler(BaseHTTPRequestHandler):
         html_body = (
             "<!DOCTYPE html><html lang='zh'><head><meta charset='utf-8'>"
             "<title>PixCull · 偏差审计</title>"
-            "<style>"
-            "body{margin:0;background:#161616;color:#fff;"
+            "<style>" + _DESIGN_TOKENS_CSS +
+            "body{margin:0;background:var(--bg);color:var(--fg);"
             "font:13px/1.55 system-ui,-apple-system;padding:32px;}"
             "h1{margin:0 0 4px;letter-spacing:-0.02em;}"
-            ".meta{color:#888;font-size:11.5px;margin-bottom:32px;}"
-            ".meta a{color:#d5b584;text-decoration:none;margin-left:14px;}"
+            ".meta{color:var(--muted);font-size:11.5px;margin-bottom:32px;}"
+            ".meta a{color:var(--accent);text-decoration:none;margin-left:14px;}"
             "section{margin:24px 0;}"
             ".findings .finding{padding:14px;border-radius:8px;margin:10px 0;"
-            "background:rgba(220,38,38,0.10);"
-            "border-left:4px solid #dc2626;}"
-            ".findings .finding.under{background:rgba(245,158,11,0.10);"
-            "border-left-color:#f59e0b;}"
+            "background:color-mix(in srgb, var(--c-danger) 12%, transparent);"
+            "border-left:4px solid var(--c-danger);}"
+            ".findings .finding.under{background:color-mix(in srgb, var(--c-warn) 12%, transparent);"
+            "border-left-color:var(--c-warn);}"
             ".findings .badge{font-weight:600;letter-spacing:0.02em;"
-            "font-size:11.5px;text-transform:uppercase;color:#fda4af;"
+            "font-size:11.5px;text-transform:uppercase;color:var(--c-danger);"
             "margin-bottom:4px;}"
-            ".findings .metric{color:#fff;}"
-            ".findings .suggest{color:#aaa;font-size:11.5px;margin-top:4px;}"
+            ".findings .metric{color:var(--fg);}"
+            ".findings .suggest{color:var(--muted);font-size:11.5px;margin-top:4px;}"
             "table{border-collapse:collapse;width:100%;font-size:12px;}"
             "th,td{padding:6px 10px;text-align:left;"
-            "border-bottom:1px solid rgba(255,255,255,0.10);}"
-            "th{color:#a0a4b0;font-weight:600;}"
+            "border-bottom:1px solid var(--border);}"
+            "th{color:var(--muted);font-weight:600;}"
             "tr.under{opacity:0.45;}"
-            ".family h2{font-size:14px;color:#d5b584;"
+            ".family h2{font-size:14px;color:var(--accent);"
             "letter-spacing:0.02em;text-transform:uppercase;}"
-            "</style></head><body>"
+            "</style>" + _THEME_BOOT_HTML + "</head><body>"
             "<h1>偏差审计"
-            + (f" · <span style='color:#d5b584;font-size:18px'>"
+            + (f" · <span style='color:var(--accent);font-size:18px'>"
                f"@{_esc(user_filter)}</span>"
                if user_filter else "")
             + "</h1>"
@@ -5100,16 +5122,16 @@ class _Handler(BaseHTTPRequestHandler):
             f"{report.n_total_runs} 个 run · 缓存于 {ts}"
             # v0.13.2 — annotator switcher chips
             + (
-                "&nbsp;&nbsp;|&nbsp;&nbsp;<span style='color:#888'>"
+                "&nbsp;&nbsp;|&nbsp;&nbsp;<span style='color:var(--muted)'>"
                 + "切片:</span> "
                 + ("<a href='/admin/bias' style='" +
-                   (("color:#d5b584" if user_filter else
-                     "color:#fff;text-decoration:underline"))
+                   (("color:var(--accent)" if user_filter else
+                     "color:var(--fg);text-decoration:underline"))
                    + "'>全部</a>"
                    + "".join(
                        f" · <a href='/admin/bias?user={_esc(u)}' style='"
-                       + (("color:#fff;text-decoration:underline" if u == user_filter
-                           else "color:#d5b584"))
+                       + (("color:var(--fg);text-decoration:underline" if u == user_filter
+                           else "color:var(--accent)"))
                        + f"'>{_esc(u)}</a>"
                        for u in annotators[:10]))
                 if annotators else ""
@@ -5368,37 +5390,37 @@ class _Handler(BaseHTTPRequestHandler):
             "<!DOCTYPE html>"
             "<html lang='zh'><head><meta charset='utf-8'>"
             "<title>PixCull · 副屏</title>"
-            "<style>"
-            "html,body{margin:0;background:#161616;color:#fff;"
+            "<style>" + _DESIGN_TOKENS_CSS +
+            "html,body{margin:0;background:var(--bg);color:var(--fg);"
             "font:13px/1.4 system-ui,-apple-system;height:100%;}"
             "body{display:flex;flex-direction:column;}"
             ".bar{display:flex;align-items:center;gap:10px;"
-            "padding:8px 14px;background:rgba(28,30,38,0.85);"
+            "padding:8px 14px;background:var(--chrome);"
             "backdrop-filter:saturate(180%) blur(12px);}"
-            ".bar .badge{background:rgba(213,181,132,0.18);"
-            "color:#d5b584;padding:2px 10px;border-radius:999px;"
+            ".bar .badge{background:var(--accent-soft);"
+            "color:var(--accent);padding:2px 10px;border-radius:999px;"
             "font-size:11px;font-weight:600;}"
-            ".bar .fn{color:#aaa;font-family:ui-monospace,SF Mono,"
+            ".bar .fn{color:var(--muted);font-family:ui-monospace,SF Mono,"
             "Menlo,monospace;font-size:11.5px;flex:1;overflow:hidden;"
             "text-overflow:ellipsis;white-space:nowrap;}"
             ".stage{flex:1;display:flex;align-items:center;"
             "justify-content:center;padding:14px;}"
             "img{max-width:100%;max-height:100%;object-fit:contain;"
             "box-shadow:0 10px 36px rgba(0,0,0,0.6);}"
-            ".empty{color:#666;font-size:15px;text-align:center;"
+            ".empty{color:var(--muted);font-size:15px;text-align:center;"
             "max-width:420px;line-height:1.6;}"
-            "</style></head><body>"
+            "</style>" + _THEME_BOOT_HTML + "</head><body>"
             "<div class='bar'>"
             "<span class='badge'>🪟 副屏</span>"
             "<span class='fn' id='fnLabel'></span>"
-            "<span style='color:#888;font-size:11px'>Esc 关闭</span>"
+            "<span style='color:var(--muted);font-size:11px'>Esc 关闭</span>"
             "</div>"
             "<div class='stage'>"
             f"  <img id='lbImg' src='{initial_src}' alt='' "
             f"       style='{'display:none' if not initial_src else ''}'>"
             "  <div id='emptyState' class='empty' "
             f"       style='{'display:none' if initial_src else ''}'>"
-            "    等候主窗口选定一张照片…<br><span style='color:#444'>"
+            "    等候主窗口选定一张照片…<br><span style='color:var(--muted-soft)'>"
             "    (副屏会同步翻页 + 缩放)</span></div>"
             "</div>"
             "<script>(function(){"
@@ -6318,18 +6340,19 @@ class _Handler(BaseHTTPRequestHandler):
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
 <title>{_esc(event_title)} · {_esc(photographer or "PixCull")}</title>
+{_THEME_BOOT_HTML}
 <style>
+{_DESIGN_TOKENS_CSS}
+  /* v2.37 — the client delivery page now runs on the SAME design system
+     as the rest of the product.
+     Until now it carried a third, unrelated palette (--bg #0a0a1e,
+     --bg-soft #1a1230 — purple/navy) plus a hard `color-scheme: dark`,
+     which meant the one surface a photographer actually sends to their
+     client looked like a different piece of software, and could never
+     follow the light theme.  Every variable it uses is in the shared
+     set, so adopting it is a straight deletion, not a redesign.
+     Only the page-specific spring curve stays local. */
   :root {{
-    color-scheme: dark;
-    --bg: #0a0a1e; --bg-card: #14171c; --bg-soft: #1a1230;
-    --fg: #e8eaed; --fg-2: #c6c9cf; --muted: #8a8e96; --muted-soft: #6b7280;
-    --border: rgba(255,255,255,0.10);
-    --border-hi: rgba(255,255,255,0.18);
-    --brand-gradient: linear-gradient(135deg, #d5b584 0%, #b5945f 50%, #93743f 100%);
-    --brand-gradient-soft: linear-gradient(135deg, rgba(213,181,132,0.18) 0%, rgba(106,96,82,0.18) 100%);
-    --accent: #b5945f;
-    --font-serif: "Charter","Iowan Old Style","PT Serif","Source Serif Pro","Cambria",Georgia,"Songti SC",serif;
-    --font-sans: -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
     --ease-out: cubic-bezier(0.34, 1.56, 0.64, 1);
   }}
   *,*::before,*::after {{ box-sizing: border-box; }}
@@ -6342,9 +6365,10 @@ class _Handler(BaseHTTPRequestHandler):
     position: sticky; top: 0; z-index: 5;
     display: flex; align-items: center; gap: 12px;
     padding: 10px 24px;
-    background: rgba(10,10,30,0.85);
-    backdrop-filter: blur(14px) saturate(140%);
-    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    background: color-mix(in srgb, var(--chrome) 78%, transparent);
+    backdrop-filter: var(--glass-filter);
+    -webkit-backdrop-filter: var(--glass-filter);
+    box-shadow: var(--glass-edge);
     border-bottom: 1px solid var(--border);
     font-size: 13px;
   }}
@@ -6375,7 +6399,7 @@ class _Handler(BaseHTTPRequestHandler):
     margin: 0 0 14px; font-family: var(--font-serif);
     font-size: clamp(36px, 6vw, 64px); font-weight: 700;
     letter-spacing: -0.01em; line-height: 1.1;
-    background: linear-gradient(180deg, #ffffff 0%, #cbd0d8 100%);
+    background: linear-gradient(180deg, var(--fg) 0%, var(--muted) 100%);
     -webkit-background-clip: text; background-clip: text;
     color: transparent; position: relative;
   }}
@@ -6453,12 +6477,12 @@ class _Handler(BaseHTTPRequestHandler):
   }}
   .ph-card:hover {{
     transform: translateY(-3px);
-    border-color: rgba(213,181,132,0.55);
-    box-shadow: 0 12px 28px rgba(213,181,132,0.25);
+    border-color: var(--focus-ring);
+    box-shadow: 0 12px 28px var(--accent-glow);
   }}
   .ph-card img {{
     display: block; width: 100%; aspect-ratio: 3/2;
-    object-fit: cover; background: #1c1f24;
+    object-fit: cover; background: var(--surface-3);
   }}
   .ph-cap {{
     padding: 8px 12px; font-size: 11px; color: var(--muted);
@@ -6498,7 +6522,7 @@ class _Handler(BaseHTTPRequestHandler):
   }}
   .ph-comment-form textarea:focus {{
     outline: 0; border-color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(213,181,132,0.20);
+    box-shadow: 0 0 0 3px var(--accent-soft);
   }}
   .ph-comment-form-row {{
     display: flex; gap: 10px; margin-top: 10px;
@@ -6511,9 +6535,9 @@ class _Handler(BaseHTTPRequestHandler):
   }}
   .ph-comment-form button {{
     padding: 0 18px; font-size: 13px; font-weight: 600;
-    background: var(--brand-gradient); color: #ffffff;
+    background: var(--brand-gradient); color: var(--on-accent, #161616);
     border: 0; border-radius: 8px; cursor: pointer;
-    box-shadow: 0 4px 14px rgba(213,181,132,0.35);
+    box-shadow: 0 4px 14px var(--accent-glow);
     transition: filter 160ms var(--ease-out),
                 transform 160ms var(--ease-out);
   }}
@@ -6522,8 +6546,8 @@ class _Handler(BaseHTTPRequestHandler):
   .ph-comment-form-status {{
     font-size: 11.5px; color: var(--muted); margin-top: 8px; min-height: 16px;
   }}
-  .ph-comment-form-status.ok {{ color: #88e0a6; }}
-  .ph-comment-form-status.err {{ color: #ee8888; }}
+  .ph-comment-form-status.ok {{ color: var(--c-ok, var(--keep)); }}
+  .ph-comment-form-status.err {{ color: var(--c-danger); }}
   .ph-comment-list-wrap {{ margin-top: 26px; }}
   .ph-comment-list-title {{
     margin: 0 0 12px; font-size: 12.5px; color: var(--muted);
@@ -6531,7 +6555,7 @@ class _Handler(BaseHTTPRequestHandler):
   }}
   .ph-comment-list {{ list-style: none; margin: 0; padding: 0; }}
   .ph-comment {{
-    background: rgba(255,255,255,0.02);
+    background: var(--surface-2);
     border: 1px solid var(--border); border-radius: 10px;
     padding: 12px 14px; margin-bottom: 8px;
   }}

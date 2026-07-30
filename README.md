@@ -52,6 +52,26 @@
 
 ## What's new
 
+**v2.37** — **big shoots open 3x faster, and the page your client sees finally
+looks like this product** (see
+[`docs/ROADMAP-v2.37-charter.md`](docs/ROADMAP-v2.37-charter.md)). v2.33's cache
+only helped from the second request on; the *first* open of a 20,000-photo
+shoot still took 8.5s. Profiling found the loop touching ~58 cells per row, and
+against a pandas Series every one is an `Index.get_loc` hash lookup —
+**1.22M `Series.get()` calls, 43% of the build**, versus 9% doing the actual
+work. Switching to `df.to_dict("records")` took the build **6.59s → 1.66s** and
+the cold page **8.55s → 2.85s**. Because `iterrows()` silently upcasts int
+columns to float and `to_dict` doesn't, the bar for that change was a
+field-by-field diff of all 20,000 rows × 52 fields, not a stopwatch — identical.
+Separately, `/share/<run>/<token>` — the gallery a photographer *sends to their
+client* — turned out to be running on a third, unrelated palette
+(`#0a0a1e`/`#1a1230`, purple-navy) with `color-scheme: dark` hard-locked, so it
+could never follow the theme and looked like different software; the bias-audit
+and companion windows were still on the pre-v2.21 gold. All three now use the
+shared tokens. Finding the last of it needed a real browser: the sticky brand
+bar was `rgba(10,10,30,0.85)`, invisible to a hex grep — the same failure mode
+as the v2.3.1 palette leak — so the new lint checks both notations.
+
 **v2.36** — **real video footage on stage, and a bug it flushed out** (see
 [`docs/ROADMAP-v2.36-charter.md`](docs/ROADMAP-v2.36-charter.md)). The task was
 just to close an owner action: publishable video footage. The owner authorised

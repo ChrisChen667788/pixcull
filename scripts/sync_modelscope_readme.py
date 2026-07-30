@@ -72,6 +72,7 @@ import argparse
 import os
 import re
 import sys
+import time
 from pathlib import Path
 
 
@@ -252,30 +253,67 @@ def _git_push_readme(repo_id: str, branch: str, readme_text: str) -> bool:
     return True
 
 
+# A ModelScope commit takes a repo-wide lock, so two syncs running at
+# once (e.g. a manual `make modelscope-sync` while the push-triggered CI
+# workflow is doing the same thing) make each other fail with
+# HTTP 429 "commit lock busy".  That is transient by definition — wait
+# and it succeeds — so it is worth retrying rather than reporting.
+_TRANSIENT_MARKERS = ("commit lock busy", "429", "too many requests",
+                      "500", "502", "503", "504", "timeout", "timed out")
+
+
+def _is_transient(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    return any(m in msg for m in _TRANSIENT_MARKERS)
+
+
 def _upload_referenced_assets(api, repo_id: str, branch: str,
-                              readme_text: str) -> int:
+                              readme_text: str,
+                              *, attempts: int = 4) -> tuple[int, int, list]:
     """Upload every ``docs/...(png|gif|svg|jpg|jpeg|webp)`` the README
-    references so the relative paths resolve on ModelScope itself."""
+    references so the relative paths resolve on ModelScope itself.
+
+    Returns ``(uploaded, expected, failed_paths)``.  The caller must treat
+    a short count as a FAILURE: this used to return only a count that
+    nobody compared against ``expected``, so a run that hosted 20 of 28
+    assets still printed "✓ synced" and exited 0 — the README then
+    referenced eight images that were not on the server.
+    """
     paths = sorted(set(re.findall(
         r"docs/[A-Za-z0-9/_.-]+\.(?:png|gif|svg|jpe?g|webp)", readme_text)))
-    n = 0
+    expected, n, failed = 0, 0, []
     for rel in paths:
         local = REPO_ROOT / rel
         if not local.exists():
+            # Not counted against the total: a missing local file is a
+            # README bug, reported separately from an upload failure.
             print(f"[modelscope-sync]   skip (missing): {rel}", file=sys.stderr)
             continue
-        try:
-            api.upload_file(
-                path_or_fileobj=str(local), path_in_repo=rel,
-                repo_id=repo_id, repo_type="model", revision=branch,
-                commit_message=f"host {rel}", disable_tqdm=True)
-            n += 1
-        except Exception as exc:  # noqa: BLE001
-            print(f"[modelscope-sync]   asset upload failed {rel}: {exc}",
-                  file=sys.stderr)
-    print(f"[modelscope-sync] ✓ hosted {n}/{len(paths)} referenced assets",
+        expected += 1
+        for attempt in range(1, attempts + 1):
+            try:
+                api.upload_file(
+                    path_or_fileobj=str(local), path_in_repo=rel,
+                    repo_id=repo_id, repo_type="model", revision=branch,
+                    commit_message=f"host {rel}", disable_tqdm=True)
+                n += 1
+                break
+            except Exception as exc:  # noqa: BLE001
+                if attempt < attempts and _is_transient(exc):
+                    delay = 2 ** attempt          # 2s, 4s, 8s
+                    print(f"[modelscope-sync]   {rel}: {type(exc).__name__} "
+                          f"(transient) — retry {attempt}/{attempts - 1} "
+                          f"in {delay}s", file=sys.stderr)
+                    time.sleep(delay)
+                    continue
+                print(f"[modelscope-sync]   asset upload failed {rel}: {exc}",
+                      file=sys.stderr)
+                failed.append(rel)
+                break
+    mark = "✓" if n == expected else "✗"
+    print(f"[modelscope-sync] {mark} hosted {n}/{expected} referenced assets",
           file=sys.stderr)
-    return n
+    return n, expected, failed
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -421,13 +459,28 @@ def main(argv: list[str] | None = None) -> int:
     #      which upload_file handles correctly), then
     #   2. push README.md + a correct .gitattributes via GIT so the
     #      model card renders as text (upload_file would re-LFS it).
-    _upload_referenced_assets(api, args.repo_id, args.branch, rewritten)
+    n_up, n_exp, failed = _upload_referenced_assets(
+        api, args.repo_id, args.branch, rewritten)
     if not _git_push_readme(args.repo_id, args.branch, rewritten):
         print("[modelscope-sync] ✗ README git push failed — card may show "
               "an LFS pointer; check git/Repository auth", file=sys.stderr)
         return 1
+    if failed:
+        # Exit non-zero: the README is live but points at images that
+        # are not.  Printing "✓ synced" here (as this did until v2.37)
+        # made a half-published model card look finished.
+        print(f"[modelscope-sync] ✗ {len(failed)} asset(s) still missing "
+              f"after retries — the model card references images that are "
+              f"NOT hosted:", file=sys.stderr)
+        for rel in failed:
+            print(f"[modelscope-sync]     {rel}", file=sys.stderr)
+        print("[modelscope-sync]   re-run once nothing else is syncing "
+              "(a push also triggers the CI sync workflow, and the two "
+              "fight over the same commit lock).", file=sys.stderr)
+        return 1
     print(f"[modelscope-sync] ✓ synced {args.repo_id}#{args.branch} "
-          f"(README renders as text; assets hosted)", file=sys.stderr)
+          f"({n_up}/{n_exp} assets hosted; README renders as text)",
+          file=sys.stderr)
     return 0
 
 

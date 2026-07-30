@@ -120,3 +120,99 @@ def test_pages_without_a_head_are_left_alone(mod, tmp_path, monkeypatch):
         assert out == "<div>just a fragment</div>"
     finally:
         frag.unlink()
+
+
+# ── v2.37 — the three inline-HTML builders ─────────────────────────────
+#
+# These never went through _read_template (they are f-string builders, a
+# deliberate v2.27 call), so v2.35's roll-up missed them entirely: the
+# client-facing share page was still on a THIRD palette (--bg #0a0a1e /
+# --bg-soft #1a1230, purple-navy) with `color-scheme: dark` hard-locked,
+# and the other two were on the pre-v2.21 gold.  They now interpolate
+# _DESIGN_TOKENS_CSS + _THEME_BOOT_HTML directly.
+
+import ast
+
+_INLINE_BUILDERS = ("_render_share_html", "_serve_bias_audit_page",
+                    "_serve_companion_page")
+
+# Colour literals that are deliberately theme-independent:
+#   * the photo lightbox is always dark — a light lightbox would wash out
+#     the photo being judged, so its scrim and its white-on-dark controls
+#     are correct as literals;
+#   * plain black drop shadows read correctly on both themes;
+#   * the brand logo gradient must NOT invert with the theme.
+_ALLOWED_LITERALS = {
+    "rgba(0,0,0,0.94)", "rgba(0,0,0,0.7)", "rgba(0,0,0,0.6)",
+    "rgba(255,255,255,0.08)", "rgba(255,255,255,0.18)",
+    "rgba(255,255,255,0.06)", "rgba(255,255,255,0.15)",
+    "#d5b584", "#93743f",          # <stop> colours of the SVG logo
+    "#161616",                     # documented var() fallback
+}
+
+
+def _builder_source(mod_src, name):
+    """Source of one builder, with comments stripped.
+
+    Comments must go before linting, and not for tidiness: the comment
+    explaining *why* the share page dropped its old palette necessarily
+    quotes that palette (#1a1230) and the `color-scheme: dark` it
+    removed.  A lint that reads comments flags its own documentation —
+    which is exactly what happened the first time these ran.
+    """
+    tree = ast.parse(mod_src)
+    fn = next((n for n in ast.walk(tree)
+               if isinstance(n, ast.FunctionDef) and n.name == name), None)
+    assert fn is not None, f"{name} not found — renamed?"
+    end = max(getattr(n, "lineno", fn.lineno) for n in ast.walk(fn))
+    src = "\n".join(mod_src.splitlines()[fn.lineno - 1:end])
+    src = re.sub(r"/\*.*?\*/", "", src, flags=re.S)          # CSS comments
+    return "\n".join(ln for ln in src.splitlines()
+                     if not ln.strip().startswith("#"))       # py comments
+
+
+@pytest.fixture(scope="module")
+def impl_src():
+    return (REPO / "pixcull" / "report" / "serve_app.py").read_text("utf-8")
+
+
+@pytest.mark.parametrize("name", _INLINE_BUILDERS)
+def test_inline_builder_uses_shared_tokens_and_theme_boot(impl_src, name):
+    src = _builder_source(impl_src, name)
+    assert "_DESIGN_TOKENS_CSS" in src, (
+        f"{name} does not interpolate the shared design tokens — it will "
+        f"drift from the design system as /share once did")
+    assert "_THEME_BOOT_HTML" in src, (
+        f"{name} never sets data-theme, so the light block cannot match")
+
+
+@pytest.mark.parametrize("name", _INLINE_BUILDERS)
+def test_inline_builder_has_no_theme_breaking_colour_literals(impl_src, name):
+    """Catches BOTH notations.
+
+    v2.3.1 was caused by a leaked palette hiding in decimal rgba() where a
+    hex grep could not see it, and the same thing happened again here: the
+    share page's navy brand bar was `rgba(10,10,30,0.85)` and survived the
+    first hex-only sweep of this very change.
+    """
+    src = _builder_source(impl_src, name)
+    found = set()
+    for m in re.finditer(r"rgba?\([^)]*\)", src):
+        lit = re.sub(r"\s+", "", m.group(0))
+        if re.match(r"rgba?\(\d+,\d+,\d+", lit) and lit not in _ALLOWED_LITERALS:
+            found.add(lit)
+    for m in re.finditer(r"#[0-9a-fA-F]{6}\b", src):
+        if m.group(0) not in _ALLOWED_LITERALS:
+            found.add(m.group(0))
+    assert not found, (
+        f"{name} carries theme-breaking colour literals {sorted(found)}; "
+        f"use a design token so light theme reaches it (or add to "
+        f"_ALLOWED_LITERALS with a reason if genuinely theme-independent)")
+
+
+def test_share_page_is_not_locked_to_dark(impl_src):
+    """`color-scheme: dark` on the client delivery page overrode the whole
+    point of the theme system."""
+    src = _builder_source(impl_src, "_render_share_html")
+    assert "color-scheme: dark" not in src, (
+        "share page is hard-locked to dark again")
