@@ -106,9 +106,15 @@ def test_boot_mirrors_the_toggle_contract(mod):
 
 def test_boot_is_not_injected_twice(mod):
     """_read_template is called on every request for some pages; a second
-    injection would run the script twice."""
+    injection would run the script twice.
+
+    Counts the boot script's own banner, not the storage key: since v2.39
+    the toggle legitimately references the same key, so a bare key count
+    is 2 on a healthy page.
+    """
     html = mod._read_template("pages/library.html")
-    assert html.count("pixcull_theme") == 1
+    assert html.count("honour the theme the user picked") == 1
+    assert html.count('id="pcThemeFab"') == 1
 
 
 def test_pages_without_a_head_are_left_alone(mod, tmp_path, monkeypatch):
@@ -216,3 +222,69 @@ def test_share_page_is_not_locked_to_dark(impl_src):
     src = _builder_source(impl_src, "_render_share_html")
     assert "color-scheme: dark" not in src, (
         "share page is hard-locked to dark again")
+
+
+# ── v2.39 — the theme CONTROL, not just the theme ─────────────────────
+
+@pytest.mark.parametrize("page", _page_templates(), ids=lambda p: p.name)
+def test_every_page_gets_the_theme_toggle(mod, page):
+    """v2.35 made these pages obey the preference; they still had no way
+    to change it without going back to the review workspace."""
+    html = mod._read_template(f"pages/{page.name}")
+    assert "pcThemeFab" in html, f"{page.name}: no theme control"
+    assert html.count('id="pcThemeFab"') == 1, f"{page.name}: injected twice"
+
+
+@pytest.mark.parametrize("page", _page_templates(), ids=lambda p: p.name)
+def test_toggle_sits_at_end_of_body(mod, page):
+    """End-of-body so a fixed-position control can never reflow a page."""
+    html = mod._read_template(f"pages/{page.name}")
+    assert html.index("pcThemeFab") < html.index("</body>")
+    assert html.index("pcThemeFab") > html.index("<body")
+
+
+def test_toggle_cycle_matches_the_workspace_toggle(mod):
+    """Two independent implementations of the same three-state machine;
+    if their order or storage key drifts, switching in one place would
+    disagree with the other."""
+    fab = mod._THEME_TOGGLE_HTML
+    toggle = (REPO / "pixcull" / "report" / "templates" / "src" / "modules"
+              / "29-theme-toggle.js").read_text(encoding="utf-8")
+    # dark → light → system → dark, in both
+    for src in (fab, toggle):
+        flat = re.sub(r"\s+", " ", src)
+        assert '"dark" ? "light"' in flat, "cycle no longer starts dark→light"
+        assert '"light" ? "system"' in flat, "cycle no longer goes light→system"
+    assert "pixcull_theme" in fab and "pixcull_theme" in toggle
+
+
+def test_toggle_is_keyboard_and_screen_reader_reachable(mod):
+    fab = mod._THEME_TOGGLE_HTML
+    assert "<button" in fab, "must be a real button, not a div"
+    assert 'type="button"' in fab, "unset type submits inside a form"
+    assert "aria-label" in fab
+    assert ":focus-visible" in fab, "no visible keyboard focus"
+
+
+def test_toggle_is_not_printed(mod):
+    """A client printing a delivered page shouldn't get app chrome."""
+    assert "@media print" in mod._THEME_TOGGLE_HTML
+
+
+def test_share_page_has_no_app_chrome(mod):
+    """The client delivery page is the photographer's presentation, not
+    the app: it obeys the theme but carries no PixCull controls."""
+    src = _builder_source(
+        (REPO / "pixcull" / "report" / "serve_app.py").read_text("utf-8"),
+        "_render_share_html")
+    assert "_THEME_TOGGLE_HTML" not in src, (
+        "the client-facing share page grew an app control")
+    assert "_THEME_BOOT_HTML" in src, "…but it must still obey the theme"
+
+
+@pytest.mark.parametrize("name", ("_serve_bias_audit_page",
+                                  "_serve_companion_page"))
+def test_internal_inline_pages_do_get_the_toggle(mod, name):
+    src = _builder_source(
+        (REPO / "pixcull" / "report" / "serve_app.py").read_text("utf-8"), name)
+    assert "_THEME_TOGGLE_HTML" in src

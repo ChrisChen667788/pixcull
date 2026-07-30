@@ -52,6 +52,29 @@
 
 ## What's new
 
+**v2.39** — **switch the theme where you are, and stop rewriting the whole
+library on every cull** (see
+[`docs/ROADMAP-v2.39-charter.md`](docs/ROADMAP-v2.39-charter.md)). v2.35 made
+the standalone pages *obey* the theme; they still had no way to change it, so
+opening /library directly meant going back to the review workspace to switch.
+The control is injected once in `_read_template` as a fixed-position pill
+rather than wired into each page's header — three of them have no header, and
+per-page wiring is exactly how ten of eleven pages missed the boot script
+before. It mirrors the workspace toggle's contract exactly (dark → light →
+system, same storage key), with a test pinning the two implementations
+together. One deliberate exception: `/share/<run>/<token>` still obeys the
+theme but carries **no** app chrome — that page is the photographer's delivery
+to a client, not the application. Second half: `append_run` used to `np.vstack`
+the entire index and rewrite `vectors.npy`, which measured 0.37s → 1.08s →
+**3.30s** as the library grew 50k → 150k → 300k photos — and since v2.34
+auto-index runs that after *every* cull, i.e. a 614 MB rewrite each time.
+Vectors now live in a headerless float32 file appended in O(new); the row count
+lives in `meta.json`, which is also what makes it crash-safe (bytes and
+manifest are fsynced first, meta is swapped in last, so a torn tail is inert
+rather than corrupt). Same three sizes: **0.159s / 0.380s / 0.697s**. What
+remains linear is the manifest dedup scan (0.556s of that 0.697s), not the
+vector write (0.005s) — documented rather than papered over as O(1).
+
 **v2.38** — **contrast audit of the light theme I'd just rolled out** (see
 [`docs/ROADMAP-v2.38-charter.md`](docs/ROADMAP-v2.38-charter.md)). v2.35 and
 v2.37 brought light theme to a dozen surfaces that had never rendered light

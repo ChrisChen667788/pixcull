@@ -679,6 +679,105 @@ _THEME_BOOT_HTML = """<script>
 """
 
 
+# v2.39 — the theme *control*, not just the theme.
+#
+# v2.35 made the standalone pages OBEY the preference; they still had no
+# way to change it.  A photographer who opened /library directly (or
+# followed a link into /history) had to go back to the review workspace
+# to switch, which is where module 29's toolbar toggle lives.
+#
+# Injected as a fixed-position control rather than added to each page's
+# header: the pages have wildly different layouts and three of them have
+# no header at all, and per-page wiring is precisely how ten of eleven
+# pages ended up without the boot script in the first place.
+#
+# The cycle and the storage contract are module 29's, exactly:
+# dark → light → system → dark, persisted under localStorage
+# "pixcull_theme"; "system" re-reads prefers-color-scheme and keeps
+# following it live via a matchMedia listener.
+_THEME_TOGGLE_HTML = """<style>
+  .pc-theme-fab {
+    position: fixed; right: 16px; bottom: 16px; z-index: 90;
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 7px 12px 7px 10px;
+    font: 500 12px/1 -apple-system, BlinkMacSystemFont, "Segoe UI",
+          "PingFang SC", system-ui, sans-serif;
+    color: var(--fg-2, #c6c6c6);
+    background: color-mix(in srgb, var(--chrome, #1d1d1d) 82%, transparent);
+    backdrop-filter: var(--glass-filter, blur(16px) saturate(130%));
+    -webkit-backdrop-filter: var(--glass-filter, blur(16px) saturate(130%));
+    box-shadow: var(--glass-edge, none), var(--shadow-md, 0 4px 14px rgba(0,0,0,.2));
+    border: 1px solid var(--border, #2a2a2a);
+    border-radius: 999px; cursor: pointer;
+    transition: color 140ms, border-color 140ms, transform 140ms;
+  }
+  .pc-theme-fab:hover { color: var(--fg, #e6e6e6);
+                        border-color: var(--border-hi, #3a3a3a); }
+  .pc-theme-fab:focus-visible { outline: 2px solid var(--focus-ring, #888);
+                                outline-offset: 2px; }
+  .pc-theme-fab svg { width: 14px; height: 14px; flex: none; }
+  /* Printing a delivery page shouldn't print app chrome. */
+  @media print { .pc-theme-fab { display: none; } }
+  @media (prefers-reduced-motion: reduce) {
+    .pc-theme-fab { transition: none; }
+  }
+</style>
+<button class="pc-theme-fab" id="pcThemeFab" type="button"
+        aria-live="polite" title="切换主题 / Switch theme">
+  <svg id="pcThemeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+       stroke-width="1.8" stroke-linecap="round" aria-hidden="true"></svg>
+  <span id="pcThemeLabel">主题</span>
+</button>
+<script>
+(function () {
+  var KEY = "pixcull_theme";
+  var MOON = '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>';
+  var SUN  = '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2' +
+             'M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2' +
+             'M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>';
+  var AUTO = '<circle cx="12" cy="12" r="9"/><path d="M12 3v18" />' +
+             '<path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" ' +
+             'stroke="none"/>';
+  var btn = document.getElementById("pcThemeFab");
+  var icon = document.getElementById("pcThemeIcon");
+  var label = document.getElementById("pcThemeLabel");
+  if (!btn) return;
+  var mq = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)");
+  function pref() {
+    var p = null;
+    try { p = localStorage.getItem(KEY); } catch (e) {}
+    return (p === "dark" || p === "light" || p === "system") ? p : "system";
+  }
+  function effective(p) {
+    if (p === "light" || p === "dark") return p;
+    return (mq && mq.matches) ? "light" : "dark";
+  }
+  function render(p) {
+    var eff = effective(p);
+    document.documentElement.setAttribute("data-theme", eff);
+    icon.innerHTML = p === "system" ? AUTO : (eff === "light" ? SUN : MOON);
+    label.textContent = p === "system" ? "跟随系统"
+                      : p === "light" ? "浅色" : "深色";
+    btn.setAttribute("aria-label", "当前主题:" + label.textContent +
+                                   ",点击切换");
+  }
+  btn.addEventListener("click", function () {
+    var p = pref();
+    p = p === "dark" ? "light" : p === "light" ? "system" : "dark";
+    try { localStorage.setItem(KEY, p); } catch (e) {}
+    render(p);
+  });
+  if (mq && mq.addEventListener) {
+    mq.addEventListener("change", function () {
+      if (pref() === "system") render("system");
+    });
+  }
+  render(pref());
+})();
+</script>
+"""
+
+
 def _read_template(name: str) -> str:
     """v2.5-P0-1 — load a sibling HTML page template (video_review /
     timeline) from the same dir as results.html, so large embedded page
@@ -700,6 +799,11 @@ def _read_template(name: str) -> str:
         html = html.replace("/*__DESIGN_TOKENS_CSS__*/", _DESIGN_TOKENS_CSS)
     if "</head>" in html and "pixcull_theme" not in html:
         html = html.replace("</head>", _THEME_BOOT_HTML + "</head>", 1)
+        # v2.39 — and the control to change it.  Guarded by the same
+        # "did we already inject" check, and placed at end-of-body so it
+        # can't shift a page's layout.
+        if "</body>" in html:
+            html = html.replace("</body>", _THEME_TOGGLE_HTML + "</body>", 1)
     return html
 _RESULTS_HTML_CACHE: tuple[int, str] | None = None
 
@@ -5142,7 +5246,7 @@ class _Handler(BaseHTTPRequestHandler):
             + "'>↻ 刷新</a></div>"
             + findings_html
             + tables_html
-            + "</body></html>"
+            + _THEME_TOGGLE_HTML + "</body></html>"
         )
         self._send_html(200, html_body.encode("utf-8"))
 
@@ -5453,7 +5557,7 @@ class _Handler(BaseHTTPRequestHandler):
             "});"
             f"if({'true' if fn0 else 'false'}) label.textContent='{_esc(fn0)}';"
             "})();</script>"
-            "</body></html>"
+            + _THEME_TOGGLE_HTML + "</body></html>"
         )
         self._send_html(200, html_body.encode("utf-8"))
 

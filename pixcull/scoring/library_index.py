@@ -55,9 +55,89 @@ LIBRARY_DIR = Path(
 
 
 def _paths(library_dir: Path) -> tuple[Path, Path, Path]:
+    """Legacy triple (``vectors.npy``, manifest, meta).
+
+    Kept because ``prune``/``status`` and the tests still speak in these
+    terms; ``vectors.npy`` is now only the *legacy* store — see
+    :data:`_VEC_RAW` and :func:`_migrate_legacy_vectors`.
+    """
     return (library_dir / "vectors.npy",
             library_dir / "manifest.jsonl",
             library_dir / "meta.json")
+
+
+# v2.39 — vectors live in a HEADERLESS float32 file so appends are O(new)
+# instead of O(library).
+#
+# The .npy store this replaces carries its shape in a header, so adding
+# rows meant np.vstack of the whole array and rewriting the file.
+# Measured, appending one 2,000-photo shoot:
+#
+#     library  50,000 photos (102 MB)  →  0.37s
+#     library 150,000 photos (307 MB)  →  1.08s
+#     library 300,000 photos (614 MB)  →  3.30s
+#
+# i.e. linear in everything already indexed, rewriting the entire library
+# every time a shoot finishes — and with auto-index on (v2.34) that is
+# after every cull.  A raw file appends in O(new bytes).
+#
+# The row count lives in meta.json, NOT in the vector file, and that is
+# what makes the append crash-safe: bytes are appended and fsynced first,
+# then the manifest, and meta.json is swapped in last by atomic rename.
+# A crash at any point leaves a tail that no reader counts, because every
+# reader takes its row count from meta.
+_VEC_RAW = "vectors.f32"
+
+
+def _raw_path(library_dir: Path) -> Path:
+    return library_dir / _VEC_RAW
+
+
+def _fsync(fh) -> None:
+    fh.flush()
+    os.fsync(fh.fileno())
+
+
+def _write_meta(library_dir: Path, meta: dict) -> None:
+    """Atomically publish meta.json — this is the commit point."""
+    meta_path = library_dir / "meta.json"
+    tmp = meta_path.with_suffix(".json.tmp")
+    with tmp.open("w", encoding="utf-8") as fh:
+        json.dump(meta, fh, ensure_ascii=False, indent=2)
+        _fsync(fh)
+    os.replace(tmp, meta_path)
+
+
+def _migrate_legacy_vectors(library_dir: Path) -> Optional[int]:
+    """One-shot ``vectors.npy`` → ``vectors.f32``.
+
+    Returns the row count written, or None when there was nothing to
+    migrate.  The legacy file is left in place: it costs disk but means a
+    downgrade still finds a working library, and :func:`load_vectors`
+    prefers the raw store once it exists.
+    """
+    vec_path, _, _ = _paths(library_dir)
+    raw = _raw_path(library_dir)
+    if raw.is_file() or not vec_path.is_file():
+        return None
+    try:
+        old = np.load(vec_path, mmap_mode="r")
+    except (OSError, ValueError) as exc:
+        logger.warning("library: legacy vectors unreadable, not migrating: %s",
+                       exc)
+        return None
+    arr = np.ascontiguousarray(np.asarray(old), dtype=np.float32)
+    tmp = raw.with_suffix(".f32.tmp")
+    with tmp.open("wb") as fh:
+        fh.write(arr.tobytes())
+        _fsync(fh)
+    os.replace(tmp, raw)
+    meta = read_meta(library_dir)
+    meta.update({"schema": SCHEMA, "n_rows": int(arr.shape[0]),
+                 "dim": int(arr.shape[1]), "store": _VEC_RAW})
+    _write_meta(library_dir, meta)
+    logger.info("library: migrated %d vectors to %s", arr.shape[0], _VEC_RAW)
+    return int(arr.shape[0])
 
 
 def _norm_rows(v: np.ndarray) -> np.ndarray:
@@ -103,7 +183,33 @@ def load_manifest(library_dir: Path = LIBRARY_DIR) -> list[dict]:
 
 def load_vectors(library_dir: Path = LIBRARY_DIR,
                  mmap: bool = True) -> Optional[np.ndarray]:
-    """Open vectors.npy (mmap by default — see module docstring)."""
+    """Open the vector store (mmap by default — see module docstring).
+
+    Prefers the append-only ``vectors.f32``; falls back to a legacy
+    ``vectors.npy`` so an index built before v2.39 keeps working without
+    a migration step.
+
+    Only ``meta["n_rows"]`` rows are exposed.  Any bytes past that are an
+    interrupted append and are deliberately invisible.
+    """
+    raw = _raw_path(library_dir)
+    if raw.is_file():
+        meta = read_meta(library_dir)
+        dim = int(meta.get("dim") or DIM)
+        try:
+            on_disk = raw.stat().st_size // (4 * dim)
+            n = int(meta.get("n_rows", on_disk))
+            n = max(0, min(n, on_disk))     # never read past the file
+            if n == 0:
+                return np.zeros((0, dim), np.float32)
+            mode = "r" if mmap else None
+            arr = np.memmap(raw, dtype=np.float32, mode="r",
+                            shape=(n, dim))
+            return arr if mode else np.array(arr)
+        except (OSError, ValueError) as exc:
+            logger.warning("library vectors unreadable: %s", exc)
+            return None
+
     vec_path, _, _ = _paths(library_dir)
     if not vec_path.is_file():
         return None
@@ -166,29 +272,37 @@ def append_run(
     if not keep_rows:
         return {"added": 0, "skipped": skipped, "total": len(existing)}
 
-    new_vecs = _norm_rows(vectors[keep_rows])
+    new_vecs = np.ascontiguousarray(_norm_rows(vectors[keep_rows]),
+                                    dtype=np.float32)
+
+    # Fold any pre-v2.39 vectors.npy into the raw store first, so the
+    # append below has a single format to extend.
+    _migrate_legacy_vectors(library_dir)
+
+    raw = _raw_path(library_dir)
     old = load_vectors(library_dir, mmap=True)
     if old is not None and old.shape[0]:
         if old.shape[1] != new_vecs.shape[1]:
             raise ValueError(
                 f"dimension mismatch: library has {old.shape[1]}, "
                 f"incoming has {new_vecs.shape[1]}")
-        merged = np.vstack([np.asarray(old), new_vecs])
+        base_row = int(old.shape[0])
     else:
-        merged = new_vecs
+        base_row = 0
+    del old                       # drop the mmap before extending the file
 
-    # Atomic: write temp then rename, so an interrupted append can never
-    # leave vectors.npy and manifest.jsonl disagreeing about row count.
-    # NB: np.save() APPENDS ".npy" to a target that doesn't already end in
-    # it, so writing to "vectors.npy.tmp" would silently land at
-    # "vectors.npy.tmp.npy" and the rename below would FileNotFound.
-    # Same trap semantic_search.py documents; write through a handle.
-    tmp_vec = vec_path.with_suffix(".npy.tmp")
-    with tmp_vec.open("wb") as fh:
-        np.save(fh, merged)
-    os.replace(tmp_vec, vec_path)
+    # ---- commit protocol -------------------------------------------
+    # 1. append + fsync the vectors   (invisible: meta still says base_row)
+    # 2. append + fsync the manifest  (still invisible for the same reason)
+    # 3. atomically publish meta.json (the single commit point)
+    #
+    # Crash before 3 and every reader still sees exactly base_row rows —
+    # load_vectors clamps to meta's n_rows, and search() further clamps to
+    # the manifest length — so a torn tail is inert rather than corrupt.
+    with raw.open("ab") as fh:
+        fh.write(new_vecs.tobytes())
+        _fsync(fh)
 
-    base_row = len(existing)
     now = time.time()
     with man_path.open("a", encoding="utf-8") as fh:
         for offset, (filename, abs_path, mtime) in enumerate(keep_entries):
@@ -200,17 +314,19 @@ def append_run(
                 "row": base_row + offset,
                 "indexed_at": now,
             }, ensure_ascii=False) + "\n")
+        _fsync(fh)
 
-    meta_path.write_text(json.dumps({
+    total_rows = base_row + int(new_vecs.shape[0])
+    _write_meta(library_dir, {
         "schema": SCHEMA,
         "model": model or read_meta(library_dir).get("model", ""),
-        "dim": int(merged.shape[1]),
-        "n_rows": int(merged.shape[0]),
+        "dim": int(new_vecs.shape[1]),
+        "n_rows": total_rows,
+        "store": _VEC_RAW,
         "built_at": now,
-    }, ensure_ascii=False, indent=2), encoding="utf-8")
-
+    })
     return {"added": len(keep_rows), "skipped": skipped,
-            "total": int(merged.shape[0])}
+            "total": total_rows}
 
 
 def search(
@@ -263,7 +379,9 @@ def status(library_dir: Path = LIBRARY_DIR) -> dict:
     runs = sorted({e.get("run_id", "") for e in manifest})
     stale = sum(1 for e in manifest
                 if not Path(e.get("abs_path", "")).is_file())
-    disk = sum(p.stat().st_size for p in (vec_path, man_path) if p.is_file())
+    disk = sum(p.stat().st_size
+               for p in (_raw_path(library_dir), vec_path, man_path)
+               if p.is_file())
     meta = read_meta(library_dir)
     return {
         "n_photos": len(manifest),
@@ -302,12 +420,25 @@ def prune(library_dir: Path = LIBRARY_DIR,
     if removed == 0:
         return {"removed": 0, "remaining": len(keep)}
 
-    vec_path, man_path, meta_path = _paths(library_dir)
-    new_vecs = vecs[keep] if keep else np.zeros((0, vecs.shape[1]), np.float32)
-    tmp_vec = vec_path.with_suffix(".npy.tmp")
-    with tmp_vec.open("wb") as fh:      # see append_run: np.save appends .npy
-        np.save(fh, new_vecs)
-    os.replace(tmp_vec, vec_path)
+    vec_path, man_path, _ = _paths(library_dir)
+    dim = int(vecs.shape[1])
+    new_vecs = np.ascontiguousarray(
+        vecs[keep] if keep else np.zeros((0, dim), np.float32),
+        dtype=np.float32)
+
+    # Pruning is inherently a rewrite (rows move), so unlike append_run
+    # this one still costs O(library) — but it is a rare, explicit,
+    # user-invoked operation, not something every cull triggers.
+    raw = _raw_path(library_dir)
+    tmp_vec = raw.with_suffix(".f32.tmp")
+    with tmp_vec.open("wb") as fh:
+        fh.write(new_vecs.tobytes())
+        _fsync(fh)
+    os.replace(tmp_vec, raw)
+    # A legacy store left over from before v2.39 would otherwise still be
+    # there with the *unpruned* rows, and a downgrade would resurrect
+    # exactly the entries the user asked to remove.
+    vec_path.unlink(missing_ok=True)
 
     tmp_man = man_path.with_suffix(".jsonl.tmp")
     with tmp_man.open("w", encoding="utf-8") as fh:
@@ -315,10 +446,11 @@ def prune(library_dir: Path = LIBRARY_DIR,
             e = dict(manifest[i])
             e["row"] = new_row
             fh.write(json.dumps(e, ensure_ascii=False) + "\n")
+        _fsync(fh)
     os.replace(tmp_man, man_path)
 
     meta = read_meta(library_dir)
-    meta.update({"n_rows": len(keep), "built_at": time.time()})
-    meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2),
-                         encoding="utf-8")
+    meta.update({"n_rows": len(keep), "dim": dim, "store": _VEC_RAW,
+                 "built_at": time.time()})
+    _write_meta(library_dir, meta)
     return {"removed": removed, "remaining": len(keep)}

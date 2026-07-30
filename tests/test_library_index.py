@@ -176,3 +176,141 @@ def test_manifest_is_json_lines_with_expected_fields(tmp_path):
     line = (lib / "manifest.jsonl").read_text(encoding="utf-8").strip()
     rec = json.loads(line)
     assert set(rec) >= {"run_id", "filename", "abs_path", "mtime", "row"}
+
+
+# ── v2.39 — append-only vector store ──────────────────────────────────
+#
+# Appending used to np.vstack the whole library and rewrite vectors.npy.
+# Measured with one 2,000-photo shoot going in:
+#   library  50k → 0.37s      150k → 1.08s      300k → 3.30s
+# i.e. linear in everything already indexed, on every cull (auto-index
+# has been on since v2.34). The raw store appends in O(new bytes):
+#   library  50k → 0.16s      150k → 0.38s      300k → 0.70s
+# What is left is load_manifest parsing the dedup set (0.556s of that
+# 0.70s), not the vector write (0.005s).
+
+def _v39(n, dim=8, seed=0):
+    rng = np.random.default_rng(seed)
+    return rng.normal(size=(n, dim)).astype(np.float32)
+
+
+def _e39(n, prefix="p"):
+    return [(f"{prefix}{i}.jpg", f"/src/{prefix}{i}.jpg", 1.0)
+            for i in range(n)]
+
+
+def test_append_uses_the_raw_store(tmp_path):
+    LX.append_run("r1", _e39(3), _v39(3), library_dir=tmp_path)
+    assert (tmp_path / "vectors.f32").is_file()
+    meta = LX.read_meta(tmp_path)
+    assert meta["n_rows"] == 3 and meta["dim"] == 8
+    assert meta["store"] == "vectors.f32"
+
+
+def test_second_append_does_not_rewrite_existing_bytes(tmp_path):
+    """The whole point: old bytes stay put, new ones are appended."""
+    LX.append_run("r1", _e39(4), _v39(4, seed=1), library_dir=tmp_path)
+    raw = tmp_path / "vectors.f32"
+    first = raw.read_bytes()
+    LX.append_run("r2", _e39(3, "q"), _v39(3, seed=2),
+                  library_dir=tmp_path)
+    after = raw.read_bytes()
+    assert after[:len(first)] == first, "existing rows were rewritten"
+    assert len(after) == len(first) + 3 * 8 * 4
+
+
+def test_rows_survive_the_append_intact(tmp_path):
+    a, b = _v39(3, seed=3), _v39(2, seed=4)
+    LX.append_run("r1", _e39(3), a, library_dir=tmp_path)
+    LX.append_run("r2", _e39(2, "q"), b, library_dir=tmp_path)
+    got = np.asarray(LX.load_vectors(tmp_path))
+    assert got.shape == (5, 8)
+
+    def unit(v):
+        return v / np.linalg.norm(v, axis=1, keepdims=True)
+
+    assert np.allclose(got[:3], unit(a), atol=1e-6)
+    assert np.allclose(got[3:], unit(b), atol=1e-6)
+
+
+def test_torn_append_is_invisible_until_meta_commits(tmp_path):
+    """Crash safety: vectors are appended and fsynced BEFORE meta.json is
+    swapped in, so a half-written tail must not be readable."""
+    LX.append_run("r1", _e39(4), _v39(4), library_dir=tmp_path)
+    raw = tmp_path / "vectors.f32"
+    # simulate a crash mid-append: extra bytes, meta untouched
+    with raw.open("ab") as fh:
+        fh.write(b"\x01" * (8 * 4 * 2 + 5))     # 2 rows + a partial one
+
+    got = LX.load_vectors(tmp_path)
+    assert got.shape == (4, 8), "reader exposed an uncommitted tail"
+    hits = LX.search(_v39(1)[0], k=10, library_dir=tmp_path,
+                     check_liveness=False)
+    assert len(hits) == 4
+
+
+def test_meta_claiming_more_rows_than_exist_is_clamped(tmp_path):
+    """Never read past the end of the file, whatever meta says."""
+    LX.append_run("r1", _e39(3), _v39(3), library_dir=tmp_path)
+    meta = LX.read_meta(tmp_path)
+    meta["n_rows"] = 99
+    (tmp_path / "meta.json").write_text(json.dumps(meta), encoding="utf-8")
+    assert LX.load_vectors(tmp_path).shape == (3, 8)
+
+
+def test_legacy_npy_library_is_migrated_on_next_append(tmp_path):
+    """An index built before v2.39 must keep working — and converge onto
+    the new store rather than staying slow forever."""
+    old = np.ascontiguousarray(
+        _v39(3, seed=7) / np.linalg.norm(_v39(3, seed=7), axis=1,
+                                           keepdims=True))
+    with (tmp_path / "vectors.npy").open("wb") as fh:
+        np.save(fh, old)
+    (tmp_path / "manifest.jsonl").write_text("".join(
+        json.dumps({"run_id": "old", "filename": f"o{i}.jpg",
+                     "abs_path": f"/o/o{i}.jpg", "mtime": 1.0, "row": i})
+        + "\n" for i in range(3)), encoding="utf-8")
+    (tmp_path / "meta.json").write_text(
+        json.dumps({"n_rows": 3, "dim": 8}), encoding="utf-8")
+
+    LX.append_run("new", _e39(2, "n"), _v39(2, seed=8),
+                  library_dir=tmp_path)
+
+    assert (tmp_path / "vectors.f32").is_file()
+    got = np.asarray(LX.load_vectors(tmp_path))
+    assert got.shape == (5, 8), "migration lost or duplicated rows"
+    assert np.allclose(got[:3], old, atol=1e-6), "legacy rows corrupted"
+    assert LX.read_meta(tmp_path)["n_rows"] == 5
+
+
+def test_legacy_only_library_still_reads_without_migrating(tmp_path):
+    old = _v39(2, seed=9)
+    with (tmp_path / "vectors.npy").open("wb") as fh:
+        np.save(fh, old)
+    got = LX.load_vectors(tmp_path)
+    assert got is not None and got.shape == (2, 8)
+    assert not (tmp_path / "vectors.f32").exists()
+
+
+def test_prune_rewrites_the_raw_store_and_drops_the_legacy_one(tmp_path):
+    """A leftover vectors.npy would resurrect exactly the rows the user
+    asked to remove if anything ever read it again."""
+    real = tmp_path / "kept.jpg"
+    real.write_bytes(b"x")
+    entries = [("kept.jpg", str(real), 1.0),
+               ("gone.jpg", str(tmp_path / "missing.jpg"), 1.0)]
+    LX.append_run("r1", entries, _v39(2), library_dir=tmp_path)
+    (tmp_path / "vectors.npy").write_bytes(b"stale legacy")
+
+    res = LX.prune(tmp_path)
+    assert res == {"removed": 1, "remaining": 1}
+    assert not (tmp_path / "vectors.npy").exists()
+    assert LX.load_vectors(tmp_path).shape == (1, 8)
+    assert LX.read_meta(tmp_path)["n_rows"] == 1
+
+
+def test_status_counts_the_raw_store_on_disk(tmp_path):
+    LX.append_run("r1", _e39(5), _v39(5), library_dir=tmp_path)
+    st = LX.status(tmp_path)
+    assert st["n_photos"] == 5
+    assert st["disk_bytes"] >= 5 * 8 * 4
