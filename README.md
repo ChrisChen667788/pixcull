@@ -52,6 +52,28 @@
 
 ## What's new
 
+**v2.35** — **near-dup grouping stops recomputing itself, and light theme
+finally works everywhere** (see
+[`docs/ROADMAP-v2.35-charter.md`](docs/ROADMAP-v2.35-charter.md)). Both items
+came off the roadmap with a plan attached, and measurement killed both plans.
+The near-dup plan said "prune by time window" — wrong: that grouping exists
+precisely to catch near-duplicates `cluster_bursts` missed *because* they
+aren't time-adjacent, and the real cost wasn't the pipeline but a
+**per-request** handler with a user-adjustable threshold, so every nudge of the
+slider re-paid the whole O(N²). Profiling found the surprise: `np.nonzero` cost
+nearly as much as the matmul (1.15s vs 1.35s at 20k) because it walks all N²
+booleans, while the Python union loop everyone suspects was 0.01s. Computing
+only the upper triangle — the old code did every pair twice and threw half away
+*after* paying — gives **2.69s → 1.50s** at 20k and **14.7s → 7.7s** at 50k
+with provably identical grouping, and caching the result on the vector file's
+mtime makes repeat requests free. For theming, a real-browser sweep found the
+problem was bigger than "nobody sets `data-theme`": five pages never injected
+the shared tokens at all, because their module constants are built *above*
+where `_DESIGN_TOKENS_CSS` was defined — so the replace would have raised
+NameError and was simply never written, leaving them on a hand-rolled
+pre-v2.21 palette where the light-theme rule didn't exist. Both injections now
+happen once inside `_read_template`, verified across 9 routes × 2 preferences.
+
 **v2.34** — **cross-run search works out of the box now** (see
 [`docs/ROADMAP-v2.34-charter.md`](docs/ROADMAP-v2.34-charter.md)). The task was
 "auto-index a shoot after culling", but the investigation found v2.32's library

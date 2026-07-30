@@ -147,3 +147,61 @@ def test_dedup_across_cli_needs_two_runs(tmp_path):
                  vectors=np.eye(4, dtype=np.float32)[:1], model=np.array("clip"))
     res = CliRunner().invoke(app, ["dedup-across", str(d)])
     assert res.exit_code == 1
+
+
+# ── v2.35 — upper-triangle-only grouping + handler cache ────────────────
+
+def _naive_groups(vecs, fns, thr):
+    """Reference implementation, written independently of the one under
+    test: every pair, then union-find, then drop singletons."""
+    n = len(fns)
+    parent = list(range(n))
+
+    def find(a):
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        return a
+
+    for i in range(n):
+        for j in range(i + 1, n):
+            if float(vecs[i] @ vecs[j]) >= thr:
+                parent[find(i)] = find(j)
+    buckets = {}
+    for i in range(n):
+        buckets.setdefault(find(i), []).append(fns[i])
+    return sorted(sorted(g) for g in buckets.values() if len(g) >= 2)
+
+
+def _planted(n, dim, seed):
+    rng = np.random.default_rng(seed)
+    v = rng.normal(size=(n, dim)).astype(np.float32)
+    for s in range(0, n, 4):
+        if s + 1 < n:
+            v[s + 1] = v[s] + rng.normal(scale=0.02, size=dim).astype(np.float32)
+    v /= np.linalg.norm(v, axis=1, keepdims=True)
+    return v
+
+
+def test_upper_triangle_matches_naive_all_pairs():
+    """v2.35 halved the work by never computing the lower triangle.  The
+    acceptance bar is identical grouping, not "close enough" — a shifted
+    group boundary would silently fold two distinct photos together."""
+    for n, thr, seed in ((60, 0.90, 5), (150, 0.95, 6), (400, 0.92, 7)):
+        v = _planted(n, 64, seed)
+        fns = [f"p{i}" for i in range(n)]
+        want = _naive_groups(v, fns, thr)
+        for block in (7, 64, 4096):
+            got = sorted(sorted(g) for g in
+                         group_near_dups(fns, v, threshold=thr, block=block))
+            assert got == want, f"n={n} thr={thr} block={block}"
+
+
+def test_no_self_pairs_or_duplicate_groups():
+    """The diagonal must be excluded, or every photo joins its own group
+    and the min_group=2 filter stops dropping singletons."""
+    rng = np.random.default_rng(6)
+    v = rng.normal(size=(40, 32)).astype(np.float32)
+    v /= np.linalg.norm(v, axis=1, keepdims=True)
+    assert group_near_dups([f"p{i}" for i in range(40)], v,
+                           threshold=0.999) == []

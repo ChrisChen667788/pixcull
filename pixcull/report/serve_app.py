@@ -454,11 +454,247 @@ _RESULTS_HTML_PATH = (
 )
 
 
+# v0.6 (3/5) — shared design tokens.
+# Single source of truth for the v0.4 P0 + v0.5 LR-grade palette
+# that previously lived only inside pixcull/report/templates/
+# results.html.  Interpolated into the inline <style> blocks of
+# the upload page, admin page, face-audit page, and delivery-
+# audit page so /, /admin, /admin/face_audit/<id>, and
+# /admin/delivery/<id> all share the same visual language.
+_DESIGN_TOKENS_CSS = r"""
+  @font-face{font-family:"Geist Variable";font-style:normal;font-weight:100 900;font-display:swap;src:url("/docs/brand/geist-variable.woff2") format("woff2");unicode-range:U+0000-2E7F;}
+  :root {
+    /* surfaces — v2.21 Studio Neutral: achromatic ramp, aligned
+       with results.css (the photo surround carries no hue) */
+    --bg:           #161616;
+    --bg-card:      #1d1d1d;
+    --bg-card-hi:   #242424;
+    --surface-2:    #242424;
+    --surface-3:    #2e2e2e;
+    --chrome:       #0f0f0f;
+    /* text — neutral ramp (was a stray cool blue-gray set that never
+       matched the main workspace) */
+    --fg:           #e6e6e6;
+    --fg-2:         #c6c6c6;
+    --muted:        #9b9b9b;
+    --muted-soft:   #707070;
+    /* borders */
+    --border:       #262626;
+    --border-hi:    #363636;
+    /* accent — v2.21 champagne gold */
+    --accent:       #d5b584;
+    --accent-hi:    #eaca98;
+    --accent-soft:  rgba(213,181,132,0.15);
+    --accent-glow:  rgba(213,181,132,0.42);
+    --focus-ring:   rgba(234,202,152,0.55);
+    /* semantic palette */
+    --c-success:        #63bd7f;
+    --c-success-tint:   rgba(99,189,127,0.14);
+    --c-success-border: rgba(99,189,127,0.40);
+    --c-warn:           #d6a443;
+    --c-warn-tint:      rgba(214,164,67,0.14);
+    --c-warn-border:    rgba(214,164,67,0.40);
+    --c-danger:         #e0604e;
+    --c-danger-tint:    rgba(224,96,78,0.14);
+    --c-danger-border:  rgba(224,96,78,0.40);
+    --c-info:           #6fa7bd;
+    --c-info-tint:      rgba(111,167,189,0.14);
+    --c-info-border:    rgba(111,167,189,0.40);
+    --c-neutral:        #9b9b9b;
+    --c-neutral-tint:   rgba(155,155,155,0.10);
+    --c-neutral-border: rgba(155,155,155,0.30);
+    /* legacy alias for V14 callers */
+    --keep:  var(--c-success);
+    --maybe: var(--c-warn);
+    --cull:  var(--c-danger);
+    --error: var(--c-danger);
+    /* typography */
+    --font-display: "Geist Variable", -apple-system,
+                    BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI",
+                    "PingFang SC", "Microsoft Yahei UI", "Noto Sans SC", sans-serif;
+    --font-body:    "Geist Variable", -apple-system, BlinkMacSystemFont,
+                    "Segoe UI Variable", "Segoe UI", "PingFang SC",
+                    "Microsoft Yahei UI", "Noto Sans SC", sans-serif;
+    --font-mono:    ui-monospace, "SF Mono", "JetBrains Mono", Menlo,
+                    monospace;
+    /* v2.2 — editorial serif for hero numbers / titles (offline-first) */
+    --font-serif:   "Charter", "Iowan Old Style", "PT Serif",
+                    "Source Serif Pro", Georgia, "Songti SC", serif;
+    --t-hero:    28px;  --t-h2:    18px;  --t-h3:    14px;
+    --t-body:    13px;  --t-small: 11.5px; --t-tiny:  10.5px;
+    --lh-tight:  1.25;  --lh-normal: 1.55; --lh-loose: 1.7;
+    /* spacing */
+    --space-1: 4px;  --space-2: 8px;  --space-3: 12px;
+    --space-4: 16px; --space-5: 20px; --space-6: 24px;
+    --space-7: 32px; --space-8: 48px;
+    /* radius — v2.21 tightened pro register */
+    --radius-sm: 5px;  --radius-md: 8px;  --radius-lg: 11px;
+    --radius-xl: 14px; --radius-pill: 999px;
+    /* glass — v2.29 shipped these into results.css's token module but not
+       into THIS shared blob, so standalone pages (/library, /tether,
+       /history, upload, admin) silently rendered chrome with no frost.
+       Same values; one material across every surface. */
+    --glass-blur:          16px;
+    --glass-sat:           130%;
+    --glass-filter:        blur(var(--glass-blur)) saturate(var(--glass-sat));
+    --glass-scrim-filter:  blur(4px);
+    --glass-edge:          inset 0 1px 0 rgba(255,255,255,0.08);
+    /* shadows — v2.2 softer + wider "expensive" elevation */
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.34);
+    --shadow-md: 0 6px 22px rgba(0,0,0,0.36);
+    --shadow-lg: 0 16px 40px rgba(0,0,0,0.46);
+    --shadow-xl: 0 30px 64px rgba(0,0,0,0.52);
+    /* motion */
+    --duration-fast: 120ms; --duration-normal: 220ms; --duration-slow: 320ms;
+    /* v0.9-P0-1 — signature soft-bounce: every transition gains
+       ~6% overshoot at the destination, mirroring Linear / Stripe /
+       Apple Photos.  Original flat curve preserved as --ease-out-flat
+       for the rare case overshoot would mislead (data bar widths). */
+    --ease-out:      cubic-bezier(0.34, 1.56, 0.64, 1);
+    --ease-out-flat: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-in-out:   cubic-bezier(0.4, 0, 0.2, 1);
+    --ease-spring:   cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  /* Light theme override — same shape as results.html */
+  html[data-theme="light"] {
+    /* v2.2 — warm paper-and-ink editorial, mirrors results.html light */
+    --bg:           #f7f7f7;
+    --bg-card:      #ffffff;
+    --bg-card-hi:   #eeeeee;
+    --surface-2:    #e9e9e9;
+    --surface-3:    #dddddd;
+    --chrome:       #ffffff;
+    --fg:           #171717;
+    --fg-2:         #3a3a3c;
+    --muted:        #616165;
+    --muted-soft:   #8f8f93;
+    --border:       #e2e2e2;
+    --border-hi:    #c9c9c9;
+    /* light glass: an 8% white highlight is invisible on a near-white
+       film — light materials read via a stronger edge (as tokens.css). */
+    --glass-edge:   inset 0 1px 0 rgba(255,255,255,0.65);
+    --accent:       #6c501f;
+    --accent-hi:    #866939;
+    --accent-soft:  rgba(71,58,41,0.10);
+    --accent-glow:  rgba(71,58,41,0.30);
+    --focus-ring:   rgba(71,58,41,0.45);
+    --shadow-sm: 0 1px 2px  rgba(0,0,0,0.07);
+    --shadow-md: 0 4px 14px rgba(0,0,0,0.09);
+    --shadow-lg: 0 14px 34px rgba(0,0,0,0.10);
+    --shadow-xl: 0 28px 60px rgba(0,0,0,0.12);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    :root {
+      --duration-fast: 1ms; --duration-normal: 1ms; --duration-slow: 1ms;
+    }
+  }
+  /* v2.32 — same a11y contract as results.css: a user who asks for less
+     transparency gets solid chrome, not frosted glass. */
+  @media (prefers-reduced-transparency: reduce) {
+    :root, [data-theme="light"] {
+      --glass-filter: none; --glass-scrim-filter: none; --glass-edge: none;
+    }
+    header { background: var(--chrome) !important; }
+  }
+  /* v0.9-P0-3 — signature brand-wide gradient + CTA helper, available
+     on every page that uses _DESIGN_TOKENS_CSS (upload / admin / share).
+     Defined here so the token name + curve are project-wide single source. */
+  :root {
+    --brand-gradient:       linear-gradient(135deg, #d5b584 0%, #93743f 100%);
+    --brand-gradient-soft:  linear-gradient(135deg,
+                              rgba(213,181,132,0.18) 0%,
+                              rgba(106,96,82,0.18) 100%);
+  }
+  /* Primary CTA: signature gradient backdrop, white text, soft glow.
+     Hover lifts 1px + brightens; active settles. */
+  button.btn-primary,
+  .btn-brand-gradient {
+    background: var(--brand-gradient) !important;
+    color: #ffffff !important;
+    border: 0 !important;
+    box-shadow: 0 4px 14px rgba(213,181,132, 0.35);
+    transition: filter 120ms var(--ease-out, ease-out),
+                transform 120ms var(--ease-out, ease-out),
+                box-shadow 220ms var(--ease-out, ease-out);
+  }
+  button.btn-primary:hover,
+  .btn-brand-gradient:hover {
+    filter: brightness(1.08);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(213,181,132, 0.45);
+  }
+  button.btn-primary:active,
+  .btn-brand-gradient:active {
+    transform: translateY(0);
+    filter: brightness(0.95);
+  }
+  button.btn-primary:disabled {
+    filter: grayscale(0.4) brightness(0.6);
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
+"""
+
+
+# v2.35 — theme boot for the standalone pages.
+#
+# The bug this fixes: _DESIGN_TOKENS_CSS has carried a complete
+# `html[data-theme="light"]` block since v2.2, but of the eleven pages
+# that inject those tokens, ten never set `data-theme` at all — so light
+# theme has NEVER applied on /library, /history, /tether, /upload,
+# /admin, /verticals, /privacy, /disagreement, first-run or vertical-bulk.
+# A user who picked 浅色 in the review workspace still got a dark
+# /library.  The toggle lives in results.js module 29; these pages only
+# need to *honour* the choice, so this mirrors its exact contract:
+# localStorage["pixcull_theme"] of "dark" | "light" | "system" (anything
+# else, or unreadable storage, means system), and system resolves via
+# prefers-color-scheme.
+#
+# Runs inline in <head> so the attribute is set before first paint —
+# injected as a script element rather than a page edit so a page added
+# later cannot forget it.
+_THEME_BOOT_HTML = """<script>
+/* v2.35 — honour the theme the user picked in the review workspace.
+   Same key + resolution order as results.js setupThemeToggle(). */
+(function () {
+  try {
+    var p = null;
+    try { p = localStorage.getItem("pixcull_theme"); } catch (e) {}
+    if (p !== "dark" && p !== "light") {
+      p = (window.matchMedia &&
+           window.matchMedia("(prefers-color-scheme: light)").matches)
+          ? "light" : "dark";
+    }
+    document.documentElement.setAttribute("data-theme", p);
+  } catch (e) { /* never let theming break the page */ }
+})();
+</script>
+"""
+
+
 def _read_template(name: str) -> str:
     """v2.5-P0-1 — load a sibling HTML page template (video_review /
     timeline) from the same dir as results.html, so large embedded page
-    blobs live as files instead of bloating this module."""
-    return (_RESULTS_HTML_PATH.parent / name).read_text(encoding="utf-8")
+    blobs live as files instead of bloating this module.
+
+    v2.35 — also splices in the shared design tokens and the theme-boot
+    script.  Both were previously done per call site, and both got
+    forgotten: /first_run, /privacy, /verticals and /vertical_bulk build
+    their constants ABOVE where _DESIGN_TOKENS_CSS used to be defined, so
+    their ``.replace`` would have raised NameError and simply wasn't
+    written — leaving four pages on a hand-rolled pre-v2.21 palette with
+    no light theme at all.  Injecting here, once, removes the whole class
+    of bug; the constant now lives above this function so import-time
+    callers can see it.  Call sites that still do their own ``.replace``
+    are harmless no-ops (the marker is already consumed).
+    """
+    html = (_RESULTS_HTML_PATH.parent / name).read_text(encoding="utf-8")
+    if "/*__DESIGN_TOKENS_CSS__*/" in html:
+        html = html.replace("/*__DESIGN_TOKENS_CSS__*/", _DESIGN_TOKENS_CSS)
+    if "</head>" in html and "pixcull_theme" not in html:
+        html = html.replace("</head>", _THEME_BOOT_HTML + "</head>", 1)
+    return html
 _RESULTS_HTML_CACHE: tuple[int, str] | None = None
 
 
@@ -1279,6 +1515,50 @@ def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
                 _RESULTS_CACHE.pop(next(iter(_RESULTS_CACHE)))   # oldest out
             _RESULTS_CACHE[cache_key] = built
     return built
+
+
+# v2.35 — near-duplicate grouping cache.  Same mtime-keyed discipline as
+# _RESULTS_CACHE above: the writer (a re-score rebuilding embeddings.npz)
+# never has to know this exists.  Keyed on threshold too, because that's
+# a request parameter the UI lets the user sweep.
+_NEARDUP_CACHE: dict[tuple, list] = {}
+_NEARDUP_CACHE_LOCK = threading.Lock()
+_NEARDUP_CACHE_MAX = 8          # a few thresholds across a couple of runs
+
+
+def _cached_near_dup_groups(cache_path: Path, cache: dict,
+                            threshold: float) -> list:
+    """Group near-duplicates, reusing the last result when nothing moved.
+
+    Falls through to an uncached grouping if the vector file can't be
+    stat'ed — a slow correct answer beats a wrongly-cached one.
+    """
+    from pixcull.scoring.near_dup import group_near_dups
+
+    names = [str(f) for f in cache["filenames"]]
+    try:
+        key = (str(cache_path), cache_path.stat().st_mtime_ns,
+               round(float(threshold), 6), len(names))
+    except OSError:
+        return group_near_dups(names, cache["vectors"], threshold=threshold)
+
+    with _NEARDUP_CACHE_LOCK:
+        hit = _NEARDUP_CACHE.get(key)
+    if hit is not None:
+        return hit
+
+    # Computed outside the lock: this is the multi-second path.
+    groups = group_near_dups(names, cache["vectors"], threshold=threshold)
+    with _NEARDUP_CACHE_LOCK:
+        # Drop superseded entries for this same vector file first, so a
+        # re-scored run can't pin several generations of its groups.
+        for k in [k for k in _NEARDUP_CACHE
+                  if k[0] == key[0] and k[1] != key[1]]:
+            _NEARDUP_CACHE.pop(k, None)
+        if len(_NEARDUP_CACHE) >= _NEARDUP_CACHE_MAX:
+            _NEARDUP_CACHE.pop(next(iter(_NEARDUP_CACHE)))
+        _NEARDUP_CACHE[key] = groups
+    return groups
 
 
 def _build_results_uncached(run_id: str) -> tuple[list[dict], dict] | None:
@@ -3069,9 +3349,13 @@ class _Handler(BaseHTTPRequestHandler):
                     "no reachable photos to build embeddings cache"); return True
             cache = build_embeddings_cache(paths, cache_path)
 
-        groups = group_near_dups(
-            [str(f) for f in cache["filenames"]], cache["vectors"],
-            threshold=thr)
+        # v2.35 — grouping is O(N**2) and this is a per-request handler
+        # with a user-adjustable threshold, so every nudge of the slider
+        # re-paid 1.5s at 20k photos and 7.7s at 50k. The grouping is a
+        # pure function of (vectors, threshold), so cache it on the
+        # vector file's mtime plus the threshold; pick_heroes below still
+        # runs fresh because it depends on the (separately cached) rows.
+        groups = _cached_near_dup_groups(cache_path, cache, thr)
         scores = {r.get("filename"): r.get("score_final") for r in rows
                   if isinstance(r.get("score_final"), (int, float))}
         body = _safe_dumps({
@@ -12239,189 +12523,6 @@ _VERTICALS_HTML = _read_template("pages/verticals.html")
 # v2.16-P0 — extracted to templates/pages/vertical_bulk.html (335 lines of inline HTML);
 # loaded via the same _read_template as video_review/timeline (v2.5).
 _VERTICAL_BULK_HTML = _read_template("pages/vertical_bulk.html")
-
-
-# v0.6 (3/5) — shared design tokens.
-# Single source of truth for the v0.4 P0 + v0.5 LR-grade palette
-# that previously lived only inside pixcull/report/templates/
-# results.html.  Interpolated into the inline <style> blocks of
-# the upload page, admin page, face-audit page, and delivery-
-# audit page so /, /admin, /admin/face_audit/<id>, and
-# /admin/delivery/<id> all share the same visual language.
-_DESIGN_TOKENS_CSS = r"""
-  @font-face{font-family:"Geist Variable";font-style:normal;font-weight:100 900;font-display:swap;src:url("/docs/brand/geist-variable.woff2") format("woff2");unicode-range:U+0000-2E7F;}
-  :root {
-    /* surfaces — v2.21 Studio Neutral: achromatic ramp, aligned
-       with results.css (the photo surround carries no hue) */
-    --bg:           #161616;
-    --bg-card:      #1d1d1d;
-    --bg-card-hi:   #242424;
-    --surface-2:    #242424;
-    --surface-3:    #2e2e2e;
-    --chrome:       #0f0f0f;
-    /* text — neutral ramp (was a stray cool blue-gray set that never
-       matched the main workspace) */
-    --fg:           #e6e6e6;
-    --fg-2:         #c6c6c6;
-    --muted:        #9b9b9b;
-    --muted-soft:   #707070;
-    /* borders */
-    --border:       #262626;
-    --border-hi:    #363636;
-    /* accent — v2.21 champagne gold */
-    --accent:       #d5b584;
-    --accent-hi:    #eaca98;
-    --accent-soft:  rgba(213,181,132,0.15);
-    --accent-glow:  rgba(213,181,132,0.42);
-    --focus-ring:   rgba(234,202,152,0.55);
-    /* semantic palette */
-    --c-success:        #63bd7f;
-    --c-success-tint:   rgba(99,189,127,0.14);
-    --c-success-border: rgba(99,189,127,0.40);
-    --c-warn:           #d6a443;
-    --c-warn-tint:      rgba(214,164,67,0.14);
-    --c-warn-border:    rgba(214,164,67,0.40);
-    --c-danger:         #e0604e;
-    --c-danger-tint:    rgba(224,96,78,0.14);
-    --c-danger-border:  rgba(224,96,78,0.40);
-    --c-info:           #6fa7bd;
-    --c-info-tint:      rgba(111,167,189,0.14);
-    --c-info-border:    rgba(111,167,189,0.40);
-    --c-neutral:        #9b9b9b;
-    --c-neutral-tint:   rgba(155,155,155,0.10);
-    --c-neutral-border: rgba(155,155,155,0.30);
-    /* legacy alias for V14 callers */
-    --keep:  var(--c-success);
-    --maybe: var(--c-warn);
-    --cull:  var(--c-danger);
-    --error: var(--c-danger);
-    /* typography */
-    --font-display: "Geist Variable", -apple-system,
-                    BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI",
-                    "PingFang SC", "Microsoft Yahei UI", "Noto Sans SC", sans-serif;
-    --font-body:    "Geist Variable", -apple-system, BlinkMacSystemFont,
-                    "Segoe UI Variable", "Segoe UI", "PingFang SC",
-                    "Microsoft Yahei UI", "Noto Sans SC", sans-serif;
-    --font-mono:    ui-monospace, "SF Mono", "JetBrains Mono", Menlo,
-                    monospace;
-    /* v2.2 — editorial serif for hero numbers / titles (offline-first) */
-    --font-serif:   "Charter", "Iowan Old Style", "PT Serif",
-                    "Source Serif Pro", Georgia, "Songti SC", serif;
-    --t-hero:    28px;  --t-h2:    18px;  --t-h3:    14px;
-    --t-body:    13px;  --t-small: 11.5px; --t-tiny:  10.5px;
-    --lh-tight:  1.25;  --lh-normal: 1.55; --lh-loose: 1.7;
-    /* spacing */
-    --space-1: 4px;  --space-2: 8px;  --space-3: 12px;
-    --space-4: 16px; --space-5: 20px; --space-6: 24px;
-    --space-7: 32px; --space-8: 48px;
-    /* radius — v2.21 tightened pro register */
-    --radius-sm: 5px;  --radius-md: 8px;  --radius-lg: 11px;
-    --radius-xl: 14px; --radius-pill: 999px;
-    /* glass — v2.29 shipped these into results.css's token module but not
-       into THIS shared blob, so standalone pages (/library, /tether,
-       /history, upload, admin) silently rendered chrome with no frost.
-       Same values; one material across every surface. */
-    --glass-blur:          16px;
-    --glass-sat:           130%;
-    --glass-filter:        blur(var(--glass-blur)) saturate(var(--glass-sat));
-    --glass-scrim-filter:  blur(4px);
-    --glass-edge:          inset 0 1px 0 rgba(255,255,255,0.08);
-    /* shadows — v2.2 softer + wider "expensive" elevation */
-    --shadow-sm: 0 1px 3px rgba(0,0,0,0.34);
-    --shadow-md: 0 6px 22px rgba(0,0,0,0.36);
-    --shadow-lg: 0 16px 40px rgba(0,0,0,0.46);
-    --shadow-xl: 0 30px 64px rgba(0,0,0,0.52);
-    /* motion */
-    --duration-fast: 120ms; --duration-normal: 220ms; --duration-slow: 320ms;
-    /* v0.9-P0-1 — signature soft-bounce: every transition gains
-       ~6% overshoot at the destination, mirroring Linear / Stripe /
-       Apple Photos.  Original flat curve preserved as --ease-out-flat
-       for the rare case overshoot would mislead (data bar widths). */
-    --ease-out:      cubic-bezier(0.34, 1.56, 0.64, 1);
-    --ease-out-flat: cubic-bezier(0.16, 1, 0.3, 1);
-    --ease-in-out:   cubic-bezier(0.4, 0, 0.2, 1);
-    --ease-spring:   cubic-bezier(0.34, 1.56, 0.64, 1);
-  }
-  /* Light theme override — same shape as results.html */
-  html[data-theme="light"] {
-    /* v2.2 — warm paper-and-ink editorial, mirrors results.html light */
-    --bg:           #f7f7f7;
-    --bg-card:      #ffffff;
-    --bg-card-hi:   #eeeeee;
-    --surface-2:    #e9e9e9;
-    --surface-3:    #dddddd;
-    --chrome:       #ffffff;
-    --fg:           #171717;
-    --fg-2:         #3a3a3c;
-    --muted:        #616165;
-    --muted-soft:   #8f8f93;
-    --border:       #e2e2e2;
-    --border-hi:    #c9c9c9;
-    /* light glass: an 8% white highlight is invisible on a near-white
-       film — light materials read via a stronger edge (as tokens.css). */
-    --glass-edge:   inset 0 1px 0 rgba(255,255,255,0.65);
-    --accent:       #6c501f;
-    --accent-hi:    #866939;
-    --accent-soft:  rgba(71,58,41,0.10);
-    --accent-glow:  rgba(71,58,41,0.30);
-    --focus-ring:   rgba(71,58,41,0.45);
-    --shadow-sm: 0 1px 2px  rgba(0,0,0,0.07);
-    --shadow-md: 0 4px 14px rgba(0,0,0,0.09);
-    --shadow-lg: 0 14px 34px rgba(0,0,0,0.10);
-    --shadow-xl: 0 28px 60px rgba(0,0,0,0.12);
-  }
-  @media (prefers-reduced-motion: reduce) {
-    :root {
-      --duration-fast: 1ms; --duration-normal: 1ms; --duration-slow: 1ms;
-    }
-  }
-  /* v2.32 — same a11y contract as results.css: a user who asks for less
-     transparency gets solid chrome, not frosted glass. */
-  @media (prefers-reduced-transparency: reduce) {
-    :root, [data-theme="light"] {
-      --glass-filter: none; --glass-scrim-filter: none; --glass-edge: none;
-    }
-    header { background: var(--chrome) !important; }
-  }
-  /* v0.9-P0-3 — signature brand-wide gradient + CTA helper, available
-     on every page that uses _DESIGN_TOKENS_CSS (upload / admin / share).
-     Defined here so the token name + curve are project-wide single source. */
-  :root {
-    --brand-gradient:       linear-gradient(135deg, #d5b584 0%, #93743f 100%);
-    --brand-gradient-soft:  linear-gradient(135deg,
-                              rgba(213,181,132,0.18) 0%,
-                              rgba(106,96,82,0.18) 100%);
-  }
-  /* Primary CTA: signature gradient backdrop, white text, soft glow.
-     Hover lifts 1px + brightens; active settles. */
-  button.btn-primary,
-  .btn-brand-gradient {
-    background: var(--brand-gradient) !important;
-    color: #ffffff !important;
-    border: 0 !important;
-    box-shadow: 0 4px 14px rgba(213,181,132, 0.35);
-    transition: filter 120ms var(--ease-out, ease-out),
-                transform 120ms var(--ease-out, ease-out),
-                box-shadow 220ms var(--ease-out, ease-out);
-  }
-  button.btn-primary:hover,
-  .btn-brand-gradient:hover {
-    filter: brightness(1.08);
-    transform: translateY(-1px);
-    box-shadow: 0 6px 20px rgba(213,181,132, 0.45);
-  }
-  button.btn-primary:active,
-  .btn-brand-gradient:active {
-    transform: translateY(0);
-    filter: brightness(0.95);
-  }
-  button.btn-primary:disabled {
-    filter: grayscale(0.4) brightness(0.6);
-    cursor: not-allowed;
-    transform: none;
-    box-shadow: none;
-  }
-"""
 
 
 # v2.16-P0 — extracted to templates/pages/upload.html (1716 lines of inline HTML);

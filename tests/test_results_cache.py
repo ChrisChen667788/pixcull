@@ -220,3 +220,67 @@ def test_rescore_does_not_pin_old_generations(mod, monkeypatch, tmp_path,
     keys = [k for k in mod._RESULTS_CACHE if k[0] == rid]
     assert len(keys) == 1, f"superseded generations still cached: {keys}"
     assert mod._build_results(rid)[1]["n_total"] == 5
+
+
+# ── v2.35 — near-duplicate grouping cache ───────────────────────────────
+
+def test_near_dup_groups_are_cached_and_bust_on_rescore(mod, tmp_path,
+                                                        monkeypatch):
+    """The /api/v1/near_dups handler is per-request with a user-adjustable
+    threshold, so an uncached O(N^2) grouping was re-paid on every nudge
+    of the slider (1.5s at 20k photos, 7.7s at 50k)."""
+    import numpy as np
+
+    calls = []
+    real = mod._cached_near_dup_groups
+
+    from pixcull.scoring import near_dup
+    orig = near_dup.group_near_dups
+
+    def counted(*a, **k):
+        calls.append(1)
+        return orig(*a, **k)
+
+    monkeypatch.setattr(near_dup, "group_near_dups", counted)
+    monkeypatch.setattr(mod, "_NEARDUP_CACHE", {})
+
+    vec_path = tmp_path / "embeddings.npz"
+    rng = np.random.default_rng(1)
+    v = rng.normal(size=(30, 32)).astype(np.float32)
+    v[1] = v[0]                                   # one guaranteed pair
+    v /= np.linalg.norm(v, axis=1, keepdims=True)
+    cache = {"filenames": np.array([f"p{i}.jpg" for i in range(30)]),
+             "vectors": v, "model": "test"}
+    vec_path.write_bytes(b"placeholder")          # only its mtime is keyed
+
+    g1 = real(vec_path, cache, 0.99)
+    g2 = real(vec_path, cache, 0.99)
+    assert len(calls) == 1, "second identical request recomputed"
+    assert g1 == g2
+
+    # a different threshold is a different question
+    real(vec_path, cache, 0.90)
+    assert len(calls) == 2
+
+    # a re-score rewrites embeddings.npz → must recompute
+    _bump_mtime(vec_path)
+    real(vec_path, cache, 0.99)
+    assert len(calls) == 3, "rewritten vectors served a stale grouping"
+
+    # ...and the superseded generation must not linger
+    keys = [k for k in mod._NEARDUP_CACHE if k[0] == str(vec_path)]
+    assert all(k[1] == vec_path.stat().st_mtime_ns for k in keys), \
+        f"stale generations still cached: {keys}"
+
+
+def test_near_dup_cache_is_bounded(mod, tmp_path, monkeypatch):
+    import numpy as np
+    monkeypatch.setattr(mod, "_NEARDUP_CACHE", {})
+    v = np.eye(4, dtype=np.float32)
+    cache = {"filenames": np.array([f"p{i}" for i in range(4)]),
+             "vectors": v, "model": "t"}
+    p = tmp_path / "e.npz"
+    p.write_bytes(b"x")
+    for i in range(mod._NEARDUP_CACHE_MAX + 4):
+        mod._cached_near_dup_groups(p, cache, 0.5 + i * 0.01)
+    assert len(mod._NEARDUP_CACHE) <= mod._NEARDUP_CACHE_MAX

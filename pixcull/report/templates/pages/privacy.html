@@ -4,11 +4,12 @@
   <meta charset="utf-8">
   <title>PixCull — 隐私 / 错误上报政策</title>
   <style>
-    :root {
-      --bg: #161616; --bg-card: #1d1d1d; --fg: #e9ecf2;
-      --muted: #a8b2c1; --accent: #d5b584; --border: #262626;
-      --keep: #4ade80; --cull: #e0604e;
-    }
+    /* v2.35 — adopt the shared design system. This page carried a
+       hand-rolled pre-v2.21 palette (--accent #d5b584, the old
+       editorial gold), so it missed the Studio Neutral overhaul AND
+       had no html[data-theme="light"] block — light theme could never
+       reach it. Every variable it used is already in the shared set. */
+/*__DESIGN_TOKENS_CSS__*/
     body {
       margin: 0; min-height: 100vh; background: var(--bg); color: var(--fg);
       font: 14px/1.65 -apple-system, "SF Pro Text", Inter,

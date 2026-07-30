@@ -4,13 +4,10 @@
   <meta charset="utf-8">
   <title>PixCull — 批量分类 · __VZH__</title>
   <style>
-    :root {
-      --bg: #161616; --bg-card: #1d1d1d; --bg-card-hi: #242424;
-      --fg: #e9ecf2; --muted: #a8b2c1; --accent: #d5b584;
-      --accent-hi: #eaca98; --border: #262626;
-      --keep: #4ade80; --maybe: #d9a30c; --cull: #e0604e;
-      --focus-ring: rgba(234,202,152,0.55);
-    }
+    /* v2.35 — adopt the shared design system (see first_run.html):
+       this page carried the same pre-v2.21 palette and therefore had
+       no light theme. All of its variables exist in the shared set. */
+/*__DESIGN_TOKENS_CSS__*/
     * { box-sizing: border-box; }
     body {
       margin: 0; min-height: 100vh; background: var(--bg); color: var(--fg);

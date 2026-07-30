@@ -4,18 +4,12 @@
   <meta charset="utf-8">
   <title>PixCull — 首次设置</title>
   <style>
-    :root {
-      --bg: #161616;
-      --bg-card: #1d1d1d;
-      --fg: #e9ecf2;
-      --muted: #a8b2c1;
-      --accent: #d5b584;
-      --accent-hi: #eaca98;
-      --border: #262626;
-      --keep: #4ade80;
-      --maybe: #d9a30c;
-      --cull: #e0604e;
-    }
+    /* v2.35 — adopt the shared design system. This page carried a
+       hand-rolled pre-v2.21 palette (--accent #d5b584, the old
+       editorial gold), so it missed the Studio Neutral overhaul AND
+       had no html[data-theme="light"] block — light theme could never
+       reach it. Every variable it used is already in the shared set. */
+/*__DESIGN_TOKENS_CSS__*/
     * { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; }
     body {

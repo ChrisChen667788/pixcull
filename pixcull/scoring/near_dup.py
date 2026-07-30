@@ -64,12 +64,26 @@ def group_near_dups(
 
     dsu = _DSU(n)
     for start in range(0, n, block):
-        sims = v[start:start + block] @ v.T          # [block, N]
+        stop = min(start + block, n)
+        b = stop - start
+        # v2.35 — compute the UPPER TRIANGLE only.  The previous version
+        # did `v[block] @ v.T`, i.e. every pair twice, then threw half
+        # away with an `if gi < c` test *after* paying for it.  Columns
+        # below `start` were already covered when that earlier row-block
+        # was scanned, so slicing them off halves both the matmul and —
+        # this was the surprise — the mask scan.  Profiled at N=20,000:
+        # matmul 1.35s, np.nonzero 1.15s, the Python union loop only
+        # 0.01s (25k pairs).  np.nonzero costs nearly as much as the
+        # matmul because it walks all N**2 booleans, so shrinking the
+        # array matters as much as shrinking the multiply.
+        sims = v[start:stop] @ v[start:].T            # [b, n-start]
+        # Zero out the diagonal and below within the leading [b, b]
+        # square (a view, so this edits sims in place). -2 can never
+        # clear a cosine threshold.
+        sims[:, :b][np.tril_indices(b)] = -2.0
         rows, cols = np.nonzero(sims >= threshold)
         for r, c in zip(rows, cols):
-            gi = start + int(r)
-            if gi < c:                               # upper triangle only
-                dsu.union(gi, int(c))
+            dsu.union(start + int(r), start + int(c))
 
     groups: dict[int, list[str]] = {}
     for i in range(n):
