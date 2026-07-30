@@ -9,6 +9,8 @@ These guard the packaging contract without needing a full install:
 the server module ships inside the package, resolves REQUIRED assets
 through the package root, and the CLI exposes `serve`.
 """
+import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -54,11 +56,27 @@ def test_repo_root_detection_is_honest():
 
 
 def test_cli_exposes_serve():
+    """`pixcull serve --help` must advertise --port / --host.
+
+    Terminal-independent on purpose: typer/rich renders help into a box
+    sized to the terminal and colours it with ANSI escapes, so on CI's
+    80-column runner the flag names were being wrapped mid-token and the
+    naive substring check failed even though the options exist.  Pin a
+    wide COLUMNS, ask rich for no colour, and strip any escapes that
+    survive — the assertion is about the CLI's surface, not about how a
+    given terminal happens to wrap it.
+    """
+    env = {**os.environ, "COLUMNS": "200", "NO_COLOR": "1",
+           "TERM": "dumb", "TERMINAL_WIDTH": "200"}
     out = subprocess.run(
         [sys.executable, "-m", "pixcull", "serve", "--help"],
-        capture_output=True, text=True, timeout=180, cwd=_REPO)
+        capture_output=True, text=True, timeout=180, cwd=_REPO, env=env)
     assert out.returncode == 0, out.stderr[-500:]
-    assert "--port" in out.stdout and "--host" in out.stdout
+    plain = re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", out.stdout)
+    for flag in ("--port", "--host"):
+        assert flag in plain, (
+            f"{flag} not advertised by `pixcull serve --help`; got:\n"
+            f"{plain[:800]}")
 
 
 def test_dev_shim_still_forwards():
