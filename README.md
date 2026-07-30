@@ -52,6 +52,22 @@
 
 ## What's new
 
+**v2.40.1** — **the last linear cost in library indexing, solved without adding
+a file** (see [`docs/ROADMAP-v2.40.1-charter.md`](docs/ROADMAP-v2.40.1-charter.md)).
+v2.39 deferred this as "needs a key-index file, not worth it". Profiling showed
+that framing was wrong: on a 300,000-row manifest the cost wasn't a missing
+index, it was `json.loads` — 0.525s of 0.720s — parsing rows that could never
+match. The dedup key starts with `run_id` and `append_run` handles one run at a
+time, so rows from other runs are irrelevant by construction; a raw substring
+pre-filter (0.013s for all 300k lines) keeps them out of the parser. Appending a
+2,000-photo shoot: **0.159s → 0.062s** at 50k, **0.697s → 0.068s** at 300k, and
+flat in library size instead of linear — ~48x faster than v2.38 at that scale.
+The pre-filter is deliberately a superset test, with `run_id` re-checked after
+parsing, so a filename that happens to contain the needle costs one wasted parse
+and never a wrong answer — there's a test that plants exactly such a filename.
+The degenerate case (re-indexing a run that *is* the whole library) still costs
+0.708s and is documented rather than glossed over.
+
 **v2.40** — **the gate stops lying, and the CLI does what the box says** (see
 [`docs/ROADMAP-v2.40-charter.md`](docs/ROADMAP-v2.40-charter.md)). Real-model
 tests used to guard themselves with a blanket `except Exception: skip`, which

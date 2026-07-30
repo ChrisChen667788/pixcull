@@ -314,3 +314,99 @@ def test_status_counts_the_raw_store_on_disk(tmp_path):
     st = LX.status(tmp_path)
     assert st["n_photos"] == 5
     assert st["disk_bytes"] >= 5 * 8 * 4
+
+
+# ── v2.40 — dedup only parses the run being appended ───────────────────
+#
+# After v2.39 made the vector write O(new), load_manifest was the last
+# linear cost. Profiled on a 300,000-row manifest (41 MB): json.loads was
+# 0.525s of 0.720s. The dedup key starts with run_id, so rows from other
+# runs can never match an incoming entry — a substring pre-filter (0.013s
+# for all 300k lines) keeps them out of the parser.
+#   append 2,000 into a 300k library: 0.697s → 0.061s, and flat in
+#   library size rather than linear.
+
+def _seed(lib, rid, n, start=0, mtime=1.0):
+    LX.append_run(rid,
+                  [(f"{rid}-{i}.jpg", f"/p/{rid}-{i}.jpg", mtime)
+                   for i in range(start, start + n)],
+                  _v39(n, seed=abs(hash(rid)) % 999), library_dir=lib)
+
+
+def test_seen_keys_matches_a_full_manifest_scan(tmp_path):
+    """The fast path must agree with the naive one, run by run."""
+    for rid, n in (("alpha", 6), ("beta", 4), ("gamma", 3)):
+        _seed(tmp_path, rid, n)
+    full = {LX.entry_key(e["run_id"], e["filename"], e.get("mtime", 0))
+            for e in LX.load_manifest(tmp_path)}
+    for rid in ("alpha", "beta", "gamma"):
+        want = {k for k in full if k.split("\x1f")[0] == rid}
+        assert LX._seen_keys_for_run(tmp_path, rid) == want, rid
+
+
+def test_other_runs_are_not_parsed_into_the_key_set(tmp_path):
+    _seed(tmp_path, "mine", 3)
+    _seed(tmp_path, "theirs", 5)
+    keys = LX._seen_keys_for_run(tmp_path, "mine")
+    assert len(keys) == 3
+    assert all(k.startswith("mine\x1f") for k in keys)
+
+
+@pytest.mark.parametrize("rid", ["婚礼·二号", 'quo"te', "back\\slash",
+                                 "with space"])
+def test_needle_escaping_matches_how_the_manifest_was_written(tmp_path, rid):
+    """The pre-filter is a raw substring test, so its escaping has to be
+    byte-identical to what json.dumps wrote — non-ASCII, quotes and
+    backslashes all included."""
+    _seed(tmp_path, rid, 3)
+    assert len(LX._seen_keys_for_run(tmp_path, rid)) == 3
+
+
+def test_a_filename_containing_the_needle_is_not_a_false_match(tmp_path):
+    """The pre-filter is a SUPERSET test on purpose; run_id is re-checked
+    after parsing, so a filename that happens to contain the needle text
+    costs one wasted parse and nothing else."""
+    _seed(tmp_path, "victim", 2)
+    LX.append_run("attacker",
+                  [('x"run_id": "victim"y.jpg', "/p/evil.jpg", 9.0)],
+                  _v39(1), library_dir=tmp_path)
+    keys = LX._seen_keys_for_run(tmp_path, "victim")
+    assert len(keys) == 2
+    assert all("evil" not in k and 'x"run_id"' not in k for k in keys)
+
+
+def test_reindexing_is_still_idempotent(tmp_path):
+    entries = [(f"r{i}.jpg", f"/p/r{i}.jpg", 5.0) for i in range(6)]
+    LX.append_run("r", entries, _v39(6), library_dir=tmp_path)
+    again = LX.append_run("r", entries, _v39(6), library_dir=tmp_path)
+    assert again["added"] == 0 and again["skipped"] == 6
+    assert again["total"] == 6, "total must come from meta, not a re-parse"
+
+
+def test_partial_overlap_adds_only_the_new_rows(tmp_path):
+    old = [(f"o{i}.jpg", f"/p/o{i}.jpg", 5.0) for i in range(4)]
+    LX.append_run("r", old, _v39(4), library_dir=tmp_path)
+    mixed = old[:2] + [(f"n{i}.jpg", f"/p/n{i}.jpg", 7.0) for i in range(3)]
+    res = LX.append_run("r", mixed, _v39(5), library_dir=tmp_path)
+    assert (res["added"], res["skipped"]) == (3, 2)
+    assert LX.status(tmp_path)["n_photos"] == 7
+
+
+def test_changed_mtime_reindexes_that_photo(tmp_path):
+    """mtime is in the key so an edited photo gets a fresh vector."""
+    LX.append_run("r", [("a.jpg", "/p/a.jpg", 1.0)], _v39(1),
+                  library_dir=tmp_path)
+    res = LX.append_run("r", [("a.jpg", "/p/a.jpg", 2.0)], _v39(1),
+                        library_dir=tmp_path)
+    assert res["added"] == 1, "a re-scored photo must not be deduped away"
+
+
+def test_torn_manifest_line_does_not_break_dedup(tmp_path):
+    _seed(tmp_path, "r", 3)
+    with (tmp_path / "manifest.jsonl").open("a", encoding="utf-8") as fh:
+        fh.write('{"run_id": "r", "filename": "torn.jpg"')   # no newline/close
+    assert len(LX._seen_keys_for_run(tmp_path, "r")) == 3
+
+
+def test_no_manifest_yet_is_an_empty_set(tmp_path):
+    assert LX._seen_keys_for_run(tmp_path, "anything") == set()
