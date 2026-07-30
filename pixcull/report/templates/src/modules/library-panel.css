@@ -56,7 +56,9 @@
       width: 22px; height: 22px;
       display: inline-flex; align-items: center; justify-content: center;
       background: transparent;
-      color: var(--muted-soft);
+      /* v2.38 — an interactive control whose glyph IS its label, so it
+         takes the legible tier, not the decorative one. */
+      color: var(--muted);
       border: 1px solid var(--border);
       border-radius: 4px;
       cursor: pointer;

@@ -650,7 +650,7 @@
     }
     .lightbox .info-pane .similar-loading,
     .lightbox .info-pane .similar-empty {
-      color: var(--muted-soft); font-size: 11px;
+      color: var(--muted); font-size: 11px;
       padding: 4px 0; font-style: italic;
     }
     .lightbox .info-pane .similar-reason-tags {
@@ -664,7 +664,7 @@
       letter-spacing: 0.02em;
     }
     .lightbox .info-pane .similar-hint {
-      font-size: 10.5px; color: var(--muted-soft);
+      font-size: 10.5px; color: var(--muted);
       margin-top: 8px; line-height: 1.5;
     }
 
@@ -713,7 +713,7 @@
     }
     .lightbox .info-pane .decision-btn .hk {
       font-size: 9.5px; font-family: ui-monospace, monospace;
-      color: var(--muted-soft);
+      color: var(--muted);
       padding: 1px 5px; border-radius: 2px;
       background: rgba(255,255,255,0.06);
     }

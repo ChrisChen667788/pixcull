@@ -357,7 +357,7 @@
       --fg:           var(--contrast);   /* near-black  #171717 */
       --fg-2:         #3a3a3c;
       --muted:        #616165;
-      --muted-soft:   #8f8f93;
+      --muted-soft:   #858589;
       /* —— BORDERS (neutral hairline) —— */
       --border:       #e2e2e2;
       --border-hi:    #c9c9c9;
@@ -980,7 +980,7 @@
       line-height: 1.4;
       padding: 2px 0;
     }
-    .cmdk-input::placeholder { color: var(--muted-soft, var(--muted)); }
+    .cmdk-input::placeholder { color: var(--muted); }
     .cmdk-esc {
       padding: 2px 7px;
       font-family: var(--font-mono, monospace);
@@ -1495,7 +1495,7 @@
       font-variant-numeric: tabular-nums; font-weight: 600;
     }
     .neardup-sim-stat {
-      flex: 1 1 100%; color: var(--muted-soft);
+      flex: 1 1 100%; color: var(--muted);
       font-variant-numeric: tabular-nums;
     }
     .neardup-sim-range {
@@ -3029,7 +3029,7 @@
       color: var(--fg);
     }
     .cflx-by {
-      font-size: 10.5px; color: var(--muted-soft, var(--muted));
+      font-size: 10.5px; color: var(--muted);
     }
     /* On narrow viewports, stack the three options vertically. */
     @media (max-width: 600px) {
@@ -3859,7 +3859,7 @@
     }
     .lightbox .info-pane .similar-loading,
     .lightbox .info-pane .similar-empty {
-      color: var(--muted-soft); font-size: 11px;
+      color: var(--muted); font-size: 11px;
       padding: 4px 0; font-style: italic;
     }
     .lightbox .info-pane .similar-reason-tags {
@@ -3873,7 +3873,7 @@
       letter-spacing: 0.02em;
     }
     .lightbox .info-pane .similar-hint {
-      font-size: 10.5px; color: var(--muted-soft);
+      font-size: 10.5px; color: var(--muted);
       margin-top: 8px; line-height: 1.5;
     }
 
@@ -3922,7 +3922,7 @@
     }
     .lightbox .info-pane .decision-btn .hk {
       font-size: 9.5px; font-family: ui-monospace, monospace;
-      color: var(--muted-soft);
+      color: var(--muted);
       padding: 1px 5px; border-radius: 2px;
       background: rgba(255,255,255,0.06);
     }
@@ -5664,7 +5664,9 @@
       width: 22px; height: 22px;
       display: inline-flex; align-items: center; justify-content: center;
       background: transparent;
-      color: var(--muted-soft);
+      /* v2.38 — an interactive control whose glyph IS its label, so it
+         takes the legible tier, not the decorative one. */
+      color: var(--muted);
       border: 1px solid var(--border);
       border-radius: 4px;
       cursor: pointer;
@@ -5784,7 +5786,7 @@
     .lp-group .lp-count {
       margin-left: auto;
       font-size: 10.5px;
-      color: var(--muted-soft);
+      color: var(--muted);
       font-weight: 400;
       font-variant-numeric: tabular-nums;
     }

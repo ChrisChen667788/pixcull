@@ -573,7 +573,7 @@ _DESIGN_TOKENS_CSS = r"""
     --fg:           #171717;
     --fg-2:         #3a3a3c;
     --muted:        #616165;
-    --muted-soft:   #8f8f93;
+    --muted-soft:   #858589;
     --border:       #e2e2e2;
     --border-hi:    #c9c9c9;
     /* light glass: an 8% white highlight is invisible on a near-white
@@ -5420,7 +5420,7 @@ class _Handler(BaseHTTPRequestHandler):
             f"       style='{'display:none' if not initial_src else ''}'>"
             "  <div id='emptyState' class='empty' "
             f"       style='{'display:none' if initial_src else ''}'>"
-            "    等候主窗口选定一张照片…<br><span style='color:var(--muted-soft)'>"
+            "    等候主窗口选定一张照片…<br><span style='color:var(--muted)'>"
             "    (副屏会同步翻页 + 缩放)</span></div>"
             "</div>"
             "<script>(function(){"
@@ -6564,7 +6564,7 @@ class _Handler(BaseHTTPRequestHandler):
     margin-bottom: 4px; font-size: 12px;
   }}
   .ph-comment-author {{ color: var(--fg-2); font-weight: 600; }}
-  .ph-comment-ts {{ color: var(--muted-soft); font-family: ui-monospace, monospace; font-size: 11px; }}
+  .ph-comment-ts {{ color: var(--muted); font-family: ui-monospace, monospace; font-size: 11px; }}
   .ph-comment-body {{ color: var(--fg); font-size: 13.5px; line-height: 1.55; }}
 
   /* ===== Signature footer ===== */

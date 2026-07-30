@@ -52,6 +52,27 @@
 
 ## What's new
 
+**v2.38** — **contrast audit of the light theme I'd just rolled out** (see
+[`docs/ROADMAP-v2.38-charter.md`](docs/ROADMAP-v2.38-charter.md)). v2.35 and
+v2.37 brought light theme to a dozen surfaces that had never rendered light
+before, and nobody had checked what that did to legibility. Measured against
+the real tokens: the palette is healthy — every text tier clears WCAG AA on
+both themes — with one exception. `--muted-soft` was **3.01:1** in light and
+3.65:1 in dark while colouring 9.5–11px text (timestamps, hints, input
+placeholders, hotkey labels); WCAG's "large text" allowance starts at 18.66px
+bold, so that text needed the full 4.5:1. Solving for a compliant value showed
+there's no room for a tier *softer* than `--muted` that still passes on deeper
+surfaces, so this became a design decision rather than a colour tweak:
+`--muted-soft` is now decoration-only (dividers, chevrons, dots, borders, SVG
+strokes — the 3:1 graphical bar) and all 16 text uses moved to `--muted`. The
+static token analysis nearly missed the point: the review workspace derives its
+surfaces via OKLCH, not hex, so the same check was re-run in a real browser by
+rasterising each colour to a canvas — the two agree, but only measurement could
+say so. This release also **reverts an optimisation of its own**: batching the
+per-row XMP sidecar probe into one `scandir` was 3–5% *slower* in both tested
+shapes, so it was dropped rather than kept on an untested "it'd help on network
+storage" rationale.
+
 **v2.37** — **big shoots open 3x faster, and the page your client sees finally
 looks like this product** (see
 [`docs/ROADMAP-v2.37-charter.md`](docs/ROADMAP-v2.37-charter.md)). v2.33's cache

@@ -103,7 +103,7 @@
       color: var(--fg);
     }
     .cflx-by {
-      font-size: 10.5px; color: var(--muted-soft, var(--muted));
+      font-size: 10.5px; color: var(--muted);
     }
     /* On narrow viewports, stack the three options vertically. */
     @media (max-width: 600px) {

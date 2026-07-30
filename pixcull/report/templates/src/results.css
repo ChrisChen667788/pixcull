@@ -549,7 +549,7 @@
       line-height: 1.4;
       padding: 2px 0;
     }
-    .cmdk-input::placeholder { color: var(--muted-soft, var(--muted)); }
+    .cmdk-input::placeholder { color: var(--muted); }
     .cmdk-esc {
       padding: 2px 7px;
       font-family: var(--font-mono, monospace);
@@ -1064,7 +1064,7 @@
       font-variant-numeric: tabular-nums; font-weight: 600;
     }
     .neardup-sim-stat {
-      flex: 1 1 100%; color: var(--muted-soft);
+      flex: 1 1 100%; color: var(--muted);
       font-variant-numeric: tabular-nums;
     }
     .neardup-sim-range {
@@ -2142,7 +2142,7 @@
     .lp-group .lp-count {
       margin-left: auto;
       font-size: 10.5px;
-      color: var(--muted-soft);
+      color: var(--muted);
       font-weight: 400;
       font-variant-numeric: tabular-nums;
     }

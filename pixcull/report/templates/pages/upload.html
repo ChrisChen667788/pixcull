@@ -595,7 +595,7 @@
          border-radius:8px;padding:24px;width:min(440px,90vw);
          box-shadow:var(--shadow-lg)">
       <h3 style="margin:0 0 14px;font-size:16px">用户配置</h3>
-      <div style="color:var(--muted-soft);font-size:11px;margin-bottom:14px">
+      <div style="color:var(--muted);font-size:11px;margin-bottom:14px">
         当前活动用户: <span id="userModalActive" style="color:var(--fg)">···</span>
         <br>每个用户独立维护垂类样本桶 / 策略 / phrase 覆盖。
       </div>
@@ -613,10 +613,10 @@
             background:var(--accent);color:#fff;border:none;border-radius:4px;
             font:inherit;cursor:pointer">创建</button>
         </div>
-        <div id="userCreateMsg" style="font-size:10px;color:var(--muted-soft);margin-top:6px"></div>
+        <div id="userCreateMsg" style="font-size:10px;color:var(--muted);margin-top:6px"></div>
       </div>
       <div style="border-top:1px solid var(--border);padding-top:14px;
-           margin-top:14px;font-size:10px;color:var(--muted-soft);line-height:1.5">
+           margin-top:14px;font-size:10px;color:var(--muted);line-height:1.5">
         <b style="color:var(--fg)">V28.2:</b> 点击上面任一非当前用户的行 → 直接切换(本浏览器
         会话内,通过 cookie 标记;不需要重启服务)。<br>
         <span style="opacity:0.8">如果要 PERMANENTLY 改默认用户(全局),启动前设
@@ -1054,14 +1054,14 @@
       modalList.innerHTML = (data.users || []).map(u => {
         const tag = u.is_active
           ? '<span style="color:var(--keep);margin-left:6px;font-size:10px">← 当前</span>'
-          : '<span style="color:var(--muted-soft);margin-left:6px;font-size:10px">点击切换</span>';
+          : '<span style="color:var(--muted);margin-left:6px;font-size:10px">点击切换</span>';
         return `<div data-uid="${u.user_id}" class="user-row"
                 style="padding:8px 10px;border-radius:4px;
                 ${u.is_active ? 'background:rgba(99,189,127,0.08);' : 'cursor:pointer;'}
                 margin-bottom:4px;display:flex;justify-content:space-between;
                 align-items:center;font-size:12px">
           <span><b>${u.user_id}</b>${tag}</span>
-          <span style="color:var(--muted-soft);font-size:10px">
+          <span style="color:var(--muted);font-size:10px">
             ${u.vertical_count} 个垂类已填样本
           </span>
         </div>`;
