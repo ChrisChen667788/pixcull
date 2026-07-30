@@ -52,6 +52,27 @@
 
 ## What's new
 
+**v2.36** — **real video footage on stage, and a bug it flushed out** (see
+[`docs/ROADMAP-v2.36-charter.md`](docs/ROADMAP-v2.36-charter.md)). The task was
+just to close an owner action: publishable video footage. The owner authorised
+their own GoPro clips, and every frame was vetted before publishing — GPMF
+carries **no GPS samples**, 38 sampled frames through PixCull's own
+`FaceDetector` flagged 14 which visual review confirmed were **all false
+positives** (fur trim and knit patterning; the subject faces away throughout), a
+wedding-motorcade clip with plates and bystanders was dropped, and the working
+copy is re-encoded with `-map_metadata -1` under a neutral name so no drive name
+or original path can appear on screen. Worth swapping because the old shots used
+a stock clip whose reel-candidate thumbnails had to be **blurred to mush** —
+hiding the very thing that panel exists to show. **Shooting it flushed out a
+real bug**: `/timeline` rendered 50 broken images with 50 `/thumb` 404s, because
+`_reload_run_from_disk` demanded either a `manifest.json` or an `input/` dir and
+`pixcull video` produces neither (its frames live in `video_frames/`) — so a
+video run never reloaded at all. Compounded by `_resolve_image_source` also
+ignoring scores.csv's `path` column, the **same root cause as v2.34's**. Now
+scores.csv is the marker of "this is a run", both output layouts are accepted,
+and the path map is mtime-cached because that resolver runs **once per
+thumbnail**. Re-verified: thumbnails **50/50, zero 4xx**.
+
 **v2.35** — **near-dup grouping stops recomputing itself, and light theme
 finally works everywhere** (see
 [`docs/ROADMAP-v2.35-charter.md`](docs/ROADMAP-v2.35-charter.md)). Both items
@@ -1342,7 +1363,12 @@ Lightbox 按 `A` 弹出 6 轴选择条(技术 / 主体 / 构图 / 光线 / 时�
 Kodak Vision3 / Arri 709A / Teal-Orange / B&W),主画面 + 每个 reel
 候选缩略图实时套用 ASC-CDL 参数化预览(仅预览,不改原片)。
 
-![视频审片 · 🎨 调色预览 — 整段套用 Kodak / Arri / Teal-Orange / B&W LUT,主画面实时预览(此处 B&W)](docs/screenshots/19-video-grade.png)
+![视频审片 · 🎨 调色预览 — 整段套用 Kodak / Arri / Teal-Orange / B&W LUT,主画面 + 候选缩略图实时预览(此处 Kodak Vision3)](docs/screenshots/19-video-grade.png)
+**照片 + 视频同一条时间线(`/timeline/<run_id>`)** —— 一次拍摄里的照片与视频片段
+按拍摄时间排在一起,视频卡片显示时长 · 帧数 · 候选数 · 卖点标签,一键跳进审片台。
+
+![照片 + 视频时间线 — 视频片段与照片按时间同轴排列,50 帧全部可点](docs/screenshots/23-video-timeline.png)
+
 
 ### v2.9 · 智能透明 + 内容优先观看
 

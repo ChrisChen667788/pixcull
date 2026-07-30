@@ -54,7 +54,20 @@ tasks:
 完整源码 + iOS 伴侣 App + Lightroom 插件,均在 GitHub:
 **[github.com/ChrisChen667788/pixcull](https://github.com/ChrisChen667788/pixcull)**
 
-## v0.7 → v2.35 主要更新
+## v0.7 → v2.36 主要更新
+- **v2.36**:**真实视频素材上台 + 挖出"CLI 挑完视频就没法看"**。原任务只是关掉 owner
+  动作第 4 条(可公开视频素材):owner 授权自有 GoPro 素材,发布前逐项核过 —— GPMF
+  **无 GPS 采样**、抽 38 帧过自家 `FaceDetector` 检出的 14 帧**目视全为误检**(毛领/针织
+  纹样,主体全程背对镜头)、弃用有车牌+路人的婚礼车队片段、工作副本 `-map_metadata -1`
+  且改中性文件名(页面只显示 `winter-sled.mp4`,不含盘名/原路径)。换掉库存素材的意义:
+  旧 18/19 的 reel 候选缩略图**必须模糊成一团**才能对外,恰好把这功能最该展示的东西糊掉了。
+  **而拍图时撞出一个真 bug**:`/timeline` 的 50 个缩略图全是碎图、50 个 `/thumb` 全 404 ——
+  `_reload_run_from_disk` 要求 `manifest.json` 或 `input/` 至少有一个,而 `pixcull video`
+  两个都不产出(帧在 `video_frames/` 里),于是**视频 run 根本没被 reload**;叠加
+  `_resolve_image_source` 同样不查 scores.csv 的 `path` 列(与 v2.34 那个 bug **同一根因**)。
+  现在用 scores.csv 作为"这是一个 run"的标志、兼容两种输出布局,并按 mtime 缓存路径表
+  (该函数是**每张缩略图调一次**的)。复验缩略图 **50/50 加载、4xx/5xx = 0**;9 条新测试
+  做了变异验证。详见 `docs/ROADMAP-v2.36-charter.md`。
 - **v2.35**:**近重复分组不再每点一次重算 + 浅色主题第一次真的全站可用**。两项都带着
   方案上路,**两个方案都被测量推翻**。近重复原计划"按时间窗剪枝"——错的:这个分组存在
   的全部理由就是抓 `cluster_bursts` 因为**时间不相邻**而漏掉的近重复;而真实成本也不在
@@ -471,7 +484,12 @@ Heatmap PNG 缓存到 `output/attribution/<axis>/<sha>.png`。
 Vision3 / Arri 709A / Teal-Orange / B&W),主画面 + 每个候选缩略图实时
 参数化预览(仅预览,不改原片)。
 
-![视频审片 · 🎨 调色预览 — 整段套用 Kodak / Arri / Teal-Orange / B&W LUT,主画面实时预览(此处 B&W)](docs/screenshots/19-video-grade.png)
+![视频审片 · 🎨 调色预览 — 整段套用 Kodak / Arri / Teal-Orange / B&W LUT,主画面 + 候选缩略图实时预览(此处 Kodak Vision3)](docs/screenshots/19-video-grade.png)
+**照片 + 视频同一条时间线(`/timeline/<run_id>`)** —— 一次拍摄里的照片与视频片段
+按拍摄时间排在一起,视频卡片显示时长 · 帧数 · 候选数 · 卖点标签,一键跳进审片台。
+
+![照片 + 视频时间线 — 视频片段与照片按时间同轴排列,50 帧全部可点](docs/screenshots/23-video-timeline.png)
+
 
 ### v2.9 · 智能透明 + 内容优先观看
 

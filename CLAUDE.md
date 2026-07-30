@@ -46,11 +46,18 @@ script now strips `README.md`/`*.md`/`docs/` LFS rules and pins
 `README.md text` before each upload.  Never use `--github-links` unless
 you specifically want CDN-linked images instead of ModelScope-hosted.
 
-New screenshots: next free number is **23** (01–22 used; 17 =
+New screenshots: next free number is **24** (01–23 used; 17 =
 attribution-heatmap, 18 = video-review, 19 = video-grade, 20 =
-scenes-navigator, 21 = verdict-glassbox, 22 = transparency-tools).  23 is
-reserved for the deferred baby face-Close-ups shot (feature verified; the
-headless capture is killed by this host — capture it locally via
+scenes-navigator, 21 = verdict-glassbox, 22 = transparency-tools, 23 =
+video-timeline).  **18 / 19 / 23 are shot from the owner's own GoPro
+footage** (owner-authorised 2026-07-30): winter sledding, subject filmed
+from behind throughout, no resolvable faces, GPMF carries no GPS
+samples, and the working copy is re-encoded with `-map_metadata -1`
+under a neutral name (`winter-sled.mp4`) so no drive name or original
+path can appear on screen.  The earlier 18/19 used a stock clip whose
+reel-candidate thumbnails had to be blurred to mush.  The deferred baby
+face-Close-ups shot is still outstanding (feature verified; headless
+capture is killed by this host — capture locally via
 `scripts/brand/capture_real_screenshots.sh`).  The
 animated architecture / sequence / data-flow diagrams live separately in
 `docs/diagrams/` (SVG for GitHub, GIF for ModelScope).

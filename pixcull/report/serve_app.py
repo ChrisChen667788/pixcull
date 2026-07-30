@@ -2494,6 +2494,15 @@ def _reload_run_from_disk(run_id: str) -> dict | None:
     info: dict = {
         "output_dir": str(output_dir),
     }
+    # v2.35.2 — a run laid out by `pixcull video` puts scores.csv directly
+    # in its --output dir, with no nested output/. Accept either shape, or
+    # the run is invisible to the registry.
+    if not (output_dir / "scores.csv").is_file() and \
+            (run_root / "scores.csv").is_file():
+        output_dir = run_root
+        manifest_path = output_dir / "manifest.json"
+        info["output_dir"] = str(output_dir)
+
     if manifest_path.exists():
         info["mode"] = "scan"
         info["input_dir"] = ""  # n/a in scan mode
@@ -2504,6 +2513,16 @@ def _reload_run_from_disk(run_id: str) -> dict | None:
     elif input_dir.is_dir():
         info["mode"] = "upload"
         info["input_dir"] = str(input_dir)
+    elif (output_dir / "scores.csv").is_file():
+        # v2.35.2 — a VIDEO run has neither: `pixcull video` writes no
+        # manifest.json and has no input/ dir, its frames live in
+        # video_frames/<clip>_<hash>/. Before this, such a run failed to
+        # reload at all, so /api/v1/runs reported it missing, every
+        # /thumb 404'd, and the photo+video timeline rendered as N broken
+        # images. scores.csv is the real marker of "this is a run";
+        # _resolve_image_source falls back to its `path` column.
+        info["mode"] = "csv"
+        info["input_dir"] = ""
     else:
         return None
     return info
@@ -2551,8 +2570,50 @@ def _resolve_image_source(run: dict, filename: str) -> Path | None:
     input_dir = run.get("input_dir") or ""
     if input_dir:
         candidate = Path(input_dir) / filename
-        return candidate if candidate.exists() else None
-    return None
+        if candidate.exists():
+            return candidate
+    # v2.35.2 — last resort: scores.csv's own ``path`` column.
+    #
+    # A VIDEO run is exactly this case. Its frames live in
+    # ``video_frames/<clip>_<hash>/``, it has no manifest.json and no
+    # input_dir, so neither branch above could resolve anything: every
+    # /thumb request 404'd and the whole photo+video timeline rendered as
+    # 50 broken images. The CSV records the absolute path of each frame,
+    # which is authoritative — the same column v2.34 found the library
+    # indexer was ignoring for the same reason.
+    return _scores_path_map(Path(run["output_dir"])).get(filename)
+
+
+def _scores_path_map(output_dir: Path) -> dict[str, Path]:
+    """``filename -> path`` from scores.csv, for runs with no manifest.
+
+    Cached on the CSV's mtime because _resolve_image_source is called
+    once PER THUMBNAIL — parsing the CSV inline would be one full parse
+    per image (50 parses to draw one video timeline, thousands on a real
+    shoot). Only paths that exist are returned.
+    """
+    def _load() -> dict[str, Path]:
+        import csv as _csv
+        out: dict[str, Path] = {}
+        scores = output_dir / "scores.csv"
+        if not scores.is_file():
+            return out
+        try:
+            with scores.open("r", encoding="utf-8", newline="") as fh:
+                for row in _csv.DictReader(fh):
+                    fn, raw = row.get("filename"), row.get("path")
+                    if fn and raw:
+                        p = Path(raw)
+                        if p.is_file():
+                            out[fn] = p
+        except (OSError, ValueError):
+            return {}
+        return out
+
+    return _SCORES_PATH_CACHE.get_or_load(output_dir / "scores.csv", _load)
+
+
+_SCORES_PATH_CACHE = _MtimeLRUCache(maxsize=8)
 
 
 # ── v2.9-P0-1 — face Close-ups (Narrative Select) ────────────────────────────
