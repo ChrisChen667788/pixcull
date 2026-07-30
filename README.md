@@ -52,6 +52,25 @@
 
 ## What's new
 
+**v2.33** — **big shoots stop re-rendering themselves** (see
+[`docs/ROADMAP-v2.33-charter.md`](docs/ROADMAP-v2.33-charter.md)). This one
+started by *disproving* its own roadmap: the design audit predicted the DOM
+was the bottleneck on huge runs, but a 20,000-row measurement found only 700
+placeholder nodes / 7,362 total / 30 MB heap — v2.18 chunked hydration already
+bounds it. The real cost was on the server: `_build_results()` re-parsed the
+entire CSV, re-merged annotations and re-derived all six rubric axes **on
+every request**, and one page load calls it 5+ times. Caching it on the mtimes
+of its only two inputs took the page from **6.2s → 0.055s** and each
+hydration chunk from **6.3s → 0.045s** (~140x); cold start is unchanged
+because the CSV has to be parsed once. Invalidation piggybacks on the
+discipline `_JSONL_CACHE` already uses — a re-score or a saved annotation
+changes an mtime, so writers never need to know the cache exists. The care
+went into correctness, not speed: the cached rows are handed back by
+reference, so all 18 call sites and every helper they forward rows into were
+AST-audited as read-only (that contract is now written above the function),
+and the nine regression tests were **mutation-verified** — blanking the
+annotation mtime out of the key turns exactly the two invalidation tests red.
+
 **v2.32** — **cross-run library search: ask your whole archive at once** (see
 [`docs/ROADMAP-v2.32-charter.md`](docs/ROADMAP-v2.32-charter.md)). Per-run
 semantic search answered "in THIS shoot, where is the backlit shot"; the new
