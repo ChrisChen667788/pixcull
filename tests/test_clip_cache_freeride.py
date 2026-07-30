@@ -212,11 +212,13 @@ def test_scene_forward_exposes_the_same_vector_semantic_search_encodes():
     torch = pytest.importorskip("torch")
     from PIL import Image
 
-    try:
-        from pixcull.detectors.scene import SceneDetector, _clip
-        proc, model, device = _clip()
-    except Exception:                                   # noqa: BLE001
-        pytest.skip("CLIP unavailable")
+    # v2.40 — cached weights mean this MUST run.  It is the only guard on
+    # the claim that every vector the pipeline caches lives in the same
+    # space as the query encoder; letting it skip silently would leave
+    # that unprotected (see tests/_model_gate.py).
+    from tests._model_gate import require_clip
+    from pixcull.detectors.scene import SceneDetector
+    proc, model, device = require_clip()
 
     rng = np.random.default_rng(3)
     a = np.zeros((224, 224, 3), np.uint8)

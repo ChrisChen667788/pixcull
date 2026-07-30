@@ -66,11 +66,148 @@ def run(
 
 @app.command()
 def export(
-    project: Path = typer.Argument(..., help="Project SQLite path"),
+    run_dir: Path = typer.Argument(
+        ..., exists=True, file_okay=False,
+        help="Run output dir (the one containing scores.csv)"),
     fmt: str = typer.Option("xmp", "--format", "-f", help="xmp | csv"),
+    target: str = typer.Option(
+        "alongside", "--target", "-t",
+        help="alongside = sidecar next to each original (what Lightroom "
+             "and Capture One pick up) | collected = sidecars gathered in "
+             "<run>/xmp/ | embedded = write IPTC into the originals "
+             "(needs exiftool)"),
+    out: Optional[Path] = typer.Option(
+        None, "--out", "-o", help="CSV path (--format csv only)"),
 ) -> None:
-    """Export ratings to XMP sidecars (Lightroom / C1) or CSV. (V0.5+)"""
-    raise typer.Exit(code=1)  # TODO(V0.5)
+    """Export ratings to XMP sidecars (Lightroom / C1) or CSV.
+
+    v2.40 — this was a stub that raised ``typer.Exit(1)`` with no message
+    since V0.5, while the packaging blurb advertised "XMP/IPTC export,
+    Lightroom & Capture One ready".  Export did exist, but only inside
+    the web workspace, so the CLI path v2.31 opened up for pip users
+    dead-ended here.  It now runs the *same* code the server does —
+    ``_build_results`` for the rows, then ``write_xmp`` /
+    ``write_iptc_to_file`` — rather than a second implementation that
+    could drift.
+    """
+    scores = run_dir / "scores.csv"
+    if not scores.is_file():
+        console.print(f"[red]no scores.csv in {run_dir}[/] — point this at a "
+                      f"run's output dir (the one `pixcull run --output` "
+                      f"created).")
+        raise typer.Exit(code=2)
+
+    fmt = fmt.strip().lower()
+    if fmt not in ("xmp", "csv"):
+        console.print(f"[red]unknown --format {fmt!r}[/] (xmp | csv)")
+        raise typer.Exit(code=2)
+
+    if fmt == "csv":
+        dest = out or (run_dir / "ratings.csv")
+        n = _export_ratings_csv(scores, dest)
+        console.print(f"[green]✓[/] {n} rows → {dest}")
+        return
+
+    target = target.strip().lower()
+    if target not in ("alongside", "collected", "embedded"):
+        console.print(f"[red]unknown --target {target!r}[/] "
+                      f"(alongside | collected | embedded)")
+        raise typer.Exit(code=2)
+
+    written, skipped, per_decision = _export_xmp(run_dir, target)
+    if not written:
+        console.print("[yellow]nothing written[/] — no source images were "
+                      "resolvable (moved originals, or an external drive is "
+                      "offline)")
+        raise typer.Exit(code=1)
+    breakdown = " · ".join(f"{k} {v}" for k, v in sorted(per_decision.items()))
+    where = {"alongside": "next to each original",
+             "collected": f"{run_dir / 'xmp'}",
+             "embedded": "embedded in the originals"}[target]
+    console.print(f"[green]✓[/] {written} sidecars → {where}"
+                  + (f"  [dim]({breakdown})[/dim]" if breakdown else ""))
+    if skipped:
+        console.print(f"[yellow]{skipped} skipped[/] "
+                      f"[dim](source image not reachable)[/dim]")
+
+
+def _export_ratings_csv(scores_csv: Path, dest: Path) -> int:
+    """filename, decision, stars, colour label — the flat form C1 and
+    spreadsheet workflows ask for."""
+    import csv as _csv
+    from pixcull.io.xmp import decision_to_xmp
+
+    rows = []
+    with scores_csv.open(encoding="utf-8", newline="") as fh:
+        for r in _csv.DictReader(fh):
+            decision = (r.get("decision") or "").strip()
+            stars, label = decision_to_xmp(decision)
+            rows.append({"filename": r.get("filename", ""),
+                         "decision": decision,
+                         "rating": stars,
+                         "color_label": label,
+                         "score_final": r.get("score_final", "")})
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    with dest.open("w", encoding="utf-8", newline="") as fh:
+        w = _csv.DictWriter(fh, fieldnames=["filename", "decision", "rating",
+                                            "color_label", "score_final"])
+        w.writeheader()
+        w.writerows(rows)
+    return len(rows)
+
+
+def _export_xmp(run_dir: Path, target: str) -> tuple[int, int, dict]:
+    """Write XMP/IPTC for every row, mirroring the server's exporter."""
+    import csv as _csv
+    from collections import Counter
+
+    from pixcull.io.xmp import (
+        build_iptc_fields_from_row, decision_to_xmp, write_xmp,
+    )
+
+    path_map = _run_path_map(run_dir)
+    xmp_dir = run_dir / "xmp"
+    if target == "collected":
+        xmp_dir.mkdir(parents=True, exist_ok=True)
+
+    written = skipped = 0
+    per_decision: Counter = Counter()
+    with (run_dir / "scores.csv").open(encoding="utf-8", newline="") as fh:
+        for row in _csv.DictReader(fh):
+            fn = row.get("filename") or ""
+            if not fn:
+                continue
+            decision = (row.get("decision") or "").strip()
+            stars, label = decision_to_xmp(decision)
+            iptc = build_iptc_fields_from_row(row, run_id=run_dir.parent.name)
+
+            if target == "collected":
+                write_xmp(xmp_dir / Path(fn).name, stars, label,
+                          keywords=iptc["keywords"],
+                          description=iptc["description"],
+                          headline=iptc["headline"])
+            else:
+                src = path_map.get(fn)
+                if src is None:
+                    skipped += 1
+                    continue
+                if target == "embedded":
+                    from pixcull.io.iptc_embed import write_iptc_to_file
+                    if not write_iptc_to_file(
+                            src, rating=stars, color_label=label,
+                            keywords=iptc["keywords"],
+                            description=iptc["description"],
+                            headline=iptc["headline"]):
+                        skipped += 1
+                        continue
+                else:
+                    write_xmp(src, stars, label,
+                              keywords=iptc["keywords"],
+                              description=iptc["description"],
+                              headline=iptc["headline"])
+            written += 1
+            per_decision[decision] += 1
+    return written, skipped, dict(per_decision)
 
 
 @app.command(name="contact-sheet")
@@ -114,9 +251,94 @@ def contact_sheet(
 @app.command()
 def bench(
     folder: Path = typer.Argument(..., exists=True, file_okay=False),
+    limit: int = typer.Option(24, "--limit", "-n",
+                              help="How many images to time (0 = all)"),
+    workers: Optional[int] = typer.Option(
+        None, "--workers", "-w", help="Worker processes (default: auto)"),
+    keep_output: bool = typer.Option(
+        False, "--keep-output", help="Leave the scratch run dir in place"),
 ) -> None:
-    """Benchmark images-per-second throughput. (V0.5+)"""
-    raise typer.Exit(code=1)  # TODO(V0.5)
+    """Benchmark images-per-second throughput on this machine.
+
+    v2.40 — was a stub that exited 1 with no message since V0.5.  Runs
+    the real pipeline (the same one `pixcull run` uses), because the
+    number people actually want is end-to-end throughput, not a
+    micro-benchmark of one detector.
+
+    The first run on a cold machine also pays model loading, which is
+    reported separately so a 24-image sample isn't mistaken for the
+    steady-state rate.
+    """
+    import shutil
+    import tempfile
+    import time
+
+    from pixcull.io.loader import list_images
+
+    images = list_images(folder)
+    if not images:
+        console.print(f"[red]no readable images in {folder}[/]")
+        raise typer.Exit(code=2)
+    if limit and limit > 0:
+        images = images[:limit]
+
+    scratch = Path(tempfile.mkdtemp(prefix="pixcull_bench_"))
+    sample_dir = scratch / "sample"
+    sample_dir.mkdir()
+    # Symlink rather than copy: copying a few hundred RAWs would time the
+    # disk instead of the pipeline.
+    for p in images:
+        try:
+            (sample_dir / p.name).symlink_to(p.resolve())
+        except OSError:
+            shutil.copy2(p, sample_dir / p.name)
+
+    # run_pipeline takes no `workers` argument — the pool reads
+    # PIXCULL_WORKERS (pipeline/parallel.py::_default_workers), so set
+    # that rather than offering a flag that silently does nothing.
+    prev_workers = os.environ.get("PIXCULL_WORKERS")
+    if workers and workers > 0:
+        os.environ["PIXCULL_WORKERS"] = str(workers)
+    # A benchmark must not file its throwaway sample into the user's
+    # cross-run library: the scratch dir is deleted straight after, so
+    # every row would become a permanently stale hit in /library.
+    prev_noindex = os.environ.get("PIXCULL_NO_AUTO_INDEX")
+    os.environ["PIXCULL_NO_AUTO_INDEX"] = "1"
+
+    console.print(f"[cyan]Benchmarking[/] {len(images)} image(s) from {folder}"
+                  + (f" · {workers} workers" if workers else ""))
+    try:
+        from pixcull.pipeline.orchestrator import run_pipeline
+        t0 = time.perf_counter()
+        run_pipeline(sample_dir, scratch / "out")
+        elapsed = time.perf_counter() - t0
+    finally:
+        if prev_workers is None:
+            os.environ.pop("PIXCULL_WORKERS", None)
+        else:
+            os.environ["PIXCULL_WORKERS"] = prev_workers
+        if prev_noindex is None:
+            os.environ.pop("PIXCULL_NO_AUTO_INDEX", None)
+        else:
+            os.environ["PIXCULL_NO_AUTO_INDEX"] = prev_noindex
+        if not keep_output:
+            shutil.rmtree(scratch, ignore_errors=True)
+
+    n = len(images)
+    rate = n / elapsed if elapsed else 0.0
+    console.print(
+        f"\n[bold green]{rate:.2f} img/s[/]  "
+        f"[dim]({n} images in {elapsed:.1f}s, {elapsed / n:.2f}s each)[/dim]")
+    for shoot, label in ((500, "small shoot"), (1500, "wedding"),
+                         (5000, "multi-day event")):
+        if rate:
+            mins = shoot / rate / 60
+            console.print(f"  [dim]{shoot:>5,} photos ({label}): "
+                          f"~{mins:.0f} min[/dim]")
+    console.print("[dim]First run includes one-off model loading; re-run for "
+                  "the steady-state rate.[/dim]")
+    if keep_output:
+        console.print(f"[dim]scratch kept at {scratch}[/dim]")
 
 
 @app.command()

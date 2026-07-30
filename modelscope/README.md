@@ -54,7 +54,21 @@ tasks:
 完整源码 + iOS 伴侣 App + Lightroom 插件,均在 GitHub:
 **[github.com/ChrisChen667788/pixcull](https://github.com/ChrisChen667788/pixcull)**
 
-## v0.7 → v2.39 主要更新
+## v0.7 → v2.40 主要更新
+- **v2.40**:**门禁不再说谎 + CLI 兑现包装上印的东西**。真模型测试原先用
+  `except Exception: skip` 兜底,把"模型不在这台机器上"和"模型就在本地、加载却失败了"
+  混为一谈。v2.39 那轮门禁里,这让 HF 限流悄悄停掉了三条测试 —— **其中包括 v2.34 用来
+  钉住 `image_embeds ≡ get_image_features` 的那条**,而那是流水线写出的每个缓存向量唯一
+  的正确性保障。现在:权重在盘上,测试就**必须跑**,并用 `HF_HUB_OFFLINE=1` 加载(网络
+  因此不可能把已缓存的模型变成失败),此后任何异常都是失败而非 skip。顺着同一个问题
+  ——**"绿"到底覆盖了什么** —— 新加的"任何命令都不许是无输出的 `typer.Exit(1)`"守卫,
+  当场抓出两个从 V0.5 就在的静默 stub。`pixcull export` 是其一:无输出、退出 1,而包
+  描述印着 "XMP/IPTC export, Lightroom & Capture One ready"。导出**是存在的**,但只在
+  Web 工作台里,于是 v2.31 为 pip 用户打通的 CLI 路径走到这里就断了。现在它跑和服务端
+  同一套代码 —— 用真 JPEG 实跑并**逐张回读**验证:keep→5★/Green、maybe→3★/Yellow、
+  cull→1★/Red 全部往返一致。`pixcull bench` 是其二,现在报真实吞吐并换算成拍摄规模;
+  而一实跑就发现它把临时样本写进了用户的跨 run 全库索引(临时目录跑完即删,那些行会
+  永久变成 stale 命中)。详见 `docs/ROADMAP-v2.40-charter.md`。
 - **v2.39**:**主题能就地切了 + 入库不再重写整个库**。v2.35 让独立页面**遵守**主题,
   但没有改的办法 —— 直接打开 `/library` 得先回审片工作台才能切换。控件在
   `_read_template` 一处注入成固定定位胶囊,而不是往每个页面 header 里加(其中三个

@@ -52,6 +52,28 @@
 
 ## What's new
 
+**v2.40** — **the gate stops lying, and the CLI does what the box says** (see
+[`docs/ROADMAP-v2.40-charter.md`](docs/ROADMAP-v2.40-charter.md)). Real-model
+tests used to guard themselves with a blanket `except Exception: skip`, which
+conflates "the model isn't on this machine" with "the model is right here and
+failed to load". During the v2.39 gate that let Hub rate-limiting silently stop
+three tests — including the one pinning v2.34's `image_embeds ≡
+get_image_features`, the sole guard on every cached vector the pipeline writes.
+Now: if the weights are on disk the test **runs**, loaded with
+`HF_HUB_OFFLINE=1` so the network can't turn a cached model into a failure, and
+anything after that is a failure rather than a skip. Following the same
+question — *what does green actually cover?* — a new guard asserting no command
+is a silent `raise typer.Exit(1)` found two that had been stubs since V0.5.
+`pixcull export` was one of them: no output, exit 1, while the package blurb
+advertised "XMP/IPTC export, Lightroom & Capture One ready". Export existed, but
+only inside the web workspace, so the CLI path v2.31 opened for pip users
+dead-ended. It now runs the same code the server does — verified by writing
+sidecars for real JPEGs and reading them back: keep→5★/Green, maybe→3★/Yellow,
+cull→1★/Red all round-trip. `pixcull bench` was the other, now reporting real
+throughput translated into shoot sizes — and running it immediately showed it
+was filing its throwaway scratch sample into the user's cross-run library, where
+every row would become a permanently stale hit.
+
 **v2.39** — **switch the theme where you are, and stop rewriting the whole
 library on every cull** (see
 [`docs/ROADMAP-v2.39-charter.md`](docs/ROADMAP-v2.39-charter.md)). v2.35 made

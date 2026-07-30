@@ -170,8 +170,14 @@ def test_vlm_caption_real_model(tmp_path, monkeypatch):
     Image.new("RGB", (320, 240), (90, 140, 200)).save(fd / "frame_000003.jpg")
     monkeypatch.setattr(C, "_VLM_ENABLED", True)
     C.reset()
-    if C._try_vlm() is None:
-        pytest.skip("captioning VLM unavailable")
+    # v2.40 — skip only when the VLM weights aren't cached; if they are,
+    # a failure to load is a failure, not a skip.
+    from tests._model_gate import VLM_REPO, is_cached
+    if not is_cached(VLM_REPO):
+        pytest.skip(f"captioning VLM not cached locally ({VLM_REPO})")
+    assert C._try_vlm() is not None, (
+        f"VLM is cached at {VLM_REPO} but _try_vlm() returned None — "
+        f"that is a real failure, not an unavailable model")
     cand = _cand(best_frame_id="frame_000003", start_s=2.0, end_s=4.0)
     out = C.vlm_caption(cand, frames_root=tmp_path)
     assert out and out.startswith("2.0–4.0s:")

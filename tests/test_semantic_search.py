@@ -136,14 +136,14 @@ def test_feature_tensor_shim_handles_both_return_shapes():
 
 
 def _require_clip():
-    pytest.importorskip("torch")
-    pytest.importorskip("transformers")
-    pytest.importorskip("PIL")
-    try:
-        from pixcull.detectors.scene import _clip
-        _clip()
-    except Exception as e:                                   # noqa: BLE001
-        pytest.skip(f"CLIP model unavailable: {e}")
+    """v2.40 — skip only when CLIP genuinely isn't on this machine.
+
+    This used to swallow ANY load error as a skip, so Hub rate-limiting
+    turned a real-model test into a no-op without anyone noticing.  See
+    tests/_model_gate.py.
+    """
+    from tests._model_gate import require_clip
+    return require_clip()
 
 
 def test_build_search_real_clip_end_to_end(tmp_path: Path):
