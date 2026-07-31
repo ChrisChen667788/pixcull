@@ -107,9 +107,22 @@ jobs:
           #   - test_v1_2_rescorer_integration.py joblib weights not in public repo
           # The remaining suite is hermetic (no model download
           # required for the assertions we check).
-          pytest -q \
+          # -m "not slow" leaves out the one journey that runs the real
+          # pipeline; it needs weights and lives in the realmodel lane.
+          pytest -q -m "not slow" \
             --ignore=tests/test_v1_1_scripts.py \
             --ignore=tests/test_v1_2_rescorer_integration.py
+
+      # v2.41 — the journey, separately, so a red run says WHICH failed.
+      # DESIGN-AUDIT-2031Q1: this repo's most common defect is a live
+      # feature no real user path can reach. Four shipped that way
+      # (library index resolving nothing, video runs unserveable, light
+      # theme never applying, export exiting silently) with the unit
+      # suite green throughout, because unit tests exercise functions
+      # and those were broken journeys. Each of the four was replayed as
+      # a mutation and this file caught all four.
+      - name: End-to-end smoke (run -> serve -> export)
+        run: pytest -q -m "not slow" tests/test_e2e_smoke.py
 
   realmodel:
     name: real-model integration (CLIP + VLM)

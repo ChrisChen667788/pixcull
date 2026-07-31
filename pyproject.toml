@@ -1,6 +1,6 @@
 [project]
 name = "pixcull"
-version = "2.40.2"
+version = "2.41.0"
 description = "Local-first AI photo culling for professional photographers — 6-axis rubric, XMP/IPTC export, Lightroom & Capture One ready."
 # v2.23 — dedicated PyPI readme: the repo README leans on relative-path
 # screenshots and GitHub-only markup that render broken on pypi.org.
@@ -146,6 +146,9 @@ ignore = ["E501"]  # line length handled by formatter
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 addopts = "-ra -q"
+markers = [
+    "slow: end-to-end journeys that run the real pipeline (needs model weights)",
+]
 
 [tool.mypy]
 python_version = "3.11"
