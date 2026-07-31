@@ -1,6 +1,6 @@
 [project]
 name = "pixcull"
-version = "2.42.0"
+version = "2.43.0"
 description = "Local-first AI photo culling for professional photographers — 6-axis rubric, XMP/IPTC export, Lightroom & Capture One ready."
 # v2.23 — dedicated PyPI readme: the repo README leans on relative-path
 # screenshots and GitHub-only markup that render broken on pypi.org.
@@ -111,6 +111,22 @@ bird = [
 # holds it down for anyone installing `pixcull[shots]`.
 shots = [
     "scenedetect>=0.6",
+]
+# v2.43-P0 — opt-in speech transcription. Both engines are large and
+# BOTH leave numpy unpinned, which is exactly how v2.42 pulled numpy 2.x
+# and broke mediapipe; the core `numpy>=1.26,<2` pin holds them down when
+# installed as an extra, but a bare `pip install funasr` will not be.
+#
+# asr          = Paraformer via FunASR (MIT, Alibaba TONGYI) — the model
+#                FunClip is built on. Mandarin-first; weights on
+#                ModelScope, which PixCull already mirrors to.
+# asr-whisper  = broader language coverage. faster-whisper is the lighter
+#                runtime; plain openai-whisper also works if present.
+asr = [
+    "funasr>=1.1",
+]
+asr-whisper = [
+    "faster-whisper>=1.0",
 ]
 # v0.10-P0-2 — opt-in mDNS auto-discovery for LAN sync sessions.
 # Without this extra, /sync still works (paste URL or scan QR), but

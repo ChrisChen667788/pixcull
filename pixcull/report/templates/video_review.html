@@ -144,6 +144,12 @@ padding:1px 6px;font-size:11px;color:var(--ink)}
       <svg id="gpssvg" viewBox="0 0 320 190" preserveAspectRatio="xMidYMid meet"></svg>
       <div class="gpsmeta" id="gpsmeta"></div>
     </div>
+    <div class="tx" id="txWrap" style="display:none">
+      <h2>🗣 转录 <span class="tx-eng" id="txEng"></span></h2>
+      <input type="search" id="txFind" placeholder="搜台词…"
+             aria-label="在转录里搜索">
+      <div class="tx-list" id="txList"></div>
+    </div>
     <h2 id="reelHead">Reel 候选</h2>
     <div class="list" id="reelList"></div>
   </aside>
@@ -153,6 +159,34 @@ padding:1px 6px;font-size:11px;color:var(--ink)}
   <kbd>←</kbd>/<kbd>→</kbd> 单帧 · <kbd>Space</kbd> 播放/暂停 ·
   <kbd>[</kbd>/<kbd>]</kbd> 上/下个候选 · <kbd>Home</kbd>/<kbd>End</kbd> 首/尾帧
 </footer>
+<style>
+  /* v2.43-P1 — transcript panel. Tokens only: v2.37 had to undo a page
+     that invented its own palette. */
+  .tx { margin-bottom: 18px; }
+  .tx h2 { display: flex; align-items: baseline; gap: 8px; }
+  .tx-eng { font-size: 10px; font-weight: 400; color: var(--muted); }
+  #txFind {
+    width: 100%; margin: 0 0 8px; padding: 6px 10px; font: inherit;
+    font-size: 12px; color: var(--fg); background: var(--bg-card);
+    border: 1px solid var(--border); border-radius: var(--radius-md, 6px);
+  }
+  #txFind:focus { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+  .tx-list { max-height: 320px; overflow-y: auto; }
+  .tx-line {
+    display: grid; grid-template-columns: 52px 1fr; gap: 8px;
+    width: 100%; text-align: left; padding: 5px 6px; cursor: pointer;
+    background: none; border: 0; border-radius: 5px;
+    color: var(--fg-2); font: inherit; font-size: 12px; line-height: 1.5;
+  }
+  .tx-line:hover { background: var(--surface-2); color: var(--fg); }
+  .tx-line:focus-visible { outline: 2px solid var(--focus-ring);
+                           outline-offset: -2px; }
+  .tx-line.active { background: var(--accent-soft); color: var(--fg); }
+  .tx-t { color: var(--muted); font-variant-numeric: tabular-nums;
+          font-size: 11px; }
+  .tx-line.hit .tx-x { background: var(--accent-soft); border-radius: 3px; }
+  .tx-empty { color: var(--muted); font-size: 12px; padding: 6px; }
+</style>
 <script>
 "use strict";
 const RUN_ID = "__RUN_ID__";
@@ -165,6 +199,77 @@ document.getElementById('backlink').href = '/results/'+RUN_ID;
 fetch('/video/data/'+encodeURIComponent(RUN_ID))
   .then(r=>r.json()).then(init)
   .catch(e=>{ $('main').innerHTML='<div class="err">加载失败:'+e+'</div>'; });
+
+function fmtT(s){ const m=Math.floor(s/60), r=s-60*m;
+  return m+':'+(r<10?'0':'')+r.toFixed(1); }
+
+let TX=[];
+function initTranscript(d){
+  const t = d.transcript;
+  if(!t){ return; }                    // never transcribed — panel stays hidden
+  TX = (t.segments||[]).filter(s=>(s.text||'').trim());
+  $('txWrap').style.display='';
+  $('txEng').textContent = [t.engine, t.language].filter(Boolean).join(' · ');
+  if(!TX.length){
+    $('txList').innerHTML='<div class="tx-empty">这段没有检测到语音。</div>';
+    return;
+  }
+  renderTranscript('');
+  $('txFind').addEventListener('input', e=>renderTranscript(e.target.value));
+}
+
+function renderTranscript(q){
+  const needle=(q||'').trim().toLowerCase();
+  const rows=TX.map((s,i)=>({s,i}))
+    .filter(({s})=>!needle || (s.text||'').toLowerCase().includes(needle));
+  if(!rows.length){
+    $('txList').innerHTML='<div class="tx-empty">没有匹配的台词。</div>';
+    return;
+  }
+  $('txList').innerHTML = rows.map(({s,i})=>{
+    const txt=esc(s.text||'');
+    const body = needle
+      ? txt.replace(new RegExp('('+needle.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','ig'),
+                    '<span class="tx-x">$1</span>')
+      : txt;
+    return '<button class="tx-line'+(needle?' hit':'')+'" data-i="'+i+
+           '" data-t="'+(+s.start_s||0)+'" title="跳到 '+fmtT(+s.start_s||0)+'">'+
+           '<span class="tx-t">'+fmtT(+s.start_s||0)+'</span>'+
+           '<span>'+body+'</span></button>';
+  }).join('');
+  $('txList').querySelectorAll('.tx-line').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      // Same seek primitive the scrubber and reel list already use, so
+      // a transcript jump lands exactly where a scrub would.
+      pause(); show(nearestFrame(+el.dataset.t));
+      // …then force THIS line active. Frames are sampled, so the nearest
+      // one can land a few ms before the line starts, and the
+      // playhead-derived highlight would light up the PREVIOUS line —
+      // clicking line 3 and watching line 2 highlight reads as a bug.
+      TX_PIN = +el.dataset.i;
+      $('txList').querySelectorAll('.tx-line').forEach(o=>
+        o.classList.toggle('active', o === el));
+    });
+  });
+}
+
+let TX_PIN=null;
+function markActiveLine(t){
+  if(!TX.length) return;
+  let best=-1;
+  for(let i=0;i<TX.length;i++){ if((+TX[i].start_s||0)<=t+1e-6) best=i; else break; }
+  // A just-clicked line stays lit until playback actually moves past it.
+  if(TX_PIN!==null){
+    const pinned=TX[TX_PIN];
+    if(pinned && t < (+pinned.end_s||0)) best=TX_PIN; else TX_PIN=null;
+  }
+  $('txList').querySelectorAll('.tx-line').forEach(el=>{
+    el.classList.toggle('active', +el.dataset.i===best);
+  });
+}
+
+function esc(x){ return String(x).replace(/[&<>"']/g,
+  c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 function init(d){
   if(!d || !d.ok){ $('main').innerHTML='<div class="err">'+((d&&d.error)||'无数据')+'</div>'; return; }
@@ -192,7 +297,7 @@ function init(d){
   const sel=$('grade'); const grades=d.grades||[{id:'none',label:'Original'}];
   sel.innerHTML=grades.map(g=>'<option value="'+g.id+'">'+g.label+'</option>').join('');
   sel.onchange=()=>{ GRADE=sel.value; show(cur); renderReel(); };
-  drawTimeline(); drawGPS(); renderReel(); show(0); bindControls();
+  drawTimeline(); drawGPS(); renderReel(); initTranscript(d); show(0); bindControls();
 }
 
 function frameURL(f, w){ let u=DATA.frame_base+encodeURIComponent(f.frame_id)+'.jpg'; const q=[]; if(GRADE&&GRADE!=='none')q.push('grade='+encodeURIComponent(GRADE)); if(w)q.push('w='+w); return u+(q.length?('?'+q.join('&')):''); }
@@ -213,6 +318,7 @@ function show(i){
   $('bQ').style.width=pct(f.sF)+'%'; $('vQ').textContent=(f.sF==null?'—':f.sF.toFixed(2));
   $('count').textContent=(cur+1)+' / '+FRAMES.length;
   updatePlayhead(); markActiveCandidate(f.t); updateGPSMarker();
+  markActiveLine(f.t);
   // preload neighbour
   const nx=cur+(playing<0?-1:1);
   if(nx>=0&&nx<FRAMES.length){ const im=new Image(); im.src=frameURL(FRAMES[nx]); }

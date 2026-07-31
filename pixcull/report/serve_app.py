@@ -7876,6 +7876,23 @@ class _Handler(BaseHTTPRequestHandler):
                 gps_payload = {**proj, "source": raw.get("source", "")}
         except Exception:
             gps_payload = None
+        # v2.43-P1 — transcript, when `pixcull transcribe` has been run.
+        # None (not []) when absent, so the panel can tell "no transcript
+        # yet" apart from "transcribed, and the clip is silent".
+        transcript = None
+        try:
+            from pixcull.scoring.transcribe import load_transcript
+            _t = load_transcript(run_dir)
+            if _t is not None:
+                transcript = _t.to_dict()
+        except (OSError, ValueError, ImportError) as exc:
+            # Narrow on purpose. The first draft caught bare Exception and
+            # swallowed a NameError from getting this very variable wrong
+            # (`run` instead of `run_dir`) — the page rendered fine with an
+            # empty panel and nothing said why. A transcript must not 500
+            # the page, but it must not hide a bug either.
+            print(f"[transcript] unreadable for {rid}: {exc}")
+            transcript = None
         body = json.dumps({
             "ok": True,
             "run_id": rid,
@@ -7886,6 +7903,7 @@ class _Handler(BaseHTTPRequestHandler):
             "audio": audio,
             "grades": grades,
             "gps": gps_payload,
+            "transcript": transcript,
         }, ensure_ascii=False).encode("utf-8")
         self._send_json(200, body)
 

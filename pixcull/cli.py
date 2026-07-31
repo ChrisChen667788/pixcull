@@ -4,6 +4,7 @@ from typing import Optional
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
 
 app = typer.Typer(help="PixCull — AI photo culling & scoring", no_args_is_help=True)
@@ -339,6 +340,91 @@ def bench(
                   "the steady-state rate.[/dim]")
     if keep_output:
         console.print(f"[dim]scratch kept at {scratch}[/dim]")
+
+
+@app.command()
+def transcribe(
+    media: Path = typer.Argument(..., exists=True, dir_okay=False,
+                                 help="Video or audio file"),
+    output: Optional[Path] = typer.Option(
+        None, "--output", "-o",
+        help="Run dir to write transcript.json + transcript.srt into "
+             "(default: alongside the media file)"),
+    engine: str = typer.Option(
+        "auto", "--engine", "-e",
+        help="auto | paraformer (Mandarin-first, FunASR) | whisper"),
+    language: str = typer.Option(
+        "", "--language", "-l", help="Language hint, e.g. zh / en"),
+    shots: bool = typer.Option(
+        True, "--shots/--no-shots",
+        help="Tag each line with the shot it starts in (needs "
+             "pixcull[shots]); makes 'jump to this line' land on a real "
+             "shot rather than mid-cut"),
+) -> None:
+    """Transcribe speech to transcript.json + an SRT sidecar.
+
+    v2.43 — before this, PixCull could tell you a clip was sharp, stable
+    and had a laugh in it, but not a word of what was said.
+    """
+    from pixcull.scoring.transcribe import (
+        TranscriptionUnavailable, available_engines, transcribe as _run,
+        write_transcript,
+    )
+
+    out_dir = output or media.parent
+    cut_points = []
+    if shots:
+        from pixcull.scoring.shot_boundaries import available as _shots_ok
+        from pixcull.scoring.shot_boundaries import detect_cuts
+        if _shots_ok():
+            cut_points = detect_cuts(media)
+            if cut_points:
+                console.print(f"[dim]{len(cut_points)} shot boundaries[/dim]")
+
+    try:
+        result = _run(media, engine=engine, language=language,
+                      cut_points=cut_points)
+    except TranscriptionUnavailable as exc:
+        # escape(): rich reads "[asr]" as a style tag and swallows it,
+        # which turned the install hint into `pip install "pixcull"` —
+        # i.e. we'd be telling the user the wrong command.
+        console.print(f"[red]{escape(str(exc))}[/]")
+        raise typer.Exit(code=3) from None
+    except ValueError as exc:
+        console.print(f"[red]{escape(str(exc))}[/]")
+        raise typer.Exit(code=2) from None
+
+    if not result.segments:
+        console.print("[yellow]no speech found[/] "
+                      "[dim](silent clip, or the wrong --language)[/dim]")
+        raise typer.Exit(code=1)
+
+    written = write_transcript(result, out_dir)
+    dur = max((s.end_s for s in result.segments), default=0.0)
+    console.print(
+        f"[green]✓[/] {written['n_segments']} lines · {dur:.1f}s · "
+        f"{result.engine}"
+        + (f" · {result.language}" if result.language else ""))
+    console.print(f"  [dim]{written['json']}[/dim]")
+    console.print(f"  [dim]{written['srt']}[/dim]")
+    _ = available_engines
+
+
+@app.command(name="transcribe-engines")
+def transcribe_engines() -> None:
+    """List installed ASR engines (diagnostic)."""
+    from pixcull.scoring.transcribe import ENGINES, available_engines
+
+    have = available_engines()
+    for e in ENGINES:
+        mark = "[green]✓[/]" if e in have else "[dim]·[/]"
+        extra = "asr" if e == "paraformer" else "asr-whisper"
+        hint = "" if e in have else (
+            f'  [dim]pip install "pixcull{escape("[" + extra + "]")}"[/dim]')
+        console.print(f"  {mark} {e}{hint}")
+    if not have:
+        console.print("[yellow]no engine installed[/] — "
+                      "`pixcull transcribe` will exit 3 until one is")
 
 
 @app.command()
