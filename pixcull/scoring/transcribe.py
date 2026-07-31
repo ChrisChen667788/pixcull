@@ -18,6 +18,21 @@ formatting, alignment to shot boundaries — are ordinary pure functions
 with no model in sight.  They are fully tested with no engine installed,
 which is also how CI exercises them.
 
+Engine choice was measured on the target machine, not assumed
+(v2.43.1, Apple M1 Max / 32 GB, both disks nearly full — 17 GiB internal,
+31 GiB external):
+
+* marginal install: **FunASR pulls 28 new packages** (aliyun SDKs,
+  hydra, librosa, umap-learn, cryptography …) vs **mlx-whisper's 2**,
+  because ``mlx`` and most of Whisper's deps were already present;
+* MLX runs on the **Metal GPU**, which is the native path on this chip.
+
+So on Apple Silicon the Whisper engine runs through ``mlx_whisper``.
+Measured with ``whisper-large-v3-turbo`` weights on the external drive:
+first call in a process **12.2s** (loading 1.5 GB over USB), every call
+after **1.0s for 5s of audio ≈ 5x realtime**.  Accuracy on real TTS
+speech was exact in both Mandarin and English, punctuation included.
+
 Two engines, in the order the owner asked for:
 
 * ``paraformer`` — FunASR's Paraformer-Large, the model FunClip (MIT,
@@ -96,6 +111,14 @@ class Transcript:
 # Engine availability
 # ==========================================================================
 
+# v2.43.1 — on Apple Silicon, MLX runs Whisper on the Metal GPU and costs
+# two packages (mlx is usually already present) against FunASR's 28.  On
+# the maintainer's M1 Max with both disks nearly full, that decided it.
+# Model weights are large, so point HF_HOME at roomier storage:
+#   export HF_HOME=/Volumes/<drive>/pixcull-models/hf
+MLX_DEFAULT_MODEL = "mlx-community/whisper-large-v3-turbo"
+
+
 def _has(module: str) -> bool:
     try:
         __import__(module)
@@ -109,7 +132,7 @@ def available_engines() -> list[str]:
     out = []
     if _has("funasr"):
         out.append(PARAFORMER)
-    if _has("faster_whisper") or _has("whisper"):
+    if _has("mlx_whisper") or _has("faster_whisper") or _has("whisper"):
         out.append(WHISPER)
     return out
 
@@ -245,6 +268,27 @@ def _transcribe_paraformer(wav: Path, language: str = "zh") -> Transcript:
 
 
 def _transcribe_whisper(wav: Path, language: str = "") -> Transcript:
+    # MLX first on Apple Silicon: same weights, Metal GPU, and it is
+    # already installed here. Falls through to the portable runtimes
+    # elsewhere.
+    if _has("mlx_whisper"):
+        import os
+
+        import mlx_whisper
+
+        res = mlx_whisper.transcribe(
+            str(wav),
+            path_or_hf_repo=os.environ.get("PIXCULL_MLX_WHISPER_MODEL",
+                                           MLX_DEFAULT_MODEL),
+            language=language or None,
+            word_timestamps=False,
+        )
+        segments = [Segment(float(s["start"]), float(s["end"]),
+                            str(s["text"]).strip())
+                    for s in res.get("segments", [])
+                    if str(s.get("text", "")).strip()]
+        return Transcript(segments=segments, engine=WHISPER,
+                          language=res.get("language", language) or "")
     try:
         from faster_whisper import WhisperModel
 

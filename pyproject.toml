@@ -1,6 +1,6 @@
 [project]
 name = "pixcull"
-version = "2.43.0"
+version = "2.43.1"
 description = "Local-first AI photo culling for professional photographers — 6-axis rubric, XMP/IPTC export, Lightroom & Capture One ready."
 # v2.23 — dedicated PyPI readme: the repo README leans on relative-path
 # screenshots and GitHub-only markup that render broken on pypi.org.
@@ -127,6 +127,14 @@ asr = [
 ]
 asr-whisper = [
     "faster-whisper>=1.0",
+]
+# v2.43.1 — Apple Silicon: MLX runs Whisper on the Metal GPU. Measured on
+# an M1 Max, this is 2 new packages against FunASR's 28 (mlx and most of
+# Whisper's deps are usually already present), and 5x realtime once the
+# weights are resident. transcribe.py prefers it over faster-whisper when
+# importable.
+asr-mlx = [
+    "mlx-whisper>=0.4",
 ]
 # v0.10-P0-2 — opt-in mDNS auto-discovery for LAN sync sessions.
 # Without this extra, /sync still works (paste URL or scan QR), but
