@@ -989,7 +989,7 @@ def main() -> None:
                          "remains the engineering audit format.")
     ap.add_argument("--client", default="",
                     help="v0.9-P1-3 — client name for the executive "
-                         "cover page (e.g. '李慧 & 李翔').  Ignored "
+                         "cover page (e.g. '新郎 & 新娘').  Ignored "
                          "unless --executive is set.")
     ap.add_argument("--event", default="",
                     help="v0.9-P1-3 — event title for the cover "

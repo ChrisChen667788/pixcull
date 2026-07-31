@@ -65,7 +65,7 @@ echo "[capture] sample run: $RUN"
 
 # Issue a share token for the portfolio screenshot
 SHARE_TOKEN=$(curl -sS -X POST -H "Content-Type: application/json" \
-                -d '{"photographer":"ChrisChen Studio","client":"李慧 & 李翔","event":"川西风光 · 婚礼","event_date":"2026-06-15"}' \
+                -d '{"photographer":"ChrisChen Studio","client":"新郎 & 新娘","event":"川西风光 · 婚礼","event_date":"2026-06-15"}' \
                 "http://127.0.0.1:$PORT/share/$RUN/issue" \
               | "$PYTHON" -c "import json,sys; d=json.load(sys.stdin); print(d.get('token',''))" 2>/dev/null \
               || echo "")

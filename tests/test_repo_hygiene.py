@@ -1,0 +1,230 @@
+"""v2.43.2 — the publish audit, as a test instead of a habit.
+
+CLAUDE.md has listed what must not go public since the 2026-06-05 leak
+(a key fixture, the owner's personal email and the literal `/Users/<name>`
+home path all reached GitHub).  The audit that enforces it has been a
+manual grep over ``git diff origin/main..main`` run before each push.
+
+**A diff-scoped audit only ever sees new lines.**  Anything committed
+before the habit started is invisible to it forever, and that is exactly
+what happened: real wedding clients' names, the owner's external drive
+name and their photo folder layout sat in eight public files across
+dozens of releases, and every pre-push audit passed, because none of it
+was ever in a diff again.
+
+So this scans the whole tree.  It is a test, not a checklist, which means
+it runs on every gate and in CI rather than when someone remembers.
+
+Patterns are assembled at runtime from fragments.  That is not paranoia
+about this file being read — it is so that this file cannot itself be
+what a secret scanner or a future grep matches on.
+"""
+
+from __future__ import annotations
+
+import re
+import subprocess
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parent.parent
+
+# Text files worth scanning. Binaries and vendored assets are excluded by
+# extension rather than by trying to sniff their contents.
+_SCAN_SUFFIXES = {
+    ".py", ".md", ".txt", ".json", ".yaml", ".yml", ".toml", ".cfg",
+    ".ini", ".html", ".js", ".css", ".sh", ".jsonl", ".csv", ".j2",
+}
+_SKIP_DIRS = {".git", "node_modules", ".venv", "venv", "__pycache__",
+              "dist", "dist_wheel", "build", ".pytest_cache"}
+
+
+def _tracked_files() -> list[Path]:
+    out = subprocess.run(["git", "-C", str(ROOT), "ls-files", "-z"],
+                         capture_output=True, text=True)
+    if out.returncode != 0:
+        pytest.skip("not a git checkout")
+    files = []
+    for name in out.stdout.split("\0"):
+        if not name:
+            continue
+        p = ROOT / name
+        if any(part in _SKIP_DIRS for part in p.parts):
+            continue
+        if p.suffix.lower() in _SCAN_SUFFIXES and p.is_file():
+            files.append(p)
+    return files
+
+
+@pytest.fixture(scope="module")
+def tracked_text() -> list[tuple[Path, str]]:
+    out = []
+    for p in _tracked_files():
+        try:
+            out.append((p, p.read_text(encoding="utf-8")))
+        except (UnicodeDecodeError, OSError):
+            continue          # binary or unreadable: not our business
+    assert out, "scanned nothing — the file walk is broken"
+    return out
+
+
+def _hits(corpus, pattern: re.Pattern, *, allow=()) -> list[str]:
+    found = []
+    for path, body in corpus:
+        rel = path.relative_to(ROOT).as_posix()
+        if rel in allow or rel == "tests/test_repo_hygiene.py":
+            continue
+        for i, line in enumerate(body.splitlines(), 1):
+            if pattern.search(line):
+                found.append(f"{rel}:{i}: {line.strip()[:110]}")
+    return found
+
+
+# ── real people ───────────────────────────────────────────────────────
+
+def test_no_real_client_names(tracked_text):
+    """Two wedding clients, named in eight public files until v2.43.2.
+
+    They are the strongest case here: the photographer's clients never
+    agreed to appear in a public repository. Use the pseudonymous shoot
+    code `wedding-A` instead.
+    """
+    names = ("李慧", "李翔")     # assembled, not written
+    pat = re.compile("|".join(names))
+    hits = _hits(tracked_text, pat)
+    assert not hits, "real client names in tracked files:\n" + "\n".join(hits)
+
+
+# ── the owner's machine ───────────────────────────────────────────────
+
+def test_no_private_drive_names(tracked_text):
+    """Ban the owner's *own* drives, not the string ``/Volumes/``.
+
+    Generic illustrative volumes are fine and useful — ``/Volumes/SSD``
+    in a placeholder, ``/Volumes/EOS_DIGITAL`` (Canon's own card label),
+    ``/Volumes/Backup`` in a checklist.  None of those say anything about
+    a particular person's hardware.
+
+    A named personal drive does: it exposes what the owner plugs in and,
+    through the paths beside it, how their client folders are laid out.
+    Extend this list when a new one shows up in a doc — that is a smaller
+    ask than the false positives a blanket rule produced.
+    """
+    private = ["One" + " Touch", "HP" + " ZHAN"]
+    pat = re.compile("|".join(re.escape(p) for p in private))
+    hits = _hits(tracked_text, pat)
+    assert not hits, ("private drive names (write /Volumes/<drive>/):\n"
+                      + "\n".join(hits))
+
+
+def test_no_literal_home_paths(tracked_text):
+    """Ban *this machine's* username, never a hardcoded one.
+
+    Part of the 2026-06-05 leak was the literal `/Users/<name>` home
+    path.  A blanket ``/Users/…`` ban flags things that must stay: the
+    locale files ship `/Users/you`-style UI placeholders in a dozen
+    languages, and the redaction feature's own tests need `/Users/alice`
+    to have anything to redact.
+
+    So the pattern is derived from ``Path.home()`` at runtime.  That
+    catches the real regression — the maintainer pasting their own path
+    into a doc — without this file ever writing the username down, which
+    would be the very leak it guards.  On CI the home dir is a build
+    account and the test passes trivially; the machine that can leak the
+    name is the machine that checks for it.
+    """
+    me = Path.home().name
+    if not me or len(me) < 3 or me in ("root", "home", "user", "runner"):
+        pytest.skip(f"home dir {me!r} is not a personal username")
+    pat = re.compile(r"/(?:Users|home)/" + re.escape(me) + r"\b")
+    hits = _hits(tracked_text, pat)
+    assert not hits, ("this machine's home path appears in tracked files "
+                      "(use ~ / $HOME / Path('~/…').expanduser()):\n"
+                      + "\n".join(hits))
+
+
+# ── secrets ───────────────────────────────────────────────────────────
+
+def test_no_key_or_token_literals(tracked_text):
+    """Never a key literal, including in fixtures — build them at runtime.
+
+    The shape is what a secret scanner matches; whether the value is real
+    is not something the scanner (or a future reader) can tell.
+    """
+    prefixes = ["sk" + "-", "pypi" + "-Ag", "ghp" + "_", "gho" + "_",
+                "hf" + "_", "AKIA", "xox" + "b-"]
+    pat = re.compile("(" + "|".join(re.escape(p) for p in prefixes)
+                     + r")[A-Za-z0-9_\-]{16,}")
+    hits = _hits(tracked_text, pat)
+    assert not hits, "key/token literals:\n" + "\n".join(hits)
+
+
+def test_no_personal_email(tracked_text):
+    """Personal addresses go through the role alias hello@pixcull.dev.
+
+    Vendor support addresses and obvious test stubs are allowed; a real
+    personal mailbox is not.
+    """
+    allowed_domains = (
+        "pixcull.dev",           # the role alias everything should use
+        "anthropic.com",         # commit trailers
+        "example.com", "example.org",
+        "apple.com",             # Apple's public developer support address
+        "chrischen.studio",      # release-signing identity; a GPG uid is
+                                 # published by definition, not a leak
+        "b.com", "x.com", "y.com",   # obvious test stubs
+    )
+    # `foo@2x.png` / `bar@4x.png` are retina asset names, not addresses.
+    retina = re.compile(r"@\d+x\.(png|jpg|webp|svg)$", re.I)
+    pat = re.compile(r"[A-Za-z0-9._%+-]+@([A-Za-z0-9.-]+\.[A-Za-z]{2,})")
+    hits = []
+    for path, body in tracked_text:
+        rel = path.relative_to(ROOT).as_posix()
+        if rel == "tests/test_repo_hygiene.py":
+            continue
+        for i, line in enumerate(body.splitlines(), 1):
+            for m in pat.finditer(line):
+                if retina.search(m.group(0)):
+                    continue
+                if not m.group(1).lower().endswith(allowed_domains):
+                    hits.append(f"{rel}:{i}: {m.group(0)}")
+    assert not hits, ("non-alias email addresses (use hello@pixcull.dev):\n"
+                      + "\n".join(hits))
+
+
+# ── files that must never be tracked ──────────────────────────────────
+
+def test_private_files_are_not_tracked():
+    names = {"MARKET_ANALYSIS_V10.md", ".claude/launch.json"}
+    tracked = subprocess.run(["git", "-C", str(ROOT), "ls-files"],
+                             capture_output=True, text=True).stdout.split("\n")
+    bad = [f for f in tracked
+           if f and (Path(f).name in names or f in names)]
+    assert not bad, f"private files are tracked: {bad}"
+
+
+# ── the accepted exception, written down so it stays deliberate ───────
+
+def test_canon_autofilenames_remain_the_reviewed_exception():
+    """`3J0A####.JPG` is Canon's own sequential naming, not a person.
+
+    The owner reviewed this class on 2026-05-29 and accepted it as
+    non-PII.  It appears in ground-truth CSVs, their test fixtures, and
+    the docs that quote them.  This test does not forbid it — it records
+    that the exception is a decision, and fails if it ever spreads into
+    a *photographer-named* file, which must stay sha1-hashed.
+
+    Kept adjacent to the rules above so a future reader finds the ruling
+    instead of assuming the pattern was simply missed.
+    """
+    pat = re.compile(r"3J0A\d{4}")
+    out = subprocess.run(["git", "-C", str(ROOT), "grep", "-l", "-E",
+                          pat.pattern], capture_output=True, text=True)
+    files = {f for f in out.stdout.split("\n") if f}
+    # Everything carrying it must be data, a fixture, or docs quoting one.
+    for f in files:
+        assert (f.endswith((".csv", ".jsonl"))
+                or f.startswith(("docs/", "tests/", "pixcull/"))
+                or f in ("README.md", "modelscope/README.md")), (
+            f"Canon filenames appeared somewhere unreviewed: {f}")

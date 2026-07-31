@@ -72,6 +72,14 @@ animated architecture / sequence / data-flow diagrams live separately in
 
 ## Repo hygiene — what must NOT go public
 
+**`tests/test_repo_hygiene.py` now enforces this over the whole tree**
+(v2.43.2) — run it, don't just grep.  The manual pre-push audit below is
+still worth doing for judgement calls, but it is **diff-scoped**, and
+that is exactly how two real wedding clients' names, the owner's
+external-drive name and their client-folder layout survived in eight
+public files across dozens of releases: never in a diff again, so never
+re-examined.  The lint scans every tracked file on every gate.
+
 Audit the diff before any push (`git -C <repo> diff origin/main..main`):
 
 - **No real API keys / tokens** — MiniMax, DeepSeek, ModelScope.  Tools

@@ -88,4 +88,4 @@ Reserved for v0.13.  Slices already drafted in
 - Reference product set: same as 2026 Q4
 - Pixel-level evidence: not collected this round (every gap above was
   felt during v0.11 dogfooding on the 1147-row 川西行 + 2400-row
-  李慧&李翔 wedding runs)
+  wedding-A runs)

@@ -5,7 +5,7 @@ Why this exists
 ---------------
 The V17.7 bulk-classify endpoint caps at 500 images and blocks the
 HTTP connection for the duration. For a 1858-image RAW dump like
-``/Volumes/One Touch/100CANON`` (~62 minutes at 2s/image) we want:
+``/Volumes/<drive>/100CANON`` (~62 minutes at 2s/image) we want:
 
   * Streamable progress (this script writes a line to stderr every 50
     images so you can ``tail -f`` it).
@@ -17,7 +17,7 @@ HTTP connection for the duration. For a 1858-image RAW dump like
 Usage
 -----
     PYTHONPATH=. python scripts/scan_for_bad.py \\
-        "/Volumes/One Touch/100CANON" \\
+        "/Volumes/<drive>/100CANON" \\
         --output /tmp/100CANON_scan.json \\
         [--limit 2500] [--bad-threshold 0.40] [--top-bad 50]
 

@@ -43,7 +43,7 @@ class MomentDef:
 
 WEDDING_MOMENTS: list[MomentDef] = [
     # P-PRO-4.2 — prompts tightened after running classifier on
-    # the 81-photo curated set from /Volumes/.../李慧&李翔/已调色.
+    # the 81-photo curated set from /Volumes/.../wedding-A/已调色.
     # Diagnostic showed:
     #   - preparation_bride matched 23% of frames (CLIP attaching
     #     to any woman with styled hair / makeup); tightened to

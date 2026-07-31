@@ -24,7 +24,7 @@ channels to wire into BurstPeakWeights as full picker components.
 Usage:
     /tmp/p_ai_54_venv/bin/python \\
         scripts/analyze_blendshape_importance.py \\
-        /Volumes/.../李慧&李翔/JPG原图 \\
+        /Volumes/.../wedding-A/JPG原图 \\
         out_wedding_eval/bursts.json
 """
 from __future__ import annotations

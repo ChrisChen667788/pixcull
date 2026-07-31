@@ -105,7 +105,7 @@ Honest, including what my v2.2 token pass kept or introduced:
   `make tokens-check` reports all targets in sync.
 
 **DONE — gallery (mostly):** `6ebfd94` re-seeded the 198-photo Xiapu run
-(drive remounted at `/Volumes/One Touch 1/100CANON`, symlinked 198 →
+(drive remounted at `/Volumes/<drive>/100CANON`, symlinked 198 →
 `pixcull run … --scene landscape`) and regenerated **14** screenshots on
 the new design (01 grid · 02 cmd-k · 03 lightbox · 05 upload · 07 history
 · 08 mobile · 09 tether · 10 admin · 11 buckets · 12 light · 13 ipad-lb ·

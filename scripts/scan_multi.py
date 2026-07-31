@@ -19,11 +19,11 @@ can pass ``--no-dump-features``.
 
 Usage:
   PYTHONPATH=. python scripts/scan_multi.py --output-dir /tmp/scan_2025 \\
-      "/Volumes/One Touch/佳能JPG原片/2025/2025-10" \\
-      "/Volumes/One Touch/佳能JPG原片/2025/2025-09" \\
-      "/Volumes/One Touch/佳能JPG原片/2025/2025-11" \\
-      "/Volumes/One Touch/佳能JPG原片/2025/2025-08" \\
-      "/Volumes/One Touch/佳能JPG原片/2025/2025-07" \\
+      "/Volumes/<drive>/佳能JPG原片/2025/2025-10" \\
+      "/Volumes/<drive>/佳能JPG原片/2025/2025-09" \\
+      "/Volumes/<drive>/佳能JPG原片/2025/2025-11" \\
+      "/Volumes/<drive>/佳能JPG原片/2025/2025-08" \\
+      "/Volumes/<drive>/佳能JPG原片/2025/2025-07" \\
       "/Volumes/EOS_DIGITAL/DCIM/101EOSR5"
 
 Each folder's result lands at OUTPUT_DIR/<basename>.json (same

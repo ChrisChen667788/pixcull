@@ -1,8 +1,8 @@
 # Burst peak picker — weight tuning report (P-AI-5.2)
 
 Tuning the four-component blend in `pixcull.scoring.burst_peak.BurstPeakWeights`
-against 13 real bursts from the 李慧&李翔 wedding shoot
-(`/Volumes/One Touch 1/李慧&李翔/JPG原图`), cross-referenced
+against 13 real bursts from the wedding-A shoot
+(`/Volumes/<drive>/wedding-A/JPG原图`), cross-referenced
 against the photographer's curated cut (`已调色/`, 80 frames).
 
 ## Tooling
@@ -364,7 +364,7 @@ python -c "..."   # see commit message of P-AI-5.2 for exact snippet
 
 # 2. Featurize + sweep weights
 python scripts/tune_burst_peak_weights.py \
-    "/Volumes/One Touch 1/李慧&李翔/JPG原图" \
+    "/Volumes/<drive>/wedding-A/JPG原图" \
     out_wedding_eval/bursts.json
 
 # Cache lives at <parent>/burst_features_cache.json; re-runs are

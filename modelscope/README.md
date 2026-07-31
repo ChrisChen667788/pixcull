@@ -404,7 +404,7 @@ tasks:
 
 ## 实机截图(2022 Canon EOS 卡 200 张连续帧)
 
-> **真机数据**: `/Volumes/One Touch/100CANON/3J0A8133.JPG`–`3J0A8332.JPG`
+> **真机数据**: `/Volumes/<drive>/100CANON/3J0A8133.JPG`–`3J0A8332.JPG`
 > 连续 200 张(海岸 / 风光 / 建筑 / 纪实混合)。完整 pipeline 跑完:
 > keep 104 · maybe 1 · cull 95 · 178 个连拍组。下面所有截图都是
 > 这一个真机 run(`/tmp/pixcull_demo/realdemo01/`)的实时页面,

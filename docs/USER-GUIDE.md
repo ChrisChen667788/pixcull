@@ -1,7 +1,7 @@
 # PixCull 新手操作流程指南
 
 > **20 分钟从 0 到选完 200 张照片** —— 不需要 ML 背景,跟着步骤走就好。
-> 截图全部来自真机 demo run(`/Volumes/One Touch/100CANON/` 真实 Canon
+> 截图全部来自真机 demo run(`/Volumes/<drive>/100CANON/` 真实 Canon
 > 卡数据 200 张照片),不是 mockup。
 
 ---
