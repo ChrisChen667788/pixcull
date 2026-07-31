@@ -52,6 +52,25 @@
 
 ## What's new
 
+**v2.40.2** — **dead stubs removed, plus a fresh design audit**
+([`docs/DESIGN-AUDIT-2031Q1.md`](docs/DESIGN-AUDIT-2031Q1.md)). v2.40's guard
+only looked for `typer.Exit`, so three V0.3-era `NotImplementedError` stubs
+survived — including `pixcull.report.export_html`, which sat in `__all__` as
+public API guaranteed to crash. All three were deleted rather than implemented:
+each had long been overtaken by something real (the HTML report is the review
+workspace; `scripts/bench.py` is now `pixcull bench`). The guard now covers both
+shapes. The audit scores **3.9/5** (2030Q4: 3.4) and names the pattern behind
+this repo's most common defect: *advertised but unreachable* — cross-run search
+that indexed nothing, video runs that wouldn't load, light theme that never
+applied, an export command that exited silently. All four were live features
+with one real user path that couldn't reach them, and all four would have been
+caught by a single end-to-end smoke test, which is now the top engineering
+recommendation. It also surveys the AI-editing OSS landscape and gates it on
+licence first: **OpenChatCut is AGPL-3.0 and therefore cannot be vendored** into
+an MIT project, while **FunClip (MIT) and PySceneDetect (BSD-3)** can — and they
+fill verified gaps, since `SceneDetector` is CLIP *scene classification* rather
+than shot-cut detection, and there is no ASR anywhere in the codebase.
+
 **v2.40.1** — **the last linear cost in library indexing, solved without adding
 a file** (see [`docs/ROADMAP-v2.40.1-charter.md`](docs/ROADMAP-v2.40.1-charter.md)).
 v2.39 deferred this as "needs a key-index file, not worth it". Profiling showed

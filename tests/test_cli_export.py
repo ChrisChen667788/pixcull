@@ -192,3 +192,44 @@ def test_bench_workers_flag_is_actually_wired():
     assert 'os.environ["PIXCULL_WORKERS"] = str(workers)' in body
     par = (REPO / "pixcull" / "pipeline" / "parallel.py").read_text("utf-8")
     assert "PIXCULL_WORKERS" in par, "the pool stopped reading this var"
+
+
+# ── v2.40.2 — no stub may sit in a public surface ─────────────────────
+
+def test_no_module_is_a_bare_notimplementederror_stub():
+    """v2.40's guard only looked at typer.Exit, so it missed three V0.3-era
+    stubs: report/html.py::export_html (which was even re-exported in
+    pixcull.report.__all__, i.e. a public API guaranteed to crash),
+    pipeline/cache.py, and scripts/bench.py (superseded by `pixcull
+    bench`). All three were removed rather than implemented — each had
+    been overtaken by something real."""
+    import ast
+
+    offenders = []
+    for path in list((REPO / "pixcull").rglob("*.py")) + \
+            list((REPO / "scripts").rglob("*.py")):
+        if "/dist/" in str(path) or "/.venv/" in str(path):
+            continue
+        try:
+            tree = ast.parse(path.read_text("utf-8"))
+        except (SyntaxError, UnicodeDecodeError):
+            continue
+        for fn in [n for n in ast.walk(tree)
+                   if isinstance(n, ast.FunctionDef)]:
+            body = [s for s in fn.body if not isinstance(s, ast.Expr)]
+            if len(body) != 1:
+                continue
+            s = body[0]
+            if (isinstance(s, ast.Raise) and isinstance(s.exc, ast.Call)
+                    and getattr(s.exc.func, "id", "") == "NotImplementedError"):
+                offenders.append(f"{path.relative_to(REPO)}::{fn.name}")
+    assert not offenders, (
+        "function(s) whose entire body raises NotImplementedError: "
+        f"{offenders}. Implement it or delete it — a public name that "
+        "always crashes is worse than an absent one.")
+
+
+def test_report_package_no_longer_advertises_export_html():
+    import pixcull.report as r
+    assert "export_html" not in r.__all__
+    assert not hasattr(r, "export_html")

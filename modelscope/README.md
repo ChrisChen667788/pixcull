@@ -54,7 +54,19 @@ tasks:
 完整源码 + iOS 伴侣 App + Lightroom 插件,均在 GitHub:
 **[github.com/ChrisChen667788/pixcull](https://github.com/ChrisChen667788/pixcull)**
 
-## v0.7 → v2.40.1 主要更新
+## v0.7 → v2.40.2 主要更新
+- **v2.40.2**:**清掉死存根 + 新一轮设计审计**(`docs/DESIGN-AUDIT-2031Q1.md`)。
+  v2.40 的守卫只看 `typer.Exit`,于是三个 V0.3 时代的 `NotImplementedError` 存根活了下来
+  —— 其中 `pixcull.report.export_html` 还挂在 `__all__` 里,是**保证会崩的公开 API**。
+  三个都**删掉而非实现**:各自早已被真东西取代(HTML 报告就是审片工作台;
+  `scripts/bench.py` 已被 `pixcull bench` 取代)。守卫现在两种形态都盖。审计总评
+  **3.9/5**(2030Q4 为 3.4),并点名了本仓库最主要的缺陷类型:**宣传了但到不了** ——
+  全库检索一张没入库、视频 run 打不开、浅色主题从未生效、export 静默退出。四次都是
+  "功能存在、但某条真实用户路径到不了它",而**四次都能被一条端到端冒烟提前抓到**,
+  这也成了本轮首要工程建议。审计还调研了 AI 剪辑开源生态,并**以许可证为第一道闸**:
+  **OpenChatCut 是 AGPL-3.0,不能并入 MIT 项目**;而 **FunClip(MIT)与
+  PySceneDetect(BSD-3)可以** —— 且它们补的是已核实的缺口:`SceneDetector` 是 CLIP
+  场景分类而非镜头切变检测,全栈也没有任何 ASR。
 - **v2.40.1**:**入库的最后一个线性项,不靠新增文件解决**。v2.39 把这条记成"要再引入
   一个 key 索引文件,不划算"。一剖析发现那个判断把方案和问题绑死了:30 万行 manifest 上
   真正的成本不是"没有索引",而是 **`json.loads` 占了 0.720s 中的 0.525s** —— 解析了大量
