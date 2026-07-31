@@ -43,11 +43,14 @@ from __future__ import annotations
 
 import csv
 import json
+import logging
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Sequence
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_WINDOW_LENS_S = (1.0, 2.0, 3.0)
 DEFAULT_STRIDE_S = 0.5
@@ -170,17 +173,47 @@ def sliding_windows(
     *,
     window_lens_s: Sequence[float] = DEFAULT_WINDOW_LENS_S,
     stride_s: float = DEFAULT_STRIDE_S,
+    cut_points: Sequence[float] | None = None,
 ) -> list[dict]:
-    """Sweep overlapping windows of each length; aggregate each."""
+    """Sweep overlapping windows of each length; aggregate each.
+
+    v2.41-P1 — ``cut_points`` are shot boundaries (see
+    :mod:`pixcull.scoring.shot_boundaries`).  When given, the sweep runs
+    **inside each shot** instead of across the whole clip, so no
+    candidate straddles a hard cut — cutting one into a reel produced a
+    clip that visibly jumps in the middle.
+
+    With ``cut_points`` empty or None this is exactly the pre-v2.41
+    sweep, which is deliberate: shot detection is an optional extra, and
+    its absence must change nothing.
+    """
     if not frames:
         return []
     ts = [_get(f, "timestamp_s") for f in frames]
     t0, t_end = min(ts), max(ts)
-    duration = max(t_end - t0, 1e-6)
     order = np.argsort(ts)
     ts_sorted = [ts[i] for i in order]
     frames_sorted = [frames[i] for i in order]
 
+    if cut_points:
+        from pixcull.scoring.shot_boundaries import segments_from_cuts
+
+        out: list[dict] = []
+        seen_all: set[tuple[float, float]] = set()
+        for seg_start, seg_end in segments_from_cuts(t0, t_end, cut_points):
+            members = [f for f, t in zip(frames_sorted, ts_sorted)
+                       if seg_start - 1e-9 <= t <= seg_end + 1e-9]
+            if not members:
+                continue
+            for w in sliding_windows(members, window_lens_s=window_lens_s,
+                                     stride_s=stride_s):
+                key = (round(w["start_s"], 3), round(w["end_s"], 3))
+                if key not in seen_all:
+                    seen_all.add(key)
+                    out.append(w)
+        return out
+
+    duration = max(t_end - t0, 1e-6)
     out: list[dict] = []
     seen: set[tuple[float, float]] = set()
     for L in window_lens_s:
@@ -510,10 +543,16 @@ def detect_reel_candidates(
     n_max: int = DEFAULT_MAX_CANDIDATES,
     audio_events: list | None = None,
     profile: dict | None = None,
+    cut_points: Sequence[float] | None = None,
 ) -> list[ReelCandidate]:
-    """Full P0-3 detection over per-frame records (pure; no IO)."""
+    """Full P0-3 detection over per-frame records (pure; no IO).
+
+    v2.41-P1 — ``cut_points`` keeps a candidate from spanning a shot
+    boundary.  Empty/None reproduces the pre-v2.41 sweep exactly.
+    """
     windows = sliding_windows(
-        frames, window_lens_s=window_lens_s, stride_s=stride_s)
+        frames, window_lens_s=window_lens_s, stride_s=stride_s,
+        cut_points=cut_points)
     return select_candidates(windows, n_min=n_min, n_max=n_max,
                              audio_events=audio_events, profile=profile)
 
@@ -558,9 +597,15 @@ def run_reel_detection(
     n_min: int = DEFAULT_MIN_CANDIDATES,
     n_max: int = DEFAULT_MAX_CANDIDATES,
     write: bool = True,
+    video_path: Path | None = None,
 ) -> list[ReelCandidate]:
     """Read ``temporal.json`` (P0-2) + ``scores.csv``, detect reel
-    candidates, write ``reel_candidates.json`` (charter array format)."""
+    candidates, write ``reel_candidates.json`` (charter array format).
+
+    v2.41-P1 — pass ``video_path`` to split candidates at shot
+    boundaries, so none straddles a hard cut.  Needs the ``[shots]``
+    extra; without it (or without the path) the sweep is unchanged.
+    """
     output_dir = Path(output_dir)
     temporal_path = output_dir / "temporal.json"
     if not temporal_path.exists():
@@ -587,9 +632,18 @@ def run_reel_detection(
                             .get("events") or None)
     except (OSError, ValueError):
         audio_events = None
+    # v2.41-P1 — shot boundaries, when the optional extra is present.
+    cut_points: list[float] = []
+    if video_path is not None:
+        from pixcull.scoring.shot_boundaries import detect_cuts
+        cut_points = detect_cuts(Path(video_path))
+        if cut_points:
+            logger.info("reel: %d shot boundaries → candidates will not "
+                        "span a cut", len(cut_points))
+
     candidates = detect_reel_candidates(
         frames, window_lens_s=window_lens_s, stride_s=stride_s,
-        n_min=n_min, n_max=n_max,
+        n_min=n_min, n_max=n_max, cut_points=cut_points,
         audio_events=audio_events, profile=load_reel_profile(),
     )
 

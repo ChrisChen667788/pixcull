@@ -1,6 +1,6 @@
 [project]
 name = "pixcull"
-version = "2.41.0"
+version = "2.42.0"
 description = "Local-first AI photo culling for professional photographers — 6-axis rubric, XMP/IPTC export, Lightroom & Capture One ready."
 # v2.23 — dedicated PyPI readme: the repo README leans on relative-path
 # screenshots and GitHub-only markup that render broken on pypi.org.
@@ -99,6 +99,18 @@ face = [
 bird = [
     "ultralytics>=8.2",       # YOLOv8
     "segment-anything>=1.0",  # Meta SAM
+]
+# v2.41-P1 — opt-in shot-boundary detection. PySceneDetect is BSD-3 and
+# OpenCV-based (opencv is already a core dep), so this adds no compiled
+# dependency and keeps `pip install pixcull` free of build steps.
+# Without it, reel windows simply aren't split at cuts — the pre-v2.41
+# behaviour, not an error.
+# NB numpy: scenedetect declares no upper bound, so installing it OUTSIDE
+# this project's constraints pulls numpy 2.x and silently breaks
+# mediapipe + the rescorer joblibs. The core `numpy>=1.26,<2` pin above
+# holds it down for anyone installing `pixcull[shots]`.
+shots = [
+    "scenedetect>=0.6",
 ]
 # v0.10-P0-2 — opt-in mDNS auto-discovery for LAN sync sessions.
 # Without this extra, /sync still works (paste URL or scan QR), but
