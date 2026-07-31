@@ -112,3 +112,70 @@ def require_clip():
     pytest.importorskip("PIL")
     from pixcull.detectors.scene import _clip
     return require_model(CLIP_REPO, _clip, what="CLIP")
+
+
+# ── ModelScope (FunASR / Paraformer) ─────────────────────────────────
+#
+# v2.43.2.  FunASR pulls its weights from ModelScope, not the HF hub, so
+# the layout above doesn't apply: models land in
+# ``$MODELSCOPE_CACHE/models/<namespace>/<name>/``.
+#
+# Every bug this version fixed — the lazy-import lie, the missing
+# `sentence_info`, the per-call model rebuild — was invisible to tests
+# that never started the engine.  Hence a real-engine lane, under the
+# same rule as CLIP: **if the weights are here, it runs.**
+PARAFORMER_REPOS = (
+    "iic/speech_seaco_paraformer_large_asr_nat-zh-cn-16k-common-vocab8404-pytorch",
+    "iic/speech_fsmn_vad_zh-cn-16k-common-pytorch",
+    "iic/punc_ct-transformer_cn-en-common-vocab471067-large",
+)
+
+
+def _modelscope_cache_dirs() -> list[Path]:
+    out = []
+    v = os.environ.get("MODELSCOPE_CACHE")
+    if v:
+        out.append(Path(v))
+    out.append(Path.home() / ".cache" / "modelscope")
+    return out
+
+
+def is_modelscope_cached(repo_id: str) -> bool:
+    """True when a ModelScope repo has real weights on this machine.
+
+    Checks for ``model.pt`` specifically rather than a non-empty
+    directory: an interrupted download leaves the config and README
+    behind, and treating that as "cached" would turn a partial download
+    into a confusing test failure instead of a skip.
+    """
+    for base in _modelscope_cache_dirs():
+        d = base / "models" / repo_id
+        if (d / "model.pt").is_file():
+            return True
+    return False
+
+
+def require_paraformer():
+    """The FunASR stack: ASR + VAD + punctuation, all three needed.
+
+    Returns the loaded model. Skips only when the engine or its weights
+    are genuinely absent — on a machine that has them, a failure to load
+    is a defect, exactly as with CLIP.
+    """
+    pytest.importorskip("funasr")
+    pytest.importorskip("torchaudio",
+                        reason="funasr imports torchaudio but does not "
+                               "declare it — see pixcull[asr]")
+    missing = [r for r in PARAFORMER_REPOS if not is_modelscope_cached(r)]
+    if missing:
+        pytest.skip("Paraformer weights not cached locally "
+                    f"({len(missing)}/{len(PARAFORMER_REPOS)} missing); "
+                    "run `pixcull transcribe -e paraformer` once, or set "
+                    "MODELSCOPE_CACHE to the drive holding them")
+    from pixcull.scoring.transcribe import _paraformer_model
+    try:
+        return _paraformer_model()
+    except Exception as exc:  # noqa: BLE001 — deliberately NOT a skip
+        raise AssertionError(
+            f"Paraformer weights are cached but the model failed to "
+            f"build: {type(exc).__name__}: {exc}") from exc

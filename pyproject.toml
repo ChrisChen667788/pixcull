@@ -1,6 +1,6 @@
 [project]
 name = "pixcull"
-version = "2.43.1"
+version = "2.43.2"
 description = "Local-first AI photo culling for professional photographers — 6-axis rubric, XMP/IPTC export, Lightroom & Capture One ready."
 # v2.23 — dedicated PyPI readme: the repo README leans on relative-path
 # screenshots and GitHub-only markup that render broken on pypi.org.
@@ -124,6 +124,11 @@ shots = [
 #                runtime; plain openai-whisper also works if present.
 asr = [
     "funasr>=1.1",
+    # v2.43.2 — funasr 1.4.0 does `import torchaudio` unconditionally in
+    # funasr/utils/load_utils.py but omits it from its own requirements,
+    # so a plain `pip install "pixcull[asr]"` installed an engine that
+    # crashed on first use. Declared here because we cannot fix upstream.
+    "torchaudio>=2.0",
 ]
 asr-whisper = [
     "faster-whisper>=1.0",

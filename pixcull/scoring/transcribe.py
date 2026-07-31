@@ -36,12 +36,37 @@ speech was exact in both Mandarin and English, punctuation included.
 Two engines, in the order the owner asked for:
 
 * ``paraformer`` — FunASR's Paraformer-Large, the model FunClip (MIT,
-  Alibaba TONGYI) is built on.  Strongest on Mandarin, and its weights
-  live on ModelScope, which PixCull already mirrors to.
-* ``whisper`` — broader language coverage, weaker on Mandarin than
-  Paraformer in published comparisons.
+  Alibaba TONGYI) is built on.  Its weights live on ModelScope, which
+  PixCull already mirrors to.
+* ``whisper`` — broader language coverage.
 
 ``engine="auto"`` prefers Paraformer and falls back to Whisper.
+
+**Head-to-head on this machine (v2.43.2), because the earlier "Paraformer
+is stronger on Mandarin" line here was quoting published comparisons, not
+measurement — and it did not survive contact with the hardware:**
+
+================  ==============  ==============
+metric            Paraformer      MLX-Whisper
+================  ==============  ==============
+cold call         60.6 s          19.8 s
+warm call         1.3 s           0.5 s
+CER, clip 1       0.0 %           0.0 %
+CER, clip 2       9.5 %           **4.8 %**
+CER, mixed zh/en  **10.7 %**      17.9 %
+segments          **2 (clause)**  1 (whole clip)
+================  ==============  ==============
+
+So Paraformer wins on *segmentation* — which is the thing "click a line
+to seek" actually needs — and on mixed Chinese/English, while Whisper was
+the more accurate transcriber of plain Mandarin and far quicker.  That is
+why ``auto`` still prefers Paraformer, but the reason is granularity, not
+accuracy.
+
+Read that table narrowly: three macOS-TTS clips, ~17 s of audio, no
+noise, no accent, one speaker.  It is enough to disprove a claim that was
+never measured; it is **not** enough to rank these engines on real
+wedding audio.
 
 Unlike shot detection (v2.42), a missing engine here is an **error**, not
 a silent degradation: `pixcull transcribe` does nothing else, so quietly
@@ -119,22 +144,48 @@ class Transcript:
 MLX_DEFAULT_MODEL = "mlx-community/whisper-large-v3-turbo"
 
 
-def _has(module: str) -> bool:
+# v2.43.2 — probe the entry point the adapter actually calls, not just
+# the top-level package.  Found on a real `pip install "pixcull[asr]"`:
+# funasr 1.4.0 imports torchaudio unconditionally from
+# funasr/utils/load_utils.py but does not declare it, and its __init__
+# is lazy — so `import funasr` SUCCEEDS while `from funasr import
+# AutoModel` raises ModuleNotFoundError.  Probing the package alone made
+# available_engines() advertise Paraformer, resolve_engine("auto") pick
+# it, and transcription then die with a bare ModuleNotFoundError instead
+# of the TranscriptionUnavailable this module promises — precisely the
+# "advertised but unreachable" failure DESIGN-AUDIT-2031Q1 named.
+#
+# The extra now pins torchaudio too, which fixes the cause; this probe is
+# the guard, because a lazily-imported package can always lie and we do
+# not control what upstream imports next.
+_ENGINE_PROBES: dict[str, tuple[tuple[str, str], ...]] = {
+    PARAFORMER: (("funasr", "AutoModel"),),
+    WHISPER: (("mlx_whisper", "transcribe"),
+              ("faster_whisper", "WhisperModel"),
+              ("whisper", "load_model")),
+}
+
+
+def _has(module: str, attr: str | None = None) -> bool:
+    """Can this backend actually be *used*?
+
+    Importing the package is not enough — see ``_ENGINE_PROBES``.  When
+    ``attr`` is given, resolve it too, which is what forces a lazy
+    ``__getattr__`` to do its real work.
+    """
     try:
-        __import__(module)
+        mod = __import__(module, fromlist=[attr] if attr else [])
+        if attr is not None:
+            getattr(mod, attr)
         return True
-    except Exception:      # noqa: BLE001 — any import failure means "no"
+    except Exception:      # noqa: BLE001 — any failure means "no"
         return False
 
 
 def available_engines() -> list[str]:
     """Which ASR backends this machine can actually run, best first."""
-    out = []
-    if _has("funasr"):
-        out.append(PARAFORMER)
-    if _has("mlx_whisper") or _has("faster_whisper") or _has("whisper"):
-        out.append(WHISPER)
-    return out
+    return [name for name, probes in _ENGINE_PROBES.items()
+            if any(_has(m, a) for m, a in probes)]
 
 
 def resolve_engine(engine: str = "auto") -> str:
@@ -247,24 +298,154 @@ def align_to_shots(segments: Sequence[Segment],
 # Engines
 # ==========================================================================
 
-def _transcribe_paraformer(wav: Path, language: str = "zh") -> Transcript:
-    from funasr import AutoModel
+# Punctuation the ct-punc model inserts.  Sentence-final marks always
+# close a segment; clause marks only close one that is already long
+# enough to be worth splitting, so a comma after two characters doesn't
+# produce a subtitle line nobody can read.
+_SENT_END = "。！？!?…"
+_CLAUSE = "，,、；;：:"
+_MIN_CLAUSE_CHARS = 10
 
-    model = AutoModel(model="paraformer-zh", vad_model="fsmn-vad",
-                      punc_model="ct-punc", disable_update=True)
-    raw = model.generate(input=str(wav), batch_size_s=300)
+
+def segments_from_char_timestamps(
+    text: str,
+    timestamp: Sequence[Sequence[float]],
+    *,
+    min_clause_chars: int = _MIN_CLAUSE_CHARS,
+) -> list[Segment]:
+    """Split punctuated text into timed segments using per-character spans.
+
+    v2.43.2, from the first real run of this engine.  Paraformer does not
+    return ``sentence_info`` in PixCull's configuration — the real keys
+    are ``key`` / ``text`` / ``timestamp`` — and ``timestamp`` holds one
+    ``[start_ms, end_ms]`` pair per character of the text *without* the
+    punctuation the punc model inserts.  Measured: a 6.66 s clip gave 27
+    pairs against 29 characters of text (the extras being a comma and a
+    question mark), and a maximum of 6535 against 6.66 s of audio pins
+    the unit as milliseconds.
+
+    The pairing is re-checked at runtime rather than assumed.  A mixed
+    Chinese/English result can emit one span per *word* instead of per
+    character, and inventing an alignment would drop subtitles on the
+    wrong frames.  When the count doesn't line up, this returns a single
+    segment spanning the whole utterance — coarse, but every timestamp
+    in it is one the model actually reported.
+    """
+    text = (text or "").strip()
+    pairs = [p for p in (timestamp or []) if p and len(p) >= 2]
+    if not text or not pairs:
+        return []
+
+    body = [c for c in text if c not in _SENT_END and c not in _CLAUSE
+            and not c.isspace()]
+    if len(body) != len(pairs):
+        logger.info(
+            "paraformer: %d timestamps for %d non-punctuation characters — "
+            "falling back to one whole-utterance segment",
+            len(pairs), len(body))
+        return [Segment(float(pairs[0][0]) / 1000.0,
+                        float(pairs[-1][1]) / 1000.0, text)]
+
+    out: list[Segment] = []
+    buf: list[str] = []
+    start_ms: float | None = None
+    end_ms = 0.0
+    i = 0                      # index into `pairs`, advances on body chars
+
+    def _flush() -> None:
+        nonlocal buf, start_ms, end_ms
+        line = "".join(buf).strip()
+        if line and start_ms is not None:
+            out.append(Segment(start_ms / 1000.0, end_ms / 1000.0, line))
+        buf, start_ms = [], None
+
+    for ch in text:
+        is_end, is_clause = ch in _SENT_END, ch in _CLAUSE
+        if not (is_end or is_clause or ch.isspace()):
+            if start_ms is None:
+                start_ms = float(pairs[i][0])
+            end_ms = float(pairs[i][1])
+            i += 1
+        buf.append(ch)
+        if is_end or (is_clause and len(buf) >= min_clause_chars):
+            _flush()
+    _flush()
+    return out
+
+
+_PARAFORMER_MODEL = None
+
+
+def _paraformer_model():
+    """Build the model once per process.
+
+    v2.43.2, measured: constructing ``AutoModel`` reads ~1.6 GB of
+    weights (Paraformer-Large + FSMN-VAD + CT-Punc) and took **55 s**
+    from an external drive.  The adapter built a fresh one on every
+    call, so transcribing three short clips cost 63.5 s / 59.0 s /
+    56.0 s — the same load three times over, around ~2 s of actual
+    inference each.  MLX-Whisper caches internally, which is why its
+    warm calls were 0.5 s; this closes the same gap for Paraformer.
+
+    Not an LRU: there is one configuration, and holding 1.6 GB twice on
+    a 32 GB machine to key it would be the wrong trade.
+    """
+    global _PARAFORMER_MODEL
+    if _PARAFORMER_MODEL is None:
+        from funasr import AutoModel
+
+        _PARAFORMER_MODEL = AutoModel(
+            model="paraformer-zh", vad_model="fsmn-vad",
+            punc_model="ct-punc", disable_update=True)
+    return _PARAFORMER_MODEL
+
+
+def _transcribe_paraformer(wav: Path, language: str = "zh") -> Transcript:
+    raw = _paraformer_model().generate(input=str(wav), batch_size_s=300)
     segments: list[Segment] = []
     for item in raw or []:
-        for s in item.get("sentence_info") or []:
-            segments.append(Segment(
-                start_s=float(s.get("start", 0)) / 1000.0,
-                end_s=float(s.get("end", 0)) / 1000.0,
-                text=str(s.get("text", "")).strip(),
-                speaker=(str(s["spk"]) if s.get("spk") is not None else None),
-            ))
-        if not (item.get("sentence_info")) and item.get("text"):
+        # Tier 1 — sentence_info, which appears when a speaker model is
+        # configured and is richer (it carries `spk`).  Kept first so
+        # enabling diarization upgrades the output for free.
+        sentences = item.get("sentence_info") or []
+        if sentences:
+            for s in sentences:
+                segments.append(Segment(
+                    start_s=float(s.get("start", 0)) / 1000.0,
+                    end_s=float(s.get("end", 0)) / 1000.0,
+                    text=str(s.get("text", "")).strip(),
+                    speaker=(str(s["spk"]) if s.get("spk") is not None
+                             else None),
+                ))
+            continue
+        # Tier 2 — what this engine actually returns.  Before v2.43.2
+        # execution fell straight through to tier 3 and every segment was
+        # timed 0.0–0.0, which made the SRT unusable and "click a line to
+        # seek" a no-op.
+        derived = segments_from_char_timestamps(
+            str(item.get("text", "")), item.get("timestamp") or [])
+        if derived:
+            segments.extend(derived)
+            continue
+        # Tier 3 — text with no timing at all.  Still worth returning:
+        # search over the words works, seeking does not.
+        if item.get("text"):
             segments.append(Segment(0.0, 0.0, str(item["text"]).strip()))
     return Transcript(segments=segments, engine=PARAFORMER, language=language)
+
+
+# v2.43.2 — Whisper transcribes Mandarin into TRADITIONAL characters by
+# default.  Measured on the same clip Paraformer got exactly right:
+# "第一條被選鏡頭有點陡" where a Chinese photographer expects
+# "第一条备选镜头有点抖".  Priming the decoder with a Simplified sample is
+# the accepted fix and costs nothing.  Only applied when the caller says
+# the audio is Chinese — on auto-detect it would bias the language guess.
+_SIMPLIFIED_HINT = "以下是普通话的句子，使用简体中文。"
+
+
+def _wants_simplified(language: str) -> bool:
+    lang = (language or "").lower()
+    return lang.startswith("zh") or lang in ("chinese", "mandarin")
 
 
 def _transcribe_whisper(wav: Path, language: str = "") -> Transcript:
@@ -281,6 +462,8 @@ def _transcribe_whisper(wav: Path, language: str = "") -> Transcript:
             path_or_hf_repo=os.environ.get("PIXCULL_MLX_WHISPER_MODEL",
                                            MLX_DEFAULT_MODEL),
             language=language or None,
+            initial_prompt=_SIMPLIFIED_HINT if _wants_simplified(language)
+            else None,
             word_timestamps=False,
         )
         segments = [Segment(float(s["start"]), float(s["end"]),

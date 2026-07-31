@@ -10,13 +10,17 @@ lives behind an extra, while the parts that decide how a transcript
 """
 
 import json
+import pathlib
+import sys
+import types
 
 import pytest
 
 from pixcull.scoring.transcribe import (
     PARAFORMER, WHISPER, Segment, Transcript, TranscriptionUnavailable,
     align_to_shots, available_engines, load_transcript, resolve_engine,
-    to_srt, write_transcript, _srt_timestamp,
+    segments_from_char_timestamps, to_srt, write_transcript,
+    _ENGINE_PROBES, _srt_timestamp, _wants_simplified,
 )
 
 
@@ -118,6 +122,198 @@ def test_auto_prefers_paraformer(monkeypatch):
 def test_available_engines_is_honest_about_this_machine():
     for e in available_engines():
         assert e in (PARAFORMER, WHISPER)
+
+
+# ── v2.43.2: the lazy-import lie ──────────────────────────────────────
+#
+# Found on a real `pip install "pixcull[asr]"`. funasr 1.4.0 imports
+# torchaudio unconditionally but does not declare it, and its __init__ is
+# lazy — so `import funasr` succeeded while `from funasr import
+# AutoModel` raised ModuleNotFoundError. available_engines() therefore
+# advertised Paraformer, resolve_engine("auto") picked it, and
+# transcription died with a bare ModuleNotFoundError instead of
+# TranscriptionUnavailable.
+#
+# Reproduced here without funasr installed, so it guards in CI too.
+
+class _LazilyBrokenModule(types.ModuleType):
+    """Imports clean, raises on first real attribute access."""
+
+    def __getattr__(self, name):
+        raise ModuleNotFoundError("No module named 'torchaudio'")
+
+
+@pytest.fixture
+def _funasr_that_imports_but_cannot_run(monkeypatch):
+    monkeypatch.setitem(sys.modules, "funasr",
+                        _LazilyBrokenModule("funasr"))
+    # Keep the whisper side genuinely absent so the assertions below are
+    # about Paraformer alone.
+    for name in ("mlx_whisper", "faster_whisper", "whisper"):
+        monkeypatch.setitem(sys.modules, name, None)
+
+
+def test_engine_that_imports_but_cannot_run_is_not_advertised(
+        _funasr_that_imports_but_cannot_run):
+    assert "funasr" in sys.modules          # the import itself succeeds
+    assert PARAFORMER not in available_engines()
+
+
+def test_lazy_broken_engine_raises_the_designed_error_not_a_bare_crash(
+        _funasr_that_imports_but_cannot_run):
+    # auto: nothing usable at all -> the install hint
+    with pytest.raises(TranscriptionUnavailable):
+        resolve_engine("auto")
+    # explicit: still TranscriptionUnavailable, never ModuleNotFoundError
+    with pytest.raises(TranscriptionUnavailable) as ei:
+        resolve_engine(PARAFORMER)
+    assert "pixcull[asr]" in str(ei.value)
+
+
+def test_probe_resolves_the_attribute_the_adapter_actually_calls():
+    """The probe must name a real entry point, not just a package.
+
+    A probe pointing at an attribute that doesn't exist would silently
+    disable a working engine, which is the opposite failure.
+    """
+    for engine, probes in _ENGINE_PROBES.items():
+        assert probes, f"{engine} has no probe"
+        for module, attr in probes:
+            assert isinstance(module, str) and module
+            assert isinstance(attr, str) and attr
+            mod = sys.modules.get(module)
+            if mod is not None and not isinstance(mod, _LazilyBrokenModule):
+                assert hasattr(mod, attr), (
+                    f"{module}.{attr} is not the real entry point")
+
+
+# ── v2.43.2: Paraformer's real output shape ───────────────────────────
+#
+# The adapter read `sentence_info`. On a real run that key is absent —
+# the engine returns key / text / timestamp — so every segment came back
+# timed 0.0-0.0 and the SRT was unusable. These fixtures are the actual
+# measured output of a 6.66s clip, so the mapping is pinned to reality
+# rather than to what the docs implied.
+
+# "今天我们在这里拍摄婚礼，请新郎新娘站到中间灯光准备好了吗？"
+_REAL_TEXT = "今天我们在这里拍摄婚礼，请新郎新娘站到中间灯光准备好了吗？"
+_REAL_TS = [
+    [110, 210], [210, 450], [530, 690], [690, 830], [830, 1070],
+    [1130, 1290], [1290, 1490], [1490, 1690], [1690, 1930], [1950, 2110],
+    [2110, 2350], [2570, 2810], [2810, 2990], [2990, 3170], [3170, 3350],
+    [3350, 3590], [3590, 3770], [3770, 3950], [3950, 4190], [4250, 4430],
+    [4430, 4670], [4730, 4910], [4910, 5090], [5090, 5330], [5330, 5570],
+    [6150, 6330], [6330, 6535],
+]
+
+
+def test_char_timestamps_produce_real_times_not_zeroes():
+    segs = segments_from_char_timestamps(_REAL_TEXT, _REAL_TS)
+    assert len(segs) == 2
+    assert segs[0].text == "今天我们在这里拍摄婚礼，"
+    assert segs[0].start_s == pytest.approx(0.110)
+    assert segs[0].end_s == pytest.approx(2.350)
+    assert segs[1].start_s == pytest.approx(2.570)
+    assert segs[1].end_s == pytest.approx(6.535)
+    # The regression itself: nothing may come back timed 0.0-0.0.
+    assert not any(s.start_s == 0.0 and s.end_s == 0.0 for s in segs)
+
+
+def test_char_timestamps_stay_inside_the_audio():
+    segs = segments_from_char_timestamps(_REAL_TEXT, _REAL_TS)
+    assert segs[-1].end_s <= 6.66
+    assert all(s.end_s >= s.start_s for s in segs)
+    assert all(b.start_s >= a.start_s for a, b in zip(segs, segs[1:]))
+
+
+def test_mismatched_counts_give_one_honest_span_not_a_guess():
+    """Mixed zh/en emits one span per WORD, so the per-char map breaks.
+
+    Measured: 19 timestamps for 29 non-punctuation characters. Guessing
+    an alignment would put subtitles on the wrong frames, so the guard
+    returns the whole utterance with the outer bounds the model reported.
+    """
+    text = "这条用be rule过渡，然后切到close up特写。Ok就这样。"
+    ts = [[50, 200], [200, 400], [400, 700], [700, 1100], [1100, 1500],
+          [1500, 1800], [1800, 2100], [2100, 2400], [2400, 2700],
+          [2700, 3000], [3000, 3300], [3300, 3600], [3600, 3900],
+          [3900, 4200], [4200, 4500], [4500, 4700], [4700, 4900],
+          [4900, 5100], [5100, 5275]]
+    segs = segments_from_char_timestamps(text, ts)
+    assert len(segs) == 1
+    assert segs[0].start_s == pytest.approx(0.050)
+    assert segs[0].end_s == pytest.approx(5.275)
+    assert segs[0].text == text          # nothing dropped
+
+
+def test_sentence_final_always_splits_but_a_short_clause_does_not():
+    # "好。" ends a sentence even though it is 2 characters.
+    segs = segments_from_char_timestamps(
+        "好。走吧。", [[0, 100], [200, 300], [300, 400]])
+    assert [s.text for s in segs] == ["好。", "走吧。"]
+    # A comma before min_clause_chars must NOT split.
+    segs = segments_from_char_timestamps(
+        "好，走吧。", [[0, 100], [200, 300], [300, 400]])
+    assert [s.text for s in segs] == ["好，走吧。"]
+
+
+def test_char_timestamps_degrade_quietly_on_empty_input():
+    assert segments_from_char_timestamps("", [[0, 1]]) == []
+    assert segments_from_char_timestamps("你好", []) == []
+    assert segments_from_char_timestamps("", []) == []
+
+
+def test_simplified_hint_fires_for_chinese_only():
+    """Whisper emits Traditional Mandarin unless primed.
+
+    Measured v2.43.2 on identical audio: "第一條被選鏡頭有點陡" without
+    the hint, "第一条背选镜头有点抖" with it — CER 52.4% -> 4.8%. The
+    hint must NOT fire on auto-detect, where it would bias the language
+    guess toward Chinese.
+    """
+    for lang in ("zh", "zh-CN", "ZH", "zh-Hans", "chinese", "Mandarin"):
+        assert _wants_simplified(lang), lang
+    for lang in ("", "en", "ja", "en-US", None):
+        assert not _wants_simplified(lang), lang
+
+
+def test_paraformer_model_is_built_once_per_process(monkeypatch):
+    """Rebuilding it re-read 1.6 GB of weights — 55s per call.
+
+    Measured before the cache: three clips cost 63.5s / 59.0s / 56.0s.
+    After: 60.6s / 1.3s / 1.4s.
+    """
+    import pixcull.scoring.transcribe as mod
+
+    builds = []
+
+    class _FakeAutoModel:
+        def __init__(self, **kw):
+            builds.append(kw)
+
+        def generate(self, **kw):
+            return [{"key": "k", "text": "好。", "timestamp": [[0, 100]]}]
+
+    fake = types.ModuleType("funasr")
+    fake.AutoModel = _FakeAutoModel
+    monkeypatch.setitem(sys.modules, "funasr", fake)
+    monkeypatch.setattr(mod, "_PARAFORMER_MODEL", None)
+
+    for _ in range(3):
+        mod._transcribe_paraformer(pathlib.Path("x.wav"), "zh")
+    assert len(builds) == 1, f"model rebuilt {len(builds)} times"
+
+
+def test_extra_declares_torchaudio_for_funasr():
+    """funasr omits torchaudio from its own requirements — we add it.
+
+    Pinned by a test because dropping it re-creates the exact install
+    that shipped a crashing engine.
+    """
+    root = pathlib.Path(__file__).resolve().parents[1]
+    body = (root / "pyproject.toml").read_text(encoding="utf-8")
+    asr = body.split("asr = [", 1)[1].split("]", 1)[0]
+    assert "torchaudio" in asr
 
 
 # ── round-trip ────────────────────────────────────────────────────────

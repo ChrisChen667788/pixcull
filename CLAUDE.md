@@ -12,7 +12,15 @@ this repo.  Read it before each session.
    from an ambiguous cwd — always pass `-C <this repo's abspath>`.
 2. **Test gate before every commit:**
    `python -m pytest tests/ --ignore=tests/test_v1_1_scripts.py`
-   (must be green; 2 face-fixture skips are expected).
+   (must be green; **5 skips expected** — 2 face-fixture + 3 zeroconf).
+   Locally also `--ignore` `test_lightbox_stability.py` and
+   `test_visual_smoke.py` (headless capture is killed by this host).
+   **The ASR real-engine lane needs its weights pointed at:** export
+   `MODELSCOPE_CACHE=/Volumes/<drive>/pixcull-models/modelscope` (and
+   `HF_HOME=…/hf` for MLX-Whisper) or `tests/test_transcribe_real_engine.py`
+   adds 4 more skips.  With it set the count is back to 5 and those
+   tests actually run — which is the point: v2.43.2's three bugs were
+   all invisible until the engine was really started.
 3. **Commit trailer:** end every commit message with
    `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.
 4. **Commit / push only when asked.**  Pushing to GitHub or ModelScope
