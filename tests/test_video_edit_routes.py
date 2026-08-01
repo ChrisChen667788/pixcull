@@ -150,3 +150,73 @@ def test_malformed_ops_do_not_500(run):
     h._handle_video_edit(run)
     assert h.status == 400
     assert h.payload["ok"] is False
+
+
+# ── render ────────────────────────────────────────────────────────────
+
+def _render_handler_cls():
+    class H(FakeHandler):
+        _handle_video_render = SA._Handler._handle_video_render
+        _serve_video_render_status = SA._Handler._serve_video_render_status
+    return H
+
+
+def test_render_refuses_before_anything_is_edited(run):
+    h = _render_handler_cls()()
+    h._handle_video_render(run)
+    assert h.status == 400
+    assert h.payload["error"] == "nothing edited yet"
+
+
+def test_render_returns_immediately_and_reports_running(run, tmp_path,
+                                                        monkeypatch):
+    """The POST must not block on ffmpeg.
+
+    A wedding clip is minutes of encoding; holding the request open that
+    long has the browser give up and tell the photographer it failed
+    while it is still working.
+    """
+    (tmp_path / run / "edit.json").write_text(
+        json.dumps({"schema": "pixcull.edit/v1", "ops": []}), encoding="utf-8")
+
+    started = {"n": 0}
+    real = SA.threading.Thread
+
+    class _Blocking(real):
+        def start(self):
+            started["n"] += 1      # count it, never actually run ffmpeg
+
+    monkeypatch.setattr(SA.threading, "Thread", _Blocking)
+    h = _render_handler_cls()()
+    h._handle_video_render(run)
+    assert h.status == 200
+    assert h.payload["state"] == "running"
+    assert started["n"] == 1
+
+
+def test_second_render_while_one_runs_does_not_start_another(run, tmp_path,
+                                                             monkeypatch):
+    """Two ffmpegs writing the same output file would race."""
+    (tmp_path / run / "edit.json").write_text(
+        json.dumps({"schema": "pixcull.edit/v1", "ops": []}), encoding="utf-8")
+    starts = {"n": 0}
+
+    class _Counting(SA.threading.Thread):
+        def start(self):
+            starts["n"] += 1
+
+    monkeypatch.setattr(SA.threading, "Thread", _Counting)
+    SA._RENDERS.pop(run, None)
+    H = _render_handler_cls()
+    H()._handle_video_render(run)
+    H()._handle_video_render(run)
+    assert starts["n"] == 1
+    SA._RENDERS.pop(run, None)
+
+
+def test_status_is_idle_before_any_render(run):
+    SA._RENDERS.pop(run, None)
+    h = _render_handler_cls()()
+    h._serve_video_render_status(run)
+    assert h.status == 200
+    assert h.payload["state"] == "idle"

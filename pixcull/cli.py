@@ -1399,6 +1399,14 @@ def cut(
     fps: float = typer.Option(25.0, "--fps"),
     edl: Optional[Path] = typer.Option(None, "--edl",
                                        help="Write a CMX-3600 EDL here"),
+    render: bool = typer.Option(
+        False, "--render",
+        help="Also cut the source into <run>/edit/edit.mp4 (needs ffmpeg "
+             "and the original video still on disk)"),
+    crossfade: float = typer.Option(
+        None, "--crossfade",
+        help="Seconds of dissolve between kept spans. Default 0 — a "
+             "dissolve mid-sentence eats the words you kept."),
 ) -> None:
     """Cut a clip by striking transcript text.
 
@@ -1452,3 +1460,19 @@ def cut(
         edl.write_text(build_edl(sess.to_clips(), source, fps),
                        encoding="utf-8")
         console.print(f"  [dim]{edl}[/dim]")
+
+    if render:
+        from pixcull.io.reel_assembly import (
+            EDIT_CROSSFADE_S, FFmpegError, assemble_from_edit,
+        )
+        xf = EDIT_CROSSFADE_S if crossfade is None else float(crossfade)
+        try:
+            res = assemble_from_edit(run_dir, crossfade_s=xf)
+        except (FileNotFoundError, ValueError) as exc:
+            console.print(f"[red]{escape(str(exc))}[/]")
+            raise typer.Exit(code=2) from None
+        except FFmpegError as exc:
+            console.print(f"[red]render failed:[/] {escape(str(exc))}")
+            raise typer.Exit(code=4) from None
+        console.print(f"[green]✓[/] {res.duration_s:.1f}s rendered")
+        console.print(f"  [dim]{res.mp4_path}[/dim]")

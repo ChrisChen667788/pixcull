@@ -154,8 +154,10 @@ padding:1px 6px;font-size:11px;color:var(--ink)}
           <button type="button" id="txUndo" disabled>↶ 撤销</button>
           <button type="button" id="txRedo" disabled>↷ 重做</button>
           <a id="txEdl" href="#" download>导出 EDL</a>
+          <button type="button" id="txRender">出片</button>
         </div>
         <div class="tx-edit-stat" id="txStat"></div>
+        <div class="tx-edit-stat" id="txOut"></div>
       </div>
     </div>
     <h2 id="reelHead">Reel 候选</h2>
@@ -316,6 +318,9 @@ function paintEdit(){
   $('txUndo').disabled = !EDIT_OPS.length;
   $('txRedo').disabled = !EDIT_REDO.length;
   $('txEdl').href = '/video/edl/'+encodeURIComponent(RUN_ID);
+  // Rendering only makes sense once something has been cut; before that
+  // it would just re-encode the whole clip for no reason.
+  $('txRender').disabled = !EDIT_OPS.length || RENDER_BUSY;
   const gone = v.segments.filter(x=>x.gone).length;
   $('txStat').textContent =
     '保留 ' + (+v.kept_s).toFixed(1) + 's · ' + v.n_clips + ' 段' +
@@ -386,6 +391,41 @@ function cutChars(i, first, last){
   }).catch(e=>{ $('txStat').textContent='删除失败:'+e; });
 }
 
+/* Rendering is minutes of ffmpeg on real footage, so the POST starts a
+   thread and this polls. Blocking the request instead would have the
+   browser time out and tell the photographer it failed while it was
+   still working. */
+let RENDER_BUSY=false, RENDER_TIMER=null;
+function renderStatus(){
+  fetch('/video/render_status/'+encodeURIComponent(RUN_ID))
+    .then(r=>r.json()).then(st=>{
+      if(st.state==='running'){ $('txOut').textContent='出片中…'; return; }
+      clearInterval(RENDER_TIMER); RENDER_TIMER=null; RENDER_BUSY=false;
+      paintEdit();
+      if(st.state==='done'){
+        $('txOut').innerHTML='成片 '+(+st.duration_s).toFixed(1)+'s · '+
+          '<a href="'+st.url+'" download>下载 mp4</a>';
+      } else if(st.state==='error'){
+        $('txOut').textContent='出片失败:'+(st.error||'');
+      } else { $('txOut').textContent=''; }
+    }).catch(e=>{
+      clearInterval(RENDER_TIMER); RENDER_TIMER=null; RENDER_BUSY=false;
+      $('txOut').textContent='出片失败:'+e;
+    });
+}
+function startRender(){
+  if(RENDER_BUSY) return;
+  RENDER_BUSY=true; paintEdit();
+  $('txOut').textContent='出片中…';
+  fetch('/video/render/'+encodeURIComponent(RUN_ID), {method:'POST'})
+    .then(r=>r.json()).then(v=>{
+      if(!v.ok){ RENDER_BUSY=false; paintEdit();
+                 $('txOut').textContent='出片失败:'+(v.error||''); return; }
+      RENDER_TIMER = setInterval(renderStatus, 1200);
+    }).catch(e=>{ RENDER_BUSY=false; paintEdit();
+                  $('txOut').textContent='出片失败:'+e; });
+}
+
 function initEdit(){
   $('txUndo').addEventListener('click', ()=>{
     if(!EDIT_OPS.length) return;
@@ -395,6 +435,7 @@ function initEdit(){
     if(!EDIT_REDO.length) return;
     EDIT_OPS.push(EDIT_REDO.pop()); syncEdit();
   });
+  $('txRender').addEventListener('click', startRender);
   document.addEventListener('selectionchange', onTxSelect);
   document.addEventListener('mousedown', e=>{
     if(TX_SELBTN && e.target!==TX_SELBTN) clearSelBtn();

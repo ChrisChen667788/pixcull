@@ -137,6 +137,14 @@ _RUNS_LOCK = threading.Lock()
 # server class can reach it across all request handlers.
 _MDNS_ADVERTS: dict[str, dict] = {}
 
+# v2.44.2 — transcript-edit renders, keyed by run_id. ffmpeg on a wedding
+# clip is minutes of work, so the POST starts a thread and returns
+# immediately; the page polls. Doing it inline would hold an HTTP request
+# open long enough for any proxy or browser to give up on it, and the
+# photographer would be told the render failed when it was still running.
+# Guarded by _RUNS_LOCK — one more small dict does not justify a second.
+_RENDERS: dict[str, dict] = {}
+
 # V2.1 retrain state — one global slot since you only ever want one
 # training job running at a time. Guarded by _RUNS_LOCK to keep the
 # /retrain handler simple.
@@ -4818,6 +4826,8 @@ class _Handler(BaseHTTPRequestHandler):
         ("/thumb/", "_serve_image", "raw", (_THUMB_SIZE,)),
         ("/full/", "_serve_image", "raw", (_FULL_SIZE,)),
         ("/face_crop/", "_serve_face_crop", "raw", ()),
+        ("/video/render_status/", "_serve_video_render_status", "tail", ()),
+        ("/video/render_file/", "_serve_video_render_file", "tail", ()),
         ("/video/edit/", "_serve_video_edit", "tail", ()),
         ("/video/edl/", "_serve_video_edl", "tail", ()),
         ("/video/data/", "_serve_video_data", "tail", ()),
@@ -4908,6 +4918,8 @@ class _Handler(BaseHTTPRequestHandler):
         # v2.44-P2 — edit by text. Body is the whole op log.
         if path.startswith("/video/edit/"):
             return self._handle_video_edit(path[len("/video/edit/"):])
+        if path.startswith("/video/render/"):
+            return self._handle_video_render(path[len("/video/render/"):])
         if path == "/analyze":
             return self._handle_analyze_post()
         if path == "/scan_local":
@@ -7954,6 +7966,80 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def _handle_video_render(self, tail: str) -> None:
+        """POST /video/render/<run_id> — start an ffmpeg cut, return at once."""
+        rid = _safe_run_id(tail)
+        if rid is None:
+            return self._send_json(400, json.dumps(
+                {"ok": False, "error": "bad run_id"}).encode())
+        run_dir = _run_dir(rid)
+        if not (run_dir / "edit.json").is_file():
+            return self._send_json(400, json.dumps(
+                {"ok": False, "error": "nothing edited yet"}).encode())
+
+        with _RUNS_LOCK:
+            cur = _RENDERS.get(rid)
+            if cur and cur.get("state") == "running":
+                # Not an error: the page asked again while one is in
+                # flight, and starting a second ffmpeg over the same
+                # output file would race the first.
+                return self._send_json(200, json.dumps(
+                    {"ok": True, "state": "running"}).encode())
+            _RENDERS[rid] = {"state": "running", "started_ms":
+                             int(time.time() * 1000)}
+
+        def _work() -> None:
+            from pixcull.io.reel_assembly import (
+                FFmpegError, assemble_from_edit,
+            )
+            try:
+                res = assemble_from_edit(run_dir, reel_id="edit")
+                out = {"state": "done", "duration_s": res.duration_s,
+                       "url": f"/video/render_file/{rid}",
+                       "n_clips": len(res.clips)}
+            except (FileNotFoundError, ValueError, FFmpegError) as exc:
+                # The three things that actually go wrong: the original
+                # clip is gone, the edit keeps nothing, or ffmpeg failed.
+                # Each is actionable, so each is reported verbatim.
+                out = {"state": "error", "error": str(exc)[:400]}
+            with _RUNS_LOCK:
+                _RENDERS[rid] = out
+
+        threading.Thread(target=_work, daemon=True,
+                         name=f"render-{rid}").start()
+        self._send_json(200, json.dumps({"ok": True,
+                                         "state": "running"}).encode())
+
+    def _serve_video_render_status(self, tail: str) -> None:
+        """GET /video/render_status/<run_id>."""
+        rid = _safe_run_id(tail)
+        if rid is None:
+            return self._send_json(400, json.dumps(
+                {"ok": False, "error": "bad run_id"}).encode())
+        with _RUNS_LOCK:
+            st = dict(_RENDERS.get(rid) or {"state": "idle"})
+        st["ok"] = True
+        self._send_json(200, json.dumps(st, ensure_ascii=False).encode())
+
+    def _serve_video_render_file(self, tail: str) -> None:
+        """GET /video/render_file/<run_id> — download the cut mp4."""
+        rid = _safe_run_id(tail)
+        if rid is None:
+            self.send_error(400, "bad run_id")
+            return
+        mp4 = _run_dir(rid) / "edit" / "edit.mp4"
+        if not mp4.is_file():
+            self.send_error(404, "no render yet")
+            return
+        data = mp4.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", "video/mp4")
+        self.send_header("Content-Disposition",
+                         f'attachment; filename="{rid}-edit.mp4"')
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
 
     def _serve_video_data(self, tail: str) -> None:
         """GET /video/data/<run_id> — bundle manifest + temporal + reel."""

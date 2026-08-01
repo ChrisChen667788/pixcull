@@ -543,6 +543,84 @@ def export_preset(
     return out
 
 
+# --------------------------------------------------------------------------
+# v2.44.2 — render what the transcript editor kept
+# --------------------------------------------------------------------------
+
+# A reel joins *separate highlights*, so a half-second dissolve reads as
+# deliberate. Edit-by-text is the opposite: the kept spans are usually
+# two halves of one sentence with words taken out between them, and a
+# dissolve there both looks like an effect nobody asked for and — worse —
+# eats time off BOTH sides, so it swallows the very words the
+# photographer chose to keep. Hard cut is the correct default here, and
+# the caller can still ask for a fade.
+EDIT_CROSSFADE_S = 0.0
+
+
+def assemble_from_edit(
+    run_dir: Path,
+    *,
+    reel_id: str = "edit",
+    crossfade_s: float = EDIT_CROSSFADE_S,
+    edl_only: bool = False,
+    source_video: Path | None = None,
+) -> ReelResult:
+    """Cut the source down to what ``edit.json`` kept.
+
+    Reads the saved edit + transcript, replays the operation log through
+    ``EditSession`` — the same one the CLI and the review page use — and
+    hands the surviving spans to :func:`assemble_reel`.
+
+    Raises ``ValueError`` when the edit removed everything: an empty
+    render is indistinguishable from a broken one, and ffmpeg would
+    produce a zero-length file rather than say so.
+    """
+    from pixcull.scoring.edit_model import EditSession
+    from pixcull.scoring.transcribe import load_transcript
+
+    run_dir = Path(run_dir)
+    transcript = load_transcript(run_dir)
+    if transcript is None or not transcript.segments:
+        raise FileNotFoundError(
+            f"no transcript in {run_dir} — run `pixcull transcribe` first")
+
+    sess = EditSession(transcript)
+    edit_path = run_dir / "edit.json"
+    if edit_path.is_file():
+        sess = EditSession.from_dict(
+            json.loads(edit_path.read_text("utf-8")), transcript)
+
+    clips = sess.to_clips()
+    if not clips:
+        raise ValueError(
+            "the edit keeps nothing — restore some lines before rendering")
+
+    source = Path(source_video) if source_video else None
+    if source is None:
+        from pixcull.scoring.temporal import _resolve_frames_dir
+        try:
+            frames_dir = _resolve_frames_dir(run_dir, None)
+        except FileNotFoundError as exc:
+            # Reached when a transcript was written into a run that was
+            # never imported with `pixcull video`. The frames-dir error
+            # is true but unhelpful: the user's problem is that there is
+            # no source clip to cut, and the fix is a different command.
+            raise FileNotFoundError(
+                f"source video not found for {run_dir}: this run has no "
+                f"video_frames/ — import the clip with `pixcull video` "
+                f"first, or pass the file explicitly. ({exc})") from None
+        manifest = json.loads((frames_dir / "manifest.json").read_text("utf-8"))
+        raw = manifest.get("source_path")
+        if not raw or not Path(raw).exists():
+            raise FileNotFoundError(
+                f"source video not found (manifest source_path={raw!r}); "
+                f"the original clip must be present to render.")
+        source = Path(raw)
+
+    return assemble_reel(source, clips, run_dir, reel_id=reel_id,
+                         crossfade_s=crossfade_s, edl_only=edl_only)
+
+
 def assemble_from_run(
     run_dir: Path,
     *,
