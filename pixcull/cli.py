@@ -360,6 +360,11 @@ def transcribe(
         help="Tag each line with the shot it starts in (needs "
              "pixcull[shots]); makes 'jump to this line' land on a real "
              "shot rather than mid-cut"),
+    speakers: bool = typer.Option(
+        False, "--speakers",
+        help="Label who is speaking (Paraformer only; loads cam++). "
+             "Needs a long enough clip — FunASR's clusterer gives up "
+             "under 20 speech segments and reports one speaker."),
     hotword: list[str] = typer.Option(
         [], "--hotword", "-H",
         help="Bias recognition towards a term (repeatable). Shoot-specific "
@@ -388,7 +393,8 @@ def transcribe(
 
     try:
         result = _run(media, engine=engine, language=language,
-                      cut_points=cut_points, hotwords=hotword)
+                      cut_points=cut_points, hotwords=hotword,
+                      speakers=speakers)
     except TranscriptionUnavailable as exc:
         # escape(): rich reads "[asr]" as a style tag and swallows it,
         # which turned the install hint into `pip install "pixcull"` —
@@ -403,6 +409,16 @@ def transcribe(
         console.print("[yellow]no speech found[/] "
                       "[dim](silent clip, or the wrong --language)[/dim]")
         raise typer.Exit(code=1)
+
+    if speakers:
+        found = {s.speaker for s in result.segments if s.speaker}
+        if found:
+            console.print(f"[dim]{len(found)} speaker(s) distinguished[/dim]")
+        else:
+            console.print(
+                "[yellow]no speakers distinguished[/] [dim](one person, or "
+                "the clip is too short for the clusterer — see "
+                "--speakers help)[/dim]")
 
     written = write_transcript(result, out_dir)
     dur = max((s.end_s for s in result.segments), default=0.0)

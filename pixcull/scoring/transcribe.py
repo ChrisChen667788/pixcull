@@ -394,9 +394,28 @@ def segments_from_char_timestamps(
 
 
 _PARAFORMER_MODEL = None
+_PARAFORMER_MODEL_KEY: bool | None = None
+
+# v2.44.3 — FunASR's ClusterBackend opens with:
+#
+#     if X.shape[0] < 20:
+#         return np.zeros(X.shape[0], dtype="int")
+#
+# i.e. with fewer than 20 speaker embeddings it hard-returns "everybody
+# is speaker 0" *before* it looks at the embeddings or at any
+# preset_spk_num the caller passed.  Measured: a 13 s two-voice dialogue
+# produced 17 embeddings whose pairwise cosine similarity ranged 0.25 to
+# 0.91 — clearly separable — and still came back all-zero.  The same
+# voices in a 59 s dialogue produced 78 embeddings and were separated
+# correctly (18/18 single-speaker lines labelled right).
+#
+# The number is theirs, recorded here because the failure is silent: the
+# output of "too short to tell" is identical to the output of "one
+# person spoke".
+_FUNASR_MIN_SPK_EMBEDDINGS = 20
 
 
-def _paraformer_model():
+def _paraformer_model(speakers: bool = False):
     """Build the model once per process.
 
     v2.43.2, measured: constructing ``AutoModel`` reads ~1.6 GB of
@@ -410,13 +429,21 @@ def _paraformer_model():
     Not an LRU: there is one configuration, and holding 1.6 GB twice on
     a 32 GB machine to key it would be the wrong trade.
     """
-    global _PARAFORMER_MODEL
-    if _PARAFORMER_MODEL is None:
+    global _PARAFORMER_MODEL, _PARAFORMER_MODEL_KEY
+    if _PARAFORMER_MODEL is None or _PARAFORMER_MODEL_KEY != speakers:
         from funasr import AutoModel
 
-        _PARAFORMER_MODEL = AutoModel(
-            model="paraformer-zh", vad_model="fsmn-vad",
-            punc_model="ct-punc", disable_update=True)
+        kw = dict(model="paraformer-zh", vad_model="fsmn-vad",
+                  punc_model="ct-punc", disable_update=True)
+        if speakers:
+            # cam++ is small (~35 MB) next to the 1.6 GB it joins, but it
+            # changes the graph, so the cached model has to be rebuilt
+            # rather than reused. One slot, swapped: holding both
+            # configurations resident would cost 3.2 GB to save a load
+            # nobody makes twice in a session.
+            kw["spk_model"] = "cam++"
+        _PARAFORMER_MODEL = AutoModel(**kw)
+        _PARAFORMER_MODEL_KEY = speakers
     return _PARAFORMER_MODEL
 
 
@@ -461,12 +488,13 @@ def load_hotwords(extra: Sequence[str] | None = None) -> list[str]:
 
 
 def _transcribe_paraformer(wav: Path, language: str = "zh", *,
-                           hotwords: Sequence[str] | None = None) -> Transcript:
+                           hotwords: Sequence[str] | None = None,
+                           speakers: bool = False) -> Transcript:
     words = load_hotwords(hotwords)
     kw = {"batch_size_s": 300}
     if words:
         kw["hotword"] = " ".join(words)
-    raw = _paraformer_model().generate(input=str(wav), **kw)
+    raw = _paraformer_model(speakers).generate(input=str(wav), **kw)
     segments: list[Segment] = []
     for item in raw or []:
         # Tier 1 — sentence_info, which appears when a speaker model is
@@ -496,7 +524,38 @@ def _transcribe_paraformer(wav: Path, language: str = "zh", *,
         # search over the words works, seeking does not.
         if item.get("text"):
             segments.append(Segment(0.0, 0.0, str(item["text"]).strip()))
+    if speakers:
+        segments = _drop_indistinct_speakers(segments)
     return Transcript(segments=segments, engine=PARAFORMER, language=language)
+
+
+def _drop_indistinct_speakers(segments: list[Segment]) -> list[Segment]:
+    """Blank the speaker label when diarization distinguished nobody.
+
+    FunASR returns speaker 0 for every segment in two very different
+    situations: one person really did do all the talking, and the clip
+    was too short for its clusterer to try at all (see
+    ``_FUNASR_MIN_SPK_EMBEDDINGS``).  The output is byte-identical.
+
+    Recording "speaker 0" would state a finding the model may never have
+    made — the same shape of quiet wrongness as an empty transcript
+    passing for silence.  ``None`` is true either way: nobody was
+    distinguished.  A single-speaker clip loses nothing by it, because
+    there is no one to tell apart.
+    """
+    labels = {s.speaker for s in segments if s.speaker is not None}
+    if len(labels) > 1:
+        return segments
+    if labels:
+        logger.info(
+            "diarization returned a single label for all %d segments — "
+            "reporting speaker=None. Either one person spoke, or the clip "
+            "is shorter than FunASR's %d-embedding clustering threshold; "
+            "the two are indistinguishable from its output.",
+            len(segments), _FUNASR_MIN_SPK_EMBEDDINGS)
+    for seg in segments:
+        seg.speaker = None
+    return segments
 
 
 # v2.43.2 — Whisper transcribes Mandarin into TRADITIONAL characters by
@@ -571,6 +630,7 @@ def transcribe(
     language: str = "",
     cut_points: Sequence[float] | None = None,
     hotwords: Sequence[str] | None = None,
+    speakers: bool = False,
 ) -> Transcript:
     """Transcribe a video (or audio file), optionally aligned to shots.
 
@@ -584,6 +644,9 @@ def transcribe(
     if hotwords and chosen != PARAFORMER:
         logger.info("hotwords ignored: engine %r does not support "
                     "contextual biasing", chosen)
+    if speakers and chosen != PARAFORMER:
+        logger.info("speaker labels ignored: engine %r has no diarization",
+                    chosen)
 
     with tempfile.TemporaryDirectory(prefix="pixcull_asr_") as td:
         if media_path.suffix.lower() in (".wav",):
@@ -591,7 +654,8 @@ def transcribe(
         else:
             wav = extract_audio(media_path, Path(td) / "audio.wav")
         if chosen == PARAFORMER:
-            result = _transcribe_paraformer(wav, language, hotwords=hotwords)
+            result = _transcribe_paraformer(wav, language, hotwords=hotwords,
+                                            speakers=speakers)
         else:
             result = _ENGINE_FUNCS[chosen](wav, language)
 

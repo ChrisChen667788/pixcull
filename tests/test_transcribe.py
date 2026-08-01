@@ -432,3 +432,129 @@ def test_missing_lexicon_degrades_to_caller_terms(monkeypatch, tmp_path):
     monkeypatch.setattr(T, "_HOTWORDS_FILE", tmp_path / "nope.txt")
     assert T.load_hotwords() == []
     assert T.load_hotwords(["草坪仪式"]) == ["草坪仪式"]
+
+
+# ==========================================================================
+# v2.44.3 — speaker diarization
+# ==========================================================================
+
+def test_all_same_speaker_label_becomes_none():
+    """FunASR reports "everyone is speaker 0" in two different cases.
+
+    One person really did all the talking, and the clip was too short for
+    its clusterer to try (it hard-returns zeros under 20 embeddings,
+    before looking at them). The outputs are identical, so recording
+    "speaker 0" would assert a finding the model may never have made.
+    """
+    segs = [Segment(0, 1, "a", speaker="0"), Segment(1, 2, "b", speaker="0")]
+    assert [s.speaker for s in T._drop_indistinct_speakers(segs)] == [None,
+                                                                      None]
+
+
+def test_real_speaker_split_is_kept():
+    segs = [Segment(0, 1, "a", speaker="0"), Segment(1, 2, "b", speaker="1")]
+    assert [s.speaker for s in T._drop_indistinct_speakers(segs)] == ["0", "1"]
+
+
+def test_unlabelled_segments_stay_unlabelled():
+    segs = [Segment(0, 1, "a"), Segment(1, 2, "b")]
+    assert [s.speaker for s in T._drop_indistinct_speakers(segs)] == [None,
+                                                                      None]
+
+
+def test_three_speakers_survive():
+    segs = [Segment(i, i + 1, "x", speaker=str(i)) for i in range(3)]
+    assert [s.speaker for s in T._drop_indistinct_speakers(segs)] == \
+           ["0", "1", "2"]
+
+
+def test_the_funasr_threshold_is_written_down():
+    """It is upstream's number and the failure it causes is silent.
+
+    Pinned so that changing it is a deliberate act with a reason, not a
+    quiet edit — the value is what the user-facing help text promises.
+    """
+    assert T._FUNASR_MIN_SPK_EMBEDDINGS == 20
+
+
+def test_model_cache_is_keyed_by_the_speaker_setting(monkeypatch):
+    """Asking for speakers must not hand back the model built without.
+
+    A single cached slot is deliberate — two configurations resident is
+    3.2 GB — but it has to notice when the configuration changed.
+    """
+    built = []
+
+    class _Fake:
+        def __init__(self, **kw):
+            built.append("spk_model" in kw)
+
+    mod = types.ModuleType("funasr")
+    mod.AutoModel = _Fake
+    monkeypatch.setitem(sys.modules, "funasr", mod)
+    monkeypatch.setattr(T, "_PARAFORMER_MODEL", None)
+    monkeypatch.setattr(T, "_PARAFORMER_MODEL_KEY", None)
+
+    T._paraformer_model(False)
+    T._paraformer_model(False)          # cached, no rebuild
+    T._paraformer_model(True)           # different config, rebuild
+    T._paraformer_model(True)           # cached again
+    assert built == [False, True]
+
+
+def test_adapter_actually_applies_the_speaker_guard(monkeypatch, tmp_path):
+    """Testing the helper is not testing that anything calls it.
+
+    The first mutation run here stayed green with the call site deleted,
+    because every assertion above pokes _drop_indistinct_speakers
+    directly. That is the guard-without-a-consumer gap this repo has hit
+    before, so this drives the adapter instead.
+    """
+    class _Fake:
+        def generate(self, **kw):
+            return [{"sentence_info": [
+                {"start": 0, "end": 1000, "text": "一", "spk": 0},
+                {"start": 1000, "end": 2000, "text": "二", "spk": 0},
+            ]}]
+
+    monkeypatch.setattr(T, "_paraformer_model", lambda speakers=False: _Fake())
+    wav = tmp_path / "a.wav"
+    wav.write_bytes(b"")
+
+    got = T._transcribe_paraformer(wav, "zh", speakers=True)
+    assert [s.speaker for s in got.segments] == [None, None], \
+        "adapter did not apply the indistinct-speaker guard"
+
+
+def test_adapter_keeps_a_real_split(monkeypatch, tmp_path):
+    class _Fake:
+        def generate(self, **kw):
+            return [{"sentence_info": [
+                {"start": 0, "end": 1000, "text": "一", "spk": 0},
+                {"start": 1000, "end": 2000, "text": "二", "spk": 1},
+            ]}]
+
+    monkeypatch.setattr(T, "_paraformer_model", lambda speakers=False: _Fake())
+    wav = tmp_path / "a.wav"
+    wav.write_bytes(b"")
+    got = T._transcribe_paraformer(wav, "zh", speakers=True)
+    assert [s.speaker for s in got.segments] == ["0", "1"]
+
+
+def test_speakers_off_leaves_labels_untouched(monkeypatch, tmp_path):
+    """Without --speakers the guard must not run at all.
+
+    Nothing sets spk in that mode, but blanking labels the caller never
+    asked about would hide a future engine that supplies them.
+    """
+    class _Fake:
+        def generate(self, **kw):
+            return [{"sentence_info": [
+                {"start": 0, "end": 1000, "text": "一", "spk": 7},
+            ]}]
+
+    monkeypatch.setattr(T, "_paraformer_model", lambda speakers=False: _Fake())
+    wav = tmp_path / "a.wav"
+    wav.write_bytes(b"")
+    got = T._transcribe_paraformer(wav, "zh", speakers=False)
+    assert got.segments[0].speaker == "7"
