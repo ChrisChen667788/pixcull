@@ -1,6 +1,6 @@
 [project]
 name = "pixcull"
-version = "2.43.3"
+version = "2.43.4"
 description = "Local-first AI photo culling for professional photographers — 6-axis rubric, XMP/IPTC export, Lightroom & Capture One ready."
 # v2.23 — dedicated PyPI readme: the repo README leans on relative-path
 # screenshots and GitHub-only markup that render broken on pypi.org.
@@ -87,6 +87,12 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
+    # v2.43.4 — tests/test_packaging.py builds the real sdist+wheel and
+    # inspects them. With hatchling present it does so without isolation
+    # (~0.1s instead of ~3s), so declare both rather than let the test
+    # quietly take the slow path or skip.
+    "build>=1.0",
+    "hatchling>=1.20",
     "pytest-cov>=5.0",
     "ruff>=0.4",
     "mypy>=1.10",
@@ -166,7 +172,21 @@ build-backend = "hatchling.build"
 packages = ["pixcull"]
 
 [tool.hatch.build]
+# This list is an ALLOWLIST and it applies to the sdist as well as the
+# wheel.  v2.43.4: it had no *.py pattern, so every published sdist
+# contained zero Python files — and because `python -m build` (what
+# release.yml runs) builds the wheel *from the sdist*, every wheel on
+# every GitHub Release since v2.23 shipped 35 data files and no code.
+#
+# `python -m build --wheel` builds straight from the source tree, where
+# the wheel target's `packages` applies, and looks perfectly fine.  That
+# is why this survived: the only local command anyone ran was the one
+# that bypasses the sdist.
+#
+# Anything added here must keep the sdist self-sufficient.  The test in
+# tests/test_packaging.py builds both artifacts and checks them.
 include = [
+    "pixcull/**/*.py",
     "pixcull/scoring/templates/*.yaml",
     "pixcull/scoring/data/*.json",        # v2.4-P1-3 — calibrated audio thresholds ship with the package
     "pixcull/report/templates/*.j2",

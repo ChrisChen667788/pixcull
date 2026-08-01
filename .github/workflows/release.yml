@@ -42,11 +42,28 @@ jobs:
           python -m build --outdir dist_wheel
           twine check dist_wheel/*
 
+      # v2.43.4 — `cd /tmp` is the entire point of this step.
+      #
+      # This ran from the checkout root, where `python -c` puts the cwd on
+      # sys.path, so `import pixcull` resolved to the SOURCE TREE and the
+      # wheel was never exercised. Meanwhile the wheel itself contained
+      # zero .py files (the sdist allowlist had no *.py pattern and
+      # `python -m build` builds the wheel from the sdist), and this step
+      # passed on every release from v2.23 to v2.43.3.
+      #
+      # Verified: from a neutral directory the broken wheel raises
+      # AttributeError on __version__ — `import pixcull` alone still
+      # succeeds, because the surviving data directories make it an
+      # implicit namespace package. So check an attribute and the console
+      # script, not just the import.
       - name: Smoke-test the wheel in a clean venv
         run: |
           python -m venv /tmp/wheel_smoke
           /tmp/wheel_smoke/bin/pip install --quiet dist_wheel/*.whl
+          cd /tmp
           /tmp/wheel_smoke/bin/python -c "import pixcull; print('pixcull', pixcull.__version__)"
+          /tmp/wheel_smoke/bin/python -c "import pixcull.cli, pixcull.scoring.transcribe"
+          /tmp/wheel_smoke/bin/pixcull --help > /dev/null
 
       - name: Create GitHub Release + attach wheel & sdist
         env:
