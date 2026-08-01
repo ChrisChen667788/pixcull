@@ -8,7 +8,7 @@ try:
     from importlib.metadata import version as _pkg_version
     __version__ = _pkg_version("pixcull")
 except Exception:
-    __version__ = "2.44.3"
+    __version__ = "2.45.0"
 
 
 def _check_numpy_compatibility() -> None:

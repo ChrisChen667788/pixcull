@@ -281,3 +281,173 @@ def test_full_journey_including_run(tmp_path):
 
     # …and the thing it just produced must export.
     assert _cli("export", str(out)).returncode == 0
+
+
+# ==========================================================================
+# v2.45 — the video journey: video -> transcribe -> cut -> render
+# ==========================================================================
+#
+# v2.42 through v2.44.3 added six versions of video work — shot
+# boundaries, transcription, edit-by-text, one-click render — and none of
+# it was in this file.  That is the gap this file exists to close: only
+# four of the CLI's commands had a journey, and the newest and most
+# multi-stage block of the product had none.
+#
+# Multi-stage is the point.  Each command consumes what the previous one
+# wrote, and "works alone, breaks in sequence" lives exactly there.  Two
+# such bugs turned up by hand while building v2.44:
+#
+#   * load_transcript dropped char_spans, so an edit that was word-level
+#     in memory silently became segment-level after a save — every
+#     in-memory unit test stayed green;
+#   * rendering a run with a transcript but no video_frames/ reported a
+#     frames-directory error instead of "there is no source clip".
+#
+# ASR weights are not in CI, so the chain is exercised in two halves: the
+# plumbing (cut -> render) runs everywhere against a transcript written
+# to the real schema, and the transcribe step additionally runs for real
+# when an engine is installed — the model-gate rule, not a skip.
+
+def _tiny_video(dest: Path, seconds: float = 3.0) -> Path:
+    import shutil as _sh
+    if not _sh.which("ffmpeg"):
+        pytest.skip("ffmpeg not installed")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-y", "-f", "lavfi",
+         "-i", f"testsrc2=s=160x120:r=25:d={seconds}",
+         "-f", "lavfi", "-i", f"sine=frequency=440:duration={seconds}",
+         "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac",
+         "-shortest", str(dest)], check=True)
+    return dest
+
+
+def _write_transcript(run_dir: Path) -> None:
+    """A word-level transcript in the real on-disk schema.
+
+    Deliberately built through the product's own writer rather than
+    hand-rolled JSON: if the schema moves, this moves with it, and the
+    journey keeps testing the real contract.
+    """
+    from pixcull.scoring.transcribe import Segment, Transcript, write_transcript
+
+    spans_a = [(0.10, 0.30), (0.30, 0.50), (0.50, 0.70), (0.70, 0.90)]
+    spans_b = [(1.60, 1.80), (1.80, 2.00), (2.00, 2.20), (2.20, 2.40)]
+    write_transcript(
+        Transcript(segments=[Segment(0.10, 0.90, "第一句话", char_spans=spans_a),
+                             Segment(1.60, 2.40, "第二句话", char_spans=spans_b)],
+                   engine="paraformer", language="zh"), run_dir)
+
+
+@pytest.fixture(scope="module")
+def _video_run_template(tmp_path_factory):
+    """One real `pixcull video` import, shared by the journey tests.
+
+    That command loads the whole scoring stack, so running it per test
+    turned this file from seconds into minutes. Built once; each test
+    gets its own copy below, because they all write into the run.
+    """
+    base = tmp_path_factory.mktemp("vsrc")
+    src = _tiny_video(base / "clip.mp4")
+    out = base / "vrun"
+    # --extract-only on purpose. Scoring the frames loads CLIP and every
+    # detector, which is minutes and is a *different* journey — the one
+    # test_full_journey_including_run already gates on real weights. What
+    # the edit chain needs from this command is the frames manifest and
+    # the source_path inside it, and extraction writes both.
+    r = _cli("video", str(src), "-o", str(out), "--interval-s", "0.5",
+             "--extract-only",
+             env_extra={"PIXCULL_NO_AUTO_INDEX": "1"}, timeout=1800)
+    assert r.returncode == 0, f"`pixcull video` failed:\n{r.stdout}\n{r.stderr}"
+    manifests = list(out.glob("video_frames/*/manifest.json"))
+    assert manifests, "no frames manifest"
+    got = json.loads(manifests[0].read_text("utf-8")).get("source_path")
+    assert got and Path(got).exists(), (
+        f"manifest source_path is unusable ({got!r}) — the render step "
+        f"resolves the original clip through it")
+    return {"run_dir": out, "source": src}
+
+
+@pytest.fixture
+def video_run(_video_run_template, tmp_path):
+    """A private copy of the template run — these tests mutate it."""
+    import shutil as _sh
+    dest = tmp_path / "vrun"
+    _sh.copytree(_video_run_template["run_dir"], dest)
+    return {"run_dir": dest, "source": _video_run_template["source"]}
+
+
+def test_video_journey_cut_and_render(video_run):
+    """transcript on disk -> `pixcull cut --render` -> a real shorter mp4."""
+    run_dir = video_run["run_dir"]
+    _write_transcript(run_dir)
+
+    r = _cli("cut", str(run_dir), "--drop-chars", "0:0-1",
+             "--edl", str(run_dir / "j.edl"), "--render", timeout=900)
+    assert r.returncode == 0, f"`pixcull cut` failed:\n{r.stdout}\n{r.stderr}"
+
+    # Content, not exit code — all four historical outages exited quietly.
+    edit = json.loads((run_dir / "edit.json").read_text("utf-8"))
+    assert edit["precision"] == "word", (
+        "the journey lost per-character times somewhere between "
+        "transcribe and cut — this is the v2.44 round-trip bug")
+    assert len(edit["ops"]) == 1
+
+    mp4 = run_dir / "edit" / "edit.mp4"
+    assert mp4.is_file() and mp4.stat().st_size > 1000, "no rendered mp4"
+    assert (run_dir / "edit" / "edit.edl").is_file()
+    assert "TITLE:" in (run_dir / "j.edl").read_text("utf-8")
+
+    # The render must be shorter than the source; equal length means the
+    # edit was ignored and the whole clip was re-encoded.
+    def _dur(p: Path) -> float:
+        out = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+             "-of", "csv=p=0", str(p)], capture_output=True, text=True)
+        return float(out.stdout.strip() or 0)
+
+    assert _dur(mp4) < _dur(video_run["source"]) - 0.05, (
+        "rendered clip is not shorter than the source")
+
+
+def test_video_journey_refuses_to_render_an_empty_edit(video_run):
+    """Cutting everything must fail loudly, not emit a zero-length file."""
+    run_dir = video_run["run_dir"]
+    _write_transcript(run_dir)
+    r = _cli("cut", str(run_dir), "--drop-line", "0", "--drop-line", "1",
+             "--render", timeout=900)
+    assert r.returncode != 0
+    assert "keeps nothing" in (r.stdout + r.stderr)
+    assert not (run_dir / "edit" / "edit.mp4").exists()
+
+
+def test_video_journey_render_without_a_transcript_says_what_to_do(video_run):
+    r = _cli("cut", str(video_run["run_dir"]), "--drop-line", "0", timeout=300)
+    assert r.returncode != 0
+    assert "transcribe" in (r.stdout + r.stderr), (
+        "the error should name the command that fixes it")
+
+
+@pytest.mark.slow
+def test_video_journey_with_real_transcription(video_run):
+    """With an engine installed, the real `pixcull transcribe` runs too.
+
+    Gated on the engine being usable, not skipped by default: the whole
+    lesson of v2.43.2 was that three bugs were invisible until this ran
+    for real.
+    """
+    from pixcull.scoring.transcribe import available_engines
+
+    if not available_engines():
+        pytest.skip("no ASR engine installed (pip install 'pixcull[asr]')")
+
+    run_dir = video_run["run_dir"]
+    r = _cli("transcribe", str(video_run["source"]), "-o", str(run_dir),
+             "--no-shots", timeout=1800)
+    # A tone has no speech: exit 1 with a clear message is the correct
+    # outcome, and is itself worth pinning — it used to be silence.
+    assert r.returncode in (0, 1), f"unexpected exit:\n{r.stdout}\n{r.stderr}"
+    if r.returncode == 1:
+        assert "no speech" in (r.stdout + r.stderr)
+    else:
+        assert (run_dir / "transcript.json").is_file()

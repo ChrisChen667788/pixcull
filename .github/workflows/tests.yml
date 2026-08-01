@@ -121,7 +121,15 @@ jobs:
       # suite green throughout, because unit tests exercise functions
       # and those were broken journeys. Each of the four was replayed as
       # a mutation and this file caught all four.
-      - name: End-to-end smoke (run -> serve -> export)
+      # v2.45 — ffmpeg is what makes the video journey run instead of
+      # skip. Without it _tiny_video() bails out and the four new
+      # journey tests report green while testing nothing, which is the
+      # skip-as-a-pass failure this repo has already been bitten by
+      # twice.
+      - name: Install ffmpeg (video journey)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+
+      - name: End-to-end smoke (run -> serve -> export, video -> cut -> render)
         run: pytest -q -m "not slow" tests/test_e2e_smoke.py
 
   realmodel:

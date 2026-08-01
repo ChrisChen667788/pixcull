@@ -7,7 +7,7 @@
 
 ## 0. 先解决一个环境事故
 
-跑之前外置盘**自己卸载了**(`/Volumes/One Touch` 不存在,写入报
+跑之前外置盘**自己卸载了**(`/Volumes/<drive>` 不存在,写入报
 `PermissionError` —— 其实是在往 `/Volumes/` 本身写)。2.1 GB 权重都在上面。
 
 差点重下 1.6 GB。`diskutil list` 显示盘**还物理连着**,只是卷被卸了:
