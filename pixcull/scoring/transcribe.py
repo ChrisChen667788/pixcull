@@ -110,9 +110,23 @@ class Segment:
     text: str
     speaker: str | None = None
     shot_index: int | None = None      # filled by align_to_shots
+    # v2.44 — one (start_s, end_s) per NON-PUNCTUATION character of
+    # ``text``, when the engine reported them.  Editing by text needs a
+    # real time for each character; without this the only honest cut
+    # granularity is the whole segment, and interpolating inside it
+    # invents precision the model never gave.  None means "this engine
+    # did not tell us" — see edit_model, which degrades rather than
+    # guesses.
+    char_spans: list[tuple[float, float]] | None = None
 
     def to_dict(self) -> dict:
         return {k: v for k, v in asdict(self).items() if v is not None}
+
+    def char_time(self, index: int) -> tuple[float, float] | None:
+        """Time span of the ``index``-th non-punctuation character."""
+        if not self.char_spans or not (0 <= index < len(self.char_spans)):
+            return None
+        return self.char_spans[index]
 
 
 @dataclass
@@ -348,16 +362,20 @@ def segments_from_char_timestamps(
 
     out: list[Segment] = []
     buf: list[str] = []
+    spans: list[tuple[float, float]] = []
     start_ms: float | None = None
     end_ms = 0.0
     i = 0                      # index into `pairs`, advances on body chars
 
     def _flush() -> None:
-        nonlocal buf, start_ms, end_ms
+        nonlocal buf, start_ms, end_ms, spans
         line = "".join(buf).strip()
         if line and start_ms is not None:
-            out.append(Segment(start_ms / 1000.0, end_ms / 1000.0, line))
-        buf, start_ms = [], None
+            # v2.44 — carry the per-character spans onto the segment so
+            # "delete these words" can cut on real times.
+            out.append(Segment(start_ms / 1000.0, end_ms / 1000.0, line,
+                               char_spans=spans or None))
+        buf, start_ms, spans = [], None, []
 
     for ch in text:
         is_end, is_clause = ch in _SENT_END, ch in _CLAUSE
@@ -365,6 +383,8 @@ def segments_from_char_timestamps(
             if start_ms is None:
                 start_ms = float(pairs[i][0])
             end_ms = float(pairs[i][1])
+            spans.append((float(pairs[i][0]) / 1000.0,
+                          float(pairs[i][1]) / 1000.0))
             i += 1
         buf.append(ch)
         if is_end or (is_clause and len(buf) >= min_clause_chars):
@@ -400,8 +420,53 @@ def _paraformer_model():
     return _PARAFORMER_MODEL
 
 
-def _transcribe_paraformer(wav: Path, language: str = "zh") -> Transcript:
-    raw = _paraformer_model().generate(input=str(wav), batch_size_s=300)
+# v2.44 — contextual biasing.  SeACo-Paraformer (what `paraformer-zh`
+# resolves to) takes a hotword list and biases decoding towards it.
+#
+# This domain needs it in a specific way: shoot jargon is homophonous
+# with much commoner words, so a generic model hears 掌交 for 长焦, 被选
+# for 备选, 欠报 for 欠曝.  One wrong character ruins a whole subtitle
+# line, because "长焦端收一点" has no surrounding context to recover from.
+#
+# Measured on 10 held-out sentences the lexicon was never shown (2
+# voices, 270 reference characters): 7 errors -> 3, CER 2.59% -> 1.11%.
+# The terms it fixed there (欠曝, 同期声, 畸变) were not among the errors
+# used while writing it, which is the whole point of holding them out.
+_HOTWORDS_FILE = Path(__file__).parent / "data" / "asr_hotwords_zh.txt"
+
+
+def load_hotwords(extra: Sequence[str] | None = None) -> list[str]:
+    """The built-in Mandarin shoot lexicon, plus anything the caller adds.
+
+    ``extra`` is where shoot-specific vocabulary belongs — a venue name,
+    a couple's names, a scene label — which the generic list cannot know
+    and which is exactly what a photographer's own recordings are full
+    of.  Order is preserved and duplicates dropped.
+    """
+    out: list[str] = []
+    try:
+        for line in _HOTWORDS_FILE.read_text(encoding="utf-8").splitlines():
+            w = line.strip()
+            if w and not w.startswith("#"):
+                out.append(w)
+    except OSError as exc:
+        # Not fatal: biasing is an improvement, not a requirement. But say
+        # so — a silently empty lexicon looks exactly like "the feature
+        # does nothing", which is the failure this repo keeps hitting.
+        logger.warning("hotword lexicon unreadable at %s: %s",
+                       _HOTWORDS_FILE, exc)
+    out.extend(w for w in (extra or []) if w)
+    seen: set[str] = set()
+    return [w for w in out if not (w in seen or seen.add(w))]
+
+
+def _transcribe_paraformer(wav: Path, language: str = "zh", *,
+                           hotwords: Sequence[str] | None = None) -> Transcript:
+    words = load_hotwords(hotwords)
+    kw = {"batch_size_s": 300}
+    if words:
+        kw["hotword"] = " ".join(words)
+    raw = _paraformer_model().generate(input=str(wav), **kw)
     segments: list[Segment] = []
     for item in raw or []:
         # Tier 1 — sentence_info, which appears when a speaker model is
@@ -505,17 +570,30 @@ def transcribe(
     engine: str = "auto",
     language: str = "",
     cut_points: Sequence[float] | None = None,
+    hotwords: Sequence[str] | None = None,
 ) -> Transcript:
-    """Transcribe a video (or audio file), optionally aligned to shots."""
+    """Transcribe a video (or audio file), optionally aligned to shots.
+
+    ``hotwords`` adds shoot-specific vocabulary on top of the built-in
+    Mandarin lexicon.  Paraformer only — Whisper's prompt-based biasing
+    behaves differently enough that pretending the two are one option
+    would misrepresent what the flag does.
+    """
     media_path = Path(media_path)
     chosen = resolve_engine(engine)
+    if hotwords and chosen != PARAFORMER:
+        logger.info("hotwords ignored: engine %r does not support "
+                    "contextual biasing", chosen)
 
     with tempfile.TemporaryDirectory(prefix="pixcull_asr_") as td:
         if media_path.suffix.lower() in (".wav",):
             wav = media_path
         else:
             wav = extract_audio(media_path, Path(td) / "audio.wav")
-        result = _ENGINE_FUNCS[chosen](wav, language)
+        if chosen == PARAFORMER:
+            result = _transcribe_paraformer(wav, language, hotwords=hotwords)
+        else:
+            result = _ENGINE_FUNCS[chosen](wav, language)
 
     if cut_points:
         result.segments = align_to_shots(result.segments, cut_points)
@@ -548,6 +626,16 @@ def load_transcript(output_dir: Path) -> Transcript | None:
                           float(s.get("end_s", 0)),
                           str(s.get("text", "")),
                           speaker=s.get("speaker"),
-                          shot_index=s.get("shot_index"))
+                          shot_index=s.get("shot_index"),
+                          # v2.44 — read back as TUPLES. JSON has no
+                          # tuple, so a plain load gives lists. Dropping
+                          # this field entirely was the first bug the CLI
+                          # journey caught: in-memory editing was
+                          # word-level, and reloading the very same
+                          # transcript silently downgraded it to
+                          # segment-level while every unit test passed.
+                          char_spans=[(float(a), float(b))
+                                      for a, b in (s.get("char_spans") or [])]
+                          or None)
                   for s in d.get("segments", [])],
         engine=d.get("engine", ""), language=d.get("language", ""))

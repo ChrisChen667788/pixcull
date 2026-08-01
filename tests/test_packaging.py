@@ -55,6 +55,11 @@ MUST_HAVE_DATA = (
     "pixcull/report/templates/results.html",
     "pixcull/locale/zh_CN.json",
     "pixcull/scoring/data/audio_tagger_thresholds.json",
+    # v2.44 — added the day the .txt lexicon was written, because the
+    # allowlist globbed data/*.json and dropped it. Every new runtime
+    # data file needs a line here; that is the cost of an allowlist, and
+    # it is cheaper than shipping a feature that silently does nothing.
+    "pixcull/scoring/data/asr_hotwords_zh.txt",
     "pixcull/scoring/templates/scene_templates.yaml",
 )
 

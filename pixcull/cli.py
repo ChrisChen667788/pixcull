@@ -360,6 +360,11 @@ def transcribe(
         help="Tag each line with the shot it starts in (needs "
              "pixcull[shots]); makes 'jump to this line' land on a real "
              "shot rather than mid-cut"),
+    hotword: list[str] = typer.Option(
+        [], "--hotword", "-H",
+        help="Bias recognition towards a term (repeatable). Shoot-specific "
+             "vocabulary — a venue, a couple's names — on top of the "
+             "built-in Mandarin lexicon. Paraformer only."),
 ) -> None:
     """Transcribe speech to transcript.json + an SRT sidecar.
 
@@ -383,7 +388,7 @@ def transcribe(
 
     try:
         result = _run(media, engine=engine, language=language,
-                      cut_points=cut_points)
+                      cut_points=cut_points, hotwords=hotword)
     except TranscriptionUnavailable as exc:
         # escape(): rich reads "[asr]" as a style tag and swallows it,
         # which turned the install hint into `pip install "pixcull"` —
@@ -1375,3 +1380,75 @@ def library_prune_cmd(
         raise typer.Exit(1)
     res = LX.prune(lib, run_id=run)
     console.print(f"removed {res['removed']}, {res['remaining']} remaining")
+
+
+@app.command(name="cut")
+def cut(
+    run_dir: Path = typer.Argument(..., exists=True, file_okay=False,
+                                   help="Run dir holding transcript.json"),
+    drop_line: list[int] = typer.Option(
+        [], "--drop-line", "-d",
+        help="Transcript line to strike (0-based, repeatable)"),
+    drop_chars: list[str] = typer.Option(
+        [], "--drop-chars",
+        help="Strike characters within a line: LINE:FIRST-LAST "
+             "(0-based, inclusive). Needs an engine that reports "
+             "per-character times."),
+    source: str = typer.Option("source.mp4", "--source",
+                               help="Clip name written into the EDL"),
+    fps: float = typer.Option(25.0, "--fps"),
+    edl: Optional[Path] = typer.Option(None, "--edl",
+                                       help="Write a CMX-3600 EDL here"),
+) -> None:
+    """Cut a clip by striking transcript text.
+
+    v2.44 — the counterpart to `transcribe`: that one tells you what was
+    said, this one removes it. Deletions are layered over an immutable
+    transcript, so `edit.json` is a record of decisions, not a mangled
+    copy of the source.
+    """
+    from pixcull.scoring.edit_model import EditError, EditSession
+    from pixcull.scoring.transcribe import load_transcript
+
+    tr = load_transcript(run_dir)
+    if tr is None or not tr.segments:
+        console.print(
+            f"[red]no transcript in {run_dir}[/] "
+            f"[dim]— run `pixcull transcribe` first[/dim]")
+        raise typer.Exit(code=1)
+
+    sess = EditSession(tr)
+    console.print(
+        f"[dim]{len(tr.segments)} lines · {sess.duration():.1f}s · "
+        f"{sess.precision}-level edits available[/dim]")
+
+    try:
+        # Character ranges first: striking a whole line afterwards would
+        # make an index the user typed refer to a line that is already
+        # gone, and silently cutting the wrong words is the failure this
+        # command exists to avoid.
+        for spec in drop_chars:
+            try:
+                line, rng = spec.split(":", 1)
+                first, last = rng.split("-", 1)
+                sess.delete_chars(int(line), int(first), int(last))
+            except ValueError as exc:
+                console.print(f"[red]bad --drop-chars {escape(spec)!r}: "
+                              f"{escape(str(exc))}[/]")
+                raise typer.Exit(code=2) from None
+        for i in drop_line:
+            sess.delete_segment(i)
+    except EditError as exc:
+        console.print(f"[red]{escape(str(exc))}[/]")
+        raise typer.Exit(code=2) from None
+
+    (run_dir / "edit.json").write_text(sess.dumps(), encoding="utf-8")
+    console.print(f"[green]✓[/] {sess.duration():.1f}s kept "
+                  f"({len(sess.kept_spans())} clips)")
+    console.print(f"  [dim]{run_dir / 'edit.json'}[/dim]")
+
+    if edl:
+        from pixcull.io.reel_assembly import build_edl
+        edl.write_text(build_edl(sess.to_clips(), source, fps),
+                       encoding="utf-8")
+        console.print(f"  [dim]{edl}[/dim]")

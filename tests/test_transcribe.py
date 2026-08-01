@@ -16,6 +16,7 @@ import types
 
 import pytest
 
+import pixcull.scoring.transcribe as T
 from pixcull.scoring.transcribe import (
     PARAFORMER, WHISPER, Segment, Transcript, TranscriptionUnavailable,
     align_to_shots, available_engines, load_transcript, resolve_engine,
@@ -383,3 +384,51 @@ def test_video_payload_includes_transcript_key():
     assert "load_transcript(run_dir)" in src, (
         "the first draft passed a variable that didn't exist and a bare "
         "except swallowed the NameError")
+
+
+# ==========================================================================
+# v2.44 — contextual biasing (hotwords)
+# ==========================================================================
+
+def test_builtin_lexicon_is_not_empty():
+    """An empty lexicon is indistinguishable from the feature being off.
+
+    That is precisely how this repo's recurring defect looks, so assert
+    the file actually parses to terms rather than trusting it exists.
+    """
+    words = T.load_hotwords()
+    assert len(words) > 80, f"lexicon parsed to only {len(words)} terms"
+    # Spot-check the three the held-out measurement showed it fixing.
+    for w in ("欠曝", "同期声", "畸变"):
+        assert w in words, f"{w} missing from the shipped lexicon"
+
+
+def test_lexicon_skips_comments_and_blanks():
+    words = T.load_hotwords()
+    assert not any(w.startswith("#") for w in words)
+    assert all(w.strip() == w and w for w in words)
+
+
+def test_caller_hotwords_append_and_dedupe():
+    base = T.load_hotwords()
+    got = T.load_hotwords(["海淀婚礼堂", "长焦", "", "海淀婚礼堂"])
+    assert got[:len(base)] == base, "built-in terms must keep their order"
+    assert got.count("海淀婚礼堂") == 1, "duplicates should collapse"
+    assert got.count("长焦") == 1, "a caller repeat of a built-in is not new"
+    assert "" not in got
+
+
+def test_lexicon_is_ascii_free_chinese_terms():
+    """A stray English word here biases decoding towards nonsense.
+
+    One slipped in while the file was being written; this pins it.
+    """
+    bad = [w for w in T.load_hotwords() if w.isascii()]
+    assert not bad, f"non-Chinese entries in the Mandarin lexicon: {bad}"
+
+
+def test_missing_lexicon_degrades_to_caller_terms(monkeypatch, tmp_path):
+    """Biasing is an improvement, not a requirement."""
+    monkeypatch.setattr(T, "_HOTWORDS_FILE", tmp_path / "nope.txt")
+    assert T.load_hotwords() == []
+    assert T.load_hotwords(["草坪仪式"]) == ["草坪仪式"]

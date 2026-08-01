@@ -1,0 +1,115 @@
+# v2.44 — Mandarin contextual-biasing lexicon for Paraformer.
+#
+# SeACo-Paraformer (what `paraformer-zh` resolves to) accepts a hotword
+# list and biases decoding towards it. Generic Mandarin models get this
+# domain wrong in a specific way: shoot jargon is homophonous with much
+# commoner words, so 长焦 becomes 掌交, 备选 becomes 被选, 机位 becomes
+# 鸡位. One wrong character ruins a whole subtitle line, because an
+# imperative like "长焦端收一点" has no surrounding context to recover
+# from.
+#
+# This list is DOMAIN VOCABULARY chosen up front, not a list of observed
+# mistakes. Fitting it to the errors of an evaluation set would make
+# that set meaningless — measured generalisation on held-out sentences
+# is in ROADMAP-v2.44-charter.md.
+#
+# Nouns and fixed terms only. Biasing towards function words (一下, 一点)
+# distorts ordinary speech for no gain; those errors are left alone.
+#
+# One term per line; blank lines and #-comments ignored.
+
+# ── camera / optics ────────────────────────────────────────────────
+机位
+主机位
+第二机位
+曝光
+欠曝
+过曝
+光圈
+大光圈
+快门
+快门速度
+感光度
+白平衡
+对焦
+对焦点
+自动对焦
+手动对焦
+长焦
+广角
+定焦
+变焦
+焦段
+景深
+虚化
+畸变
+逆光
+顺光
+侧光
+色温
+直方图
+包围曝光
+
+# ── lighting / grip ────────────────────────────────────────────────
+补光灯
+反光板
+柔光罩
+柔光箱
+闪光灯
+外拍灯
+灯架
+三脚架
+稳定器
+滑轨
+遮光罩
+
+# ── capture / workflow ─────────────────────────────────────────────
+连拍
+抓拍
+跟拍
+摆拍
+构图
+特写
+近景
+中景
+全景
+远景
+空镜
+同期声
+素材
+存储卡
+备选
+精选
+废片
+穿帮
+后期
+调色
+修图
+剪辑
+交片
+
+# ── wedding ceremony ───────────────────────────────────────────────
+新郎
+新娘
+伴郎
+伴娘
+接亲
+堵门
+迎宾
+仪式
+证婚人
+主婚人
+交换戒指
+宣誓
+敬酒
+改口茶
+全家福
+合影
+婚纱
+头纱
+裙摆
+捧花
+布置
+签到台
+主舞台
+背景板
