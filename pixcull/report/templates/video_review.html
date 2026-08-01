@@ -149,6 +149,14 @@ padding:1px 6px;font-size:11px;color:var(--ink)}
       <input type="search" id="txFind" placeholder="搜台词…"
              aria-label="在转录里搜索">
       <div class="tx-list" id="txList"></div>
+      <div class="tx-edit" id="txEdit" style="display:none">
+        <div class="tx-edit-bar">
+          <button type="button" id="txUndo" disabled>↶ 撤销</button>
+          <button type="button" id="txRedo" disabled>↷ 重做</button>
+          <a id="txEdl" href="#" download>导出 EDL</a>
+        </div>
+        <div class="tx-edit-stat" id="txStat"></div>
+      </div>
     </div>
     <h2 id="reelHead">Reel 候选</h2>
     <div class="list" id="reelList"></div>
@@ -160,32 +168,78 @@ padding:1px 6px;font-size:11px;color:var(--ink)}
   <kbd>[</kbd>/<kbd>]</kbd> 上/下个候选 · <kbd>Home</kbd>/<kbd>End</kbd> 首/尾帧
 </footer>
 <style>
-  /* v2.43-P1 — transcript panel. Tokens only: v2.37 had to undo a page
-     that invented its own palette. */
+  /* v2.43-P1 — transcript panel.
+     v2.44-P2: these rules originally used the shared design tokens
+     (--fg-2 / --muted / --surface-2 / --border / --focus-ring …).  This
+     page does NOT get those: it declares its own palette in the :root
+     block at the top (--ink / --dim / --line / --panel-solid /
+     --indigo).  Every one of those var() calls was therefore undefined,
+     the declaration was invalid at computed-value time, and the property
+     silently inherited instead.  It looked acceptable, so nobody
+     noticed — a live DOM probe did, the same way the v2.3.1 palette leak
+     was found.  Hover backgrounds in particular did nothing at all.
+     tests/test_video_review_css.py now fails on any undefined variable
+     in this template. */
   .tx { margin-bottom: 18px; }
   .tx h2 { display: flex; align-items: baseline; gap: 8px; }
-  .tx-eng { font-size: 10px; font-weight: 400; color: var(--muted); }
+  .tx-eng { font-size: 10px; font-weight: 400; color: var(--dim); }
   #txFind {
     width: 100%; margin: 0 0 8px; padding: 6px 10px; font: inherit;
-    font-size: 12px; color: var(--fg); background: var(--bg-card);
-    border: 1px solid var(--border); border-radius: var(--radius-md, 6px);
+    font-size: 12px; color: var(--ink); background: var(--panel-solid);
+    border: 1px solid var(--line); border-radius: 6px;
   }
-  #txFind:focus { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+  #txFind:focus { outline: 2px solid var(--indigo2); outline-offset: 1px; }
   .tx-list { max-height: 320px; overflow-y: auto; }
   .tx-line {
     display: grid; grid-template-columns: 52px 1fr; gap: 8px;
     width: 100%; text-align: left; padding: 5px 6px; cursor: pointer;
     background: none; border: 0; border-radius: 5px;
-    color: var(--fg-2); font: inherit; font-size: 12px; line-height: 1.5;
+    color: var(--ink); font: inherit; font-size: 12px; line-height: 1.5;
   }
-  .tx-line:hover { background: var(--surface-2); color: var(--fg); }
-  .tx-line:focus-visible { outline: 2px solid var(--focus-ring);
+  .tx-line:hover { background: rgba(213,181,132,0.10); color: var(--ink); }
+  .tx-line:focus-visible { outline: 2px solid var(--indigo2);
                            outline-offset: -2px; }
-  .tx-line.active { background: var(--accent-soft); color: var(--fg); }
-  .tx-t { color: var(--muted); font-variant-numeric: tabular-nums;
+  .tx-line.active { background: rgba(213,181,132,0.18); color: var(--ink); }
+  .tx-t { color: var(--dim); font-variant-numeric: tabular-nums;
           font-size: 11px; }
-  .tx-line.hit .tx-x { background: var(--accent-soft); border-radius: 3px; }
-  .tx-empty { color: var(--muted); font-size: 12px; padding: 6px; }
+  .tx-line.hit .tx-x { background: rgba(213,181,132,0.18); border-radius: 3px; }
+  .tx-empty { color: var(--dim); font-size: 12px; padding: 6px; }
+  /* v2.44-P2 — edit by text. A struck line stays visible and readable:
+     the photographer needs to see WHAT they cut to decide whether to put
+     it back, so this dims and strikes rather than removing the row. */
+  .tx-line.cut > span:last-child { text-decoration: line-through;
+                                   opacity: .45; }
+  .tx-line.cut .tx-t { opacity: .45; }
+  .tx-cut { flex: 0 0 auto; margin-left: 6px; padding: 0 4px;
+            background: none; border: 0; border-radius: 4px; cursor: pointer;
+            color: var(--dim); font: inherit; font-size: 11px; }
+  .tx-cut:hover { background: rgba(213,181,132,0.10); color: var(--ink); }
+  .tx-cut:focus-visible { outline: 2px solid var(--indigo2);
+                          outline-offset: 1px; }
+  .tx-line { align-items: start; }
+  .tx-row { display: flex; align-items: start; gap: 2px; }
+  .tx-row > .tx-line { flex: 1 1 auto; }
+  .tx-edit { margin-top: 8px; padding-top: 8px;
+             border-top: 1px solid var(--line); }
+  .tx-edit-bar { display: flex; gap: 6px; align-items: center; }
+  .tx-edit-bar button, .tx-edit-bar a {
+    padding: 3px 8px; font: inherit; font-size: 11px; cursor: pointer;
+    color: var(--ink); background: var(--panel-solid);
+    border: 1px solid var(--line); border-radius: 6px;
+    text-decoration: none;
+  }
+  .tx-edit-bar button:hover:not(:disabled),
+  .tx-edit-bar a:hover { background: rgba(213,181,132,0.10); color: var(--ink); }
+  .tx-edit-bar button:disabled { opacity: .4; cursor: default; }
+  .tx-edit-bar button:focus-visible, .tx-edit-bar a:focus-visible {
+    outline: 2px solid var(--indigo2); outline-offset: 1px; }
+  .tx-edit-stat { margin-top: 6px; color: var(--dim); font-size: 11px; }
+  .tx-sel { position: absolute; z-index: 40; padding: 4px 9px;
+            font-size: 11px; cursor: pointer; color: var(--ink);
+            background: var(--panel-solid); border: 1px solid var(--line);
+            border-radius: 6px;
+            box-shadow: 0 2px 10px rgba(0,0,0,.28); }
+  @media print { .tx-edit, .tx-cut, .tx-sel { display: none !important; } }
 </style>
 <script>
 "use strict";
@@ -215,7 +269,143 @@ function initTranscript(d){
     return;
   }
   renderTranscript('');
-  $('txFind').addEventListener('input', e=>renderTranscript(e.target.value));
+  $('txFind').addEventListener('input', e=>{
+    renderTranscript(e.target.value);
+    paintEdit();          // a re-render loses the struck state otherwise
+  });
+  initEdit();
+}
+
+/* ── v2.44-P2 — edit by text ──────────────────────────────────────────
+   The op log lives here; every span calculation happens on the server,
+   through the same EditSession the CLI uses. Re-deriving kept spans in
+   JS would be a second implementation of the semantics and the two
+   would drift.
+
+   EDIT_VIEW is whatever the server last told us to draw. */
+let EDIT_OPS=[], EDIT_REDO=[], EDIT_VIEW=null;
+
+/* Must match edit_model._PUNCT exactly: char_spans indexes
+   NON-punctuation characters, so a mismatch here silently cuts the
+   wrong words. */
+const TX_PUNCT = '，,。.！!？?、；;：: \t\n';
+function bodyIndex(text, offset){
+  // How many non-punctuation characters precede `offset`.
+  let n=0;
+  for(let i=0;i<offset && i<text.length;i++)
+    if(TX_PUNCT.indexOf(text[i])<0) n++;
+  return n;
+}
+function bodyLen(text){ return bodyIndex(text, text.length); }
+
+function pushOp(op){
+  EDIT_OPS.push(op); EDIT_REDO.length=0; syncEdit();
+}
+function syncEdit(){
+  return fetch('/video/edit/'+encodeURIComponent(RUN_ID), {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ops: EDIT_OPS})
+    }).then(r=>r.json()).then(v=>{
+      if(!v.ok){ $('txStat').textContent = '编辑失败:'+(v.error||''); return; }
+      EDIT_VIEW = v; paintEdit();
+    }).catch(e=>{ $('txStat').textContent = '编辑失败:'+e; });
+}
+function paintEdit(){
+  const v=EDIT_VIEW; if(!v) return;
+  $('txEdit').style.display='';
+  $('txUndo').disabled = !EDIT_OPS.length;
+  $('txRedo').disabled = !EDIT_REDO.length;
+  $('txEdl').href = '/video/edl/'+encodeURIComponent(RUN_ID);
+  const gone = v.segments.filter(x=>x.gone).length;
+  $('txStat').textContent =
+    '保留 ' + (+v.kept_s).toFixed(1) + 's · ' + v.n_clips + ' 段' +
+    (gone ? ' · 已删 ' + gone + ' 行' : '') +
+    ' · ' + (v.precision === 'word' ? '可按词删' : '仅整行删');
+  // Repaint the struck state without rebuilding the list, so a search
+  // filter and the scroll position both survive an edit.
+  const by = {}; v.segments.forEach(x=>{ by[x.i]=x; });
+  $('txList').querySelectorAll('.tx-line').forEach(el=>{
+    const x = by[+el.dataset.i];
+    el.classList.toggle('cut', !!(x && x.gone));
+    if(x && !x.gone && x.kept_text && x.kept_text !== TX[+el.dataset.i].text){
+      el.lastElementChild.textContent = x.kept_text;
+    }
+  });
+}
+
+function cutSegment(i){
+  const s=TX[i];
+  pushOp({kind:'delete', label:(s.text||'').slice(0,24),
+          spans:[[+s.start_s||0, +s.end_s||0]]});
+}
+
+/* Word-level: map a text selection inside one line back to character
+   indices, then let the server turn those into times. Only offered when
+   the server said precision === 'word' — otherwise the times do not
+   exist and a selection UI would be a lie. */
+let TX_SELBTN=null;
+function clearSelBtn(){ if(TX_SELBTN){ TX_SELBTN.remove(); TX_SELBTN=null; } }
+function onTxSelect(){
+  clearSelBtn();
+  if(!EDIT_VIEW || EDIT_VIEW.precision!=='word') return;
+  const sel=window.getSelection();
+  if(!sel || sel.isCollapsed || !sel.rangeCount) return;
+  const r=sel.getRangeAt(0);
+  const host=r.startContainer.parentElement &&
+             r.startContainer.parentElement.closest('.tx-line');
+  if(!host || !host.contains(r.endContainer)) return;   // spans two lines
+  const i=+host.dataset.i, full=TX[i] && TX[i].text || '';
+  const span=host.lastElementChild;
+  if(!span || !span.contains(r.startContainer)) return;
+  const a=Math.min(r.startOffset, r.endOffset),
+        b=Math.max(r.startOffset, r.endOffset);
+  const first=bodyIndex(full, a), last=bodyIndex(full, b)-1;
+  if(last<first) return;                    // punctuation only
+  const btn=document.createElement('button');
+  btn.className='tx-sel'; btn.type='button';
+  btn.textContent='删除所选';
+  const rect=r.getBoundingClientRect();
+  btn.style.left=(rect.left+window.scrollX)+'px';
+  btn.style.top=(rect.bottom+window.scrollY+4)+'px';
+  btn.addEventListener('mousedown', e=>{
+    e.preventDefault();
+    cutChars(i, first, last);
+    sel.removeAllRanges(); clearSelBtn();
+  });
+  document.body.appendChild(btn); TX_SELBTN=btn;
+}
+function cutChars(i, first, last){
+  // The server owns the character->time mapping; ask it, don't guess.
+  fetch('/video/edit/'+encodeURIComponent(RUN_ID), {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ops: EDIT_OPS, chars:{i:i, first:first, last:last}})
+  }).then(r=>r.json()).then(v=>{
+    if(!v.ok){ $('txStat').textContent='删除失败:'+(v.error||''); return; }
+    EDIT_OPS = v.ops || EDIT_OPS; EDIT_REDO.length=0;
+    EDIT_VIEW = v; paintEdit();
+  }).catch(e=>{ $('txStat').textContent='删除失败:'+e; });
+}
+
+function initEdit(){
+  $('txUndo').addEventListener('click', ()=>{
+    if(!EDIT_OPS.length) return;
+    EDIT_REDO.push(EDIT_OPS.pop()); syncEdit();
+  });
+  $('txRedo').addEventListener('click', ()=>{
+    if(!EDIT_REDO.length) return;
+    EDIT_OPS.push(EDIT_REDO.pop()); syncEdit();
+  });
+  document.addEventListener('selectionchange', onTxSelect);
+  document.addEventListener('mousedown', e=>{
+    if(TX_SELBTN && e.target!==TX_SELBTN) clearSelBtn();
+  });
+  // Load whatever was saved last time, so closing the tab is not a
+  // silent discard of the photographer's cuts.
+  fetch('/video/edit/'+encodeURIComponent(RUN_ID))
+    .then(r=>r.json()).then(v=>{
+      if(!v.ok) return;
+      EDIT_OPS = v.ops || []; EDIT_VIEW = v; paintEdit();
+    }).catch(()=>{});
 }
 
 function renderTranscript(q){
@@ -232,11 +422,20 @@ function renderTranscript(q){
       ? txt.replace(new RegExp('('+needle.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','ig'),
                     '<span class="tx-x">$1</span>')
       : txt;
-    return '<button class="tx-line'+(needle?' hit':'')+'" data-i="'+i+
+    // The row stays a single-purpose "seek here" button and the scissors
+    // is a separate control: overloading one click with both meanings is
+    // how a scrub turns into an accidental cut.
+    return '<div class="tx-row">'+
+           '<button class="tx-line'+(needle?' hit':'')+'" data-i="'+i+
            '" data-t="'+(+s.start_s||0)+'" title="跳到 '+fmtT(+s.start_s||0)+'">'+
            '<span class="tx-t">'+fmtT(+s.start_s||0)+'</span>'+
-           '<span>'+body+'</span></button>';
+           '<span>'+body+'</span></button>'+
+           '<button class="tx-cut" data-cut="'+i+'" type="button" '+
+           'title="删除这一行" aria-label="删除这一行">✂</button></div>';
   }).join('');
+  $('txList').querySelectorAll('.tx-cut').forEach(el=>{
+    el.addEventListener('click', ()=>cutSegment(+el.dataset.cut));
+  });
   $('txList').querySelectorAll('.tx-line').forEach(el=>{
     el.addEventListener('click', ()=>{
       // Same seek primitive the scrubber and reel list already use, so

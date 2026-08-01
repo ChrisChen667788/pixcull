@@ -4818,6 +4818,8 @@ class _Handler(BaseHTTPRequestHandler):
         ("/thumb/", "_serve_image", "raw", (_THUMB_SIZE,)),
         ("/full/", "_serve_image", "raw", (_FULL_SIZE,)),
         ("/face_crop/", "_serve_face_crop", "raw", ()),
+        ("/video/edit/", "_serve_video_edit", "tail", ()),
+        ("/video/edl/", "_serve_video_edl", "tail", ()),
         ("/video/data/", "_serve_video_data", "tail", ()),
         ("/video/frame/", "_serve_video_frame", "tail", ()),
         ("/video/", "_serve_video_review", "tail", ()),
@@ -4903,6 +4905,9 @@ class _Handler(BaseHTTPRequestHandler):
         if path.startswith("/video/reel_decision/"):
             return self._handle_reel_decision(
                 path[len("/video/reel_decision/"):])
+        # v2.44-P2 — edit by text. Body is the whole op log.
+        if path.startswith("/video/edit/"):
+            return self._handle_video_edit(path[len("/video/edit/"):])
         if path == "/analyze":
             return self._handle_analyze_post()
         if path == "/scan_local":
@@ -7804,6 +7809,151 @@ class _Handler(BaseHTTPRequestHandler):
         n_profile = _rebuild_reel_profile()
         out = json.dumps({"ok": True, "n_profile": n_profile}).encode()
         self._send_json(200, out)
+
+    # v2.44-P2 — edit by text, in the browser.
+    #
+    # The client holds the operation log and posts the whole of it; the
+    # server replays it through EditSession and returns what to draw.
+    # That keeps ONE implementation of the semantics. Re-deriving kept
+    # spans in JavaScript would be a second one, and the two would drift
+    # — which is exactly how the results page and the CLI exporter
+    # disagreed before v2.40 folded them onto shared code.
+    #
+    # The log is small (one entry per user action), so posting it whole
+    # also means no server-side session state to get out of step with
+    # what the page is showing.
+    def _edit_session_for(self, rid: str):
+        """(EditSession, run_dir) or (None, None) with the error sent."""
+        from pixcull.scoring.edit_model import EditSession
+        from pixcull.scoring.transcribe import load_transcript
+
+        run_dir = _run_dir(rid)
+        if not run_dir.exists():
+            self.send_error(404, "no such run")
+            return None, None
+        tr = load_transcript(run_dir)
+        if tr is None or not tr.segments:
+            self._send_json(404, json.dumps(
+                {"ok": False, "error": "no transcript"}).encode())
+            return None, None
+        return EditSession(tr), run_dir
+
+    def _edit_view(self, sess) -> dict:
+        """Everything the panel needs to render, derived server-side."""
+        gone = sess.deleted()
+        segs = []
+        for i, seg in enumerate(sess.transcript.segments):
+            kept = sess._surviving_text(seg, gone)
+            segs.append({"i": i, "kept_text": kept,
+                         "gone": not kept.strip()})
+        return {"ok": True,
+                "precision": sess.precision,
+                "kept_s": round(sess.duration(), 3),
+                "n_clips": len(sess.kept_spans()),
+                "can_undo": sess.can_undo,
+                "n_ops": len(sess.ops),
+                "segments": segs}
+
+    def _serve_video_edit(self, tail: str) -> None:
+        """GET /video/edit/<run_id> — the stored edit, or an empty one."""
+        rid = _safe_run_id(tail)
+        if rid is None:
+            return self._send_json(400, json.dumps(
+                {"ok": False, "error": "bad run_id"}).encode())
+        sess, run_dir = self._edit_session_for(rid)
+        if sess is None:
+            return
+        from pixcull.scoring.edit_model import EditError, EditSession
+        saved = run_dir / "edit.json"
+        if saved.is_file():
+            try:
+                sess = EditSession.from_dict(
+                    json.loads(saved.read_text(encoding="utf-8")),
+                    sess.transcript)
+            except (OSError, ValueError, EditError) as exc:
+                # Narrow, and loud. A corrupt edit.json silently becoming
+                # "no edits" would look like the photographer's work was
+                # thrown away without saying so.
+                print(f"[edit] unreadable {saved}: {exc}")
+        view = self._edit_view(sess)
+        view["ops"] = [o.to_dict() for o in sess.ops]
+        self._send_json(200, json.dumps(view, ensure_ascii=False).encode())
+
+    def _handle_video_edit(self, tail: str) -> None:
+        """POST /video/edit/<run_id> {ops:[...]} — replay, persist, return."""
+        from pixcull.scoring.edit_model import EditError, EditSession
+
+        rid = _safe_run_id(tail)
+        if rid is None:
+            return self._send_json(400, json.dumps(
+                {"ok": False, "error": "bad run_id"}).encode())
+        sess, run_dir = self._edit_session_for(rid)
+        if sess is None:
+            return
+        clen = int(self.headers.get("Content-Length", "0") or "0")
+        # An op log is one small record per user action; a megabyte of
+        # them is not a transcript edit, it is someone poking the API.
+        if clen <= 0 or clen > 262_144:
+            self.send_error(400, "expected a JSON body under 256 KB")
+            return
+        try:
+            body = json.loads(self.rfile.read(clen).decode("utf-8"))
+            sess = EditSession.from_dict(
+                {"schema": "pixcull.edit/v1",
+                 "ops": body.get("ops") or []}, sess.transcript)
+            # Word-level cut: the page sends character indices and the
+            # server does the character->time mapping, because only it
+            # has char_spans. Doing it client-side would mean shipping
+            # every timestamp to the browser and duplicating the
+            # punctuation rule that decides what those indices count.
+            ch = body.get("chars")
+            if ch:
+                sess.delete_chars(int(ch["i"]), int(ch["first"]),
+                                  int(ch["last"]))
+        except (UnicodeDecodeError, ValueError, TypeError, KeyError) as exc:
+            self._send_json(400, json.dumps(
+                {"ok": False, "error": f"bad body: {exc}"}).encode())
+            return
+        except EditError as exc:
+            self._send_json(400, json.dumps(
+                {"ok": False, "error": str(exc)}).encode())
+            return
+        (run_dir / "edit.json").write_text(sess.dumps(), encoding="utf-8")
+        view = self._edit_view(sess)
+        # Echo the log back: a character cut is appended server-side, so
+        # the page cannot know its own new state without being told.
+        view["ops"] = [o.to_dict() for o in sess.ops]
+        self._send_json(200, json.dumps(view, ensure_ascii=False).encode())
+
+    def _serve_video_edl(self, tail: str) -> None:
+        """GET /video/edl/<run_id> — the current edit as a CMX-3600 EDL."""
+        from pixcull.io.reel_assembly import build_edl
+        from pixcull.scoring.edit_model import EditError, EditSession
+
+        rid = _safe_run_id(tail)
+        if rid is None:
+            self.send_error(400, "bad run_id")
+            return
+        sess, run_dir = self._edit_session_for(rid)
+        if sess is None:
+            return
+        saved = run_dir / "edit.json"
+        if saved.is_file():
+            try:
+                sess = EditSession.from_dict(
+                    json.loads(saved.read_text(encoding="utf-8")),
+                    sess.transcript)
+            except (OSError, ValueError, EditError) as exc:
+                print(f"[edit] unreadable {saved}: {exc}")
+        body = build_edl(sess.to_clips(), f"{rid}.mp4", 25.0,
+                         title=f"PixCull {rid}").encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Disposition",
+                         f'attachment; filename="{rid}.edl"')
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
     def _serve_video_data(self, tail: str) -> None:
         """GET /video/data/<run_id> — bundle manifest + temporal + reel."""
