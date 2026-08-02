@@ -73,11 +73,9 @@ ffmpeg**,所以不装的话这四条会**报绿但什么也没测** —— 正�
     然后渲染死于含糊的 `no clips selected for the reel`。这条变异同时说明
     了守卫在防什么。
 - 版本 2.44.3 → 2.45.0 lockstep。
-- **改动涉及的 7 个测试文件全绿**(transcribe / edit_model / edit_render /
-  video_edit_routes / packaging / repo_hygiene / video_review_css)。
-- **全量门禁未在本机取得可信结果**:负载一度到 **107**,所有起子进程的
-  测试都是 `subprocess.TimeoutExpired after 60 seconds`,不是代码问题。
-  机器空闲后需重跑一次全量确认。
+- **全量门禁 1713 passed, 5 skipped, 0 failed**(机器空闲后复跑,
+  负载 ~10)。5 条 skip 是老面孔:2 face-fixture + 3 zeroconf。
+- E2E 冒烟 9 条全过。
 
 ### 卫生 lint 在它该起作用的地方起作用了
 
@@ -94,6 +92,17 @@ v2.43.3 建这条 lint 就是防这个,已脱敏为 `/Volumes/<drive>`。
 外加 macOS 存储管理插件两个进程。`python -m pixcull --help` 都要 62 秒。
 
 **慢是环境造成的,不是这个文件的性质**,所以没有据此把测试改薄。
+
+**机器空闲后复跑,这个判断被数字证实了:**
+
+| | 负载 107 时 | 负载 ~10 时 |
+|---|---|---|
+| e2e 全套墙钟 | **2335s** | **98s** |
+| 同一套的 user CPU | 105s | **87s** |
+
+**CPU 几乎没变,墙钟差 24 倍** —— 测试从来不慢,是机器慢。当时那批
+`subprocess.TimeoutExpired after 60 seconds` 也全部消失。
+
 这和 vitest 那次"高负载下 worker 起不来伪装成代码坏了"是同一类 ——
 **先看 uptime,再改设计**。
 
