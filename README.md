@@ -52,6 +52,70 @@
 
 ## What's new
 
+**v2.45** — **the video chain is in the end-to-end smoke.** Only four of
+seventeen CLI commands had a journey test, and the whole video block added
+across v2.42–v2.44.3 had none — the same "advertised but unreachable" gap the
+2031Q1 audit named, this time opened by the work that closed the audit's own
+recommendations. Four tests now drive `video → cut --render`, asserting the
+render is *shorter* than the source (equal length means the edit was ignored
+and the clip merely re-encoded) and that an edit keeping nothing is refused
+rather than emitting a zero-length file. Both mutations reproduce the
+historical symptoms exactly. CI installs ffmpeg, without which the four would
+skip and report green having tested nothing.
+
+**v2.44.3** — **speaker diarization, verified and stopped from lying.** The
+adapter's `sentence_info`/`spk` branch had existed for three versions and never
+run. It does produce labels — but every segment came back as speaker 0, and no
+amount of acoustically distinct material or explicit speaker counts changed
+that. FunASR's clusterer hard-returns "everybody is speaker 0" under 20
+embeddings, *before* looking at them; a 59s dialogue clears the bar and
+separates two voices with 18/18 lines correct. Since its output is identical
+whether one person spoke or the clip was too short to tell, PixCull now reports
+`speaker=None` in both cases rather than asserting a finding the model never
+made.
+
+**v2.44.2** — **one-click render**: `pixcull cut --render`, and an 出片 button
+in the review page. Deliberately a hard cut, not the reel's half-second
+dissolve — the kept spans are usually two halves of one sentence, and a
+dissolve there eats the words you chose to keep. Verified by feeding the
+rendered mp4 back through ASR: the deleted words are gone from the audio and
+the kept ones survive.
+
+**v2.44.1** — **edit by text in the browser** (screenshot below). Strike a line
+or select words inside one; the video goes with them. Word selection is offered
+only when the engine reported per-character times, because inventing them puts
+cuts on the wrong frames. Also fixed 32 CSS variable references in
+`video_review.html` that had never resolved — that page carries its own palette
+and the v2.43 transcript panel had been styled with the shared design tokens,
+so hover backgrounds silently did nothing.
+
+**v2.44** — **a Mandarin lexicon for shoot jargon, and the edit-by-text state
+model.** Generic ASR hears 掌交 for 长焦 and 被选 for 备选, and one wrong
+character ruins a subtitle line. An 88-term lexicon chosen from domain
+knowledge — not from the errors of the evaluation set — cuts held-out CER from
+2.59% to 1.11%, a 57% error reduction, on ten sentences it had never seen.
+`pixcull cut` layers deletions over an immutable transcript, so undo cannot
+leave the text disagreeing with the timeline.
+
+**v2.43.4** — **every published wheel contained no Python code.** The sdist
+allowlist had no `*.py` pattern and `python -m build` builds the wheel *from*
+the sdist, so nine releases shipped 35 data files and nothing else; the smoke
+test passed because it ran `import pixcull` from the checkout root and picked
+up the source tree. Nothing was ever installed from PyPI, so only direct
+Release downloads were affected. `tests/test_packaging.py` now builds both
+artifacts and looks inside them.
+
+**v2.43** — **transcription** (`pixcull transcribe`): Paraformer or Whisper
+behind an extra, `transcript.json` + an SRT sidecar, and click-a-line-to-seek
+in the video review page.
+
+**v2.42** — **shot-boundary detection** (`pixcull[shots]`, PySceneDetect,
+BSD-3), so a reel candidate no longer spans a hard cut.
+
+**v2.41** — **the end-to-end smoke test** the 2031Q1 audit put first: one
+journey through `run → serve → export`, driving the real CLI and a real HTTP
+server. All four of the audit's cited outages replay as red against it.
+
 **v2.40.2** — **dead stubs removed, plus a fresh design audit**
 ([`docs/DESIGN-AUDIT-2031Q1.md`](docs/DESIGN-AUDIT-2031Q1.md)). v2.40's guard
 only looked for `typer.Exit`, so three V0.3-era `NotImplementedError` stubs
@@ -809,6 +873,16 @@ PixCull is the alternative that flips all three:
 16. **Multi-user profiles.** Studio with two shooters? Each user has
     their own verticals + face library; shared team verticals for
     house style.
+17. **Video culling.** `pixcull video` scores a clip on the same
+    6 axes plus a temporal pass, finds reel candidates, and splits
+    them on real shot boundaries (`pixcull[shots]`) so a candidate
+    never spans a hard cut.
+18. **Transcription and edit-by-text.** `pixcull transcribe` writes
+    `transcript.json` + an SRT sidecar (Paraformer or Whisper, both
+    optional extras). Strike a line — or select words inside one —
+    and the video goes with the text; export an EDL for Premiere /
+    Resolve or render the cut directly. Mandarin ships with an
+    88-term shoot lexicon, and `--speakers` labels who is talking.
 
 ## Why it's different from a generic AI culling app
 
@@ -847,6 +921,27 @@ and you get this back. Each card carries a decision badge (keep /
 maybe / cull), a final composite score, the 6-axis rubric stars, the
 detected scene + style chips, and the V20 advice one-liner. The colored
 left edge is a glanceable decision indicator.
+
+### Transcript + edit by text (v2.43 – v2.44.2)
+
+![Transcript panel beside the video: one line struck out, one cut at word level, undo / redo / export EDL / render, and a kept-duration readout](docs/screenshots/24-transcript-edit.png)
+
+`pixcull transcribe` writes `transcript.json` and an SRT sidecar; the review
+page puts the lines beside the video. Click a line to seek to it. Strike a
+line with ✂, or select words inside one and delete just those — the video goes
+with the text, and the readout tells you what is left (`保留 11.8s · 3 段`).
+Undo and redo replay an operation log, so the transcript and the timeline
+cannot drift apart. Export a CMX-3600 EDL for Premiere or Resolve, or press
+出片 and get the cut mp4.
+
+Word-level selection appears only when the engine reported a real time span per
+character — Paraformer does, Whisper does not — because interpolating inside a
+segment invents precision the model never gave and lands cuts on the wrong
+frames. The panel says which mode it is in.
+
+> This capture is synthetic end to end: an ffmpeg test pattern with macOS TTS
+> speaking four on-set directions. Re-take it with
+> `scripts/brand/capture_transcript_edit.py`.
 
 ### Lightbox with V20 advice + sticky decision toolbar
 
@@ -1490,6 +1585,32 @@ Kodak Vision3 / Arri 709A / Teal-Orange / B&W),主画面 + 每个 reel
 
 ![照片 + 视频时间线 — 视频片段与照片按时间同轴排列,50 帧全部可点](docs/screenshots/23-video-timeline.png)
 
+
+### 🗣 转录 + 按文字剪(v2.43 – v2.44.2)
+
+![转录面板贴在画面右侧:一行被划掉、一行按词剪过、撤销/重做/导出 EDL/出片,以及保留时长读数](docs/screenshots/24-transcript-edit.png)
+
+`pixcull transcribe <片子.mp4>` 产出 `transcript.json` + SRT,审片页把台词
+排在画面旁边。**点一行跳到那一秒**;点 ✂ 划掉整行,或**选中行内几个字只删
+这几个字** —— 画面跟着文字一起没,读数实时告诉你还剩多少(`保留 11.8s ·
+3 段`)。撤销/重做重放操作日志,所以文字和时间轴不可能对不上。导出
+CMX-3600 EDL 进 Premiere / Resolve,或者按**出片**直接得到剪好的 mp4。
+
+**按词选只在引擎给了每字真实时间时才出现** —— Paraformer 有,Whisper 没有。
+在段内线性插值是在伪造模型没给过的精度,会把切点放到错误的帧上,所以宁可
+不提供;面板会显示当前是哪种模式。
+
+中文识别带一份 **88 条领域词表**(机位 / 曝光 / 备选 / 长焦 / 接亲 / 证婚人
+…):通用模型会把「长焦」听成「掌交」、「备选」听成「被选」,一个字错整条
+字幕就废。词表按领域知识先验写死,在**从未见过的 10 句留出集**上把 CER 从
+2.59% 降到 1.11%(错误数 −57%)。`--hotword` 还能加场地名、新人姓名。
+
+`--speakers` 可标注谁在说话(需片子够长:FunASR 的聚类器在少于 20 个语音
+片段时直接返回"只有一个人"),**分不出时明说分不出**,不会伪造一个 0 号
+说话人。
+
+> 上图全程为合成素材:ffmpeg 测试图 + macOS TTS 念四句现场指令,不涉及任何
+> 真实拍摄素材。重拍用 `scripts/brand/capture_transcript_edit.py`。
 
 ### v2.9 · 智能透明 + 内容优先观看
 

@@ -332,7 +332,14 @@ function paintEdit(){
   $('txList').querySelectorAll('.tx-line').forEach(el=>{
     const x = by[+el.dataset.i];
     el.classList.toggle('cut', !!(x && x.gone));
-    if(x && !x.gone && x.kept_text && x.kept_text !== TX[+el.dataset.i].text){
+    // v2.45.1 — compare against what is ON SCREEN, not against the
+    // original. The first version only wrote when kept_text differed
+    // from TX[i].text, so undoing a word-level cut restored the model
+    // and left the DOM showing the cut text: the server said
+    // 第二，机位往左边挪一点， and the panel still read 位往左边挪一点.
+    // The invariant is simply "displayed text == server's kept_text".
+    if(x && !x.gone && x.kept_text &&
+       el.lastElementChild.textContent !== x.kept_text){
       el.lastElementChild.textContent = x.kept_text;
     }
   });
