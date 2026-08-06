@@ -9238,8 +9238,19 @@ class _Handler(BaseHTTPRequestHandler):
         # v2.18-P0 — progressive hydration for big runs. Inlining 5k rows of
         # JSON made the HTML multi-MB and parse-bound; now only the first
         # slice ships inline and the page pulls the rest in the background
-        # via /api/v1/runs/<id>/rows (same _build_results fields, localhost
-        # auth passes). summary / face_clusters / locations stay computed
+        # via /results_rows/<id>, which is _serve_runs_rows and returns the
+        # SAME 52 _build_results fields the inline slice carries.
+        #
+        # v2.47: this comment used to name /api/v1/runs/<id>/rows. That URL
+        # exists and answers, but it is _serve_api_v1_rows — the iOS grid's
+        # endpoint, which returns 8 fields, not 52. Measured: rubric_stars,
+        # advice, every axis score, faces and GPS are all absent from it.
+        # Hydrating from it would leave photo 801 onwards with no rating
+        # and no advice, which is most of a wedding. The client was always
+        # right; only this comment was wrong, and it is the kind of wrong
+        # that gets copied into the next change.
+        #
+        # summary / face_clusters / locations stay computed
         # over the FULL row set, so every count is correct from first paint.
         # PIXCULL_INLINE_ROWS overrides the threshold; 0 disables (inline all).
         try:
