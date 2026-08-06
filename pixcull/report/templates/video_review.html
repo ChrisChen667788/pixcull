@@ -206,6 +206,17 @@ padding:1px 6px;font-size:11px;color:var(--ink)}
           font-size: 11px; }
   .tx-line.hit .tx-x { background: rgba(213,181,132,0.18); border-radius: 3px; }
   .tx-empty { color: var(--dim); font-size: 12px; padding: 6px; }
+  /* v2.46 — speaker chips. Only rendered when diarization actually
+     distinguished people; `--speakers` on a short clip reports nobody,
+     and a chip reading "说话人 0" there would show a finding the model
+     never made (see _drop_indistinct_speakers). */
+  .tx-spk { display: inline-block; margin-left: 5px; padding: 0 5px;
+            border-radius: 4px; font-size: 10px; line-height: 16px;
+            vertical-align: 1px; color: var(--bg); background: var(--indigo); }
+  .tx-spk.s1 { background: #7fa8c4; }
+  .tx-spk.s2 { background: #b58fc4; }
+  .tx-spk.s3 { background: #8fc4a0; }
+  .tx-line.cut .tx-spk { opacity: .45; }
   /* v2.44-P2 — edit by text. A struck line stays visible and readable:
      the photographer needs to see WHAT they cut to decide whether to put
      it back, so this dims and strikes rather than removing the row. */
@@ -265,7 +276,9 @@ function initTranscript(d){
   if(!t){ return; }                    // never transcribed — panel stays hidden
   TX = (t.segments||[]).filter(s=>(s.text||'').trim());
   $('txWrap').style.display='';
-  $('txEng').textContent = [t.engine, t.language].filter(Boolean).join(' · ');
+  const spks = new Set(TX.map(s=>s.speaker).filter(v=>v!==undefined && v!==null));
+  $('txEng').textContent = [t.engine, t.language,
+    spks.size > 1 ? spks.size+' 人' : null].filter(Boolean).join(' · ');
   if(!TX.length){
     $('txList').innerHTML='<div class="tx-empty">这段没有检测到语音。</div>';
     return;
@@ -473,10 +486,23 @@ function renderTranscript(q){
     // The row stays a single-purpose "seek here" button and the scissors
     // is a separate control: overloading one click with both meanings is
     // how a scrub turns into an accidental cut.
+    // A speaker chip only when the transcript carries one. Whisper never
+    // does, and Paraformer reports None rather than 0 when its clusterer
+    // could not tell people apart — so an absent chip means "unknown",
+    // which is the truth in both cases.
+    //
+    // It rides in the TIMESTAMP span, not the text span. paintEdit keeps
+    // the text span's textContent equal to the server's kept_text, so a
+    // chip inside it counts as text, never matches, and gets wiped on
+    // the first repaint — measured: 23 chips rendered, 0 after
+    // paintEdit().
+    const spk = (s.speaker === undefined || s.speaker === null)
+      ? '' : '<span class="tx-spk s'+(Number(s.speaker)%4)+'" title="说话人 '+
+             esc(String(s.speaker))+'">'+esc(String(s.speaker))+'</span>';
     return '<div class="tx-row">'+
            '<button class="tx-line'+(needle?' hit':'')+'" data-i="'+i+
            '" data-t="'+(+s.start_s||0)+'" title="跳到 '+fmtT(+s.start_s||0)+'">'+
-           '<span class="tx-t">'+fmtT(+s.start_s||0)+'</span>'+
+           '<span class="tx-t">'+fmtT(+s.start_s||0)+spk+'</span>'+
            '<span>'+body+'</span></button>'+
            '<button class="tx-cut" data-cut="'+i+'" type="button" '+
            'title="删除这一行" aria-label="删除这一行">✂</button></div>';

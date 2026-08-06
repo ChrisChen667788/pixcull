@@ -107,3 +107,60 @@ def test_transcript_panel_hover_has_a_real_background():
         defined, _ = _defined_and_used(TEMPLATES / "video_review.html")
         assert name in defined or fallback.strip(), (
             f"hover background depends on undefined {name}")
+
+
+# ── v2.46 — speaker chips ─────────────────────────────────────────────
+
+_TPL = TEMPLATES / "video_review.html"
+
+
+def _js() -> str:
+    """The page's inline script, comments stripped."""
+    html = _TPL.read_text(encoding="utf-8")
+    js = "\n".join(re.findall(r"<script[^>]*>(.*?)</script>", html, re.S | re.I))
+    return re.sub(r"//[^\n]*", "", js)
+
+
+def test_speaker_chip_is_only_rendered_when_a_label_exists():
+    """No label must mean no chip, not a chip reading "0".
+
+    Paraformer reports None rather than 0 when its clusterer could not
+    tell people apart, and Whisper never reports speakers at all. A chip
+    in either case would show a finding the model never made.
+    """
+    js = _js()
+    assert "tx-spk" in js, "speaker chip markup is gone"
+    m = re.search(r"const spk\s*=\s*\((.*?)\)\s*\n?\s*\?", js, re.S)
+    assert m, "the chip's null-guard is gone"
+    guard = m.group(1)
+    assert "undefined" in guard and "null" in guard, (
+        f"chip guard no longer covers both absent forms: {guard.strip()!r}")
+
+
+def test_speaker_chip_lives_outside_the_editable_text_span():
+    """paintEdit() rewrites the text span; a chip inside it gets wiped.
+
+    Measured when the chip was first added: 23 chips rendered, 0 left
+    after the first paintEdit(), because the span's textContent then
+    read "0新郎新娘…" while the server said "新郎新娘…", so the repaint
+    replaced the lot with plain text.
+    """
+    js = _js()
+    m = re.search(r"'<span class=\"tx-t\">'\+fmtT\([^)]*\)([^\n]*)", js)
+    assert m, "timestamp span markup changed shape"
+    assert "spk" in m.group(1), (
+        "the speaker chip is no longer emitted inside the timestamp span; "
+        "putting it in the text span makes paintEdit strip it")
+    # and it must NOT be in the text span
+    m2 = re.search(r"'<span>'\+([a-zA-Z+ ]*)\+'</span></button>'", js)
+    assert m2, "text span markup changed shape"
+    assert "spk" not in m2.group(1), (
+        f"chip is back inside the text span: {m2.group(1)!r}")
+
+
+def test_paint_edit_compares_against_what_is_displayed():
+    """v2.45.1's fix — compare with the DOM, not with the original."""
+    js = _js()
+    assert "lastElementChild.textContent !== x.kept_text" in js, (
+        "paintEdit no longer compares against the displayed text; undoing "
+        "a word-level cut will leave stale text on screen")
