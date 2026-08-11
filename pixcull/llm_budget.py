@@ -52,6 +52,18 @@ _MODEL_PRICING: dict[str, tuple[float, float]] = {
     "deepseek-v4-pro":     (0.0040, 0.0160),
     "deepseek-chat":       (0.0010, 0.0040),   # alias for v4-flash
     "deepseek-reasoner":   (0.0040, 0.0160),   # alias for v4-pro
+    # v2.48 — MiniMax M3, the primary vision judge. Vendor list price is
+    # in USD: $0.30/M input, $1.20/M output at the standard tier for
+    # requests under 512K context (both double above it, which PixCull
+    # never approaches — one photo is ~1.5k tokens). Converted at 7.25
+    # CNY/USD.
+    #
+    # This entry matters more than it looks: without it M3 fell through
+    # to _UNKNOWN_MODEL_PRICE, which is DeepSeek-Pro's CNY rate and is
+    # ~1.8x too high on input and ~1.8x too high on output. The daily
+    # cap arithmetic was therefore meaningless for the one model that
+    # now does the most calls.
+    "minimax-m3":          (0.00218, 0.00870),
 }
 
 # Hard floor used when a model is called that isn't in the table.

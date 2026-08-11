@@ -812,6 +812,141 @@ models_app = typer.Typer(
 app.add_typer(models_app, name="models")
 
 
+# --------------------------------------------------------------------------
+# v2.48 — MiniMax M3, the primary vision judge
+# --------------------------------------------------------------------------
+
+m3_app = typer.Typer(
+    help="MiniMax M3 — the cloud vision judge (v2.48).",
+    no_args_is_help=True)
+app.add_typer(m3_app, name="m3")
+
+
+@m3_app.command("doctor")
+def m3_doctor(
+    image: Path = typer.Option(None, "--image",
+                               help="A photo to probe image input with."),
+    video: Path = typer.Option(None, "--video",
+                               help="A short clip (<50 MB) to probe video "
+                                    "input with. Without this, the video "
+                                    "content-part shape stays unverified "
+                                    "and score_video() will refuse to run."),
+    save: bool = typer.Option(True, "--save/--no-save",
+                              help="Record findings to "
+                                   "~/.pixcull/m3_capabilities.json"),
+) -> None:
+    """Make real calls to M3 and report what the endpoint actually accepts.
+
+    Every failure mode in this integration is silent: a stale endpoint,
+    a stale model string, an expired key and a wrong video content-part
+    all surface identically — as ``verdict.error`` on every row — so a
+    run of 3000 nulls reads exactly like a run that worked.  This command
+    is the loud version.
+
+    It also settles the one thing the vendor docs would not tell us: which
+    JSON encoding of a video content part the live endpoint accepts.  It
+    tries each candidate and records the winner.
+    """
+    from pixcull.scoring.m3 import (
+        BASE_URL, MODEL, api_key_from_env, capability_path,
+        probe_capabilities, save_capabilities,
+    )
+
+    key = api_key_from_env()
+    if not key:
+        console.print(
+            "[red]No MiniMax key found.[/red]\n"
+            "PixCull reads it from the environment or the macOS keychain — "
+            "never from the repo.\n\n"
+            "  export MINIMAX_API_KEY=…            (this shell only)\n"
+            "  security add-generic-password -a \"$USER\" \\\n"
+            "      -s MINIMAX_API_KEY -w           (persistent, prompts you)\n")
+        raise typer.Exit(code=2)
+
+    console.print(f"[dim]endpoint[/dim] {BASE_URL}   [dim]model[/dim] {MODEL}")
+    caps = probe_capabilities(key, image, video)
+
+    table = Table(title="M3 capability probe")
+    table.add_column("Capability", style="bold")
+    table.add_column("Result")
+
+    def _row(label: str, detail: object, skipped_hint: str = "") -> None:
+        if detail is None:
+            table.add_row(label, f"[dim]not probed — {skipped_hint}[/dim]")
+        elif detail == "ok":
+            table.add_row(label, "[green]ok[/green]")
+        else:
+            table.add_row(label, f"[red]{detail}[/red]")
+
+    _row("auth + model string", caps.get("text"))
+    _row("json_object output", caps.get("json_object"))
+    _row("image input", caps.get("image"), "pass --image <photo>")
+
+    shape = caps.get("video_part_shape")
+    if not caps.get("video_attempts"):
+        table.add_row("video input",
+                      "[dim]not probed — pass --video <clip.mp4>[/dim]")
+    elif shape:
+        table.add_row("video input", f"[green]ok[/green] — shape: {shape}")
+    else:
+        table.add_row("video input", "[red]no candidate shape accepted[/red]")
+    console.print(table)
+
+    for name, detail in (caps.get("video_attempts") or {}).items():
+        if detail != "ok":
+            console.print(f"  [dim]video shape {name}: {detail}[/dim]")
+
+    if save:
+        save_capabilities(caps)
+        console.print(f"[dim]saved → {capability_path()}[/dim]")
+
+    # Exit non-zero when the load-bearing capability failed, so this is
+    # usable as a pre-flight check in a script.
+    if caps.get("text") != "ok":
+        raise typer.Exit(code=1)
+
+
+@m3_app.command("status")
+def m3_status() -> None:
+    """Show the recorded capabilities, key presence, and today's spend."""
+    from pixcull.llm_budget import snapshot
+    from pixcull.scoring.m3 import (
+        MODEL, api_key_from_env, capability_path, default_cache_path,
+        load_capabilities,
+    )
+
+    caps = load_capabilities()
+    cache = default_cache_path()
+    n_cached = 0
+    if cache.exists():
+        try:
+            n_cached = sum(1 for line in cache.open(encoding="utf-8")
+                           if line.strip())
+        except OSError:
+            pass
+
+    table = Table(title="M3 status")
+    table.add_column("", style="bold")
+    table.add_column("")
+    table.add_row("key", "[green]found[/green]" if api_key_from_env()
+                  else "[red]missing[/red]")
+    table.add_row("model", MODEL)
+    table.add_row("probed", caps.get("probed_at")
+                  or "[red]never — run `pixcull m3 doctor`[/red]")
+    table.add_row("video shape", caps.get("video_part_shape")
+                  or "[dim]unverified[/dim]")
+    table.add_row("cached verdicts", f"{n_cached} ({cache})")
+    try:
+        snap = snapshot()
+        table.add_row("spend today",
+                      f"¥{snap.get('total_today', 0):.2f} / "
+                      f"¥{snap.get('cap_yuan', 0):.2f}")
+    except Exception:  # noqa: BLE001
+        pass
+    console.print(table)
+    console.print(f"[dim]capabilities → {capability_path()}[/dim]")
+
+
 @models_app.command("list")
 def models_list() -> None:
     """Show the optional-model catalogue + install state."""

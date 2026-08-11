@@ -1,0 +1,789 @@
+"""v2.48 — MiniMax M3 as the primary judge, for photos *and* video.
+
+Why this module exists separately from ``vlm_judge.py``
+-------------------------------------------------------
+``vlm_judge.OpenAICompatibleVlmJudge`` is a thin, provider-agnostic
+wrapper: encode one image, POST, parse.  That was the right shape when a
+VLM was an optional *fourth opinion* whose verdict landed in a parallel
+CSV column and changed nothing.
+
+M3 is being made the **primary** judge, which turns three previously
+academic problems into shipping requirements:
+
+1. **Correctness cannot be assumed.**  ``score()``'s outer
+   ``except Exception`` converts every failure — wrong endpoint, wrong
+   model string, expired key, malformed video part — into
+   ``verdict.error`` and returns.  With the VLM as a bonus opinion that
+   was graceful degradation.  With it as *the* judge, a 3000-photo run
+   that produced 3000 nulls is indistinguishable from a good one until
+   somebody opens the JSONL.  Hence :func:`probe_capabilities` and the
+   ``pixcull m3 doctor`` command.
+
+2. **Money and time are now real.**  The old path had no budget gate, no
+   retry, no rate limiter and no cache.  At the published 200 RPM a
+   3000-photo wedding is ~15 minutes; serial at 3 s/call it is ~105
+   minutes, long enough that the run *will* be interrupted, and without a
+   content-hash cache every interruption re-bills from zero.
+
+3. **A VLM cannot measure.**  See :func:`build_evidence_block`.
+
+Wire contract (verified against vendor docs 2026-08-12)
+-------------------------------------------------------
+* base_url ``https://api.minimax.io/v1``   (NOT ``api.minimax.chat`` —
+  that is the pre-M3 endpoint and it rejects the ``minimax-m3`` model)
+* model ``minimax-m3``
+* image: content part ``{"type": "image_url", "image_url": {"url": …}}``,
+  https URL or data URI, **≤ 10 MB**
+* video: content part named ``video_url``, MP4/AVI/MOV/MKV, **≤ 50 MB**,
+  ``fps`` in [0.2, 5.0] (default 1)
+* whole request body ≤ 64 MB; 200 RPM / 10M TPM; audio is NOT accepted
+  on chat completions
+
+**The exact video content-part JSON is the one thing not pinned down.**
+The vendor's own docs page was unreachable and no third-party mirror
+carries the literal schema — only the field name, the limits and the
+formats.  Rather than hard-code a guess into the scoring path and let it
+fail as a silent null, :data:`VIDEO_PART_SHAPES` lists the candidate
+encodings and the doctor probes them against the live endpoint, writing
+the winner to :func:`capability_path`.  :meth:`MiniMaxM3Judge.score_video`
+uses the recorded winner and refuses to guess when none is recorded.
+"""
+
+from __future__ import annotations
+
+import base64
+import hashlib
+import json
+import os
+import sys
+import threading
+import time
+from collections import deque
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Callable
+
+from pixcull.scoring.rubric import RUBRIC_AXES
+from pixcull.scoring.vlm_judge import (
+    VLM_RESIZE_LONG_EDGE,
+    VlmAxisScore,
+    VlmVerdict,
+    build_prompt,
+    parse_vlm_response,
+)
+
+# ---------------------------------------------------------------------------
+# Vendor contract
+# ---------------------------------------------------------------------------
+
+BASE_URL = "https://api.minimax.io/v1"
+MODEL = "minimax-m3"
+
+MAX_IMAGE_BYTES = 10 * 1024 * 1024
+MAX_VIDEO_BYTES = 50 * 1024 * 1024
+MAX_BODY_BYTES = 64 * 1024 * 1024
+
+# Published limits.  RPM is the binding one for us: at ~1.5k input tokens
+# per photo, 200 RPM is only ~300k TPM, well inside the 10M TPM ceiling.
+RPM_LIMIT = 200
+TPM_LIMIT = 10_000_000
+
+VIDEO_FPS_MIN, VIDEO_FPS_MAX = 0.2, 5.0
+VIDEO_FPS_DEFAULT = 1.0
+
+#: Candidate wire encodings for a video content part, most-likely first.
+#: :func:`probe_capabilities` tries them in order against the live API.
+#: Keep the *names* stable — they are persisted in the capability file.
+VIDEO_PART_SHAPES: dict[str, Callable[[str, float], dict]] = {
+    # The shape every OpenAI-compatible multimodal vendor that supports
+    # video has converged on, and the one the field name `video_url`
+    # implies.
+    "video_url_object": lambda url, fps: {
+        "type": "video_url",
+        "video_url": {"url": url, "fps": fps},
+    },
+    # Same, without fps — in case the endpoint rejects unknown keys
+    # rather than ignoring them.  (Silent-ignore is the norm, which is
+    # exactly why `usage` echoing a request field is not proof it took
+    # effect; see the api-param-check lesson.)
+    "video_url_object_no_fps": lambda url, fps: {
+        "type": "video_url",
+        "video_url": {"url": url},
+    },
+    # Qwen-VL style: a bare string rather than an object.
+    "video_url_string": lambda url, fps: {
+        "type": "video_url",
+        "video_url": url,
+    },
+}
+
+_DEFAULT_VIDEO_SHAPE = "video_url_object"
+
+
+# ---------------------------------------------------------------------------
+# Rate limiting
+# ---------------------------------------------------------------------------
+
+class RateLimiter:
+    """Sliding-window token bucket, shared across judge instances.
+
+    A plain ``sleep(60/rpm)`` between calls wastes most of the budget:
+    it paces to the *average* rate even when the last minute was idle.
+    This tracks actual timestamps so a burst after a quiet period is
+    allowed, which matters because the pipeline alternates between local
+    detector phases (no API traffic at all) and API phases.
+    """
+
+    def __init__(self, rpm: int = RPM_LIMIT):
+        self.rpm = max(1, int(rpm))
+        self._calls: deque[float] = deque()
+        self._lock = threading.Lock()
+
+    def acquire(self) -> float:
+        """Block until a call may proceed.  Returns seconds waited."""
+        waited = 0.0
+        while True:
+            with self._lock:
+                now = time.monotonic()
+                while self._calls and now - self._calls[0] >= 60.0:
+                    self._calls.popleft()
+                if len(self._calls) < self.rpm:
+                    self._calls.append(now)
+                    return waited
+                sleep_for = 60.0 - (now - self._calls[0]) + 0.01
+            time.sleep(sleep_for)
+            waited += sleep_for
+
+
+_GLOBAL_LIMITER = RateLimiter()
+
+
+# ---------------------------------------------------------------------------
+# Resumable cache
+# ---------------------------------------------------------------------------
+
+def _content_hash(path: Path, extra: str = "") -> str:
+    """Hash of file bytes + a prompt-affecting discriminator.
+
+    Keyed on **content**, not filename: photographers rename and
+    re-export constantly, and two runs of the same shoot from different
+    folders must hit the same cache entry.  ``extra`` folds in anything
+    that changes the request (model, prompt version, evidence block), so
+    a prompt edit correctly invalidates rather than silently serving
+    stale verdicts.
+    """
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    h.update(extra.encode("utf-8"))
+    return h.hexdigest()
+
+
+class VerdictCache:
+    """Append-only JSONL cache of verdicts, keyed by content hash.
+
+    Append-only rather than rewrite-on-save: a run killed mid-write must
+    not corrupt the entries already paid for.  A truncated final line is
+    skipped on load.
+    """
+
+    def __init__(self, path: Path):
+        self.path = Path(path)
+        self._mem: dict[str, dict] = {}
+        self._lock = threading.Lock()
+        self._load()
+
+    def _load(self) -> None:
+        if not self.path.exists():
+            return
+        try:
+            with open(self.path, encoding="utf-8") as fh:
+                for line in fh:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        rec = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue        # torn tail from a killed run
+                    key = rec.get("key")
+                    if key:
+                        self._mem[key] = rec.get("verdict") or {}
+        except OSError:
+            pass
+
+    def get(self, key: str) -> dict | None:
+        with self._lock:
+            return self._mem.get(key)
+
+    def put(self, key: str, verdict: dict) -> None:
+        with self._lock:
+            self._mem[key] = verdict
+            try:
+                self.path.parent.mkdir(parents=True, exist_ok=True)
+                with open(self.path, "a", encoding="utf-8") as fh:
+                    fh.write(json.dumps({"key": key, "verdict": verdict},
+                                        ensure_ascii=False) + "\n")
+            except OSError as exc:
+                print(f"[m3] cache write failed: {exc}", file=sys.stderr)
+
+    def __len__(self) -> int:
+        return len(self._mem)
+
+
+def default_cache_path() -> Path:
+    return Path.home() / ".pixcull" / "cache" / "m3_verdicts.jsonl"
+
+
+def capability_path() -> Path:
+    """Where the doctor records what the live endpoint actually accepted."""
+    return Path.home() / ".pixcull" / "m3_capabilities.json"
+
+
+def load_capabilities() -> dict:
+    p = capability_path()
+    if not p.exists():
+        return {}
+    try:
+        return json.loads(p.read_text("utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def save_capabilities(caps: dict) -> None:
+    p = capability_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    caps = dict(caps)
+    caps["probed_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    p.write_text(json.dumps(caps, ensure_ascii=False, indent=2),
+                 encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
+# Evidence — the reason this is not just "POST the JPEG"
+# ---------------------------------------------------------------------------
+
+#: (csv column, label, formatter).  Deliberately small: every line costs
+#: input tokens on every photo, and a wall of numbers dilutes the ones
+#: that matter.  These are exactly the signals a VLM reads badly.
+_EVIDENCE_FIELDS: tuple[tuple[str, str, Callable[[Any], str]], ...] = (
+    ("laplacian_subject", "主体清晰度(拉普拉斯方差)",
+     lambda v: f"{float(v):.0f}"),
+    ("laplacian_global", "全图清晰度", lambda v: f"{float(v):.0f}"),
+    ("highlight_clip_pct", "高光溢出",  lambda v: f"{float(v):.2f}%"),
+    ("shadow_clip_pct", "暗部死黑",     lambda v: f"{float(v):.2f}%"),
+    ("mean_luma", "平均亮度(0-255)",   lambda v: f"{float(v):.0f}"),
+    ("face_count", "检出人脸数",        lambda v: str(int(v))),
+    ("eyes_closed_count", "闭眼人数",   lambda v: str(int(v))),
+    ("burst_size", "同组连拍张数",      lambda v: str(int(v))),
+    ("dup_group_size", "近重复组大小",  lambda v: str(int(v))),
+)
+
+_EVIDENCE_HEADER = """
+## 客观测量(本机检测器实测,非你的观察)
+以下数值由本地算法测出,精度高于目视判断。请把它们当作事实,
+结合你在画面里看到的内容一起下判断;当你的观感与测量冲突时,
+在 rationale 里说明冲突,不要假装没看到。
+""".strip()
+
+
+def build_evidence_block(row: dict[str, Any] | None) -> str:
+    """Serialise local detector readings into a prompt section.
+
+    This is the load-bearing idea of v2.48.  A VLM asked "is this sharp?"
+    guesses from perceived micro-contrast, which is exactly what a
+    shallow-depth-of-field portrait defeats.  A Laplacian variance is not
+    a guess.  Same for clipped highlights (a histogram fact), closed eyes
+    (a landmark ratio) and near-duplicate group size (a pairwise hash
+    comparison over the whole shoot, which no single-image call can see).
+
+    So the local stack is not deleted and it is not a competing opinion —
+    it becomes the instrument panel the judge reads.
+
+    Returns "" when nothing is measurable, so the caller can omit the
+    section entirely rather than send an empty heading.
+    """
+    if not row:
+        return ""
+    lines: list[str] = []
+    for col, label, fmt in _EVIDENCE_FIELDS:
+        val = row.get(col)
+        if val is None or val == "":
+            continue
+        try:
+            lines.append(f"- {label}: {fmt(val)}")
+        except (TypeError, ValueError):
+            continue      # a NaN or a stray string is not worth a crash
+
+    flags = row.get("flags")
+    if isinstance(flags, str) and flags.strip():
+        lines.append(f"- 规则引擎标记: {flags.strip()}")
+    elif isinstance(flags, (list, tuple)) and flags:
+        lines.append(f"- 规则引擎标记: {', '.join(str(f) for f in flags)}")
+
+    if not lines:
+        return ""
+    return _EVIDENCE_HEADER + "\n" + "\n".join(lines)
+
+
+#: Bump when the prompt changes in a way that should invalidate cached
+#: verdicts.  Folded into the cache key.
+PROMPT_VERSION = "v2.48.0"
+
+
+# ---------------------------------------------------------------------------
+# Judge
+# ---------------------------------------------------------------------------
+
+@dataclass
+class _Attempt:
+    ok: bool
+    detail: str = ""
+
+
+class MiniMaxM3Judge:
+    """MiniMax M3 over the OpenAI-compatible endpoint.
+
+    Thread-safe: the OpenAI client is, the rate limiter and cache take
+    their own locks.  Intended to be constructed once and shared by a
+    ``ThreadPoolExecutor``.
+    """
+
+    def __init__(
+        self,
+        api_key: str,
+        *,
+        model: str = MODEL,
+        base_url: str = BASE_URL,
+        resize_long_edge: int = VLM_RESIZE_LONG_EDGE,
+        timeout_s: float = 90.0,
+        max_retries: int = 5,
+        cache: VerdictCache | None = None,
+        limiter: RateLimiter | None = None,
+        enforce_budget: bool = True,
+    ):
+        if not api_key:
+            raise ValueError(
+                "minimax-m3: api_key is required. Set MINIMAX_API_KEY, or "
+                "store it via the app's key dialog. PixCull never reads a "
+                "key from the repo.")
+        from openai import OpenAI
+        self._client = OpenAI(api_key=api_key, base_url=base_url,
+                              max_retries=0)   # we do our own backoff
+        self._model = model
+        self.model_name = f"minimax:{model}"
+        self.resize_long_edge = resize_long_edge
+        self._timeout = timeout_s
+        self._max_retries = max_retries
+        self._cache = cache
+        self._limiter = limiter or _GLOBAL_LIMITER
+        self._enforce_budget = enforce_budget
+        import tempfile
+        self._tmpdir = Path(tempfile.mkdtemp(prefix="pixcull_m3_"))
+
+    # -- transport ------------------------------------------------------
+
+    def _sleep_for_retry(self, attempt: int) -> float:
+        """Exponential backoff, capped.  Deterministic — no jitter — so a
+        test can assert the schedule; concurrency is already spread out by
+        the rate limiter, which is what jitter would otherwise buy us."""
+        return min(2.0 ** attempt, 60.0)
+
+    def _complete(self, messages: list[dict], max_tokens: int) -> Any:
+        """One chat completion, with rate limiting, retry and budget.
+
+        Retries on rate-limit and transient server errors.  Does NOT
+        retry on auth or request-shape errors — those never recover and
+        retrying them just burns five backoff sleeps before reporting the
+        same failure.
+        """
+        from openai import (
+            APIConnectionError,
+            APIStatusError,
+            APITimeoutError,
+            RateLimitError,
+        )
+
+        last: Exception | None = None
+        for attempt in range(self._max_retries):
+            self._limiter.acquire()
+            try:
+                return self._client.chat.completions.create(
+                    model=self._model,
+                    messages=messages,
+                    max_tokens=max_tokens,
+                    temperature=0.0,
+                    timeout=self._timeout,
+                )
+            except (RateLimitError, APITimeoutError, APIConnectionError) as exc:
+                last = exc
+            except APIStatusError as exc:
+                if exc.status_code < 500:
+                    raise            # 4xx: shape/auth — will never succeed
+                last = exc
+            if attempt < self._max_retries - 1:
+                time.sleep(self._sleep_for_retry(attempt))
+        assert last is not None
+        raise last
+
+    def _charge(self, resp: Any) -> None:
+        """Record real token usage against the daily ledger."""
+        try:
+            from pixcull.llm_budget import record_call
+            usage = getattr(resp, "usage", None)
+            record_call(self._model,
+                        int(getattr(usage, "prompt_tokens", 0) or 0),
+                        int(getattr(usage, "completion_tokens", 0) or 0))
+        except Exception:  # noqa: BLE001 — accounting must never kill a run
+            pass
+
+    def _budget_ok(self, estimate_yuan: float) -> bool:
+        if not self._enforce_budget:
+            return True
+        try:
+            from pixcull.llm_budget import check_budget
+            return check_budget(estimate_yuan)
+        except Exception:  # noqa: BLE001
+            return True
+
+    # -- encoding -------------------------------------------------------
+
+    def _image_data_uri(self, image_path: Path) -> str:
+        """Load → resize → JPEG → data URI, guaranteed under the 10 MB cap.
+
+        Quality is stepped down rather than failing, because a 10 MB cap
+        on a 1024px JPEG is only reachable with pathological content, and
+        dropping the photo entirely would be a worse outcome than sending
+        it at q60.
+        """
+        from pixcull.io.loader import load_image
+        img = load_image(image_path, max_side=self.resize_long_edge)
+        if img is None:
+            raise ValueError(f"failed to decode image: {image_path}")
+        if img.mode not in ("RGB", "L"):
+            img = img.convert("RGB")
+        buf = self._tmpdir / f"{image_path.stem}.jpg"
+        for quality in (85, 70, 60, 45):
+            img.save(buf, "JPEG", quality=quality, optimize=True)
+            if buf.stat().st_size <= MAX_IMAGE_BYTES:
+                break
+        raw = buf.read_bytes()
+        if len(raw) > MAX_IMAGE_BYTES:
+            raise ValueError(
+                f"{image_path.name}: {len(raw)/1e6:.1f} MB exceeds M3's "
+                f"{MAX_IMAGE_BYTES/1e6:.0f} MB image limit even at q45")
+        return "data:image/jpeg;base64," + base64.b64encode(raw).decode("ascii")
+
+    @staticmethod
+    def _video_data_uri(video_path: Path) -> str:
+        raw = Path(video_path).read_bytes()
+        if len(raw) > MAX_VIDEO_BYTES:
+            raise ValueError(
+                f"{Path(video_path).name}: {len(raw)/1e6:.1f} MB exceeds "
+                f"M3's {MAX_VIDEO_BYTES/1e6:.0f} MB video limit — transcode "
+                f"the clip to H.264 first (4K ProRes clips are ~187 MB "
+                f"for 3 s and will always trip this)")
+        suffix = Path(video_path).suffix.lower().lstrip(".") or "mp4"
+        mime = {"mp4": "mp4", "mov": "quicktime", "avi": "x-msvideo",
+                "mkv": "x-matroska"}.get(suffix, "mp4")
+        return (f"data:video/{mime};base64,"
+                + base64.b64encode(raw).decode("ascii"))
+
+    # -- scoring --------------------------------------------------------
+
+    def score(
+        self,
+        image_path: Path,
+        scene: str | None = None,
+        max_tokens: int = 600,
+        style_section: str = "",
+        vertical: str | None = None,
+        *,
+        row: dict[str, Any] | None = None,
+    ) -> VlmVerdict:
+        """Judge one photo, with local measurements supplied as evidence.
+
+        ``row`` is the scoring CSV record for this photo.  Passing it is
+        what makes this a *fused* judgement rather than a naive one — see
+        :func:`build_evidence_block`.  It stays optional so the judge is
+        still usable standalone (the doctor, ad-hoc scripts).
+        """
+        image_path = Path(image_path)
+        verdict = VlmVerdict(
+            filename=image_path.name,
+            axes={a.name: VlmAxisScore(stars=None) for a in RUBRIC_AXES},
+            model_name=self.model_name,
+        )
+        evidence = build_evidence_block(row)
+        prompt = build_prompt(scene, style_section=style_section,
+                              vertical=vertical)
+        if evidence:
+            prompt = prompt + "\n\n" + evidence
+
+        key = ""
+        if self._cache is not None:
+            try:
+                key = _content_hash(
+                    image_path,
+                    f"{self._model}|{PROMPT_VERSION}|{scene}|{vertical}|"
+                    f"{len(evidence)}")
+            except OSError:
+                key = ""
+            if key:
+                hit = self._cache.get(key)
+                if hit is not None:
+                    return _verdict_from_dict(hit, image_path.name,
+                                              self.model_name)
+
+        t0 = time.time()
+        try:
+            if not self._budget_ok(0.03):
+                verdict.error = ("LLM budget exhausted for today — raise "
+                                 "PIXCULL_LLM_BUDGET_YUAN or wait for UTC "
+                                 "midnight")
+                verdict.elapsed_s = time.time() - t0
+                return verdict
+            messages = [{
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url",
+                     "image_url": {"url": self._image_data_uri(image_path)}},
+                ],
+            }]
+            resp = self._complete(messages, max_tokens)
+            self._charge(resp)
+            text = resp.choices[0].message.content or ""
+        except Exception as exc:  # noqa: BLE001
+            verdict.elapsed_s = time.time() - t0
+            verdict.error = f"{type(exc).__name__}: {exc}"
+            return verdict
+
+        verdict.elapsed_s = time.time() - t0
+        _fill_verdict(verdict, text)
+        if key and self._cache is not None and verdict.error is None:
+            self._cache.put(key, verdict.to_dict())
+        return verdict
+
+    def score_video(
+        self,
+        video_path: Path,
+        prompt: str,
+        *,
+        fps: float = VIDEO_FPS_DEFAULT,
+        max_tokens: int = 600,
+        shape: str | None = None,
+    ) -> VlmVerdict:
+        """Judge a whole clip using M3's native video input.
+
+        This is the capability the pre-v2.48 stack simply does not have:
+        reel ranking today is ``mean_final + max_temporal``, i.e. 100%
+        proxy metrics, so a clip of the vows and a clip of someone
+        adjusting a mic score identically when camera motion and face
+        count match.
+
+        ``shape`` selects the wire encoding.  It defaults to whatever
+        ``pixcull m3 doctor`` recorded; if the doctor has never run this
+        raises rather than guessing, because a wrong shape comes back as
+        a generic 4xx that the caller would otherwise store as one more
+        null verdict.
+        """
+        video_path = Path(video_path)
+        verdict = VlmVerdict(
+            filename=video_path.name,
+            axes={a.name: VlmAxisScore(stars=None) for a in RUBRIC_AXES},
+            model_name=self.model_name,
+        )
+        if shape is None:
+            shape = load_capabilities().get("video_part_shape") or ""
+        if not shape:
+            raise RuntimeError(
+                "M3 video input has not been verified on this machine. Run "
+                "`pixcull m3 doctor --video <clip.mp4>` once — it probes "
+                "which content-part encoding the live endpoint accepts and "
+                "records it. Refusing to guess: a wrong shape returns a "
+                "generic 4xx that would be stored as a null verdict.")
+        if shape not in VIDEO_PART_SHAPES:
+            raise ValueError(f"unknown video part shape: {shape!r}")
+
+        fps = max(VIDEO_FPS_MIN, min(VIDEO_FPS_MAX, float(fps)))
+        t0 = time.time()
+        try:
+            part = VIDEO_PART_SHAPES[shape](self._video_data_uri(video_path),
+                                            fps)
+            messages = [{
+                "role": "user",
+                "content": [{"type": "text", "text": prompt}, part],
+            }]
+            resp = self._complete(messages, max_tokens)
+            self._charge(resp)
+            text = resp.choices[0].message.content or ""
+        except Exception as exc:  # noqa: BLE001
+            verdict.elapsed_s = time.time() - t0
+            verdict.error = f"{type(exc).__name__}: {exc}"
+            return verdict
+        verdict.elapsed_s = time.time() - t0
+        _fill_verdict(verdict, text)
+        return verdict
+
+
+# ---------------------------------------------------------------------------
+# Parsing helpers
+# ---------------------------------------------------------------------------
+
+def _fill_verdict(verdict: VlmVerdict, text: str) -> None:
+    verdict.raw_text = text
+    parsed = parse_vlm_response(text)
+    if parsed is None:
+        verdict.error = "JSON parse failed"
+        return
+    for axis_name in verdict.axes:
+        ax = (parsed.get("axes") or {}).get(axis_name) or {}
+        stars = ax.get("stars")
+        try:
+            if stars is not None:
+                stars = max(1.0, min(5.0, float(stars)))
+        except (TypeError, ValueError):
+            stars = None
+        verdict.axes[axis_name] = VlmAxisScore(
+            stars=stars, rationale=str(ax.get("rationale", ""))[:300])
+    verdict.overall_label = str(parsed.get("overall_label", "")).lower()
+    verdict.overall_rationale = str(parsed.get("overall_rationale", ""))[:300]
+
+
+def _verdict_from_dict(d: dict, filename: str, model_name: str) -> VlmVerdict:
+    v = VlmVerdict(
+        filename=filename,
+        axes={a.name: VlmAxisScore(stars=None) for a in RUBRIC_AXES},
+        model_name=model_name,
+    )
+    for name, ax in (d.get("axes") or {}).items():
+        if name in v.axes:
+            v.axes[name] = VlmAxisScore(stars=(ax or {}).get("stars"),
+                                        rationale=(ax or {}).get("rationale", ""))
+    v.overall_label = d.get("overall_label", "")
+    v.overall_rationale = d.get("overall_rationale", "")
+    v.elapsed_s = 0.0        # a cache hit cost no wall-clock
+    return v
+
+
+# ---------------------------------------------------------------------------
+# Doctor
+# ---------------------------------------------------------------------------
+
+def api_key_from_env() -> str:
+    """The key, from the environment only.
+
+    Deliberately never reads the repo.  ``MINIMAX_API_KEY`` first, then
+    the macOS keychain, which is where the app stores it so a GUI launch
+    (no shell environment) can still find it.
+    """
+    key = os.environ.get("MINIMAX_API_KEY", "").strip()
+    if key:
+        return key
+    if sys.platform == "darwin":
+        try:
+            import subprocess
+            out = subprocess.run(
+                ["security", "find-generic-password", "-s",
+                 "MINIMAX_API_KEY", "-w"],
+                capture_output=True, text=True, timeout=10)
+            if out.returncode == 0:
+                return out.stdout.strip()
+        except Exception:  # noqa: BLE001
+            pass
+    return ""
+
+
+def probe_capabilities(api_key: str,
+                       image_path: Path | None = None,
+                       video_path: Path | None = None,
+                       *,
+                       model: str = MODEL,
+                       base_url: str = BASE_URL) -> dict:
+    """Make real calls and report what the endpoint actually accepted.
+
+    This exists because every failure mode in this integration is silent.
+    A stale base_url, a stale model string, an expired key and a wrong
+    video content-part all surface identically — as ``verdict.error`` on
+    every row — and a run of 3000 nulls looks exactly like a run that
+    worked until somebody opens the JSONL.
+
+    Returns a dict of capability → result.  Never raises; a failed probe
+    is data.
+    """
+    caps: dict[str, Any] = {
+        "base_url": base_url,
+        "model": model,
+        "text": None,
+        "image": None,
+        "json_object": None,
+        "video_part_shape": None,
+        "video_attempts": {},
+    }
+
+    try:
+        from openai import OpenAI
+    except ImportError as exc:
+        caps["text"] = f"openai SDK not installed: {exc}"
+        return caps
+
+    client = OpenAI(api_key=api_key, base_url=base_url, max_retries=0)
+
+    def _try(fn) -> _Attempt:
+        try:
+            fn()
+            return _Attempt(True, "ok")
+        except Exception as exc:  # noqa: BLE001
+            return _Attempt(False, f"{type(exc).__name__}: {exc}"[:300])
+
+    # 1. auth + model string
+    a = _try(lambda: client.chat.completions.create(
+        model=model, messages=[{"role": "user", "content": "ping"}],
+        max_tokens=4, timeout=30))
+    caps["text"] = a.detail
+
+    # 2. structured output
+    a = _try(lambda: client.chat.completions.create(
+        model=model,
+        messages=[{"role": "user",
+                   "content": 'Reply with JSON {"ok":1} and nothing else.'}],
+        max_tokens=16, response_format={"type": "json_object"}, timeout=30))
+    caps["json_object"] = a.detail
+
+    # 3. image content part
+    if image_path is not None and Path(image_path).exists():
+        judge = MiniMaxM3Judge(api_key, model=model, base_url=base_url,
+                               enforce_budget=False)
+        uri = judge._image_data_uri(Path(image_path))
+        a = _try(lambda: client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": [
+                {"type": "text", "text": "What is in this image? One word."},
+                {"type": "image_url", "image_url": {"url": uri}}]}],
+            max_tokens=16, timeout=60))
+        caps["image"] = a.detail
+
+    # 4. video content part — the shape we could not confirm from docs
+    if video_path is not None and Path(video_path).exists():
+        try:
+            uri = MiniMaxM3Judge._video_data_uri(Path(video_path))
+        except ValueError as exc:
+            caps["video_attempts"]["_encode"] = str(exc)
+            uri = ""
+        if uri:
+            for name, build in VIDEO_PART_SHAPES.items():
+                part = build(uri, VIDEO_FPS_DEFAULT)
+                a = _try(lambda p=part: client.chat.completions.create(
+                    model=model,
+                    messages=[{"role": "user", "content": [
+                        {"type": "text",
+                         "text": "Describe this clip in one sentence."}, p]}],
+                    max_tokens=48, timeout=120))
+                caps["video_attempts"][name] = a.detail
+                if a.ok:
+                    caps["video_part_shape"] = name
+                    break
+
+    return caps

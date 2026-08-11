@@ -153,7 +153,14 @@ def test_no_key_or_token_literals(tracked_text):
     is not something the scanner (or a future reader) can tell.
     """
     prefixes = ["sk" + "-", "pypi" + "-Ag", "ghp" + "_", "gho" + "_",
-                "hf" + "_", "AKIA", "xox" + "b-"]
+                "hf" + "_", "AKIA", "xox" + "b-",
+                # v2.48 — MiniMax. Now that M3 is the primary judge this
+                # repo handles a MiniMax key on every run, and the old
+                # list matched none of its shapes: the JWT form their
+                # console has historically issued (eyJ…), and the sk-
+                # style form (already covered above, but the `sk-cp-`
+                # variant is worth naming so the intent survives).
+                "eyJhbGciOi", "sk" + "-cp-"]
     pat = re.compile("(" + "|".join(re.escape(p) for p in prefixes)
                      + r")[A-Za-z0-9_\-]{16,}")
     hits = _hits(tracked_text, pat)

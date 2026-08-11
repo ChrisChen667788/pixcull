@@ -394,9 +394,14 @@ class OpenAICompatibleVlmJudge:
     Tested against:
       - Deepseek (base_url='https://api.deepseek.com', model='deepseek-vl' or
                   'deepseek-chat' if image is in input)
-      - MiniMax  (base_url='https://api.minimax.chat/v1',
-                  model='MiniMax-VL-01' or 'abab6.5-vision-01')
       - OpenAI   (base_url=None, model='gpt-4o' / 'gpt-4o-mini')
+
+    MiniMax is NO LONGER served by this class — since v2.48 it goes
+    through ``pixcull.scoring.m3.MiniMaxM3Judge``, which adds the
+    retry / rate-limit / cache / budget machinery a primary judge needs
+    and supports M3's native video input.  The endpoint and model this
+    class used for MiniMax (``api.minimax.chat/v1``, ``MiniMax-VL-01``)
+    are both retired.
 
     Image is sent as base64 data URL — works for all three providers and
     avoids the need to host the file anywhere accessible to the API.
@@ -532,16 +537,29 @@ def make_deepseek_judge(api_key: str, model: str = "deepseek-vl") -> OpenAICompa
     )
 
 
-def make_minimax_judge(api_key: str,
-                        model: str = "MiniMax-VL-01") -> OpenAICompatibleVlmJudge:
-    return OpenAICompatibleVlmJudge(
-        # MiniMax's official base path (subject to change — verify in
-        # their docs at the time of integration).
-        base_url="https://api.minimax.chat/v1",
-        api_key=api_key,
-        model=model,
-        provider_name="minimax",
-    )
+def make_minimax_judge(api_key: str, model: str | None = None):
+    """MiniMax M3 — the primary judge since v2.48.
+
+    Returns :class:`pixcull.scoring.m3.MiniMaxM3Judge`, not the generic
+    ``OpenAICompatibleVlmJudge``: as the *primary* judge this path needs
+    retry/backoff, a 200 RPM limiter, a resumable content-hash cache and
+    a budget gate, none of which the generic wrapper has.  It satisfies
+    the same :class:`VlmJudge` protocol, so callers are unaffected.
+
+    Both the endpoint and the model string here were stale until v2.48
+    (``api.minimax.chat/v1`` + ``MiniMax-VL-01``), and they must be
+    changed together — the M3 endpoint rejects the old model name and
+    the old endpoint rejects ``minimax-m3``.  Since ``score()`` converts
+    every failure into ``verdict.error``, a half-applied fix produces a
+    full run of null verdicts that reads as success.  ``pixcull m3
+    doctor`` exists to make that failure loud.
+
+    Imported lazily: ``m3`` imports from this module.
+    """
+    from pixcull.scoring.m3 import MODEL as M3_MODEL
+    from pixcull.scoring.m3 import MiniMaxM3Judge, VerdictCache, default_cache_path
+    return MiniMaxM3Judge(api_key, model=model or M3_MODEL,
+                          cache=VerdictCache(default_cache_path()))
 
 
 def make_openai_judge(api_key: str, model: str = "gpt-4o-mini") -> OpenAICompatibleVlmJudge:
@@ -627,8 +645,11 @@ def load_judge(spec: str = "local") -> VlmJudge | None:
             key = os.environ.get("DEEPSEEK_API_KEY", "")
             return make_deepseek_judge(key, model_override or "deepseek-vl")
         if provider == "minimax":
-            key = os.environ.get("MINIMAX_API_KEY", "")
-            return make_minimax_judge(key, model_override or "MiniMax-VL-01")
+            # v2.48 — key may also live in the macOS keychain, because a
+            # GUI launch has no shell environment to export it into.
+            from pixcull.scoring.m3 import api_key_from_env
+            key = api_key_from_env()
+            return make_minimax_judge(key, model_override)
         if provider == "openai":
             key = os.environ.get("OPENAI_API_KEY", "")
             return make_openai_judge(key, model_override or "gpt-4o-mini")
