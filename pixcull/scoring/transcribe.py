@@ -503,12 +503,32 @@ def _transcribe_paraformer(wav: Path, language: str = "zh", *,
         sentences = item.get("sentence_info") or []
         if sentences:
             for s in sentences:
+                # v2.48 — carry the sentence's own per-character times.
+                #
+                # This branch only runs with a speaker model attached, and
+                # until now it built Segments without char_spans. Turning
+                # on --speakers therefore turned OFF word-level editing:
+                # EditSession saw a transcript with no character times and
+                # correctly reported "segment only". Two features that
+                # cannot be used together, with nothing saying so.
+                #
+                # The data was there the whole time — sentence_info entries
+                # carry `timestamp`, the same [start_ms, end_ms] pairs tier
+                # 2 uses. Reuse the tier-2 mapper rather than a second
+                # implementation, and fall back to no spans when the count
+                # does not line up (its own guard decides that).
+                spans = None
+                derived = segments_from_char_timestamps(
+                    str(s.get("text", "")), s.get("timestamp") or [])
+                if len(derived) == 1 and derived[0].char_spans:
+                    spans = derived[0].char_spans
                 segments.append(Segment(
                     start_s=float(s.get("start", 0)) / 1000.0,
                     end_s=float(s.get("end", 0)) / 1000.0,
                     text=str(s.get("text", "")).strip(),
                     speaker=(str(s["spk"]) if s.get("spk") is not None
                              else None),
+                    char_spans=spans,
                 ))
             continue
         # Tier 2 — what this engine actually returns.  Before v2.43.2

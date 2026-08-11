@@ -558,3 +558,118 @@ def test_speakers_off_leaves_labels_untouched(monkeypatch, tmp_path):
     wav.write_bytes(b"")
     got = T._transcribe_paraformer(wav, "zh", speakers=False)
     assert got.segments[0].speaker == "7"
+
+
+# ── v2.48 — --speakers must not disable word-level editing ────────────
+#
+# Two features that could not be used together, with nothing saying so.
+# The tier-1 branch (the one that runs when a speaker model is attached)
+# built Segments without char_spans, so EditSession correctly reported
+# "segment only" — and the word-level UI silently went away the moment a
+# user asked for diarization.
+#
+# The data was there all along: sentence_info entries carry `timestamp`,
+# the same [start_ms, end_ms] per-character pairs tier 2 already maps.
+
+def _fake_paraformer(monkeypatch, raw):
+    """Stand in for the 1.6 GB model; returns a scripted generate()."""
+    class _M:
+        def generate(self, **kw):
+            self.kw = kw
+            return raw
+    m = _M()
+    monkeypatch.setattr(T, "_paraformer_model", lambda speakers: m)
+    return m
+
+
+def _sentence(text, ts, spk, start, end):
+    return {"text": text, "timestamp": ts, "spk": spk,
+            "start": start, "end": end}
+
+
+def test_speaker_branch_carries_char_spans(monkeypatch, tmp_path):
+    """The regression itself: --speakers used to cost word-level cuts."""
+    text = "今天我们在这里拍摄婚礼"
+    ts = _REAL_TS[:len(text)]
+    _fake_paraformer(monkeypatch, [{"sentence_info": [
+        _sentence(text, ts, 0, 110, 2350)]}])
+    tr = T._transcribe_paraformer(tmp_path / "a.wav", speakers=True)
+    assert len(tr.segments) == 1
+    seg = tr.segments[0]
+    # NB the speaker label is None here, not "0": with a single label
+    # across the whole clip, _drop_indistinct_speakers nulls it because
+    # FunASR's clusterer reports "everyone is speaker 0" both when that
+    # is true and when it had too little audio to tell (v2.44.3). That
+    # is unrelated to the times, which is what this test is about.
+    assert seg.char_spans, "speaker branch dropped the per-character times"
+    assert len(seg.char_spans) == len(text)
+
+
+def test_speakers_still_allows_word_level_editing(monkeypatch, tmp_path):
+    """End of the chain — what the user actually loses or keeps."""
+    from pixcull.scoring.edit_model import EditSession
+    text = "今天我们在这里拍摄婚礼"
+    _fake_paraformer(monkeypatch, [{"sentence_info": [
+        _sentence(text, _REAL_TS[:len(text)], 0, 110, 2350)]}])
+    tr = T._transcribe_paraformer(tmp_path / "a.wav", speakers=True)
+    assert EditSession(tr).precision == "word", (
+        "turning on diarization must not turn off word-level editing")
+
+
+def test_speaker_labels_are_still_carried(monkeypatch, tmp_path):
+    """The fix must not cost the feature the branch exists for."""
+    _fake_paraformer(monkeypatch, [{"sentence_info": [
+        _sentence("你好", _REAL_TS[:2], 0, 110, 450),
+        _sentence("再见", _REAL_TS[2:4], 1, 530, 830)]}])
+    tr = T._transcribe_paraformer(tmp_path / "a.wav", speakers=True)
+    assert [s.speaker for s in tr.segments] == ["0", "1"]
+
+
+def test_speaker_branch_degrades_when_times_do_not_line_up(monkeypatch,
+                                                           tmp_path):
+    """Mixed zh/en emits one span per WORD, so the per-char map breaks.
+
+    Guessing an alignment would cut on the wrong frames. Falling back to
+    segment precision is the honest answer, and it must not raise.
+    """
+    _fake_paraformer(monkeypatch, [{"sentence_info": [
+        _sentence("hello 世界 everyone", [[0, 100], [100, 200]], 0, 0, 2000)]}])
+    tr = T._transcribe_paraformer(tmp_path / "a.wav", speakers=True)
+    assert tr.segments[0].char_spans is None
+    assert tr.segments[0].text == "hello 世界 everyone"
+
+
+def test_speaker_branch_survives_a_missing_timestamp_key(monkeypatch,
+                                                         tmp_path):
+    """Not every FunASR build emits `timestamp` inside sentence_info."""
+    _fake_paraformer(monkeypatch, [{"sentence_info": [
+        {"text": "你好", "spk": 0, "start": 0, "end": 500}]}])
+    tr = T._transcribe_paraformer(tmp_path / "a.wav", speakers=True)
+    assert tr.segments[0].char_spans is None
+    assert tr.segments[0].start_s == 0.0
+
+
+def test_speaker_branch_refuses_partial_spans_when_the_sentence_splits(
+        monkeypatch, tmp_path):
+    """The guard's real job — and the one a survivor mutation exposed.
+
+    sentence_info gives ONE record per sentence, but the tier-2 mapper
+    splits on punctuation and can return several. Taking ``derived[0]``'s
+    spans would apply the FIRST clause's timeline to the WHOLE sentence:
+    every span after the comma would point at the wrong audio, and a
+    word-level cut would land on the wrong frames while still looking
+    perfectly well-formed.
+
+    Degrading to segment precision is the honest answer. A first pass of
+    this test only covered the count-mismatch case, where the mapper
+    already returns char_spans=None — so dropping the guard entirely
+    changed nothing observable and the mutation survived.
+    """
+    assert len(segments_from_char_timestamps(_REAL_TEXT, _REAL_TS)) > 1, (
+        "fixture no longer splits — this test would prove nothing")
+    _fake_paraformer(monkeypatch, [{"sentence_info": [
+        _sentence(_REAL_TEXT, _REAL_TS, 0, 110, 6535)]}])
+    tr = T._transcribe_paraformer(tmp_path / "a.wav", speakers=True)
+    assert len(tr.segments) == 1
+    assert tr.segments[0].char_spans is None, (
+        "a multi-clause sentence must not inherit clause 1's timeline")
