@@ -78,6 +78,18 @@ dependencies = [
     "pyiqa>=0.1.11",
     # duplicate detection
     "imagededup>=0.3.2",
+    # v2.48 — the OpenAI SDK is the client for every OpenAI-compatible
+    # endpoint we speak to (MiniMax M3, DeepSeek, OpenAI itself). FIVE
+    # first-party modules import it — m3, vlm_judge, meta_judge,
+    # caption_gen, phrase_generator — and NONE of them declared it, so on
+    # a fresh `pip install pixcull` every one of those paths raised
+    # ModuleNotFoundError. Each import is inside a try/except that turns
+    # it into `verdict.error`, so the feature did not crash; it just
+    # quietly did nothing. That predates M3 by months.
+    #
+    # Core rather than an extra: pure Python, no compile step, and with
+    # M3 as the primary judge this is no longer an optional path.
+    "openai>=1.40",
     # templating
     "jinja2>=3.1",
     # storage

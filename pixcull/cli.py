@@ -52,9 +52,35 @@ def run(
         help="Path to a rescorer joblib. Overrides config.rescorer.model_path. "
              "Default (unset) uses models/rescorer_v1.joblib."
     ),
+    vlm_mode: Optional[str] = typer.Option(
+        None, "--vlm-mode",
+        help="Vision judge that actually looks at the pixels. "
+             "'minimax' (MiniMax M3, cloud — needs MINIMAX_API_KEY) | "
+             "'local' (Qwen3-VL via MLX, on-device) | 'off'. "
+             "Default (unset): 'minimax' when a MiniMax key is present, "
+             "else 'off'. Photos ARE uploaded in cloud modes."
+    ),
+    meta_mode: Optional[str] = typer.Option(
+        None, "--meta-mode",
+        help="Text LLM that consolidates every signal into one calibrated "
+             "verdict: 'deepseek' | 'off'. Sends metrics, never images."
+    ),
 ) -> None:
     """Run full culling + scoring pipeline on a folder."""
     from pixcull.pipeline.orchestrator import run_pipeline
+
+    # v2.48 — the run command had no --vlm-mode at all, so the vision
+    # judge was unreachable for anyone using the CLI: run_pipeline
+    # defaults vlm_mode="off" and nothing here ever overrode it. The
+    # backend could be perfectly configured and still never run.
+    if vlm_mode is None:
+        from pixcull.scoring.m3 import api_key_from_env
+        vlm_mode = "minimax" if api_key_from_env() else "off"
+        if vlm_mode == "minimax":
+            console.print(
+                "[dim]MiniMax key found → vision judging with M3. "
+                "Photos are uploaded. Pass --vlm-mode off to keep this "
+                "run on-device.[/dim]")
 
     run_pipeline(
         folder, output,
@@ -62,6 +88,8 @@ def run(
         strictness=strictness,
         rescorer_mode=rescorer_mode,
         rescorer_path=rescorer_path,
+        vlm_mode=vlm_mode,
+        meta_mode=meta_mode or "off",
     )
 
 

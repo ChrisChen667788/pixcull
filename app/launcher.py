@@ -239,11 +239,22 @@ class ServerHandle:
         cfg = load_config()
         if cfg.get("deepseek_api_key"):
             os.environ["DEEPSEEK_API_KEY"] = cfg["deepseek_api_key"]
-        # Defaults: if the user has a DeepSeek key, turn on the full
-        # hybrid stack. Otherwise gracefully degrade to off.
-        default_vlm = "local" if (
-            (cfg.get("deepseek_api_key") or os.environ.get("DEEPSEEK_API_KEY"))
-        ) else "off"
+        # v2.48 — MiniMax too. A GUI launch inherits no shell
+        # environment, so config.json is the ONLY way a .app user can
+        # supply a key; without this line the whole M3 path is dead for
+        # exactly the users who cannot work around it.
+        if cfg.get("minimax_api_key"):
+            os.environ["MINIMAX_API_KEY"] = cfg["minimax_api_key"]
+        # Defaults: prefer the strongest judge the user has credentials
+        # for. M3 sees the pixels AND reads the local measurements, so it
+        # outranks the on-device model; the on-device model outranks
+        # nothing at all. Degrade gracefully to off.
+        if os.environ.get("MINIMAX_API_KEY"):
+            default_vlm = "minimax"
+        elif cfg.get("deepseek_api_key") or os.environ.get("DEEPSEEK_API_KEY"):
+            default_vlm = "local"
+        else:
+            default_vlm = "off"
         default_meta = "deepseek" if os.environ.get("DEEPSEEK_API_KEY") else "off"
 
         server = ThreadingHTTPServer(("127.0.0.1", self.port), sd._Handler)

@@ -29,6 +29,163 @@ from pixcull.scoring.fusion import fuse_score
 from pixcull.scoring.rescorer import load_rescorer, score_row
 from pixcull.scoring.rubric import RUBRIC_AXES
 from pixcull.scoring.rubric_decompose import decompose_row
+
+
+def run_vlm_stage(df, judge, output: Path, *, progress_cb=None) -> dict:
+    """Score every non-cull row with ``judge``; return verdicts by filename.
+
+    Extracted from ``run_pipeline`` in v2.48-P2 so the concurrency has
+    somewhere to be tested.  Nothing covered this stage before — the only
+    two tests that touch ``run_pipeline`` never enable a VLM — which is
+    the "advertised but unreachable" shape this repo keeps rediscovering.
+
+    Writes ``vlm_verdicts.jsonl`` into ``output`` and annotates ``df``
+    in place with ``vlm_<axis>_stars`` / ``vlm_overall_*`` /
+    ``vlm_elapsed_s``.
+    """
+    import json as _json
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    from pixcull.scoring.style_modes import (
+        detect_style_modes, render_style_section_zh,
+    )
+
+    verdicts_by_fn: dict = {}
+    for axis in RUBRIC_AXES:
+        df[f"vlm_{axis.name}_stars"] = None
+    df["vlm_overall_label"] = None
+    df["vlm_overall_rationale"] = ""
+    df["vlm_elapsed_s"] = None
+
+    # V8.0: detect style modes from rule outputs and build a style-aware
+    # prompt section, so a B&W / low-key / long-exposure frame is graded
+    # against THAT style's canon rather than the generic one.  Done up
+    # front on this thread: it is pure CPU over a dict, and it keeps the
+    # workers doing nothing but I/O.
+    tasks: list[tuple[int, Path, dict]] = []
+    for i, (_, row) in enumerate(df.iterrows()):
+        if str(row.get("decision", "")) == "cull":
+            # Skip culls — saves ~30% of the calls on rough batches.
+            # NB this is right for a *second* opinion and wrong for a
+            # first one; v2.48-P1 revisits it when the verdict starts
+            # feeding decide().
+            continue
+        row_d = row.to_dict()
+        tasks.append((i, Path(row["path"]), {
+            "scene": str(row.get("scene") or ""),
+            "style_section": render_style_section_zh(detect_style_modes(row_d)),
+            "row": row_d,
+        }))
+
+    def _score_one(img_path: Path, kw: dict):
+        # `row` carries the local detector readings the judge folds into
+        # its prompt as evidence (v2.48-P0).  Backends that predate it
+        # do not accept the kwarg.
+        try:
+            return judge.score(img_path, **kw)
+        except TypeError:
+            return judge.score(img_path,
+                               **{k: v for k, v in kw.items() if k != "row"})
+
+    # v2.48-P2 — concurrency.
+    #
+    # This was serial: one blocking round-trip per photo.  For a local
+    # MLX model that is correct — the GPU is already saturated by one
+    # request and threads only add contention — but a cloud judge is pure
+    # network I/O, and serial is then the dominant cost of a run: ~2100
+    # non-cull photos at ~3 s/call is 105 minutes, long enough that the
+    # run *will* be interrupted.
+    #
+    # The load-bearing detail, copied from the meta-judge stage: results
+    # are applied to the DataFrame inside the `as_completed` loop, which
+    # runs on ONE thread.  Calling df.at[] from the workers would race,
+    # and pandas would not raise — it would silently lose verdicts.
+    workers = _vlm_workers(judge)
+    n_done = 0
+    n_total = len(tasks)
+    with open(Path(output) / "vlm_verdicts.jsonl", "w",
+              encoding="utf-8") as vf:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            fut_to_task = {pool.submit(_score_one, p, kw): (i, p)
+                           for (i, p, kw) in tasks}
+            for fut in as_completed(fut_to_task):
+                i, img_path = fut_to_task[fut]
+                try:
+                    verdict = fut.result()
+                except Exception as exc:  # noqa: BLE001
+                    console.print(
+                        f"[yellow]VLM error[/] {img_path.name}: {exc}")
+                    continue
+                n_done += 1
+                if progress_cb is not None:
+                    progress_cb(n_done, n_total,
+                                f"VLM {n_done}/{n_total}: {img_path.name}")
+                vf.write(_json.dumps(verdict.to_dict(),
+                                     ensure_ascii=False) + "\n")
+                verdicts_by_fn[img_path.name] = verdict
+                if verdict.error:
+                    continue
+                for axis_name, ax in verdict.axes.items():
+                    if ax.stars is not None:
+                        df.at[df.index[i], f"vlm_{axis_name}_stars"] = ax.stars
+                df.at[df.index[i], "vlm_overall_label"] = verdict.overall_label
+                df.at[df.index[i], "vlm_overall_rationale"] = verdict.overall_rationale
+                df.at[df.index[i], "vlm_elapsed_s"] = verdict.elapsed_s
+
+    n_err = sum(1 for v in verdicts_by_fn.values()
+                if getattr(v, "error", None))
+    console.print(
+        f"[cyan]VLM[/] {getattr(judge, 'model_name', '?')} scored "
+        f"{int(df['vlm_elapsed_s'].notna().sum())} non-cull images "
+        f"(concurrent x{workers})"
+        + (f" [yellow]— {n_err} errored[/]" if n_err else ""))
+    if n_total and n_err == n_total:
+        # Every call failed.  That is not a rough batch, it is a broken
+        # configuration — stale endpoint, expired key, wrong model
+        # string — and the CSV it produces is indistinguishable from a
+        # good run with a shy model.  This is the exact failure the
+        # `m3 doctor` command exists for, so name it.
+        console.print(
+            "[red]VLM: every call failed[/] — this is a configuration "
+            "problem, not a hard batch. Run `pixcull m3 doctor`. First "
+            f"error: {next(iter(verdicts_by_fn.values())).error}")
+    return verdicts_by_fn
+
+
+def _vlm_workers(judge) -> int:
+    """How many VLM calls to have in flight.
+
+    The right answer depends entirely on where the model runs, and
+    getting it backwards is a real regression rather than a missed
+    optimisation:
+
+    * **Local (MLX / ONNX)** — the GPU is the bottleneck and it is
+      already saturated by one request. Threads add contention and
+      memory pressure and make it *slower*, so: 1. This is why the loop
+      was serial before v2.48 and why concurrency could not simply be
+      switched on for everybody.
+    * **Cloud (M3 and friends)** — pure network I/O. Wall-clock is
+      round-trip latency divided by workers, until the provider's rate
+      limit binds. The judge does its own 200 RPM limiting, so workers
+      only need to be enough to keep that window full: at ~3 s/call,
+      8 workers sustain ~160 rpm and 12 saturate it.
+
+    ``PIXCULL_VLM_WORKERS`` overrides, mostly so a slow uplink can be
+    tuned down without a code change.
+    """
+    raw = os.environ.get("PIXCULL_VLM_WORKERS", "").strip()
+    if raw:
+        try:
+            return max(1, int(raw))
+        except ValueError:
+            pass
+    # `model_name` is "<provider>:<model>" for API backends and a bare
+    # repo id for local ones — the only signal available without the
+    # judge classes knowing about each other.
+    name = str(getattr(judge, "model_name", ""))
+    is_cloud = any(name.startswith(p + ":")
+                   for p in ("minimax", "deepseek", "openai", "custom"))
+    return 8 if is_cloud else 1
 from pixcull.scoring.axis_rescorer import (
     load_axis_rescorers, score_row_per_axis,
 )
@@ -454,51 +611,8 @@ def run_pipeline(
         from pixcull.scoring.vlm_judge import load_judge
         judge = load_judge(vlm_mode)
         if judge is not None:
-            for axis in RUBRIC_AXES:
-                df[f"vlm_{axis.name}_stars"] = None
-            df["vlm_overall_label"] = None
-            df["vlm_overall_rationale"] = ""
-            df["vlm_elapsed_s"] = None
-            verdicts_path = output / "vlm_verdicts.jsonl"
-            with open(verdicts_path, "w", encoding="utf-8") as vf:
-                for i, (_, row) in enumerate(df.iterrows()):
-                    if str(row.get("decision", "")) == "cull":
-                        # Skip culls — saves ~30% time on rough batches
-                        continue
-                    img_path = Path(row["path"])
-                    if progress_cb is not None:
-                        progress_cb(i + 1, total,
-                                    f"VLM {i+1}/{total}: {img_path.name}")
-                    # V8.0: detect style modes from rule outputs, build a
-                    # style-aware prompt section, pass to the VLM so it
-                    # grades a B&W / low-key / long-exposure photo
-                    # against THAT style's canon, not the generic one.
-                    from pixcull.scoring.style_modes import (
-                        detect_style_modes, render_style_section_zh,
-                    )
-                    style_profile = detect_style_modes(row.to_dict())
-                    style_section = render_style_section_zh(style_profile)
-                    verdict = judge.score(
-                        img_path,
-                        scene=str(row.get("scene") or ""),
-                        style_section=style_section,
-                    )
-                    vf.write(_json.dumps(verdict.to_dict(),
-                                         ensure_ascii=False) + "\n")
-                    vlm_verdicts_by_fn[img_path.name] = verdict
-                    if verdict.error:
-                        continue
-                    for axis_name, ax in verdict.axes.items():
-                        if ax.stars is not None:
-                            df.at[df.index[i],
-                                  f"vlm_{axis_name}_stars"] = ax.stars
-                    df.at[df.index[i], "vlm_overall_label"] = verdict.overall_label
-                    df.at[df.index[i], "vlm_overall_rationale"] = verdict.overall_rationale
-                    df.at[df.index[i], "vlm_elapsed_s"] = verdict.elapsed_s
-            console.print(
-                f"[cyan]VLM[/] {judge.model_name} scored "
-                f"{(df['vlm_elapsed_s'].notna()).sum()} non-cull images"
-            )
+            vlm_verdicts_by_fn = run_vlm_stage(
+                df, judge, output, progress_cb=progress_cb)
 
     # V3.1: Meta-judge stage. DeepSeek V4 (text-only) reads ALL the
     # signals — rule scores, V2.1 model stars, VLM verdict, detector

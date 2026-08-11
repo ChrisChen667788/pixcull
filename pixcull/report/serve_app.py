@@ -12753,8 +12753,6 @@ def _load_app_config_into_env() -> None:
     configured it via the launcher menu. Read the same config.json the
     launcher writes to so dev-mode runs match production behavior.
     """
-    if os.environ.get("DEEPSEEK_API_KEY"):
-        return  # already set, don't override
     import sys as _sys
     if _sys.platform == "darwin":
         cfg_path = Path.home() / "Library" / "Application Support" / "PixCull" / "config.json"
@@ -12762,12 +12760,24 @@ def _load_app_config_into_env() -> None:
         cfg_path = Path.home() / ".pixcull" / "config.json"
     if not cfg_path.exists():
         return
+    # v2.48 — one guard PER key, not a blanket early return.
+    #
+    # This used to bail out entirely when DEEPSEEK_API_KEY was already in
+    # the environment. With a second provider that is a silent trap: a
+    # user who exports their DeepSeek key in a shell profile would find
+    # their MiniMax key — stored in the very same config.json — never
+    # loaded, and M3 simply not running, with nothing said.
+    keys = (("deepseek_api_key", "DEEPSEEK_API_KEY", "DeepSeek"),
+            ("minimax_api_key",  "MINIMAX_API_KEY",  "MiniMax"))
     try:
         cfg = json.loads(cfg_path.read_text("utf-8"))
-        if cfg.get("deepseek_api_key"):
-            os.environ["DEEPSEEK_API_KEY"] = cfg["deepseek_api_key"]
-            print(f"  config: loaded DeepSeek key from {cfg_path}",
-                  file=sys.stderr)
+        for cfg_key, env_key, label in keys:
+            if os.environ.get(env_key):
+                continue          # the shell wins; never override it
+            if cfg.get(cfg_key):
+                os.environ[env_key] = cfg[cfg_key]
+                print(f"  config: loaded {label} key from {cfg_path}",
+                      file=sys.stderr)
     except (OSError, json.JSONDecodeError) as exc:
         _dbg("load_app_config", exc, str(cfg_path))
 
