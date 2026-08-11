@@ -31,7 +31,60 @@ from pixcull.scoring.rubric import RUBRIC_AXES
 from pixcull.scoring.rubric_decompose import decompose_row
 
 
-def run_vlm_stage(df, judge, output: Path, *, progress_cb=None) -> dict:
+def _reapply_decisions_with_vlm(df, verdicts_by_fn: dict,
+                                decide_args: list[dict], config, *,
+                                strictness: str, vertical, personal_shift,
+                                authority: str) -> int:
+    """Re-run ``decide`` now that the judge has actually seen the photos.
+
+    The ordering here is forced, not chosen: the VLM stage needs
+    ``decision`` to know which rows to skip, so it must run after the
+    first decision pass — which is exactly why, before v2.48, a verdict
+    could never change anything.  Recomputing is cheaper and far less
+    fragile than trying to interleave the two.
+
+    Returns how many decisions actually moved.
+    """
+    if authority == "off" or not verdicts_by_fn:
+        return 0
+    changed = 0
+    for i, args in enumerate(decide_args):
+        if i >= len(df.index):
+            break
+        fn = str(df.at[df.index[i], "filename"])
+        verdict = verdicts_by_fn.get(fn)
+        if verdict is None or getattr(verdict, "error", None):
+            # No usable verdict — the API was down, the row was skipped,
+            # the JSON was malformed. Leave the rule's decision standing.
+            # A cloud outage must degrade to a usable cull, not to chaos.
+            continue
+        axes = {name: ax.stars
+                for name, ax in (getattr(verdict, "axes", {}) or {}).items()}
+        dec, reasons = decide(
+            args["final"], args["flags"], config, strictness,  # type: ignore[arg-type]
+            scene=args["scene"], rescorer_prob_keep=args["r_prob"],
+            vertical=vertical, personal_shift=personal_shift,
+            vlm_label=getattr(verdict, "overall_label", None),
+            vlm_axes=axes, vlm_authority=authority,
+        )
+        before = str(df.at[df.index[i], "decision"])
+        if dec.value != before:
+            changed += 1
+        df.at[df.index[i], "decision"] = dec.value
+        df.at[df.index[i], "reasons"] = "; ".join(reasons)
+    if authority == "primary":
+        console.print(
+            f"[cyan]VLM authority[/] primary — {changed} decision(s) "
+            f"changed by the judge")
+    else:
+        console.print(
+            f"[dim]VLM authority: shadow — recorded only, "
+            f"{changed} decision(s) would have changed[/dim]")
+    return changed
+
+
+def run_vlm_stage(df, judge, output: Path, *, progress_cb=None,
+                  score_culls: bool = False) -> dict:
     """Score every non-cull row with ``judge``; return verdicts by filename.
 
     Extracted from ``run_pipeline`` in v2.48-P2 so the concurrency has
@@ -64,11 +117,12 @@ def run_vlm_stage(df, judge, output: Path, *, progress_cb=None) -> dict:
     # workers doing nothing but I/O.
     tasks: list[tuple[int, Path, dict]] = []
     for i, (_, row) in enumerate(df.iterrows()):
-        if str(row.get("decision", "")) == "cull":
+        if not score_culls and str(row.get("decision", "")) == "cull":
             # Skip culls — saves ~30% of the calls on rough batches.
-            # NB this is right for a *second* opinion and wrong for a
-            # first one; v2.48-P1 revisits it when the verdict starts
-            # feeding decide().
+            # Sound for a *second* opinion (a cull is already a cull) and
+            # nonsense for a first one, so v2.48-P1's primary mode passes
+            # score_culls=True: those are the frames the rule stack most
+            # often gets wrong.
             continue
         row_d = row.to_dict()
         tasks.append((i, Path(row["path"]), {
@@ -325,6 +379,7 @@ def run_pipeline(
     rescorer_path: str | None = None,
     progress_cb: Callable[[int, int, str], None] | None = None,
     vlm_mode: str = "off",
+    vlm_authority: str = "off",
     meta_mode: str = "off",
     vertical: str | None = None,
 ) -> Path:
@@ -470,6 +525,7 @@ def run_pipeline(
         _personal_shift = 0.0
         _axis_pref = None
     decisions, dim_scores, reasons_all = [], [], []
+    _decide_args: list[dict] = []      # v2.48-P1 — for the re-decide pass
     rescorer_preds: list[str | None] = []
     rescorer_probs: list[float | None] = []
     for _, row in df.iterrows():
@@ -496,6 +552,17 @@ def run_pipeline(
                 r_pred = r_out["pred"]
                 r_prob = r_out["prob_keep"]
 
+        # v2.48-P1 — remember what this row was decided on, so the
+        # verdict can be recomputed once the vision judge has actually
+        # seen the photo.  The VLM stage necessarily runs later (it needs
+        # `decision` to know which rows to skip), so a judge with real
+        # authority cannot be consulted here on the first pass.
+        _decide_args.append({
+            "final": dims["final"],
+            "flags": row["flags"],
+            "scene": row["scene"],
+            "r_prob": r_prob,
+        })
         dec, reasons = decide(
             dims["final"],
             row["flags"],
@@ -611,8 +678,20 @@ def run_pipeline(
         from pixcull.scoring.vlm_judge import load_judge
         judge = load_judge(vlm_mode)
         if judge is not None:
+            # v2.48-P1 — with real authority the judge must see the rows
+            # the rule would have thrown away. Skipping culls is a sound
+            # economy for a second opinion (a cull is already a cull) and
+            # nonsense for a first one: those are exactly the frames a
+            # rule stack gets wrong, and the ones a photographer notices.
             vlm_verdicts_by_fn = run_vlm_stage(
-                df, judge, output, progress_cb=progress_cb)
+                df, judge, output, progress_cb=progress_cb,
+                score_culls=(vlm_authority == "primary"))
+            if vlm_authority != "off":
+                _reapply_decisions_with_vlm(
+                    df, vlm_verdicts_by_fn, _decide_args, config,
+                    strictness=strictness, vertical=vertical,
+                    personal_shift=_personal_shift,
+                    authority=vlm_authority)
 
     # V3.1: Meta-judge stage. DeepSeek V4 (text-only) reads ALL the
     # signals — rule scores, V2.1 model stars, VLM verdict, detector

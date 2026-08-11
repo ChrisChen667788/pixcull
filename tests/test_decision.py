@@ -308,3 +308,139 @@ def test_threshold_clamps_to_unit_range(config):
         for score in (0.0, 0.5, 1.0):
             dec, _ = decide(score, [], config, scene="portrait", vertical=vkey)
             assert dec in (Decision.KEEP, Decision.MAYBE, Decision.CULL)
+
+
+# ── v2.48-P1 — the vision judge gets real authority ───────────────────
+#
+# Before this, a VLM verdict was decorative: score_final and decision
+# were written before the VLM stage even ran, and rule-CULL rows were
+# skipped, so five stars on every axis could not save one photo.
+#
+# `vlm_authority` is "off" by default and stays that way until the
+# positioning rewrite ships alongside it — the README still promises
+# photos never leave the machine, and that promise must not be broken by
+# a default flip in a patch release.
+
+def test_authority_off_is_exactly_v247(config):
+    """The safety property. A verdict must change nothing until asked."""
+    for label in ("keep", "cull", "maybe"):
+        dec, _ = decide(0.72, ["closed_eyes"], config, scene="portrait",
+                        vlm_label=label, vlm_axes={"technical": 5})
+        assert dec is Decision.CULL, f"{label} changed an off-mode decision"
+
+
+def test_shadow_records_without_changing_anything(config):
+    dec, reasons = decide(0.72, ["closed_eyes"], config, scene="portrait",
+                          vlm_label="keep", vlm_authority="shadow")
+    assert dec is Decision.CULL
+    assert "vlm_shadow=keep" in reasons
+
+
+def test_shadow_annotation_survives_the_non_cull_path(config):
+    """The bug I wrote and caught: rule_reasons is built fresh.
+
+    Appending the note to `reasons` only reaches the hard-cull return, so
+    it vanished on precisely the rows worth shadowing — the ones the rule
+    was going to keep anyway and where a disagreement is interesting.
+    """
+    dec, reasons = decide(0.9, [], config, vlm_label="cull",
+                          vlm_authority="shadow")
+    assert dec is Decision.KEEP
+    assert "vlm_shadow=cull" in reasons
+
+
+def test_primary_lets_the_judge_override_a_hard_cull(config):
+    """A candid of someone laughing with their eyes shut.
+
+    The rule stack has always got this wrong. M3 was shown the blink
+    count in its prompt, so keeping it is a considered override, not
+    ignorance.
+    """
+    dec, reasons = decide(0.72, ["closed_eyes"], config, scene="portrait",
+                          vlm_label="keep", vlm_axes={"technical": 4},
+                          vlm_authority="primary")
+    assert dec is Decision.KEEP
+    assert any("vlm_kept_despite" in r for r in reasons)
+    assert "closed_eyes" in " ".join(reasons), (
+        "the photographer must be able to see WHAT was overridden")
+
+
+def test_primary_distrusts_an_incoherent_verdict(config):
+    """"Keep" alongside its own 1★ technical on a flagged frame is not a
+    considered override, it is the model contradicting itself."""
+    dec, reasons = decide(0.72, ["severely_blurry"], config, scene="portrait",
+                          vlm_label="keep", vlm_axes={"technical": 1},
+                          vlm_authority="primary")
+    assert dec is Decision.CULL
+    assert any("vlm_incoherent" in r for r in reasons)
+
+
+def test_incoherence_guard_only_fires_on_flagged_rows(config):
+    """A low technical score is a legitimate keep when nothing is flagged —
+    grain, motion blur as intent, a soft-focus portrait.
+
+    Scored at 0.2 so the rule stack would CULL: if the guard wrongly
+    fired here we would fall back to the rule and lose the keep. A first
+    version used 0.72, where the rule happens to agree, so widening the
+    guard changed nothing observable and the mutation survived.
+    """
+    dec, reasons = decide(0.2, [], config, vlm_label="keep",
+                          vlm_axes={"technical": 1}, vlm_authority="primary")
+    assert dec is Decision.KEEP, (
+        "an unflagged frame is the judge's call however it rates the "
+        f"technique; got {reasons}")
+    assert not any("incoherent" in r for r in reasons)
+
+
+def test_primary_falls_back_when_there_is_no_verdict(config):
+    """An API error must degrade to the rule stack, not to chaos.
+
+    With M3 primary and the network down, every row arrives here with
+    vlm_label=None. The run has to still produce a usable cull.
+    """
+    dec, _ = decide(0.72, ["closed_eyes"], config, scene="portrait",
+                    vlm_label=None, vlm_authority="primary")
+    assert dec is Decision.CULL
+    dec, _ = decide(0.9, [], config, vlm_label=None, vlm_authority="primary")
+    assert dec is Decision.KEEP
+
+
+def test_unknown_label_falls_through_rather_than_guessing(config):
+    dec, reasons = decide(0.9, [], config, vlm_label="probably fine?",
+                          vlm_authority="primary")
+    assert dec is Decision.KEEP
+    assert not any("vlm=" in r for r in reasons)
+
+
+def test_vendor_synonyms_are_understood(config):
+    for label, expect in (("reject", Decision.CULL),
+                          ("discard", Decision.CULL),
+                          ("borderline", Decision.MAYBE)):
+        dec, _ = decide(0.9, [], config, vlm_label=label,
+                        vlm_authority="primary")
+        assert dec is expect, label
+
+
+def test_primary_can_cull_what_the_rule_would_keep(config):
+    """Authority has to cut both ways or it is not authority."""
+    dec, reasons = decide(0.95, [], config, vlm_label="cull",
+                          vlm_authority="primary")
+    assert dec is Decision.CULL
+    assert "vlm=cull" in reasons
+
+
+def test_case_and_whitespace_are_tolerated(config):
+    dec, _ = decide(0.2, [], config, vlm_label="  KEEP \n",
+                    vlm_authority="primary")
+    assert dec is Decision.KEEP
+
+
+def test_missing_axes_do_not_crash_the_guard(config):
+    """vlm_axes is optional; a verdict with no technical star is common."""
+    dec, _ = decide(0.72, ["closed_eyes"], config, scene="portrait",
+                    vlm_label="keep", vlm_axes=None, vlm_authority="primary")
+    assert dec is Decision.KEEP
+    dec, _ = decide(0.72, ["closed_eyes"], config, scene="portrait",
+                    vlm_label="keep", vlm_axes={"technical": None},
+                    vlm_authority="primary")
+    assert dec is Decision.KEEP

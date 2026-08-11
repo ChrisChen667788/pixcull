@@ -39,6 +39,20 @@ _TINY_SUBJECT_TOLERANT_SCENES = frozenset({
 _BLUR_TOLERANT_SCENES = frozenset({"landscape"})
 
 
+#: v2.48-P1 — how a vision judge's own word maps onto our three buckets.
+#: Kept as data so an unknown label (a model that answered "maybe not")
+#: falls through to the rule stack instead of being coerced into a guess.
+_VLM_LABELS: dict[str, Decision] = {
+    "keep":  Decision.KEEP,
+    "maybe": Decision.MAYBE,
+    "cull":  Decision.CULL,
+    # Words the models actually return instead of our three.
+    "reject": Decision.CULL,
+    "discard": Decision.CULL,
+    "borderline": Decision.MAYBE,
+}
+
+
 def decide(
     final_score: float,
     flags: list[str],
@@ -49,6 +63,9 @@ def decide(
     rescorer_prob_keep: float | None = None,
     vertical: str | None = None,
     personal_shift: float = 0.0,
+    vlm_label: str | None = None,
+    vlm_axes: dict[str, float | None] | None = None,
+    vlm_authority: str = "off",
 ) -> tuple[Decision, list[str]]:
     """Map final score + blocking flags to Keep / Maybe / Cull with human-readable reasons.
 
@@ -132,20 +149,78 @@ def decide(
         hard_cull = hard_cull - set(vert_policy.tolerated_flags)
 
     triggered = set(flags) & hard_cull
+
+    # v2.48-P1 — the vision judge gets real authority.
+    #
+    # Until now a VLM verdict landed in a parallel CSV column and changed
+    # nothing: score_final and decision were already written before the
+    # VLM stage ran, and rule-CULL rows were skipped outright. Five stars
+    # on every axis could not save one photo.
+    #
+    # ``vlm_authority``:
+    #   "off"     — v2.47 behaviour. The default, and what ships until
+    #               the positioning rewrite lands with it.
+    #   "shadow"  — record the disagreement, change nothing. Safe to
+    #               leave on; this is how you find out whether you would
+    #               have trusted it before you do.
+    #   "primary" — M3 decides.
+    #
+    # In "primary" the hard-cull flags stop being a veto, and that is
+    # deliberate rather than reckless: the judge was shown those exact
+    # measurements in its prompt (see m3.build_evidence_block). When it
+    # returns "keep" on a frame flagged closed_eyes, it is not ignorant
+    # of the closed eyes — it is saying the frame is worth keeping
+    # anyway, which for a laughing-with-eyes-shut candid is the correct
+    # call and the one the rule stack has always got wrong.
+    #
+    # What it is NOT allowed to do is be incoherent. A verdict of "keep"
+    # alongside its own technical rating of 1-2 stars on a frame the
+    # detectors flagged is not a considered override, it is the model
+    # contradicting itself, and that is exactly the over-confidence the
+    # meta-judge was built to catch. Those fall back to the rule.
+    vlm_says = (vlm_label or "").strip().lower()
+    if vlm_authority == "primary" and vlm_says in _VLM_LABELS:
+        tech = (vlm_axes or {}).get("technical")
+        incoherent = (
+            vlm_says == "keep" and triggered
+            and tech is not None and float(tech) <= 2.0
+        )
+        if incoherent:
+            reasons.append(
+                f"vlm_incoherent(keep_but_technical={float(tech):.0f}★)")
+        else:
+            vdec = _VLM_LABELS[vlm_says]
+            vreasons = [*reasons, f"vlm={vlm_says}"]
+            if triggered and vdec is not Decision.CULL:
+                # Say it out loud. A photographer who sees a flagged
+                # frame kept must be able to tell that a judge chose it
+                # over the detector, not that the detector was dropped.
+                vreasons.append(
+                    f"vlm_kept_despite({','.join(sorted(triggered))})")
+            return vdec, vreasons
+    # Shadow annotation is appended to whichever list is actually
+    # returned. Appending to `reasons` here would only survive the
+    # hard-cull path — `rule_reasons` below is built fresh — so the
+    # observation would vanish on exactly the rows worth observing.
+    shadow_note = ([f"vlm_shadow={vlm_says}"]
+                   if vlm_authority == "shadow" and vlm_says in _VLM_LABELS
+                   else [])
+
     if triggered:
+        reasons.extend(shadow_note)
         reasons.extend(sorted(triggered))
         return Decision.CULL, reasons
 
     # Rule stack's own verdict — same as V0.8/V1.1.
     if final_score >= keep_min:
         rule_decision = Decision.KEEP
-        rule_reasons = [f"score={final_score:.2f}"]
+        rule_reasons = [f"score={final_score:.2f}", *shadow_note]
     elif final_score <= cull_max:
         rule_decision = Decision.CULL
-        rule_reasons = [f"low_score={final_score:.2f}", *flags]
+        rule_reasons = [f"low_score={final_score:.2f}", *flags, *shadow_note]
     else:
         rule_decision = Decision.MAYBE
-        rule_reasons = [f"score={final_score:.2f}", *flags]
+        rule_reasons = [f"score={final_score:.2f}", *flags, *shadow_note]
 
     # V1.2 adjudicate mode: the rescorer can override rule=MAYBE only.
     # Rule-keeps and rule-culls are never touched in this phase — we only

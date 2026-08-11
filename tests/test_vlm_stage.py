@@ -290,3 +290,146 @@ def test_no_rows_to_score_is_not_a_wipeout(tmp_path, capsys):
     df = make_df(6, cull_every=1)
     run_vlm_stage(df, FakeJudge(), tmp_path)
     assert "every call failed" not in capsys.readouterr().out
+
+
+# ── v2.48-P1 — the verdict now reaches the decision ───────────────────
+
+from pixcull.config import PixCullConfig  # noqa: E402
+from pixcull.pipeline.orchestrator import (  # noqa: E402
+    _reapply_decisions_with_vlm,
+)
+
+
+@pytest.fixture(scope="module")
+def cfg():
+    return PixCullConfig.load()
+
+
+def _verdict(label, technical=4.0, error=None):
+    v = VlmVerdict(filename="x", model_name="minimax:minimax-m3",
+                   axes={a.name: VlmAxisScore(stars=technical)
+                         for a in RUBRIC_AXES})
+    v.overall_label = label
+    v.error = error
+    return v
+
+
+def _mini(decisions, flags=None):
+    df = pd.DataFrame([
+        {"filename": f"img_{i}.jpg", "path": f"/n/img_{i}.jpg",
+         "decision": d, "reasons": "rule"}
+        for i, d in enumerate(decisions)])
+    args = [{"final": 0.5, "flags": (flags or {}).get(i, []),
+             "scene": "portrait", "r_prob": None}
+            for i in range(len(decisions))]
+    return df, args
+
+
+def test_primary_flips_a_rule_cull_to_keep(cfg):
+    df, args = _mini(["cull", "cull"], flags={0: ["closed_eyes"]})
+    n = _reapply_decisions_with_vlm(
+        df, {"img_0.jpg": _verdict("keep"), "img_1.jpg": _verdict("cull")},
+        args, cfg, strictness="standard", vertical=None, personal_shift=0.0,
+        authority="primary")
+    assert n == 1
+    assert df.at[0, "decision"] == "keep"
+    assert df.at[1, "decision"] == "cull"
+    assert "vlm_kept_despite" in df.at[0, "reasons"]
+
+
+def test_shadow_changes_nothing_on_disk(cfg):
+    df, args = _mini(["cull"], flags={0: ["closed_eyes"]})
+    before = df.at[0, "decision"]
+    _reapply_decisions_with_vlm(
+        df, {"img_0.jpg": _verdict("keep")}, args, cfg,
+        strictness="standard", vertical=None, personal_shift=0.0,
+        authority="shadow")
+    assert df.at[0, "decision"] == before
+    assert "vlm_shadow=keep" in df.at[0, "reasons"]
+
+
+def test_off_is_a_no_op(cfg):
+    df, args = _mini(["cull"])
+    assert _reapply_decisions_with_vlm(
+        df, {"img_0.jpg": _verdict("keep")}, args, cfg,
+        strictness="standard", vertical=None, personal_shift=0.0,
+        authority="off") == 0
+    assert df.at[0, "decision"] == "cull"
+
+
+def test_an_errored_verdict_leaves_the_rule_standing(cfg):
+    """A cloud outage must degrade to a usable cull, not to chaos."""
+    df, args = _mini(["cull", "keep"])
+    _reapply_decisions_with_vlm(
+        df, {"img_0.jpg": _verdict("keep", error="APIStatusError: 503"),
+             "img_1.jpg": _verdict("cull", error="timeout")},
+        args, cfg, strictness="standard", vertical=None,
+        personal_shift=0.0, authority="primary")
+    assert list(df["decision"]) == ["cull", "keep"]
+
+
+def test_rows_with_no_verdict_are_untouched(cfg):
+    df, args = _mini(["cull", "keep", "maybe"])
+    _reapply_decisions_with_vlm(
+        df, {"img_1.jpg": _verdict("cull")}, args, cfg,
+        strictness="standard", vertical=None, personal_shift=0.0,
+        authority="primary")
+    assert df.at[0, "decision"] == "cull"
+    assert df.at[2, "decision"] == "maybe"
+    assert df.at[1, "decision"] == "cull"
+
+
+def test_verdicts_are_matched_by_filename_not_position(cfg):
+    """verdicts_by_fn is keyed by name; the df may be in any order."""
+    df, args = _mini(["keep", "keep", "keep"])
+    _reapply_decisions_with_vlm(
+        df, {"img_2.jpg": _verdict("cull")}, args, cfg,
+        strictness="standard", vertical=None, personal_shift=0.0,
+        authority="primary")
+    assert list(df["decision"]) == ["keep", "keep", "cull"]
+
+
+def test_primary_mode_scores_the_culls(tmp_path):
+    """The economy that is right for a second opinion and wrong for a first."""
+    df = make_df(6, cull_every=2)
+    judge = FakeJudge()
+    run_vlm_stage(df, judge, tmp_path, score_culls=True)
+    assert len(judge.calls) == 6, (
+        "primary mode must judge the rows the rule would have discarded — "
+        "those are the ones it most often gets wrong")
+
+
+def test_second_opinion_mode_still_skips_them(tmp_path):
+    df = make_df(6, cull_every=2)
+    judge = FakeJudge()
+    run_vlm_stage(df, judge, tmp_path, score_culls=False)
+    assert len(judge.calls) == 3
+
+
+def test_run_pipeline_asks_for_cull_scoring_in_primary_mode():
+    """The wiring, not the flag.
+
+    run_vlm_stage honours score_culls (tested above), but nothing checked
+    that run_pipeline actually derives it from vlm_authority — so a
+    mutation pinning it to False survived while every other test stayed
+    green. Parsed with ast rather than grepped so a reformat does not
+    turn this into a false alarm.
+    """
+    import ast
+    import inspect
+
+    from pixcull.pipeline import orchestrator as O
+
+    tree = ast.parse(inspect.getsource(O.run_pipeline))
+    calls = [n for n in ast.walk(tree)
+             if isinstance(n, ast.Call)
+             and getattr(n.func, "id", "") == "run_vlm_stage"]
+    assert calls, "run_pipeline no longer calls run_vlm_stage"
+    kw = {k.arg: k.value for k in calls[0].keywords}
+    assert "score_culls" in kw, (
+        "run_pipeline never asks for cull rows to be judged, so primary "
+        "authority can only ever confirm the rule — the frames it is "
+        "meant to rescue are never sent")
+    src = ast.dump(kw["score_culls"])
+    assert "vlm_authority" in src and "primary" in src, (
+        f"score_culls is not derived from vlm_authority: {src}")
