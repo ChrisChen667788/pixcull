@@ -134,7 +134,13 @@ Plus new: a **consent gate** before the first upload, and a per-photo
 
 ## What landed in 2.48.0
 
-**P0 only.** Deliberately: P0 changes **no default**. `vlm_mode` is still
+**P0, P1 and P2.** P3/P4/P5 moved to their own versions — see
+`ROADMAP-M3-remaining.md`, which also inserts a measurement version
+*before* the positioning rewrite. Nothing yet shows M3 judges better than
+the rule stack; rewriting 47 public promises on an unverified assumption
+would be a bet, not a decision.
+
+**No default changed.** Deliberately: P0 changes **no default**. `vlm_mode` is still
 `"off"`, so the product is still local-first as shipped and every public
 claim in P5 is still true. That keeps this a safe checkpoint — the
 version that flips the default must land P1 **and** P5 together, or the
@@ -148,9 +154,14 @@ README becomes a lie the moment it is pushed.
 | `cli.py` | `pixcull m3 doctor` / `pixcull m3 status` |
 | `tests/test_m3.py` | 36 tests, **8/8 mutations caught** |
 | `test_repo_hygiene.py` | MiniMax key shapes added to the banned list |
+| `orchestrator.run_vlm_stage` | extracted + concurrent (P2); nothing tested it before |
+| `orchestrator._reapply_decisions_with_vlm` | P1 — the verdict finally reaches `decide()` |
+| `decision.decide` | `vlm_label` / `vlm_axes` / `vlm_authority`, default `off` |
+| `pyproject.toml` | **openai declared** — 5 modules imported it, none declared it |
+| `cli.py run` | `--vlm-mode` / `--meta-mode`; M3 was unreachable from the CLI |
 
-Gate: **1743 passed, 9 skipped, 0 failed** (9 = the documented 5 + 4 ASR
-weights-not-mounted).
+Gate: **1799 passed, 9 skipped, 0 failed** (9 = the documented 5 + 4 ASR
+weights-not-mounted). Mutation rounds: 8/8, 3/3, 8/8, 8/8.
 
 Mutations verified caught: stale endpoint · stale model · 4xx retried ·
 video-shape guard removed · evidence dropped from the prompt · cache
