@@ -1492,6 +1492,74 @@ _EXPOSURE_HIGHLIGHT_DELTA = 4.0
 _EXPOSURE_MIN_CLUSTER = 3
 
 
+def _m3_advice_pass(rows: list, df) -> int:
+    """Rewrite each row's advice with M3, concurrently. Best-effort.
+
+    v2.51.  ``photo_advice`` is 1576 lines of templates and zero LLM
+    calls — it can say "主体锐利,焦平面到位(σ²=300)" because it read a
+    number, but never "新娘的手被前景虚化挡住了", because it has never
+    seen the frame.
+
+    Every failure path keeps the template advice.  Advice is commentary
+    on a decision already made; nobody's cull should be worse because a
+    key expired.  Only ``keep`` and ``maybe`` rows are sent — nobody
+    reads a paragraph about a photo they discarded, and at ~¥0.005 a row
+    that is most of the bill.
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    try:
+        from pixcull.scoring.m3 import api_key_from_env, has_consent
+    except Exception:  # noqa: BLE001
+        return 0
+    if not (api_key_from_env() and has_consent()):
+        return 0
+
+    todo = [(i, r) for i, r in enumerate(rows)
+            if str(r.get("decision", "")) in ("keep", "maybe")
+            and r.get("advice") and r.get("path")]
+    if not todo:
+        return 0
+
+    try:
+        from pixcull.scoring.m3_advice import enrich_advice
+        from pixcull.scoring.vlm_judge import make_minimax_judge
+        judge = make_minimax_judge(api_key_from_env())
+    except Exception as exc:  # noqa: BLE001
+        _dbg("m3_advice_init", exc, "")
+        return 0
+
+    by_fn = {}
+    try:
+        for rec in df.to_dict("records"):
+            by_fn[str(rec.get("filename", ""))] = rec
+    except Exception:  # noqa: BLE001
+        pass
+
+    def _one(idx: int, row: dict):
+        rec = by_fn.get(str(row.get("filename", "")), {})
+        stars = {k[len("vlm_"):-len("_stars")]: v
+                 for k, v in rec.items()
+                 if k.startswith("vlm_") and k.endswith("_stars")}
+        return idx, enrich_advice(
+            rec or row, stars, str(row.get("decision", "")),
+            row["advice"], judge,
+            image_path=Path(str(row.get("path") or "")))
+
+    n = 0
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        futs = [pool.submit(_one, i, r) for i, r in todo]
+        for fut in as_completed(futs):
+            try:
+                idx, advice = fut.result()
+            except Exception:  # noqa: BLE001
+                continue
+            if advice is not rows[idx]["advice"]:
+                rows[idx]["advice"] = advice
+                n += 1
+    return n
+
+
 def _exposure_consistency_pass(rows: list[dict]) -> None:
     """Mutates rows in place: adds ``exposure_outlier`` (bool) and
     ``exposure_deviation`` (dict) to each row that's part of a
@@ -1946,6 +2014,13 @@ def _build_results_uncached(run_id: str) -> tuple[list[dict], dict] | None:
             "meta_confidence": _f(r.get("meta_confidence")),
             "meta_inconsistencies": str(r.get("meta_inconsistencies", "") or ""),
         })
+
+    # v2.51 — let M3 rewrite the advice, having actually looked at the
+    # photos. Done AFTER the loop and concurrently: build_advice is
+    # sub-millisecond, so the serial per-row loop above was fine, but an
+    # HTTP round-trip inside it would mean 500 sequential calls before
+    # the results page renders at all.
+    _m3_advice_pass(rows, df)
 
     # P-UX-14 — within-burst exposure-consistency check. For each
     # cluster of ≥ 3 photos, take the median mean_luma + median

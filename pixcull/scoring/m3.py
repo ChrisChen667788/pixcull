@@ -509,6 +509,7 @@ class MiniMaxM3Judge:
         vertical: str | None = None,
         *,
         row: dict[str, Any] | None = None,
+        prompt_override: str | None = None,
     ) -> VlmVerdict:
         """Judge one photo, with local measurements supplied as evidence.
 
@@ -524,10 +525,17 @@ class MiniMaxM3Judge:
             model_name=self.model_name,
         )
         evidence = build_evidence_block(row)
-        prompt = build_prompt(scene, style_section=style_section,
-                              vertical=vertical)
-        if evidence:
-            prompt = prompt + "\n\n" + evidence
+        if prompt_override is not None:
+            # v2.51 — the advice writer asks a different question of the
+            # same photo (prose about the frame, not axis stars), and it
+            # builds its own evidence section, so this must not be
+            # double-appended.
+            prompt = prompt_override
+        else:
+            prompt = build_prompt(scene, style_section=style_section,
+                                  vertical=vertical)
+            if evidence:
+                prompt = prompt + "\n\n" + evidence
 
         key = ""
         if self._cache is not None:
@@ -535,7 +543,11 @@ class MiniMaxM3Judge:
                 key = _content_hash(
                     image_path,
                     f"{self._model}|{PROMPT_VERSION}|{scene}|{vertical}|"
-                    f"{len(evidence)}")
+                    f"{len(evidence)}|"
+                    # v2.51 — scoring and advice ask different questions
+                    # of the same bytes. Without this the second caller
+                    # would be served the first one's answer.
+                    f"{hashlib.sha256((prompt_override or '').encode()).hexdigest()[:12]}")
             except OSError:
                 key = ""
             if key:
