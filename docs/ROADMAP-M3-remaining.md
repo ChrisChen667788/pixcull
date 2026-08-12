@@ -1,4 +1,19 @@
-# M3 迁移 — 剩余版本排期
+# M3 迁移 — 排期(已全部实现,v2.52 收口)
+
+> **状态 2026-08-12:v2.48 → v2.52 全部落地,门禁 1900 passed / 9 skipped / 0 failed。**
+> 唯一没做成的是 **v2.49 的测量本身** —— 它需要真实 MiniMax key 调 M3,
+> 而我不代收代管密钥。工具已完整可用,差一条命令:
+>
+> ```
+> pixcull m3 doctor --image <照片> --video <片段.mp4>
+> pixcull m3 eval --labels ~/pixcull_label_run/training_combined.csv \
+>                 --scores <某次 run>/scores.csv
+> ```
+>
+> **报告的结论允许是「不该翻默认值」。** 若测出 M3 并不更准,
+> v2.50 的默认值应该改回 `off`,并把 v2.50 改写过的文案再改回去 ——
+> `tests/test_claims_match_reality.py` 会强制这两件事同步。
+
 
 v2.48 已收口(4 个提交)。下面是**还剩 4 个版本**,以及每个版本的全部开发任务。
 
