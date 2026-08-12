@@ -404,6 +404,24 @@ def build_iptc_fields_from_row(
         # catalog; the full run_id would clutter LR's keyword tree.
         keywords.append(f"PixCull:run:{run_id[-4:]}")
 
+    # v2.52 — mark the frames a cloud model judged.
+    #
+    # With cloud judging on by default, "which of my photos left this
+    # machine" stops being a curiosity and becomes something a
+    # photographer may have to answer to a client. The ☁ badge answers it
+    # in our own UI; this answers it in Lightroom, where the catalog
+    # actually lives and where a keyword filter is the native way to ask.
+    #
+    # Read from the row, not from a flag: the row records what really
+    # happened on THIS photo. A run can be configured for M3 and still
+    # have frames the API never saw (skipped, errored, over budget), and
+    # keywording those would claim an upload that never occurred.
+    _judge = str(row.get("vlm_model_name") or "")
+    if str(row.get("vlm_overall_label") or "").strip():
+        keywords.append("PixCull:judged-by:"
+                        + (_judge.split(":", 1)[0] if ":" in _judge
+                           else "cloud"))
+
     # Per-face person keywords. ``face_clusters`` is a list of int
     # cluster ids; ``face_labels`` is the user-supplied {cluster_id:
     # label} from V22.1. Only labeled clusters contribute keywords —
@@ -441,6 +459,16 @@ def build_iptc_fields_from_row(
         description = auto_caption
     elif advice:
         bits: list[str] = []
+        # v2.52 — the judge's own one-line reason, first.
+        #
+        # It lived only in scores.csv and vlm_verdicts.jsonl, so a
+        # Lightroom user — the person the XMP round-trip exists for —
+        # could see six axis stars and never the sentence explaining
+        # them. When M3 overrode a hard-cull flag, that sentence is the
+        # single most useful thing on the record.
+        _why = str(row.get("vlm_overall_rationale") or "").strip()
+        if _why:
+            bits.append(f"◇ {_why}")
         for s in advice.get("strengths") or []:
             bits.append(f"+ {s}")
         for w in advice.get("weaknesses") or []:

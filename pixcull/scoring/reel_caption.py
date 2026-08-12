@@ -33,6 +33,13 @@ _VLM_ENABLED = os.environ.get("PIXCULL_REEL_VLM", "off").lower() in {
 _VLM_MODEL = os.environ.get(
     "PIXCULL_VLM_MODEL", "Salesforce/blip-image-captioning-base")
 
+# v2.52 — the M3 video-caption handle. Captions now arrive pre-computed on
+# the candidate (reel.py runs the content pass before enrich), so nothing
+# here constructs a judge yet; the slot exists so reset() has one thing to
+# clear per backend rather than three of four.
+_m3 = None
+_m3_probed = False
+
 _SCENE_WORDS = {
     "portrait": "人物特写", "event": "现场氛围", "wedding": "婚礼时刻",
     "landscape": "风景", "street": "街拍", "documentary": "纪实",
@@ -450,6 +457,17 @@ def enrich(candidates: Sequence[dict], frames_root=None) -> list[dict]:
     ``frames_root`` (a run's output dir) lets the VLM path find the best
     frame's image; omit it and captioning gracefully drops to LLM/template."""
     for c in candidates:
+        # v2.52 — M3 already watched this clip and said what happens in
+        # it. Prefer that over BLIP, which sees ONE frozen frame and
+        # produces things like "a man standing in a room" — a description
+        # of the still, not of the moment. Only when M3 actually returned
+        # something; a skipped or errored clip falls through unchanged.
+        m3 = str(c.get("m3_happening") or "").strip()
+        if m3:
+            c["why_semantic"] = m3
+            c["why_semantic_en"] = ""
+            c["caption_source"] = "minimax-m3-video"
+            continue
         zh, en, src = caption_bilingual(c, frames_root)
         c["why_semantic"] = zh
         c["why_semantic_en"] = en
@@ -458,8 +476,16 @@ def enrich(candidates: Sequence[dict], frames_root=None) -> list[dict]:
 
 
 def reset() -> None:
-    """Test hook — clear the cached LLM, VLM (transformers), and ONNX probes."""
+    """Test hook — clear every cached backend handle and probe flag.
+
+    v2.52 added a fourth (M3). A reset that clears three of four leaves a
+    handle alive across test cases, and the symptom is a test passing or
+    failing depending on which ran before it — the kind of flake that
+    gets blamed on the test rather than on this function.
+    """
     global _llm, _llm_probed, _vlm, _vlm_probed, _vlm_onnx, _vlm_onnx_probed
+    global _m3, _m3_probed
     _llm, _llm_probed = None, False
     _vlm, _vlm_probed = None, False
     _vlm_onnx, _vlm_onnx_probed = None, False
+    _m3, _m3_probed = None, False

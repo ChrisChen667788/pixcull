@@ -453,6 +453,22 @@ class ReelCandidate:
     # which signal (if any) drags this window below the clip median.
     signals: dict = field(default_factory=dict)
     why_low: str = ""
+    # v2.52 — content understanding. Everything above is proxy: per-frame
+    # photo scores plus motion statistics, which cannot tell the vows
+    # apart from someone adjusting a mic when the camera is equally
+    # steady for both. These carry M3's answer to "what is happening",
+    # and stay None when it never ran (no key, unprobed wire format,
+    # ffmpeg missing) so a consumer can tell "not judged" from "judged
+    # and found dull".
+    m3_keep_score: float | None = None
+    m3_happening: str = ""
+    m3_moment_type: str = ""
+    m3_has_speech: bool = False
+    m3_reason: str = ""
+    m3_error: str | None = None
+    #: window_score_norm before M3 reweighted it. Kept so the review page
+    #: can show what the local stack thought on its own.
+    window_score_norm_proxy: float | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -589,6 +605,37 @@ def _load_scene_face(output_dir: Path) -> dict[str, dict]:
     return out
 
 
+def _m3_rerank(dicts: list[dict], video_path) -> bool:
+    """Let M3 watch each candidate and re-rank on what is happening.
+
+    Best-effort by design and silent about being off: without a key, or
+    consent, or a probed video wire format, reel detection must behave
+    exactly as it did in v2.51 rather than fail. Each individual skip
+    still lands in ``m3_error`` on the candidate, so "not judged" is
+    distinguishable from "judged and found dull".
+
+    Returns whether anything was actually scored.
+    """
+    if not video_path or not dicts:
+        return False
+    try:
+        from pixcull.scoring.m3 import api_key_from_env, has_consent
+        if not (api_key_from_env() and has_consent()):
+            return False
+        from pixcull.scoring.m3_video import rerank, score_clips
+        from pixcull.scoring.vlm_judge import make_minimax_judge
+        judge = make_minimax_judge(api_key_from_env())
+        verdicts = score_clips(dicts, Path(video_path), judge)
+    except Exception as exc:  # noqa: BLE001
+        logger.info("reel: M3 content pass unavailable (%s)", exc)
+        return False
+    moved = rerank(dicts, verdicts)
+    n_judged = sum(1 for v in verdicts if v.keep_score is not None)
+    logger.info("reel: M3 judged %d/%d candidates, %d re-ranked",
+                n_judged, len(dicts), moved)
+    return n_judged > 0
+
+
 def run_reel_detection(
     output_dir: Path,
     *,
@@ -653,11 +700,49 @@ def run_reel_detection(
     # (PIXCULL_REEL_VLM=on) can find + caption each candidate's best frame
     # under output_dir/video_frames/<id>/.
     dicts = [c.to_dict() for c in candidates]
+
+    # v2.52 — content understanding, before captioning.
+    #
+    # Everything above this line is proxy: per-frame photo scores plus
+    # motion statistics. A clip of the vows and a clip of someone
+    # adjusting a mic score identically whenever camera motion and face
+    # count match, because no content signal was ever collected.
+    #
+    # Runs before enrich() deliberately: once M3 has said what is
+    # happening, the caption path can use that instead of guessing from
+    # a single frozen frame. Reordering also means the re-ranked list is
+    # what gets written and returned, not a list captioned in one order
+    # and scored in another.
+    m3_verdicts = _m3_rerank(dicts, video_path)
+
+    # v2.1-P0-3 — add a fluent `why_semantic` per candidate (optional LLM,
+    # deterministic template fallback — always succeeds).
+    # v2.4-P0-1 — pass the run's output dir so the opt-in VLM path
+    # (PIXCULL_REEL_VLM=on) can find + caption each candidate's best frame
+    # under output_dir/video_frames/<id>/.
     try:
         from pixcull.scoring.reel_caption import enrich
         enrich(dicts, frames_root=output_dir)
     except Exception:  # pragma: no cover - captioning is best-effort
         pass
+
+    # The returned dataclasses must agree with the JSON that was written;
+    # anything else is two sources of truth that drift silently.
+    if m3_verdicts:
+        by_span = {(round(d["start_s"], 3), round(d["end_s"], 3)): d
+                   for d in dicts}
+        for c in candidates:
+            d = by_span.get((round(c.start_s, 3), round(c.end_s, 3)))
+            if not d:
+                continue
+            for f in ("m3_keep_score", "m3_happening", "m3_moment_type",
+                      "m3_has_speech", "m3_reason", "m3_error",
+                      "window_score_norm_proxy"):
+                if f in d:
+                    setattr(c, f, d[f])
+        candidates.sort(key=lambda c: -(c.m3_keep_score
+                                        if c.m3_keep_score is not None
+                                        else c.score * 100))
     if write:
         (output_dir / "reel_candidates.json").write_text(
             json.dumps(dicts, indent=2, ensure_ascii=False),
