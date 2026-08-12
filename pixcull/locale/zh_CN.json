@@ -162,7 +162,7 @@
   "tour.row.personal": "🎯 个性化",
   "tour.row.heatmap": "🔥 归因热力图",
   "tour.row.sheet": "📇 联系表导出",
-  "tour.foot": "键盘全清单见 ? · 全部能力 100% 本地运行",
+  "tour.foot": "键盘全清单见 ? · 已启用云端分析 · 随时可切回纯本地",
   "workspace.resolve_maybes": "◐ 决议 maybe",
   "workspace.stats.unreviewed": "待审",
   "workspace.stats.all_done": "全部已审 ✓ · 导出 XMP",

@@ -162,7 +162,7 @@
   "tour.row.personal": "🎯 개인화",
   "tour.row.heatmap": "🔥 어트리뷰션 히트맵",
   "tour.row.sheet": "📇 콘택트 시트",
-  "tour.foot": "전체 단축키는 ? · 모든 기능 100% 로컬 실행",
+  "tour.foot": "전체 단축키는 ? · 클라우드 분석 켜짐 · 언제든 로컬 전용으로 전환",
   "workspace.resolve_maybes": "◐ maybe 정리",
   "workspace.stats.unreviewed": "검토 대기",
   "workspace.stats.all_done": "모두 검토됨 ✓ · XMP 내보내기",

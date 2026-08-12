@@ -12831,7 +12831,7 @@ def main() -> None:
         help=f"Per-request file count cap. Default {_MAX_UPLOAD_FILES_DEFAULT}.",
     )
     parser.add_argument(
-        "--vlm-mode", default="off",
+        "--vlm-mode", default="auto",
         help="V3.0 VLM-as-judge backend (sees pixels). Default off. "
              "Values: 'off' | 'local' | 'local:<repo>' | 'deepseek' | "
              "'minimax' | 'openai'. Note: as of 2026-04 DeepSeek's API is "
@@ -12880,6 +12880,18 @@ def main() -> None:
     server.rescorer_path = rescorer_path  # type: ignore[attr-defined]
     server.max_upload_bytes = args.max_upload_mb * 1024 * 1024  # type: ignore[attr-defined]
     server.max_upload_files = args.max_upload_files  # type: ignore[attr-defined]
+    # v2.50 — "auto" resolves at startup: cloud judging when a MiniMax
+    # key is reachable, on-device otherwise. Spelling it as a distinct
+    # value rather than baking "minimax" into the argparse default keeps
+    # `--vlm-mode off` an explicit, honest choice rather than a fight
+    # against a default the operator cannot see.
+    if args.vlm_mode == "auto":
+        from pixcull.scoring.m3 import api_key_from_env
+        args.vlm_mode = "minimax" if api_key_from_env() else "off"
+        print(f"  vlm-mode auto → {args.vlm_mode}"
+              + ("  (photos WILL be uploaded to MiniMax)"
+                 if args.vlm_mode == "minimax" else ""),
+              file=sys.stderr)
     server.vlm_mode = args.vlm_mode  # type: ignore[attr-defined]
     server.meta_mode = args.meta_mode  # type: ignore[attr-defined]
 

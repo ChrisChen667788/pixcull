@@ -162,7 +162,7 @@
   "tour.row.personal": "🎯 Personalización",
   "tour.row.heatmap": "🔥 Mapa de atribución",
   "tour.row.sheet": "📇 Hoja de contactos",
-  "tour.foot": "Atajos completos en ? · todo se ejecuta 100 % en local",
+  "tour.foot": "Atajos completos en ? · análisis en la nube activo: puedes volver a local",
   "workspace.resolve_maybes": "◐ Resolver maybes",
   "workspace.stats.unreviewed": "Por revisar",
   "workspace.stats.all_done": "Todo revisado ✓ · Exportar XMP",

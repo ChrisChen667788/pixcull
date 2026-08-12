@@ -162,7 +162,7 @@
   "tour.row.personal": "🎯 Персонализация",
   "tour.row.heatmap": "🔥 Тепловая карта",
   "tour.row.sheet": "📇 Контактный лист",
-  "tour.foot": "Все горячие клавиши — ? · всё работает 100% локально",
+  "tour.foot": "Все горячие клавиши — ? · облачный анализ включён, можно вернуться к локальному",
   "workspace.resolve_maybes": "◐ Разобрать maybe",
   "workspace.stats.unreviewed": "На проверку",
   "workspace.stats.all_done": "Всё проверено ✓ · Экспорт XMP",

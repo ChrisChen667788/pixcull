@@ -145,6 +145,12 @@ def photo(tmp_path):
 
 def _judge(**kw):
     kw.setdefault("enforce_budget", False)
+    # v2.50 added a cloud-upload consent gate in front of every request.
+    # It has its own suite (tests/test_cloud_consent.py, including the
+    # structural check that it cannot be bypassed); these tests are about
+    # the transport, so they opt out rather than each grant consent into
+    # a fixture home.
+    kw.setdefault("require_consent", False)
     return m3.MiniMaxM3Judge(FAKE_KEY, **kw)
 
 
@@ -492,7 +498,8 @@ def test_rpm_matches_the_published_limit():
 
 def test_budget_exhaustion_stops_the_call(fake_openai, photo, monkeypatch):
     monkeypatch.setattr("pixcull.llm_budget.check_budget", lambda est=0.0: False)
-    v = m3.MiniMaxM3Judge(FAKE_KEY, enforce_budget=True).score(photo)
+    v = m3.MiniMaxM3Judge(FAKE_KEY, enforce_budget=True,
+                          require_consent=False).score(photo)
     assert v.error and "budget" in v.error.lower()
     assert not fake_openai.created[-1].chat.completions.calls, (
         "an over-budget photo must not be sent")

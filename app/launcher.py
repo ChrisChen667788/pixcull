@@ -264,6 +264,11 @@ class ServerHandle:
         server.max_upload_bytes = 8 * 1024 * 1024 * 1024  # 8 GB  # type: ignore[attr-defined]
         server.max_upload_files = 500        # type: ignore[attr-defined]
         server.vlm_mode = cfg.get("vlm_mode", default_vlm)   # type: ignore[attr-defined]
+        # v2.50 — a judge with no authority is a decoration. The .app
+        # ships the same default as the CLI: cloud judging decides.
+        server.vlm_authority = cfg.get(  # type: ignore[attr-defined]
+            "vlm_authority",
+            "primary" if server.vlm_mode not in ("", "off") else "off")
         server.meta_mode = cfg.get("meta_mode", default_meta) # type: ignore[attr-defined]
 
         print(f"[launcher] vlm_mode={server.vlm_mode} meta_mode={server.meta_mode}",

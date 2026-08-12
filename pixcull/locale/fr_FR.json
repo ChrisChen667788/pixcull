@@ -162,7 +162,7 @@
   "tour.row.personal": "🎯 Personnalisation",
   "tour.row.heatmap": "🔥 Carte d'attribution",
   "tour.row.sheet": "📇 Planche contact",
-  "tour.foot": "Raccourcis complets sous ? · tout fonctionne 100 % en local",
+  "tour.foot": "Raccourcis complets sous ? · analyse cloud activée – bascule locale possible",
   "workspace.resolve_maybes": "◐ Trancher les maybes",
   "workspace.stats.unreviewed": "À vérifier",
   "workspace.stats.all_done": "Tout vérifié ✓ · Export XMP",

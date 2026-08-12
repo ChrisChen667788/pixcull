@@ -162,7 +162,7 @@
   "tour.row.personal": "🎯 التخصيص",
   "tour.row.heatmap": "🔥 خريطة الإسناد الحرارية",
   "tour.row.sheet": "📇 ورقة اتصال",
-  "tour.foot": "قائمة الاختصارات تحت ? · كل شيء يعمل محلياً 100%",
+  "tour.foot": "قائمة الاختصارات تحت ? · التحليل السحابي مُفعّل — يمكنك العودة للتحليل المحلي",
   "workspace.resolve_maybes": "◐ حسم صور maybe",
   "workspace.stats.unreviewed": "بانتظار المراجعة",
   "workspace.stats.all_done": "تمت مراجعة الكل ✓ · تصدير XMP",

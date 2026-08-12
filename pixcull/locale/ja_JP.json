@@ -162,7 +162,7 @@
   "tour.row.personal": "🎯 パーソナライズ",
   "tour.row.heatmap": "🔥 帰属ヒートマップ",
   "tour.row.sheet": "📇 コンタクトシート",
-  "tour.foot": "ショートカット一覧は ? · すべて 100% ローカル実行",
+  "tour.foot": "ショートカット一覧は ? · クラウド解析オン · ローカルのみにも切替可",
   "workspace.resolve_maybes": "◐ maybe を解決",
   "workspace.stats.unreviewed": "未確認",
   "workspace.stats.all_done": "すべて確認済み ✓ · XMP 書き出し",

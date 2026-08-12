@@ -41,7 +41,7 @@ tasks:
 [![GitHub](https://img.shields.io/badge/GitHub-ChrisChen667788%2Fpixcull-181717.svg?style=flat-square&logo=github)](https://github.com/ChrisChen667788/pixcull)
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](https://github.com/ChrisChen667788/pixcull/blob/main/LICENSE)
 ![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-3776AB.svg?style=flat-square&logo=python&logoColor=white)
-![本地优先](https://img.shields.io/badge/本地优先-照片永不上传-34d399.svg?style=flat-square)
+![云端判图](https://img.shields.io/badge/MiniMax%20M3-云端判图%20·%20可切纯本地-dcb87e.svg?style=flat-square)
 [![v0.7](https://img.shields.io/github/v/release/ChrisChen667788/pixcull?style=flat-square&color=dcb87e)](https://github.com/ChrisChen667788/pixcull/releases/latest)
 
 # PixCull · 摄影师专用的本地 AI 选片工具
@@ -643,11 +643,11 @@ Vision3 / Arri 709A / Teal-Orange / B&W),主画面 + 每个候选缩略图实时
 
 | 妥协 | 主流 SaaS | PixCull |
 |---|---|---|
-| 照片必须上传 | 是,且常常进训练池 | **不需要,照片永远不出本机** |
+| 照片去向 | 必须上传,且常常进训练池 | **默认送 MiniMax M3 判图,不进训练池;`--vlm-mode off` 全程不出网** |
 | 只给一个总分 | 0..1 黑盒数字 | **6 维评分 + 摄影正典引用** |
 | 工作流割裂 | Web App 独立运行 | **XMP sidecar + Lr 插件 + iOS App + Tether 模式** |
 
-PixCull 把这三件事全翻过来:本地推理、可解释评分、原生融入 Lr / C1 工作流。
+PixCull 把这三件事全翻过来:本机实测指标作为证据送进云端判官、可解释评分、原生融入 Lr / C1 工作流。
 
 ## 适合谁
 

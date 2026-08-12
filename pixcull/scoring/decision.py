@@ -65,7 +65,7 @@ def decide(
     personal_shift: float = 0.0,
     vlm_label: str | None = None,
     vlm_axes: dict[str, float | None] | None = None,
-    vlm_authority: str = "off",
+    vlm_authority: str = "primary",
 ) -> tuple[Decision, list[str]]:
     """Map final score + blocking flags to Keep / Maybe / Cull with human-readable reasons.
 

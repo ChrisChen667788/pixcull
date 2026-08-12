@@ -411,3 +411,20 @@
         --accent-glow: rgba(108,80,31,0.30); --focus-ring: rgba(108,80,31,0.45);
       }
     }
+
+/* v2.50 — cloud-judged marker. Deliberately quiet: this is a fact the
+   photographer needs available, not an alarm. The override variant is
+   warmer because that one IS worth a second look. */
+.cloud-badge {
+  position: absolute; top: 6px; right: 6px;
+  font-size: 11px; line-height: 1;
+  padding: 3px 5px; border-radius: 4px;
+  background: color-mix(in srgb, var(--bg-card) 82%, transparent);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  pointer-events: auto; cursor: help;
+}
+.cloud-badge-override {
+  color: var(--accent);
+  border-color: var(--accent-soft);
+}

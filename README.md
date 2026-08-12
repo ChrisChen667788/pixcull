@@ -24,7 +24,7 @@
   <a href="./LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square" /></a>
   <img alt="Python" src="https://img.shields.io/badge/python-3.11%20%7C%203.12-3776AB.svg?style=flat-square&logo=python&logoColor=white" />
   <img alt="Platform" src="https://img.shields.io/badge/macOS-Apple%20Silicon%20%26%20Intel-000.svg?style=flat-square&logo=apple" />
-  <img alt="Local-first" src="https://img.shields.io/badge/local--first-photos%20never%20upload-34d399.svg?style=flat-square" />
+  <img alt="Cloud judge" src="https://img.shields.io/badge/MiniMax%20M3-cloud%20judge%20(local%20mode%20available)-dcb87e.svg?style=flat-square" />
   <a href="https://github.com/ChrisChen667788/pixcull/stargazers"><img alt="stars" src="https://img.shields.io/github/stars/ChrisChen667788/pixcull?style=flat-square" /></a>
   <a href="https://github.com/ChrisChen667788/pixcull/releases/latest"><img alt="latest release" src="https://img.shields.io/github/v/release/ChrisChen667788/pixcull?style=flat-square&color=dcb87e" /></a>
 </p>
@@ -41,7 +41,7 @@
   <i>Local-first AI culling for working photographers.<br/>
   Six calibrated axes · style clone (CLIP) · LAN multi-shooter sync ·<br/>
   tethered live scoring · client share links + QR · Lr/C1 round-trip.<br/>
-  <b>No photo ever leaves your disk.</b></i>
+  <b>Judged by MiniMax M3 in the cloud — or entirely on-device, your call.</b></i>
 </p>
 
 > **v0.9 is in flight.** Hero reveal · signature soft-bounce motion ·
@@ -1107,10 +1107,15 @@ editorial brand.  Per-axis cache at `output/attribution/<axis>/<sha>.png`.
 If you've seen Aftershoot, FilterPixel, Narrative, or any other "AI photo
 culling" SaaS, the things you'll notice immediately on PixCull:
 
-1. **Photos never leave your disk.** RAW decode, scoring, faces, GPS,
-   CLIP embeddings — every byte stays on your machine. There's an
-   optional DeepSeek meta-judge that calls *your* API token, and even
-   that just sends the rubric numbers (not the image).
+1. **A judge that reads the measurements as well as the picture.**
+   Sharpness, clipped highlights, blink detection and near-duplicate
+   grouping are computed on your machine — a vision model guesses at
+   all four — and those numbers are handed to MiniMax M3 *as evidence*
+   alongside the photo. So when it keeps a frame flagged `closed_eyes`,
+   it is not ignorant of the closed eyes; it is overruling them, and it
+   tells you it did. Photos are uploaded for that judgement.
+   `--vlm-mode off` keeps every byte on your machine, for shoots under
+   an NDA that forbids third-party cloud processing.
 2. **Style clone learns YOU, not the average photographer.** Give
    PixCull 5-20 of your past keepers, it learns a personal style
    centroid (V1 axis-MAD + V2 CLIP embedding). Next event, it
@@ -1355,8 +1360,8 @@ from scratch.
 </p>
 
 <p align="center">
-  <i>专业摄影师的本地优先 AI 选片工具。<br/>
-  6 维评分,XMP / IPTC / 相册一键导出,Lightroom &amp; Capture One 直通,照片永远不出本机。</i>
+  <i>专业摄影师的 AI 选片工具。<br/>
+  6 维评分,XMP / IPTC / 相册一键导出,Lightroom &amp; Capture One 直通,MiniMax M3 云端判图(可切纯本地)。</i>
 </p>
 
 ## 为什么有这个项目

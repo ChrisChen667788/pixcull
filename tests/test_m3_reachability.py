@@ -102,10 +102,17 @@ def test_run_command_exposes_the_vision_judge():
 
 
 def test_run_defaults_to_m3_when_a_key_exists(monkeypatch, tmp_path):
-    """Key present => M3 on. That is the whole point of v2.48."""
+    """Key present AND consent on file => M3 on.
+
+    v2.50 added the consent gate, and a key alone is deliberately not
+    enough: a headless run with an exported key must stay on-device (see
+    tests/test_cloud_consent.py). So this now asserts the full
+    precondition rather than half of it.
+    """
     seen = {}
     monkeypatch.setattr("pixcull.scoring.m3.api_key_from_env",
                         lambda: "sk-" + "0" * 32)
+    monkeypatch.setattr("pixcull.scoring.m3.has_consent", lambda: True)
     monkeypatch.setattr("pixcull.pipeline.orchestrator.run_pipeline",
                         lambda *a, **kw: seen.update(kw) or tmp_path)
     from typer.testing import CliRunner

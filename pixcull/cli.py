@@ -1,4 +1,5 @@
 import os
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -76,11 +77,33 @@ def run(
     if vlm_mode is None:
         from pixcull.scoring.m3 import api_key_from_env
         vlm_mode = "minimax" if api_key_from_env() else "off"
-        if vlm_mode == "minimax":
-            console.print(
-                "[dim]MiniMax key found → vision judging with M3. "
-                "Photos are uploaded. Pass --vlm-mode off to keep this "
-                "run on-device.[/dim]")
+
+    # v2.50 — the consent gate. Auto-enabling an upload because a key
+    # happens to be present would be exactly the trick this is here to
+    # prevent, so ask once, record it, and make declining a first-class
+    # outcome rather than an error.
+    if vlm_mode not in ("off", "local") and not vlm_mode.startswith("local"):
+        from pixcull.scoring.m3 import CONSENT_NOTICE, grant_consent, has_consent
+        if not has_consent():
+            console.print(CONSENT_NOTICE)
+            if not sys.stdin.isatty():
+                console.print(
+                    "[yellow]No consent on file and nothing to ask.[/yellow] "
+                    "Run `pixcull m3 consent --grant` once, or pass "
+                    "`--vlm-mode off`. Continuing on-device.")
+                vlm_mode = "off"
+            elif typer.confirm("Upload photos to MiniMax for judging?",
+                               default=False):
+                grant_consent()
+                console.print("[dim]Recorded. "
+                              "`pixcull m3 consent --revoke` undoes it.[/dim]")
+            else:
+                console.print("[green]Staying on-device[/green] for this and "
+                              "every future run until you say otherwise.")
+                vlm_mode = "off"
+        if vlm_mode != "off":
+            console.print("[dim]Judging with MiniMax M3 — photos are "
+                          "uploaded. `--vlm-mode off` keeps a run local.[/dim]")
 
     run_pipeline(
         folder, output,
@@ -932,6 +955,48 @@ def m3_doctor(
     # usable as a pre-flight check in a script.
     if caps.get("text") != "ok":
         raise typer.Exit(code=1)
+
+
+@m3_app.command("consent")
+def m3_consent(
+    grant: bool = typer.Option(False, "--grant",
+                               help="Record that you agree to upload."),
+    revoke: bool = typer.Option(False, "--revoke",
+                                help="Withdraw it. Cloud judging then "
+                                     "refuses to run until re-granted."),
+) -> None:
+    """Show, grant or withdraw permission to upload photos to MiniMax.
+
+    v2.50 ships cloud judging on by default. That is defensible only if
+    the first upload is something you chose — wedding and commercial
+    contracts routinely forbid third-party cloud processing of client
+    images, and the person who signed one cannot find out afterwards.
+    """
+    from pixcull.scoring.m3 import (
+        CONSENT_NOTICE, consent_path, grant_consent, has_consent,
+        revoke_consent,
+    )
+
+    if revoke:
+        console.print("[green]Withdrawn.[/green] Cloud judging will refuse "
+                      "to run; `--vlm-mode off` is unaffected."
+                      if revoke_consent() else
+                      "[dim]Nothing on file to withdraw.[/dim]")
+        return
+    if grant:
+        console.print(CONSENT_NOTICE)
+        p = grant_consent()
+        console.print(f"[green]Recorded[/green] → {p}\n"
+                      f"[dim]Withdraw at any time: "
+                      f"pixcull m3 consent --revoke[/dim]")
+        return
+
+    if has_consent():
+        console.print(f"[green]Granted.[/green] {consent_path()}")
+    else:
+        console.print(CONSENT_NOTICE)
+        console.print("[yellow]Not granted.[/yellow] Cloud judging will "
+                      "refuse to run.\n  pixcull m3 consent --grant")
 
 
 @m3_app.command("eval")

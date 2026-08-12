@@ -21,7 +21,10 @@ exfiltrate annotations, or escalate within the host.
 
 ## Threat model
 
-PixCull is designed to run locally on a photographer's machine or LAN
+PixCull runs on a photographer's machine or LAN. Since v2.50 it also
+sends photos to MiniMax (`api.minimax.io`) for judging **by default** —
+gated behind a recorded, revocable consent (`pixcull m3 consent`) and
+fully disableable with `--vlm-mode off`, which keeps every byte local
 deployment. It assumes:
 
 - **Trusted local user.** The CLI + server APIs are not hardened against
@@ -49,3 +52,7 @@ be portable across machines. They contain filenames, axis stars,
 free-form rationale text, and the `cull_reason` taxonomy token — but
 no raw images, no API keys, no license tokens. Sharing them with
 collaborators or attaching them to bug reports is safe.
+
+Since v2.50 the rationale text may be **written by MiniMax M3 about
+your photo**. It is still text, not pixels, but it can describe people
+and places — treat a rationale the way you would treat a caption.

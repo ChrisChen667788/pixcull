@@ -362,6 +362,7 @@ class MiniMaxM3Judge:
         cache: VerdictCache | None = None,
         limiter: RateLimiter | None = None,
         enforce_budget: bool = True,
+        require_consent: bool = True,
     ):
         if not api_key:
             raise ValueError(
@@ -379,6 +380,7 @@ class MiniMaxM3Judge:
         self._cache = cache
         self._limiter = limiter or _GLOBAL_LIMITER
         self._enforce_budget = enforce_budget
+        self._require_consent = require_consent
         import tempfile
         self._tmpdir = Path(tempfile.mkdtemp(prefix="pixcull_m3_"))
 
@@ -405,6 +407,12 @@ class MiniMaxM3Judge:
             RateLimitError,
         )
 
+        if self._require_consent and not has_consent():
+            raise ConsentRequired(
+                "No cloud-upload consent on file. PixCull will not send "
+                "photos to MiniMax until you say so:\n\n"
+                "    pixcull m3 consent --grant\n\n"
+                "Or run entirely on this machine with `--vlm-mode off`.")
         last: Exception | None = None
         for attempt in range(self._max_retries):
             self._limiter.acquire()
@@ -787,3 +795,78 @@ def probe_capabilities(api_key: str,
                     break
 
     return caps
+
+
+# ---------------------------------------------------------------------------
+# Consent — v2.50
+# ---------------------------------------------------------------------------
+#
+# Cloud judging ships on.  That is defensible only if the first upload is
+# something the photographer chose, and it is a real constraint rather
+# than a formality: wedding and commercial contracts routinely forbid
+# third-party cloud processing of client images, and the person who signed
+# one cannot discover the upload afterwards.
+#
+# So: an explicit, recorded, revocable grant, checked before the first
+# call — not a pre-ticked box, and not a line in the release notes.
+
+CONSENT_VERSION = 1
+
+
+def consent_path() -> Path:
+    return Path.home() / ".pixcull" / "cloud_consent.json"
+
+
+def has_consent() -> bool:
+    """True only for a grant of the CURRENT version.
+
+    Versioned deliberately: if what we upload ever materially changes —
+    video clips as well as stills, say — the old grant does not cover the
+    new thing, and silently reusing it would be the trick this gate
+    exists to prevent.
+    """
+    try:
+        d = json.loads(consent_path().read_text("utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    return bool(d.get("granted")) and int(d.get("version", 0)) == CONSENT_VERSION
+
+
+def grant_consent(*, endpoint: str = BASE_URL) -> Path:
+    p = consent_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps({
+        "granted": True,
+        "version": CONSENT_VERSION,
+        "endpoint": endpoint,
+        "granted_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }, indent=2), encoding="utf-8")
+    return p
+
+
+def revoke_consent() -> bool:
+    try:
+        consent_path().unlink()
+        return True
+    except OSError:
+        return False
+
+
+CONSENT_NOTICE = """\
+PixCull is about to send your photos to MiniMax (api.minimax.io) so M3
+can judge them.
+
+  · The image itself is uploaded, downscaled to 1024px, over HTTPS.
+  · Locally measured numbers — sharpness, clipping, blink counts — are
+    sent with it as evidence.
+  · Faces, GPS and file paths are NOT stripped. The photo is the photo.
+  · MiniMax's retention and training policy is theirs, not ours. Read it.
+
+Many wedding and commercial contracts forbid third-party cloud
+processing of client images. If yours does, decline — `--vlm-mode off`
+runs the whole pipeline on this machine and is fully supported.
+"""
+
+
+class ConsentRequired(RuntimeError):
+    """Raised instead of uploading when no grant is on file."""

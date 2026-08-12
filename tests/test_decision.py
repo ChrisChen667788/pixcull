@@ -322,11 +322,36 @@ def test_threshold_clamps_to_unit_range(config):
 # a default flip in a patch release.
 
 def test_authority_off_is_exactly_v247(config):
-    """The safety property. A verdict must change nothing until asked."""
+    """`off` must remain a complete, working escape hatch.
+
+    v2.50 flipped the shipped default to `primary`, so this can no longer
+    lean on the default — it has to ask for `off` explicitly, which is
+    the point: after the flip, `off` is the mode a photographer under an
+    NDA depends on, and the README now promises it by name.
+    """
     for label in ("keep", "cull", "maybe"):
-        dec, _ = decide(0.72, ["closed_eyes"], config, scene="portrait",
-                        vlm_label=label, vlm_axes={"technical": 5})
+        dec, reasons = decide(0.72, ["closed_eyes"], config, scene="portrait",
+                              vlm_label=label, vlm_axes={"technical": 5},
+                              vlm_authority="off")
         assert dec is Decision.CULL, f"{label} changed an off-mode decision"
+        assert not any("vlm" in r for r in reasons)
+
+
+def test_the_shipped_default_is_the_documented_one(config):
+    """v2.50 — cloud judging is on out of the box.
+
+    Paired with tests/test_claims_match_reality.py, which fails if this
+    default and the public copy ever disagree again.
+    """
+    import inspect
+    sig = inspect.signature(decide)
+    assert sig.parameters["vlm_authority"].default == "primary"
+    dec, reasons = decide(0.72, ["closed_eyes"], config, scene="portrait",
+                          vlm_label="keep", vlm_axes={"technical": 4})
+    assert dec is Decision.KEEP, (
+        "the judge no longer decides by default — if that is intended, "
+        "tests/test_claims_match_reality.py must be re-run, because the "
+        "README now says photos are uploaded")
 
 
 def test_shadow_records_without_changing_anything(config):

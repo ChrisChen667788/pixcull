@@ -162,7 +162,7 @@
   "tour.row.personal": "🎯 Personalisation",
   "tour.row.heatmap": "🔥 Attribution heatmap",
   "tour.row.sheet": "📇 Contact sheet",
-  "tour.foot": "Full shortcut list under ? · everything runs 100% locally",
+  "tour.foot": "Full shortcut list under ? · cloud analysis is on — switch to local-only anytime",
   "workspace.resolve_maybes": "◐ Resolve maybes",
   "workspace.stats.unreviewed": "To review",
   "workspace.stats.all_done": "All reviewed ✓ · Export XMP",

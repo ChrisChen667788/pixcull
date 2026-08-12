@@ -21,17 +21,24 @@ charging $20–50/month each.
 But all of them make three trade-offs working photographers shouldn't
 have to swallow.
 
-## 1. They upload your photos
+## 1. They upload your photos, and never ask
 
 Wedding contracts often explicitly forbid third-party cloud processing
 of client images. Journalism NDAs do too. Editorial sports has embargo
 windows. Wildlife photographers of protected species can't legally share
 location data, which embeds in EXIF, which embeds in any uploaded file.
 
-The SaaS pitch is "your photos are safe with us." The reality is they're
-on someone else's server, subject to that company's business model,
-training pipeline, and legal jurisdiction. For many real workflows
-that's a deal-breaker.
+PixCull uploads too — since v2.50 the default judge is MiniMax M3, and
+M3 needs to see the frame. The difference is not that we found a way
+around physics. It is that **you are asked once, in plain language,
+before the first byte leaves**, the answer is recorded and revocable,
+and `--vlm-mode off` is a fully supported first-class mode rather than
+a downgrade — the entire pipeline runs on your machine, and the shoot
+under NDA stays there.
+
+The SaaS pitch is "your photos are safe with us," said once in a ToS
+nobody read. Ours is a prompt you have to answer, and a switch that
+actually turns it off.
 
 ## 2. They give you a score, not a reason
 

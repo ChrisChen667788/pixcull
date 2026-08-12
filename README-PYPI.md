@@ -1,11 +1,11 @@
 # PixCull
 
-**Local-first AI photo culling for working photographers.**
+**AI photo culling for working photographers.**
 Six calibrated scoring axes · burst folding · style-aware personalization ·
-Lightroom / Capture One round-trip. **No photo ever leaves your disk.**
+Lightroom / Capture One round-trip. **Judged by MiniMax M3, with the local measurements handed to it as evidence — or fully on-device with `--vlm-mode off`.**
 
-本地优先的 AI 摄影分拣:6 轴评分 · 连拍折叠 · 个性化学习 · Lr/C1 双向 round-trip,
-原图永远不离开你的硬盘。
+AI 摄影分拣:6 轴评分 · 连拍折叠 · 个性化学习 · Lr/C1 双向 round-trip。
+MiniMax M3 云端判图,本机实测指标作为证据一并送入;`--vlm-mode off` 可全程不出网。
 
 ![PixCull results grid](https://raw.githubusercontent.com/ChrisChen667788/pixcull/main/docs/screenshots/01-results-grid.png)
 
@@ -59,7 +59,7 @@ interactive review workspace: keyboard-first grid, ⌘K palette, per-axis
 - **Video too** — temporal scoring, audio events (laughter / applause /
   music), reel-candidate detection with the same glass-box treatment.
 - **13 UI languages**, dark/light studio-neutral themes, WCAG-conscious.
-- **Local-first, always** — no uploads, no cloud, no telemetry.
+- **You choose where it runs** — cloud judging by default (photos are uploaded to MiniMax), or `--vlm-mode off` for a fully on-device run. No telemetry either way.
 
 ## Links
 

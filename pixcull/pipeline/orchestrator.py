@@ -379,7 +379,10 @@ def run_pipeline(
     rescorer_path: str | None = None,
     progress_cb: Callable[[int, int, str], None] | None = None,
     vlm_mode: str = "off",
-    vlm_authority: str = "off",
+    # v2.50 — cloud judging ships on. Authority only means anything
+    # when a judge is actually running, so vlm_mode="off" still
+    # produces a fully local run: there is no verdict to defer to.
+    vlm_authority: str = "primary",
     meta_mode: str = "off",
     vertical: str | None = None,
 ) -> Path:
