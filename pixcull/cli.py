@@ -934,6 +934,99 @@ def m3_doctor(
         raise typer.Exit(code=1)
 
 
+@m3_app.command("eval")
+def m3_eval(
+    labels: Path = typer.Option(..., "--labels", exists=True,
+                                help="Your corrected label sheet — a CSV "
+                                     "with `filename` and `manual_label`."),
+    scores: Path = typer.Option(None, "--scores", exists=True,
+                                help="scores.csv with `path` + detector "
+                                     "metrics. Defaults to --labels when "
+                                     "that file carries them itself."),
+    limit: int = typer.Option(None, "--limit",
+                              help="Evaluate only the first N rows — use "
+                                   "this to sanity-check cost first."),
+    out: Path = typer.Option(Path("docs/M3-EVAL.md"), "--out",
+                             help="Where to write the report."),
+    vertical: str = typer.Option(None, "--vertical"),
+) -> None:
+    """Measure whether M3 actually decides better than the rule stack.
+
+    This is the gate in front of the positioning rewrite. v2.48 built a
+    judge that CAN decide; nothing showed it decides WELL, and rewriting
+    the product's public promises on an unmeasured assumption is a bet.
+
+    The report's headline is a verdict, and it is allowed to say no.
+    """
+    import csv as _csv
+
+    from pixcull.config import PixCullConfig
+    from pixcull.scoring.m3 import (
+        MODEL, VerdictCache, api_key_from_env, default_cache_path,
+    )
+    from pixcull.scoring.vlm_eval import evaluate, load_labels, render_report
+    from pixcull.scoring.vlm_judge import make_minimax_judge
+
+    key = api_key_from_env()
+    if not key:
+        console.print("[red]No MiniMax key.[/red] "
+                      "See `pixcull m3 doctor` for how to supply one.")
+        raise typer.Exit(code=2)
+
+    lab = load_labels(labels)
+    if not lab:
+        console.print(f"[red]{labels} has no rows with a manual_label.[/red] "
+                      "An unlabelled row cannot make anyone right or wrong.")
+        raise typer.Exit(code=2)
+
+    src = scores or labels
+    with open(src, encoding="utf-8-sig", newline="") as fh:
+        rows = list(_csv.DictReader(fh))
+
+    n_join = sum(1 for r in rows if (r.get("filename") or "").strip() in lab)
+    console.print(f"[dim]{len(lab)} labelled · {len(rows)} scored · "
+                  f"{n_join} joined[/dim]")
+    if not n_join:
+        console.print("[red]Nothing joined on `filename`.[/red] The label "
+                      "sheet and the scores file describe different shoots.")
+        raise typer.Exit(code=2)
+    if not any(r.get("path") for r in rows):
+        console.print("[yellow]No `path` column — M3 cannot be shown the "
+                      "photos.[/yellow] Pass --scores pointing at a run's "
+                      "scores.csv.")
+        raise typer.Exit(code=2)
+
+    judge = make_minimax_judge(key)
+    judge._cache = VerdictCache(default_cache_path())
+    res = evaluate(rows, lab, judge, PixCullConfig.load(),
+                   vertical=vertical, limit=limit,
+                   progress=lambda n, t, fn: (
+                       console.print(f"[dim]{n}/{t} {fn}[/dim]")
+                       if n % 25 == 0 or n == t else None))
+
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(render_report(res, labels_path=str(labels.name),
+                                 model=MODEL), encoding="utf-8")
+
+    table = Table(title="M3 vs rule stack")
+    table.add_column("", style="bold")
+    table.add_column("rule", justify="right")
+    table.add_column("M3", justify="right")
+    for label in ("keep", "cull"):
+        r = res.rule.get(label)
+        v = res.vlm.get(label)
+        table.add_row(f"{label} F1", f"{r.f1:.3f}" if r else "—",
+                      f"{v.f1:.3f}" if v else "—")
+    table.add_row("macro F1", f"{res.rule_macro_f1:.3f}",
+                  f"{res.vlm_macro_f1:.3f}")
+    console.print(table)
+    console.print(f"\n[bold]{res.verdict}[/bold]\n")
+    console.print(
+        f"[yellow]{res.n_overrides} hard-cull override(s) need your eyes[/] — "
+        f"evidence fusion stands or falls on whether they were right.")
+    console.print(f"[dim]report → {out}[/dim]")
+
+
 @m3_app.command("status")
 def m3_status() -> None:
     """Show the recorded capabilities, key presence, and today's spend."""
