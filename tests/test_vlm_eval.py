@@ -356,10 +356,16 @@ def test_dry_run_reports_the_cost_before_it_is_incurred(tmp_path, monkeypatch):
 def test_stale_paths_stop_the_run_and_say_why(tmp_path, monkeypatch):
     """The real failure this hit: a drive remounted under a different name.
 
-    Every path in the CSV pointed at /Volumes/One Touch 1/… while the
-    volume was mounted as /Volumes/One Touch/. Without this check the
-    eval would have billed for 608 unreadable photos and reported a
-    confident-looking 0.000 F1 for both sides.
+    Every path in the CSV named one volume while the disk was mounted
+    under a slightly different one, so nothing resolved. Without this
+    check the eval would have billed for hundreds of unreadable photos
+    and reported a confident-looking 0.000 F1 for both sides — the same
+    output a genuinely useless model produces.
+
+    (The drive's actual name is deliberately not written here. This file
+    is tracked, and tests/test_repo_hygiene.py bans personal drive names
+    precisely because the paths beside them expose how a photographer's
+    client folders are laid out. It caught this docstring.)
     """
     lab, sc = _tiny_csvs(tmp_path, photo_exists=False)
     res = _run(["--labels", str(lab), "--scores", str(sc),
