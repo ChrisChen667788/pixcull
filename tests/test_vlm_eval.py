@@ -304,3 +304,65 @@ def test_cli_exposes_the_command():
     from pixcull.cli import app
     out = CliRunner().invoke(app, ["m3", "--help"]).output
     assert "eval" in out
+
+
+# ---------------------------------------------------------------------------
+# v2.49.1 — verify before spending
+# ---------------------------------------------------------------------------
+
+def _tiny_csvs(tmp_path, *, photo_exists: bool):
+    from PIL import Image
+    img = tmp_path / "a.jpg"
+    if photo_exists:
+        Image.new("RGB", (16, 16)).save(img, "JPEG")
+    lab = tmp_path / "labels.csv"
+    lab.write_text("filename,manual_label\na.jpg,keep\n", encoding="utf-8")
+    sc = tmp_path / "scores.csv"
+    sc.write_text(f"filename,path,scene,score_final,flags\n"
+                  f"a.jpg,{img},portrait,0.8,\n", encoding="utf-8")
+    return lab, sc
+
+
+def _run(args, monkeypatch):
+    monkeypatch.setattr("pixcull.scoring.m3.api_key_from_env",
+                        lambda: "sk-" + "0" * 32)
+    from typer.testing import CliRunner
+
+    from pixcull.cli import app
+    return CliRunner().invoke(app, ["m3", "eval", *args])
+
+
+def test_dry_run_sends_nothing(tmp_path, monkeypatch):
+    """A 608-row run that dies on row 3 has still been billed for 1 and 2,
+    and the failure reads identically to "the model had no opinion"."""
+    lab, sc = _tiny_csvs(tmp_path, photo_exists=True)
+    sent = []
+    monkeypatch.setattr("pixcull.scoring.vlm_judge.make_minimax_judge",
+                        lambda *a, **k: sent.append(1))
+    res = _run(["--labels", str(lab), "--scores", str(sc), "--dry-run",
+                "--out", str(tmp_path / "r.md")], monkeypatch)
+    assert res.exit_code == 0
+    assert not sent, "a dry run constructed a judge"
+    assert "Dry run" in res.output
+
+
+def test_dry_run_reports_the_cost_before_it_is_incurred(tmp_path, monkeypatch):
+    lab, sc = _tiny_csvs(tmp_path, photo_exists=True)
+    out = _run(["--labels", str(lab), "--scores", str(sc), "--dry-run",
+                "--out", str(tmp_path / "r.md")], monkeypatch).output
+    assert "¥" in out and "call" in out
+
+
+def test_stale_paths_stop_the_run_and_say_why(tmp_path, monkeypatch):
+    """The real failure this hit: a drive remounted under a different name.
+
+    Every path in the CSV pointed at /Volumes/One Touch 1/… while the
+    volume was mounted as /Volumes/One Touch/. Without this check the
+    eval would have billed for 608 unreadable photos and reported a
+    confident-looking 0.000 F1 for both sides.
+    """
+    lab, sc = _tiny_csvs(tmp_path, photo_exists=False)
+    res = _run(["--labels", str(lab), "--scores", str(sc),
+                "--out", str(tmp_path / "r.md")], monkeypatch)
+    assert res.exit_code == 2
+    assert "remounts" in res.output or "stale" in res.output.lower()

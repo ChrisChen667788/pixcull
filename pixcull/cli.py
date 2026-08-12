@@ -1014,6 +1014,10 @@ def m3_eval(
     out: Path = typer.Option(Path("docs/M3-EVAL.md"), "--out",
                              help="Where to write the report."),
     vertical: str = typer.Option(None, "--vertical"),
+    dry_run: bool = typer.Option(False, "--dry-run",
+                                 help="Check the join, the photo paths and "
+                                      "the estimated cost — without calling "
+                                      "M3 or spending anything."),
 ) -> None:
     """Measure whether M3 actually decides better than the rule stack.
 
@@ -1060,6 +1064,28 @@ def m3_eval(
                       "photos.[/yellow] Pass --scores pointing at a run's "
                       "scores.csv.")
         raise typer.Exit(code=2)
+
+    # v2.49 — verify before spending. A 608-row run that dies on row 3
+    # because the photos moved has still been billed for rows 1 and 2,
+    # and the failure mode looks identical to "the model had no opinion".
+    live = sum(1 for r in rows
+               if r.get("path") and Path(str(r["path"])).exists())
+    console.print(f"[dim]{live}/{n_join} joined rows have a readable photo"
+                  f"[/dim]")
+    if not live:
+        console.print(
+            "[red]None of the photos are where the CSV says they are.[/red] "
+            "Paths go stale when a drive remounts under a different name or "
+            "a /tmp working copy is cleared — fix the paths, not the eval.")
+        raise typer.Exit(code=2)
+    todo = min(live, limit) if limit else live
+    est = todo * (1500 * 0.00218 + 150 * 0.00870) / 1000
+    console.print(f"[dim]≈{todo} calls, ≈¥{est:.2f}, "
+                  f"≈{todo / 200 * 60:.0f}s at the 200 RPM limit[/dim]")
+    if dry_run:
+        console.print("[green]Dry run — nothing was sent.[/green] "
+                      "Drop --dry-run to measure for real.")
+        return
 
     judge = make_minimax_judge(key)
     judge._cache = VerdictCache(default_cache_path())
