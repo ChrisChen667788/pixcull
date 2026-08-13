@@ -29,8 +29,11 @@ academic problems into shipping requirements:
 
 Wire contract (verified against vendor docs 2026-08-12)
 -------------------------------------------------------
-* base_url ``https://api.minimax.io/v1``   (NOT ``api.minimax.chat`` —
-  that is the pre-M3 endpoint and it rejects the ``minimax-m3`` model)
+* base_url — REGIONAL, see :data:`REGIONS`.  ``api.minimaxi.com`` (China)
+  and ``api.minimax.io`` (international) are separate accounts; a key for
+  one gets ``401 invalid api key`` from the other, which reads as a bad
+  key rather than a wrong region.  ``api.minimax.chat`` is the pre-M3
+  host and rejects the ``minimax-m3`` model entirely.
 * model ``minimax-m3``
 * image: content part ``{"type": "image_url", "image_url": {"url": …}}``,
   https URL or data URI, **≤ 10 MB**
@@ -76,8 +79,45 @@ from pixcull.scoring.vlm_judge import (
 # Vendor contract
 # ---------------------------------------------------------------------------
 
-BASE_URL = "https://api.minimax.io/v1"
+#: MiniMax runs two independent regions with SEPARATE accounts, and a key
+#: issued for one is simply invalid on the other — the international host
+#: answers a China key with `401 invalid api key (2049)`, which reads as
+#: "your key is wrong" rather than "your key is for the other region".
+#:
+#: v2.52.2: this cost a real debugging session. I hardcoded the
+#: international host from the English docs while this repo's own brand
+#: scripts (scripts/brand/gen_empty_state_art.py, gen_mascot.mjs) had been
+#: calling api.minimaxi.com for months. The evidence was in the tree.
+#:
+#: Order matters: the owner and most of this project's users are in China,
+#: so probe that one first.
+REGIONS: dict[str, str] = {
+    "cn":     "https://api.minimaxi.com/v1",
+    "global": "https://api.minimax.io/v1",
+}
+DEFAULT_REGION = "cn"
+
+BASE_URL = REGIONS[DEFAULT_REGION]
 MODEL = "minimax-m3"
+
+
+def resolve_base_url() -> str:
+    """Endpoint to use: the probed one, else ``$MINIMAX_REGION``, else CN.
+
+    Prefers what ``pixcull m3 doctor`` actually observed over anything
+    guessed, because "which region is this key for" is not something the
+    key's shape reveals.
+    """
+    caps = load_capabilities() or {}
+    # Only a probe that AUTHENTICATED counts. The first version trusted
+    # any recorded base_url, which meant a doctor run that got 401 from
+    # the wrong region pinned the judge to that wrong region forever —
+    # the probe's whole job is to find the endpoint that works, so
+    # remembering one that did not is worse than remembering nothing.
+    if caps.get("text") == "ok" and caps.get("base_url") in REGIONS.values():
+        return caps["base_url"]
+    env = os.environ.get("MINIMAX_REGION", "").strip().lower()
+    return REGIONS.get(env, REGIONS[DEFAULT_REGION])
 
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
 MAX_VIDEO_BYTES = 50 * 1024 * 1024
@@ -355,7 +395,7 @@ class MiniMaxM3Judge:
         api_key: str,
         *,
         model: str = MODEL,
-        base_url: str = BASE_URL,
+        base_url: str | None = None,
         resize_long_edge: int = VLM_RESIZE_LONG_EDGE,
         timeout_s: float = 90.0,
         max_retries: int = 5,
@@ -370,8 +410,10 @@ class MiniMaxM3Judge:
                 "store it via the app's key dialog. PixCull never reads a "
                 "key from the repo.")
         from openai import OpenAI
+        base_url = base_url or resolve_base_url()
         self._client = OpenAI(api_key=api_key, base_url=base_url,
                               max_retries=0)   # we do our own backoff
+        self.base_url = base_url
         self._model = model
         self.model_name = f"minimax:{model}"
         self.resize_long_edge = resize_long_edge
@@ -749,6 +791,28 @@ def probe_capabilities(api_key: str,
         caps["text"] = f"openai SDK not installed: {exc}"
         return caps
 
+    def _auth_ok(url: str) -> tuple[bool, str]:
+        try:
+            OpenAI(api_key=api_key, base_url=url, max_retries=0
+                   ).chat.completions.create(
+                model=model, messages=[{"role": "user", "content": "ping"}],
+                max_tokens=4, timeout=30)
+            return True, "ok"
+        except Exception as exc:  # noqa: BLE001
+            return False, f"{type(exc).__name__}: {exc}"[:300]
+
+    # Try every region before reporting failure. Asking the owner "which
+    # MiniMax region is your account in?" is asking them to know something
+    # the console never told them, and the wrong answer looks exactly like
+    # a bad key.
+    caps["region_attempts"] = {}
+    for name, url in REGIONS.items():
+        ok, detail = _auth_ok(url)
+        caps["region_attempts"][name] = detail
+        if ok:
+            base_url, caps["base_url"], caps["region"] = url, url, name
+            break
+
     client = OpenAI(api_key=api_key, base_url=base_url, max_retries=0)
 
     def _try(fn) -> _Attempt:
@@ -758,11 +822,17 @@ def probe_capabilities(api_key: str,
         except Exception as exc:  # noqa: BLE001
             return _Attempt(False, f"{type(exc).__name__}: {exc}"[:300])
 
-    # 1. auth + model string
-    a = _try(lambda: client.chat.completions.create(
-        model=model, messages=[{"role": "user", "content": "ping"}],
-        max_tokens=4, timeout=30))
-    caps["text"] = a.detail
+    # 1. auth + model string — already answered by the region sweep.
+    caps["text"] = caps["region_attempts"].get(caps.get("region") or "", "")
+    if not caps.get("region"):
+        # Nothing authenticated anywhere. Report the most informative
+        # failure: a 402 means the key is GOOD and the account is empty,
+        # which is a completely different fix from a 401.
+        billing = [d for d in caps["region_attempts"].values()
+                   if "insufficient_balance" in d or "402" in d]
+        caps["text"] = (billing[0] if billing
+                        else next(iter(caps["region_attempts"].values()), ""))
+        return caps
 
     # 2. structured output
     a = _try(lambda: client.chat.completions.create(

@@ -159,10 +159,16 @@ def _judge(**kw):
 # ---------------------------------------------------------------------------
 
 def test_endpoint_and_model_are_the_m3_ones():
-    """These were wrong for months and failed silently. Pin them."""
-    assert m3.BASE_URL == "https://api.minimax.io/v1"
+    """These were wrong for months and failed silently. Pin them.
+
+    v2.52.2 made the host regional, so BASE_URL is now the DEFAULT region
+    rather than the only one — see the region tests at the bottom. What
+    stays pinned is the model string and the exclusion of the retired
+    pre-M3 host.
+    """
+    assert m3.BASE_URL in m3.REGIONS.values()
     assert m3.MODEL == "minimax-m3"
-    assert "minimax.chat" not in m3.BASE_URL, (
+    assert "minimax.chat" not in " ".join(m3.REGIONS.values()), (
         "api.minimax.chat is the pre-M3 endpoint; it rejects minimax-m3")
 
 
@@ -575,3 +581,81 @@ def test_importing_the_module_makes_no_client(monkeypatch):
     monkeypatch.setitem(sys.modules, "openai", boom)
     importlib.reload(m3)            # must not raise
     assert m3.MODEL == "minimax-m3"
+
+
+# ---------------------------------------------------------------------------
+# 12. Regions — v2.52.2
+# ---------------------------------------------------------------------------
+#
+# MiniMax runs two independent regions with separate accounts. A China key
+# gets `401 invalid api key (2049)` from the international host, which
+# reads as "your key is wrong" and sends you off to reissue a key that was
+# fine all along. I hardcoded the international host from the English docs
+# while this repo's own brand scripts had been calling the China one for
+# months; the evidence was in the tree and I did not look.
+
+def test_both_regions_are_known():
+    assert set(m3.REGIONS) == {"cn", "global"}
+    assert m3.REGIONS["cn"] == "https://api.minimaxi.com/v1"
+    assert m3.REGIONS["global"] == "https://api.minimax.io/v1"
+
+
+def test_the_default_region_matches_this_project_s_users(monkeypatch):
+    monkeypatch.setattr(m3, "load_capabilities", lambda: {})
+    monkeypatch.delenv("MINIMAX_REGION", raising=False)
+    assert m3.resolve_base_url() == m3.REGIONS["cn"]
+
+
+def test_a_successful_probe_pins_the_endpoint(monkeypatch):
+    monkeypatch.setattr(m3, "load_capabilities",
+                        lambda: {"text": "ok",
+                                 "base_url": m3.REGIONS["global"]})
+    assert m3.resolve_base_url() == m3.REGIONS["global"]
+
+
+def test_a_FAILED_probe_does_not_pin_the_endpoint(monkeypatch):
+    """The bug in my first version of this.
+
+    It trusted any recorded base_url. So a doctor run that got 401 from
+    the wrong region pinned the judge to that wrong region permanently —
+    the probe's entire job is to find the endpoint that works, and
+    remembering one that did not is worse than remembering nothing.
+    """
+    monkeypatch.setattr(m3, "load_capabilities",
+                        lambda: {"text": "APIStatusError: 401 invalid api key",
+                                 "base_url": m3.REGIONS["global"]})
+    monkeypatch.delenv("MINIMAX_REGION", raising=False)
+    assert m3.resolve_base_url() == m3.REGIONS["cn"]
+
+
+def test_env_can_override_before_anything_is_probed(monkeypatch):
+    monkeypatch.setattr(m3, "load_capabilities", lambda: {})
+    monkeypatch.setenv("MINIMAX_REGION", "global")
+    assert m3.resolve_base_url() == m3.REGIONS["global"]
+    monkeypatch.setenv("MINIMAX_REGION", "nonsense")
+    assert m3.resolve_base_url() == m3.REGIONS["cn"]
+
+
+def test_the_doctor_sweeps_regions_rather_than_asking():
+    """"Which MiniMax region is your account in?" asks the owner to know
+    something their console never told them, and the wrong answer looks
+    identical to a bad key."""
+    import inspect
+    src = inspect.getsource(m3.probe_capabilities)
+    assert "for name, url in REGIONS.items()" in src
+    assert "region_attempts" in src
+
+
+def test_a_billing_failure_is_reported_over_an_auth_failure():
+    """402 and 401 need completely different fixes.
+
+    402 means the key is GOOD and the account is empty — top it up. 401
+    means the key does not belong here. Reporting whichever region was
+    tried last would send the owner to reissue a working key.
+    """
+    import inspect
+    src = inspect.getsource(m3.probe_capabilities)
+    i_bill = src.index("insufficient_balance")
+    i_ret = src.index("return caps", i_bill)
+    assert i_bill < i_ret
+    assert "billing[0] if billing" in src
