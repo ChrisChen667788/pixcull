@@ -551,7 +551,11 @@ class MiniMaxM3Judge:
         self,
         image_path: Path,
         scene: str | None = None,
-        max_tokens: int = 600,
+        # v2.52.5 — 600 was sized for a non-reasoning VLM. M3 thinks
+        # first, and on a real rubric prompt the reasoning alone runs past
+        # 2800 characters, leaving nothing for the answer. Measured, not
+        # guessed: at 600 every one of 250 calls came back with no JSON.
+        max_tokens: int = 3000,
         style_section: str = "",
         vertical: str | None = None,
         *,
@@ -622,12 +626,29 @@ class MiniMaxM3Judge:
             resp = self._complete(messages, max_tokens)
             self._charge(resp)
             text = resp.choices[0].message.content or ""
+            finish = getattr(resp.choices[0], "finish_reason", "")
         except Exception as exc:  # noqa: BLE001
             verdict.elapsed_s = time.time() - t0
             verdict.error = f"{type(exc).__name__}: {exc}"
             return verdict
 
         verdict.elapsed_s = time.time() - t0
+        # v2.52.5 — say WHICH failure this is.
+        #
+        # M3 is a reasoning model: it emits <think>…</think> before the
+        # answer, and at max_tokens=600 the whole budget went to thinking.
+        # The reply closed the think block and stopped — not one `{` in
+        # 2844 characters. That surfaced as "JSON parse failed", which
+        # sent me to inspect the parser while 250 calls billed and were
+        # discarded. A truncated reply is a budget problem and the message
+        # has to say so.
+        if finish == "length":
+            verdict.raw_text = text
+            verdict.error = (
+                f"response truncated at max_tokens={max_tokens} — M3 spent "
+                f"the budget on its <think> block and never reached the "
+                f"JSON. Raise max_tokens; do not retry at this size.")
+            return verdict
         _fill_verdict(verdict, text)
         if key and self._cache is not None and verdict.error is None:
             self._cache.put(key, verdict.to_dict())
@@ -813,6 +834,24 @@ def probe_capabilities(api_key: str,
         caps["region"] = REGION_BY_URL.get(detail, DEFAULT_REGION)
     else:
         return caps
+
+    client = OpenAI(api_key=api_key, base_url=base_url, max_retries=0)
+
+    def _try(fn) -> _Attempt:
+        """Run one capability probe; a failure is data, not an exception.
+
+        v2.52.5 — this and the client above were collateral damage when I
+        replaced the hand-written region sweep with probe_key(): the
+        deletion took the whole block between `_auth_ok` and the first
+        capability, and these two lived inside it. Every later probe then
+        referenced an undefined name, so the doctor crashed with a
+        NameError at exactly the moment a working key finally reached it.
+        """
+        try:
+            fn()
+            return _Attempt(True, "ok")
+        except Exception as exc:  # noqa: BLE001
+            return _Attempt(False, f"{type(exc).__name__}: {exc}"[:300])
 
     # 2. structured output
     a = _try(lambda: client.chat.completions.create(

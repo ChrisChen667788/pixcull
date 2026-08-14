@@ -1085,7 +1085,12 @@ def m3_eval(
             "a /tmp working copy is cleared — fix the paths, not the eval.")
         raise typer.Exit(code=2)
     todo = min(live, limit) if limit else live
-    est = todo * (1500 * 0.00218 + 150 * 0.00870) / 1000
+    # v2.49.2 — measured, not assumed. The first estimate used 150 output
+    # tokens; M3 is a reasoning model and actually spends ~1400 (it thinks
+    # inside <think> before answering), so the real per-photo cost is
+    # ~¥0.021 rather than ~¥0.005. Under-quoting a bill by 4x is worse
+    # than not quoting it.
+    est = todo * 0.021
     console.print(f"[dim]≈{todo} calls, ≈¥{est:.2f}, "
                   f"≈{todo / 200 * 60:.0f}s at the 200 RPM limit[/dim]")
     if dry_run:

@@ -95,6 +95,9 @@ class EvalResult:
     n_errors: int = 0
     n_incoherent: int = 0
     n_overrides: int = 0
+    #: rows where the rule stack and the human label already disagreed.
+    #: Zero means the labels cannot adjudicate between two systems.
+    n_label_disagreements: int = 0
     elapsed_s: float = 0.0
     prompt_tokens: int = 0
     completion_tokens: int = 0
@@ -123,6 +126,24 @@ class EvalResult:
         if not self.n_scored:
             return ("NO DATA — every call failed. This is a configuration "
                     "problem; run `pixcull m3 doctor`.")
+        # v2.49.3 — the labels have to be able to disagree with the rule
+        # stack, or this comparison is circular.
+        #
+        # Found the expensive way. training_combined.csv's `manual_label`
+        # is byte-identical to the rule stack's own `decision` on all 408
+        # rows — the owner reviewed the sheet and endorsed every decision
+        # as-is, which is a real review but not an independent judgement.
+        # The rule stack therefore scores exactly 1.000 BY CONSTRUCTION,
+        # and any model that differs at all is guaranteed to look worse.
+        # The run reported "M3 WORSE by 63.9 points" and that number
+        # measured disagreement-with-the-rule, not correctness. ¥8 and
+        # twenty minutes to learn it.
+        if self.n_label_disagreements == 0:
+            return ("INVALID — the label set never disagrees with the rule "
+                    "stack, so the rule scores 1.000 by construction and "
+                    "anything different scores worse. This measures "
+                    "agreement-with-the-rule, not correctness. Label a set "
+                    "where you overruled the model, then re-run.")
         delta = (self.vlm_macro_f1 - self.rule_macro_f1) * 100
         if delta >= 2.0:
             return (f"M3 BETTER by {delta:+.1f} macro-F1 points — the "
@@ -194,6 +215,7 @@ def evaluate(
     vertical: str | None = None,
     limit: int | None = None,
     progress: Callable[[int, int, str], None] | None = None,
+    workers: int = 8,
 ) -> EvalResult:
     """Score every labelled row twice — rule stack, then M3 — and compare.
 
@@ -211,6 +233,43 @@ def evaluate(
     scene_hits: dict[str, list[tuple[str, str, str]]] = {}
 
     t0 = time.time()
+
+    def _judge_one(row: dict):
+        """The network part, and only the network part.
+
+        v2.49.2 — this loop was serial. Measured on the real set: ~37 s
+        per photo (M3 is a reasoning model and thinks before answering),
+        so 408 rows would have taken 4.2 hours and the owner would
+        reasonably have killed it. Tallying stays on the caller's thread:
+        Confusion counters and the disagreement list are shared state, and
+        a race there produces a plausible-looking wrong F1 — the exact
+        failure this eval exists to rule out.
+        """
+        img = row.get("path")
+        if img and Path(str(img)).exists():
+            return judge.score(Path(str(img)),
+                               scene=str(row.get("scene") or ""), row=row)
+        if hasattr(judge, "score_row"):
+            return judge.score_row(row)      # test doubles, dry runs
+        return None
+
+    verdicts: dict[int, Any] = {}
+    if todo and workers > 1:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futs = {pool.submit(_judge_one, r): i for i, r in enumerate(todo)}
+            done = 0
+            for fut in as_completed(futs):
+                i = futs[fut]
+                try:
+                    verdicts[i] = fut.result()
+                except Exception:  # noqa: BLE001
+                    verdicts[i] = None
+                done += 1
+                if progress is not None:
+                    progress(done, len(todo),
+                             str(todo[i].get("filename", "")))
+
     for n, row in enumerate(todo, 1):
         fn = str(row.get("filename", "")).strip()
         truth = labels[fn]["manual_label"]
@@ -221,19 +280,11 @@ def evaluate(
         except (TypeError, ValueError):
             final = 0.0
 
-        if progress is not None:
-            progress(n, len(todo), fn)
-
         rule_dec, _ = decide(final, flags, config, strictness,  # type: ignore[arg-type]
                              scene=scene, vertical=vertical)
 
-        verdict = None
-        img = row.get("path")
-        if img and Path(str(img)).exists():
-            verdict = judge.score(Path(str(img)), scene=scene, row=row)
-        elif hasattr(judge, "score_row"):
-            # Test doubles and dry runs: no file needed.
-            verdict = judge.score_row(row)
+        verdict = (verdicts.get(n - 1) if verdicts
+                   else _judge_one(row))
 
         if verdict is None or getattr(verdict, "error", None):
             res.n_errors += 1
@@ -260,6 +311,8 @@ def evaluate(
         if overrode:
             res.n_overrides += 1
 
+        if rule_dec.value != truth:
+            res.n_label_disagreements += 1
         _tally(res.rule, truth, rule_dec.value)
         _tally(res.vlm, truth, vlm_dec.value)
         scene_hits.setdefault(scene or "—", []).append(
@@ -317,6 +370,12 @@ def render_report(res: EvalResult, *, labels_path: str = "",
             f"per 3000-photo wedding)")
     if labels_path:
         lines.append(f"- labels: `{labels_path}`")
+    if res.n_scored and not res.n_label_disagreements:
+        lines += ["", "> **Read no further for a ranking.** The rule stack "
+                  "and the label set agree on every single row, so the "
+                  "table below shows the rule at a perfect 1.000 because "
+                  "it was scored against its own answers. The M3 column is "
+                  "a disagreement rate, not an error rate.", ""]
     lines += ["", "## Agreement with the human", "",
               "| | rule P | rule R | rule F1 | M3 P | M3 R | M3 F1 |",
               "|---|---|---|---|---|---|---|"]

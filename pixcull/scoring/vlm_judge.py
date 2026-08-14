@@ -584,6 +584,16 @@ def parse_vlm_response(text: str) -> dict[str, Any] | None:
     if not text:
         return None
     s = text.strip()
+    # v2.52.5 — reasoning models emit a <think> block first. M3 always
+    # does. Strip it before anything else: its prose contains braces and
+    # quotes, so the "first {...}" fallback below would otherwise try to
+    # parse the model's own musings.
+    s = re.sub(r"<think>.*?</think>", "", s, flags=re.DOTALL).strip()
+    # An UNCLOSED think block means the reply was cut off mid-reasoning —
+    # there is no JSON further down, and pretending otherwise costs a
+    # retry that will fail the same way.
+    if "<think>" in s:
+        return None
     # Strip code fence
     fence = re.search(r"```(?:json)?\s*(.*?)```", s, re.DOTALL)
     if fence:

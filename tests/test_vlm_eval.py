@@ -126,7 +126,7 @@ def test_maybe_is_excluded_from_the_headline(cfg):
 # ---------------------------------------------------------------------------
 
 def test_verdict_says_no_when_m3_is_worse():
-    res = EvalResult(n_scored=608)
+    res = EvalResult(n_scored=608, n_label_disagreements=40)
     res.rule = {"keep": Confusion("keep", tp=90, fp=10, fn=10),
                 "cull": Confusion("cull", tp=90, fp=10, fn=10)}
     res.vlm = {"keep": Confusion("keep", tp=50, fp=50, fn=50),
@@ -137,7 +137,7 @@ def test_verdict_says_no_when_m3_is_worse():
 
 def test_verdict_refuses_to_call_noise_an_improvement():
     """The failure mode that would make this whole version theatre."""
-    res = EvalResult(n_scored=608)
+    res = EvalResult(n_scored=608, n_label_disagreements=40)
     same = {"keep": Confusion("keep", tp=90, fp=10, fn=10),
             "cull": Confusion("cull", tp=90, fp=10, fn=10)}
     res.rule = same
@@ -149,7 +149,7 @@ def test_verdict_refuses_to_call_noise_an_improvement():
 
 
 def test_verdict_says_yes_only_on_a_real_margin():
-    res = EvalResult(n_scored=608)
+    res = EvalResult(n_scored=608, n_label_disagreements=40)
     res.rule = {"keep": Confusion("keep", tp=50, fp=50, fn=50),
                 "cull": Confusion("cull", tp=50, fp=50, fn=50)}
     res.vlm = {"keep": Confusion("keep", tp=95, fp=5, fn=5),
@@ -275,8 +275,10 @@ def test_rows_without_a_label_are_dropped_at_load(tmp_path):
 
 
 def test_report_leads_with_the_verdict(cfg):
+    # 0.9/"cull" makes the rule disagree with the label on one row, so
+    # the circularity guard does not fire and the ranking verdict shows.
     rows = _rows([("a.jpg", 0.9, "", "p"), ("b.jpg", 0.1, "", "p")])
-    labels = _labels({"a.jpg": "keep", "b.jpg": "cull"})
+    labels = _labels({"a.jpg": "cull", "b.jpg": "cull"})
     res = evaluate(rows, labels, ScriptedJudge({}), cfg)
     md = render_report(res, labels_path="l.csv")
     head = md.split("\n\n")[1]
@@ -372,3 +374,42 @@ def test_stale_paths_stop_the_run_and_say_why(tmp_path, monkeypatch):
                 "--out", str(tmp_path / "r.md")], monkeypatch)
     assert res.exit_code == 2
     assert "remounts" in res.output or "stale" in res.output.lower()
+
+
+# ---------------------------------------------------------------------------
+# v2.49.3 — the labels must be able to disagree with the rule stack
+# ---------------------------------------------------------------------------
+
+def test_a_label_set_that_never_disagrees_is_refused(cfg):
+    """The expensive lesson, made cheap.
+
+    training_combined.csv's `manual_label` was byte-identical to the rule
+    stack's own `decision` on all 408 rows — the owner reviewed the sheet
+    and endorsed every decision as-is. A real review, but not an
+    independent judgement: the rule then scores exactly 1.000 BY
+    CONSTRUCTION and anything that differs looks worse. The run reported
+    "M3 WORSE by 63.9 points" and that number measured
+    disagreement-with-the-rule, not correctness.
+    """
+    rows = _rows([("a.jpg", 0.9, "", "p"), ("b.jpg", 0.1, "", "p")])
+    labels = _labels({"a.jpg": "keep", "b.jpg": "cull"})   # == the rule
+    res = evaluate(rows, labels, ScriptedJudge({"a.jpg": "cull"}), cfg)
+    assert res.n_label_disagreements == 0
+    assert "INVALID" in res.verdict
+    assert "by construction" in res.verdict
+
+
+def test_one_real_disagreement_is_enough_to_rank(cfg):
+    rows = _rows([("a.jpg", 0.9, "", "p"), ("b.jpg", 0.1, "", "p")])
+    labels = _labels({"a.jpg": "cull", "b.jpg": "cull"})   # rule says keep
+    res = evaluate(rows, labels, ScriptedJudge({}), cfg)
+    assert res.n_label_disagreements == 1
+    assert "INVALID" not in res.verdict
+
+
+def test_the_report_says_the_table_is_not_a_ranking(cfg):
+    rows = _rows([("a.jpg", 0.9, "", "p"), ("b.jpg", 0.1, "", "p")])
+    labels = _labels({"a.jpg": "keep", "b.jpg": "cull"})
+    md = render_report(evaluate(rows, labels, ScriptedJudge({}), cfg))
+    assert "Read no further for a ranking" in md
+    assert "scored against its own answers" in md
