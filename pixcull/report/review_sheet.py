@@ -143,16 +143,18 @@ button.bad:hover{border-color:var(--bad);color:var(--bad)}
 #bar{position:fixed;left:0;right:0;bottom:0;background:var(--card);
 border-top:1px solid var(--line);padding:11px 20px;display:flex;gap:14px;
 align-items:center;justify-content:center;font-size:13px}
+#hint{color:var(--dim);font-size:12px;max-width:52ch;line-height:1.45}
 #out{width:100%;max-width:1000px;margin:0 auto;font:12px ui-monospace,monospace;
 white-space:pre-wrap;background:var(--card);border:1px solid var(--line);
-border-radius:8px;padding:14px;display:none}
+border-radius:8px;padding:14px;display:none;cursor:copy}
 """
 
 # Verdicts are mirrored into localStorage on every click. The reviewer's
 # judgement is the scarcest input this system has; a closed tab, a reload
 # or a stray ⌘W must not cost them the pass they already did.
 _JS = """
-const N=%(n)d, KEY='pixcull-review-%(slug)s', R=JSON.parse(localStorage.getItem(KEY)||'{}');
+const N=%(n)d, KEY='pixcull-review-%(slug)s', FILE='%(slug)s-review.json';
+const R=JSON.parse(localStorage.getItem(KEY)||'{}');
 function paint(i){
   const ok=R[i], c=document.querySelectorAll('.card')[i], m=document.getElementById('mk'+i);
   if(ok===undefined) return;
@@ -170,14 +172,39 @@ function payload(){
   cards.forEach((c,i)=>{ if(i in R) out.verdicts[c.dataset.fn]=R[i]?c.dataset.yes:c.dataset.no; });
   return out;
 }
+// The download is best-effort and the visible copy is the guarantee.
+// v2.53.2: the anchor was never inserted into the document, which
+// Firefox ignores outright, and a blob download from a file:// page is
+// blocked in Safari regardless. Both fail SILENTLY — the reviewer saw
+// the panel open, assumed a file had landed, and the eval command then
+// said the path did not exist. Forty judgements sat unreachable in
+// localStorage while the page looked like it had saved them.
 function save(){
-  const blob=new Blob([JSON.stringify(payload(),null,2)],{type:'application/json'});
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(blob); a.download='%(slug)s-review.json'; a.click();
-  const o=document.getElementById('out'); o.style.display='block';
-  o.textContent=JSON.stringify(payload(),null,2);
-  if(navigator.clipboard) navigator.clipboard.writeText(JSON.stringify(payload()));
+  const text=JSON.stringify(payload(),null,2), n=Object.keys(R).length;
+  const o=document.getElementById('out'), h=document.getElementById('hint');
+  o.style.display='block'; o.textContent=text;
+  let ok=false;
+  try{
+    const url=URL.createObjectURL(
+      new Blob([text],{type:'application/json'}));
+    const a=document.createElement('a');
+    a.href=url; a.download=FILE;
+    document.body.appendChild(a);   // Firefox will not click a detached node
+    a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),4000);
+    ok=true;
+  }catch(e){ ok=false; }
+  if(navigator.clipboard) navigator.clipboard.writeText(text).catch(()=>{});
+  h.textContent=(ok? '已下载 '+FILE+'(若浏览器拦截,下方内容已复制到剪贴板,'
+                     +'粘贴存成该文件名即可)'
+                   : '浏览器拦截了下载 — 下方内容已复制到剪贴板,'
+                     +'粘贴存成 '+FILE)+' · 共 '+n+' 条';
   o.scrollIntoView({behavior:'smooth'});
+}
+// Triple-click selects one line; the reviewer needs all of it.
+function selectAll(el){
+  const r=document.createRange(); r.selectNodeContents(el);
+  const s=getSelection(); s.removeAllRanges(); s.addRange(r);
 }
 window.addEventListener('DOMContentLoaded',()=>{
   for(const i in R) paint(i);
@@ -199,7 +226,10 @@ def render(items: Sequence[dict[str, Any]], *, title: str, lede: str,
             f'<header><h1>{html.escape(title)}</h1>'
             f'<p class="lede">{lede}</p></header>{cards}'
             f'<div id="bar"><span id="cnt">已判 0 / {len(items)}</span>'
-            f'<button onclick="save()">保存结果</button></div><pre id="out"></pre>'
+            f'<button onclick="save()">保存结果</button>'
+            f'<span id="hint"></span></div>'
+            f'<pre id="out" onclick="selectAll(this)" '
+            f'title="点一下全选,便于复制"></pre>'
             f'<script>const YES={json.dumps(yes)},NO={json.dumps(no)};{js}</script>')
 
 

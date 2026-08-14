@@ -259,3 +259,49 @@ def test_a_small_pool_is_returned_whole():
     from pixcull.report.review_sheet import stratify
     small = _pool()[:6]
     assert len(stratify(small, 40, priority=("keep->cull",))) == 6
+
+
+# ── v2.53.2: the save button that silently saved nothing ──────────────
+
+def test_download_anchor_is_attached_before_it_is_clicked(photo):
+    """The regression that cost a reviewer their pass over 40 frames.
+
+    ``a.click()`` on an anchor that was never inserted into the document
+    is ignored outright by Firefox, and a blob download from a ``file://``
+    page is blocked by Safari on top of that.  Neither raises.  The panel
+    still opened, the JSON still appeared, and the only symptom was the
+    eval command later reporting that the file did not exist.
+
+    Asserted on order rather than mere presence: an ``appendChild`` that
+    lands after the click is the same bug with extra steps.
+    """
+    js = render(_items(photo), title="t", lede="l", slug="s")
+    save = js[js.index("function save()"):]
+    save = save[:save.index("function selectAll")]
+    assert "appendChild" in save, "the download anchor is never attached"
+    assert save.index("appendChild") < save.index(".click()"), (
+        "the anchor is attached only after it is clicked — Firefox drops "
+        "the click and nothing is downloaded")
+
+
+def test_json_is_revealed_even_when_the_download_throws(photo):
+    """The visible copy is the guarantee; the download is best-effort.
+
+    Whatever the browser does with the blob, the reviewer must end up
+    holding their JSON — so the panel is filled BEFORE the download is
+    attempted, not inside the same try block.
+    """
+    js = render(_items(photo), title="t", lede="l", slug="s")
+    save = js[js.index("function save()"):js.index("function selectAll")]
+    assert save.index("o.textContent=text") < save.index("try{"), (
+        "the JSON is only shown after a download that may throw")
+    assert "catch(e)" in save, "a blocked download must not abort save()"
+
+
+def test_save_reports_which_file_to_write(photo):
+    """A silent failure is what made this expensive: say what happened."""
+    page = render(_items(photo), title="t", lede="l", slug="my-batch")
+    assert 'id="hint"' in page, "no element to report the outcome in"
+    assert "FILE='my-batch-review.json'" in page, (
+        "the target filename is not stated, so a reviewer whose download "
+        "was blocked cannot know what to name the paste")

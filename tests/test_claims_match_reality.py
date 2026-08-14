@@ -186,3 +186,21 @@ def test_the_lint_would_actually_fire(tmp_path):
     hits = [name for pattern, name in _ABSOLUTE_CLAIMS
             if re.search(pattern, specimen)]
     assert len(hits) >= 2, f"the patterns match nothing real: {hits}"
+
+
+def test_eval_accepts_more_than_one_review_pass():
+    """v2.53.2 — ``--review`` was a single Path, so passing two review
+    files silently kept only the last one.
+
+    The failure mode is the worst kind this repo has: it does not error,
+    it reports a *smaller* evidence base as though it were the whole one.
+    Two review passes exist precisely because one was not enough.
+    """
+    import inspect
+
+    from pixcull.cli import m3_eval
+
+    ann = inspect.signature(m3_eval).parameters["review"].annotation
+    assert "list" in str(ann).lower(), (
+        f"--review is {ann}, not a list: a second --review would silently "
+        "replace the first instead of merging")

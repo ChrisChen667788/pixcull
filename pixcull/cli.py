@@ -1020,13 +1020,15 @@ def m3_eval(
     out: Path = typer.Option(Path("docs/M3-EVAL.md"), "--out",
                              help="Where to write the report."),
     vertical: str = typer.Option(None, "--vertical"),
-    review: Path = typer.Option(None, "--review", exists=True,
-                                help="A saved `pixcull m3 review` result. "
-                                     "Your verdicts override the label "
-                                     "sheet — which is the whole point: a "
-                                     "label set that never contradicts the "
-                                     "rule stack cannot rank it against "
-                                     "anything."),
+    review: list[Path] = typer.Option(None, "--review", exists=True,
+                                      help="A saved `pixcull m3 review` "
+                                           "result. Your verdicts override "
+                                           "the label sheet — which is the "
+                                           "whole point: a label set that "
+                                           "never contradicts the rule stack "
+                                           "cannot rank it against anything. "
+                                           "Repeatable: pass --review once "
+                                           "per review pass and they merge."),
     dry_run: bool = typer.Option(False, "--dry-run",
                                  help="Check the join, the photo paths and "
                                       "the estimated cost — without calling "
@@ -1056,15 +1058,29 @@ def m3_eval(
         raise typer.Exit(code=2)
 
     lab = load_labels(labels)
-    if review is not None:
+    # v2.53.2 — repeatable. As a single Option this silently kept only the
+    # LAST --review: passing both review passes threw the first one's
+    # judgements away and reported a smaller, quieter number as if it were
+    # the whole evidence base.
+    if review:
         from pixcull.report.review_sheet import load_verdicts
-        applied = 0
-        for fn, verdict in load_verdicts(review).items():
-            if fn in lab and lab[fn].get("manual_label") != verdict:
-                lab[fn] = {**lab[fn], "manual_label": verdict}
-                applied += 1
+        applied, seen = 0, {}
+        for src in review:
+            for fn, verdict in load_verdicts(src).items():
+                # The same frame judged twice, differently, is the reviewer
+                # contradicting themselves. Silently taking the later file
+                # would bury that; it is worth their attention.
+                if fn in seen and seen[fn][1] != verdict:
+                    console.print(
+                        f"[yellow]conflict:[/yellow] {fn} — "
+                        f"{seen[fn][0].name} says {seen[fn][1]}, "
+                        f"{src.name} says {verdict}; using {verdict}")
+                seen[fn] = (src, verdict)
+                if fn in lab and lab[fn].get("manual_label") != verdict:
+                    lab[fn] = {**lab[fn], "manual_label": verdict}
+                    applied += 1
         console.print(f"[dim]review: {applied} label(s) replaced by your "
-                      f"own verdict[/dim]")
+                      f"own verdict, from {len(review)} pass(es)[/dim]")
     if not lab:
         console.print(f"[red]{labels} has no rows with a manual_label.[/red] "
                       "An unlabelled row cannot make anyone right or wrong.")
