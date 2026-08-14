@@ -900,6 +900,74 @@ PixCull is the alternative that flips all three:
 | 1:1 focus check + sync | **Lightbox + compare** | Limited | Yes |
 | Hackable | **Plain Python + plain JS** | No | No |
 
+## Disagreement review — how you find out whether the model is right
+
+A model that disagrees with your rules is either smarter than them or
+worse than them, and **nothing in a test suite can tell you which.** Only
+you can, by looking at the frames.
+
+`pixcull m3 review` builds a page of exactly the frames where that
+question is live, and it exists because the alternative failed. This
+project had a 608-row label set that had been reviewed and endorsed —
+and was therefore *byte-identical to the rule stack's own output*. The
+rule scored a perfect 1.000 against its own answers, any model that
+differed was guaranteed to look worse, and the comparison was worthless.
+Ten minutes on 18 photographs produced the first labels that could
+separate the two systems.
+
+```bash
+# 1. score a labelled set with the cloud judge
+pixcull m3 eval --labels labels.csv --scores run/scores.csv
+
+# 2. build a review page from the disagreements (free — cache only)
+pixcull m3 review --labels labels.csv --scores run/scores.csv \
+                  --out ~/review.html
+
+# 3. open it, judge each frame, click 保存结果 → review.json
+
+# 4. feed your verdicts back; they override the label sheet
+pixcull m3 eval --labels labels.csv --scores run/scores.csv \
+                --review ~/review.json
+```
+
+Each card shows the photograph, what each system decided, **which
+hard-cull flag was overturned**, the model's own reasoning, and its six
+axis scores. Two buttons. No scale to calibrate — a reviewer thinking
+about a 1–5 rubric has stopped looking at the picture.
+
+Three properties that are not incidental:
+
+- **The photos never leave your machine.** Thumbnails are embedded in a
+  local HTML file. Reviewing your own client work must not require
+  uploading it anywhere, including to us.
+- **Your verdicts are written to disk**, and mirrored to `localStorage`
+  on every click. A closed tab does not cost you the pass you already
+  did. (The first version only offered "copy to clipboard". That was
+  wrong: ten minutes of a photographer's judgement is the scarcest input
+  this system has.)
+- **Building the page never spends money.** It reads cached verdicts
+  only; a frame the model has not judged is skipped rather than billed.
+
+The same page shape works for any A-vs-B question over images — it takes
+a list of `{photo, what A said, what B said, why}` — so a future
+comparison between rule versions, or between two models, reuses it
+rather than reinventing it.
+
+### What it found
+
+On the first pass, the owner reviewed 18 frames the rule stack had
+hard-culled and MiniMax M3 kept, and **agreed with M3 on 17 of them**.
+That is a strong, verified result about one specific behaviour: M3 is
+very good at rescuing a frame the detectors wrongly discard, because it
+was handed the blink count and the sharpness variance and chose to
+overrule them anyway.
+
+It is **not** a result about judging in general — across the whole
+measured set M3 still scores well below the rule stack. So the evidence
+buys M3 exactly one power and no more, and that is what
+`--vlm-authority rescue` grants: it may overturn a hard cull, and it may
+not touch anything else.
+
 ## Screenshots
 
 > **Real product UI captured against a 200-photo Canon EOS card from

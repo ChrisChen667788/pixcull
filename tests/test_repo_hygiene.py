@@ -235,3 +235,20 @@ def test_canon_autofilenames_remain_the_reviewed_exception():
                 or f.startswith(("docs/", "tests/", "pixcull/"))
                 or f in ("README.md", "modelscope/README.md")), (
             f"Canon filenames appeared somewhere unreviewed: {f}")
+
+
+def test_no_eval_report_with_real_filenames(tracked_text):
+    """v2.53 — the eval report must not become a tracked file.
+
+    It lists real photograph filenames next to M3's descriptions of what
+    is in them. That is a photographer's client work twice over: the
+    naming scheme and the subject matter. The aggregate numbers are safe
+    and belong in the README; the per-row table does not leave the
+    machine that produced it.
+    """
+    bad = [str(p) for p, _ in tracked_text
+           if p.name in ("M3-EVAL.md",) or p.name.endswith("-review.html")]
+    assert not bad, (
+        "eval output is tracked: " + ", ".join(bad) +
+        "\nThese name real photographs and describe their contents. Keep "
+        "them gitignored and quote only the aggregate numbers.")

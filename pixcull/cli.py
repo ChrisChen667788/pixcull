@@ -1020,6 +1020,13 @@ def m3_eval(
     out: Path = typer.Option(Path("docs/M3-EVAL.md"), "--out",
                              help="Where to write the report."),
     vertical: str = typer.Option(None, "--vertical"),
+    review: Path = typer.Option(None, "--review", exists=True,
+                                help="A saved `pixcull m3 review` result. "
+                                     "Your verdicts override the label "
+                                     "sheet — which is the whole point: a "
+                                     "label set that never contradicts the "
+                                     "rule stack cannot rank it against "
+                                     "anything."),
     dry_run: bool = typer.Option(False, "--dry-run",
                                  help="Check the join, the photo paths and "
                                       "the estimated cost — without calling "
@@ -1049,6 +1056,15 @@ def m3_eval(
         raise typer.Exit(code=2)
 
     lab = load_labels(labels)
+    if review is not None:
+        from pixcull.report.review_sheet import load_verdicts
+        applied = 0
+        for fn, verdict in load_verdicts(review).items():
+            if fn in lab and lab[fn].get("manual_label") != verdict:
+                lab[fn] = {**lab[fn], "manual_label": verdict}
+                applied += 1
+        console.print(f"[dim]review: {applied} label(s) replaced by your "
+                      f"own verdict[/dim]")
     if not lab:
         console.print(f"[red]{labels} has no rows with a manual_label.[/red] "
                       "An unlabelled row cannot make anyone right or wrong.")
@@ -1127,6 +1143,118 @@ def m3_eval(
         f"[yellow]{res.n_overrides} hard-cull override(s) need your eyes[/] — "
         f"evidence fusion stands or falls on whether they were right.")
     console.print(f"[dim]report → {out}[/dim]")
+
+
+@m3_app.command("review")
+def m3_review(
+    labels: Path = typer.Option(..., "--labels", exists=True),
+    scores: Path = typer.Option(..., "--scores", exists=True),
+    out: Path = typer.Option(Path("~/pixcull_review.html"), "--out"),
+    only: str = typer.Option("overrides", "--only",
+                             help="'overrides' — frames M3 rescued from a "
+                                  "hard cull (the highest-signal set) | "
+                                  "'disagreements' — every row the two "
+                                  "systems decided differently."),
+    limit: int = typer.Option(60, "--limit",
+                              help="Cap the page. 60 is about as many as "
+                                   "anyone reviews carefully in one sitting."),
+) -> None:
+    """Build a page for judging M3 against your own eye.
+
+    This is the mechanism that unblocked the whole M3 evaluation. The
+    label set had been reviewed but never CONTRADICTED, so the rule stack
+    scored 1.000 against its own answers and no comparison was possible.
+    Ten minutes on 18 frames produced the first labels that could tell
+    the two systems apart.
+
+    Uses only cached verdicts — a frame M3 has not judged is skipped
+    rather than billed, so building the page is free.
+
+    The photos never leave this machine: thumbnails are embedded in a
+    local HTML file. Reviewing your own client work should not require
+    uploading it anywhere, including to us.
+    """
+    import csv as _csv
+
+    from pixcull.config import PixCullConfig
+    from pixcull.report.review_sheet import write
+    from pixcull.scoring.decision import decide
+    from pixcull.scoring.m3 import (
+        VerdictCache, api_key_from_env, default_cache_path,
+    )
+    from pixcull.scoring.vlm_eval import _flags_of, load_labels
+    from pixcull.scoring.vlm_judge import make_minimax_judge
+
+    cfg = PixCullConfig.load()
+    lab = load_labels(labels)
+    with open(scores, encoding="utf-8-sig", newline="") as fh:
+        rows = list(_csv.DictReader(fh))
+
+    judge = make_minimax_judge(api_key_from_env() or "x" * 8)
+    judge._cache = VerdictCache(default_cache_path())
+    judge._require_consent = False
+
+    items, no_verdict = [], 0
+    for r in rows:
+        fn = (r.get("filename") or "").strip()
+        p = r.get("path") or ""
+        if fn not in lab or not p or not Path(p).exists():
+            continue
+        v = judge.score(Path(p), scene=str(r.get("scene") or ""), row=r)
+        # elapsed_s == 0 marks a cache hit; anything else means we would
+        # be paying to build a review page, which is not a trade anyone
+        # asked for.
+        if v.error or v.elapsed_s > 0:
+            no_verdict += 1
+            continue
+        axes = {k: a.stars for k, a in v.axes.items()}
+        try:
+            final = float(r.get("score_final") or 0)
+        except ValueError:
+            final = 0.0
+        flags, scene = _flags_of(r), str(r.get("scene") or "")
+        m3_dec, reasons = decide(final, flags, cfg, "standard", scene=scene,
+                                 vlm_label=v.overall_label, vlm_axes=axes,
+                                 vlm_authority="primary")
+        rule_dec, _ = decide(final, flags, cfg, "standard", scene=scene)
+        rescued = [x for x in reasons if "vlm_kept_despite" in x]
+        if only == "overrides" and not rescued:
+            continue
+        if only != "overrides" and rule_dec.value == m3_dec.value:
+            continue
+        items.append({
+            "fn": fn, "path": p, "scene": scene, "axes": axes,
+            "a": rule_dec.value, "b": m3_dec.value,
+            "a_label": "规则", "b_label": "M3",
+            "note": ("推翻了 " + rescued[0].split("(")[1].rstrip(")")
+                     if rescued else ""),
+            "why": v.overall_rationale,
+            "yes": "M3 对了 · 该留", "no": "M3 错了 · 该扔",
+        })
+        if len(items) >= limit:
+            break
+
+    if not items:
+        console.print("[yellow]Nothing to review.[/yellow] "
+                      + (f"{no_verdict} rows had no cached verdict — run "
+                         f"`pixcull m3 eval` first." if no_verdict else ""))
+        raise typer.Exit(code=1)
+
+    dest = write(
+        items, Path(str(out)).expanduser(),
+        title=f"M3 推翻硬性剔除 · {len(items)} 张待复核"
+              if only == "overrides" else f"M3 与规则分歧 · {len(items)} 张",
+        slug="m3-overrides" if only == "overrides" else "m3-disagreements",
+        yes_key="keep", no_key="cull",
+        lede="这些照片本机检测器判定必须剔除,但 M3 <b>在 prompt 里已经读到了"
+             "那些实测值</b>,仍然选择保留。<br>「证据融合」成立与否就压在这批"
+             "推翻对不对上 —— <b>只有你能判</b>。判完点「保存结果」,"
+             "存成 JSON 再喂给 <code>pixcull m3 eval --review</code>。")
+    console.print(f"[green]{len(items)} frames[/green] → {dest}")
+    if no_verdict:
+        console.print(f"[dim]{no_verdict} rows skipped: no cached verdict "
+                      f"(building this page never spends money)[/dim]")
+    console.print(f"[dim]open {dest}[/dim]")
 
 
 @m3_app.command("status")

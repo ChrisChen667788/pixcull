@@ -1,0 +1,216 @@
+"""v2.53 — a self-contained page for judging a model against your own eye.
+
+Built ad-hoc to review 18 frames M3 rescued from a hard cull, and kept
+because it did the one thing this project could not otherwise do: turn
+"the model disagrees with the rules" into a number somebody can act on.
+The owner went through it in a few minutes and agreed with M3 on 17 of
+18 — the first genuinely independent labels this repo has ever had, and
+the thing that promoted the eval from INVALID to usable.
+
+Design constraints, each one learned:
+
+**The photos never leave the machine.** Thumbnails are embedded as data
+URIs in a local HTML file. Reviewing your own client work must not
+require uploading it anywhere, including to us.
+
+**The verdicts are written to disk, not just the clipboard.** The first
+version only offered "copy result", so closing the tab lost the work.
+Ten minutes of a photographer's judgement is the scarcest input this
+whole system has; it does not get to live in a paste buffer.
+
+**One question per card.** Not a rating, not a form — "was the model
+right about this frame". A reviewer who has to think about scale
+calibration is no longer looking at the photograph.
+"""
+
+from __future__ import annotations
+
+import base64
+import html
+import io
+import json
+import time
+from pathlib import Path
+from typing import Any, Iterable, Sequence
+
+#: Long edge for the embedded preview. Big enough to judge a moment on,
+#: small enough that 200 of them stay a file you can open.
+THUMB_PX = 760
+THUMB_QUALITY = 82
+
+_AXES = (("technical", "技术"), ("subject", "主体"), ("composition", "构图"),
+         ("light", "光线"), ("moment", "时刻"), ("aesthetic", "美感"))
+
+
+def thumbnail_data_uri(path: Path, px: int = THUMB_PX) -> str:
+    """Embed one photo as a JPEG data URI.
+
+    ``draft()`` before ``thumbnail()`` lets the JPEG decoder skip most of
+    the file: a 45 MP RAW-derived JPEG decodes at 1/8 scale in a fraction
+    of the time, and the result is downscaled anyway.
+    """
+    from PIL import Image
+    im = Image.open(path)
+    im.draft("RGB", (px * 2, px * 2))
+    im = im.convert("RGB")
+    im.thumbnail((px, px), Image.LANCZOS)
+    buf = io.BytesIO()
+    im.save(buf, "JPEG", quality=THUMB_QUALITY, optimize=True)
+    return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
+
+
+def _card(i: int, it: dict[str, Any]) -> str:
+    axes = it.get("axes") or {}
+    stars = "".join(
+        f'<div class="ax"><span>{zh}</span><b>{"★" * int(axes.get(k) or 0)}'
+        f'<i>{"☆" * (5 - int(axes.get(k) or 0))}</i></b></div>'
+        for k, zh in _AXES)
+    note = html.escape(str(it.get("note") or ""))
+    return f'''<article class="card" data-fn="{html.escape(it['fn'])}">
+  <img src="{thumbnail_data_uri(Path(it['path']))}" alt="">
+  <div class="meta">
+    <div class="hd"><code>{html.escape(it['fn'])}</code>
+      <span class="scene">{html.escape(str(it.get('scene') or ''))}</span></div>
+    <div class="verdicts">
+      <span class="v a">{html.escape(str(it.get('a_label', '规则')))}
+        <b>{html.escape(str(it.get('a', '')))}</b></span>
+      <span class="arrow">→</span>
+      <span class="v b">{html.escape(str(it.get('b_label', 'M3')))}
+        <b>{html.escape(str(it.get('b', '')))}</b></span>
+      {f'<span class="flag">{note}</span>' if note else ''}
+    </div>
+    <p class="why">{html.escape(str(it.get('why') or ''))}</p>
+    <div class="axes">{stars}</div>
+    <div class="judge">
+      <button class="ok"  onclick="mark({i},1)">{html.escape(it.get('yes','B 对了'))}</button>
+      <button class="bad" onclick="mark({i},0)">{html.escape(it.get('no','A 对了'))}</button>
+      <span class="mk" id="mk{i}"></span>
+    </div>
+  </div>
+</article>'''
+
+
+_CSS = """
+:root{--bg:#faf8f5;--ink:#1a1614;--dim:#7d746b;--line:#e0d9d0;--card:#fffdfa;
+--ok:#3f6b4e;--bad:#a8521f;--brass:#9c6f33}
+@media(prefers-color-scheme:dark){:root{--bg:#141110;--ink:#ece6de;--dim:#8a8177;
+--line:#2c2724;--card:#1c1817;--ok:#7fb693;--bad:#dd8b57;--brass:#d3a464}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 -apple-system,
+"PingFang SC",sans-serif;padding:28px 20px 84px}
+header{max-width:1000px;margin:0 auto 26px;border-bottom:1.5px solid var(--ink);
+padding-bottom:14px}
+h1{font:600 25px/1.3 Charter,"Songti SC",serif;margin:0 0 8px}
+.lede{color:var(--dim);max-width:70ch;margin:0}.lede b{color:var(--ink)}
+.card{max-width:1000px;margin:0 auto 20px;background:var(--card);
+border:1px solid var(--line);border-radius:9px;overflow:hidden;
+display:grid;grid-template-columns:minmax(0,420px) 1fr}
+@media(max-width:820px){.card{grid-template-columns:1fr}}
+.card img{width:100%;height:100%;object-fit:cover;display:block;background:#000}
+.meta{padding:16px 18px;display:flex;flex-direction:column;gap:11px}
+.hd{display:flex;gap:10px;align-items:baseline}
+.hd code{font:12px ui-monospace,monospace;color:var(--brass)}
+.scene{font-size:11px;color:var(--dim);border:1px solid var(--line);
+border-radius:3px;padding:1px 6px}
+.verdicts{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px}
+.v{padding:3px 8px;border-radius:4px;border:1px solid var(--line)}
+.v.a b{color:var(--bad)}.v.b b{color:var(--ok)}
+.arrow{color:var(--dim)}
+.flag{font-size:11.5px;color:var(--dim)}
+.why{margin:0;font-size:14px;line-height:1.6}
+.axes{display:grid;grid-template-columns:repeat(3,1fr);gap:4px 14px;
+font-size:11.5px;color:var(--dim);margin-top:auto}
+.ax{display:flex;justify-content:space-between}
+.ax b{color:var(--brass);letter-spacing:1px}.ax i{opacity:.3;font-style:normal}
+.judge{display:flex;gap:8px;align-items:center;padding-top:10px;
+border-top:1px solid var(--line)}
+button{font:13px/1 inherit;padding:8px 13px;border-radius:5px;cursor:pointer;
+border:1px solid var(--line);background:transparent;color:var(--ink)}
+button.ok:hover{border-color:var(--ok);color:var(--ok)}
+button.bad:hover{border-color:var(--bad);color:var(--bad)}
+.mk{font-size:12.5px;font-weight:600}
+.card.done-ok{border-color:var(--ok)}.card.done-bad{border-color:var(--bad)}
+#bar{position:fixed;left:0;right:0;bottom:0;background:var(--card);
+border-top:1px solid var(--line);padding:11px 20px;display:flex;gap:14px;
+align-items:center;justify-content:center;font-size:13px}
+#out{width:100%;max-width:1000px;margin:0 auto;font:12px ui-monospace,monospace;
+white-space:pre-wrap;background:var(--card);border:1px solid var(--line);
+border-radius:8px;padding:14px;display:none}
+"""
+
+# Verdicts are mirrored into localStorage on every click. The reviewer's
+# judgement is the scarcest input this system has; a closed tab, a reload
+# or a stray ⌘W must not cost them the pass they already did.
+_JS = """
+const N=%(n)d, KEY='pixcull-review-%(slug)s', R=JSON.parse(localStorage.getItem(KEY)||'{}');
+function paint(i){
+  const ok=R[i], c=document.querySelectorAll('.card')[i], m=document.getElementById('mk'+i);
+  if(ok===undefined) return;
+  c.classList.remove('done-ok','done-bad'); c.classList.add(ok?'done-ok':'done-bad');
+  m.textContent=ok?'\\u2713 '+YES:'\\u2717 '+NO;
+  m.style.color=ok?'var(--ok)':'var(--bad)';
+}
+function mark(i,ok){
+  R[i]=ok; localStorage.setItem(KEY,JSON.stringify(R)); paint(i);
+  document.getElementById('cnt').textContent='\\u5df2\\u5224 '+Object.keys(R).length+' / '+N;
+}
+function payload(){
+  const cards=document.querySelectorAll('.card');
+  const out={reviewed_at:new Date().toISOString(),verdicts:{}};
+  cards.forEach((c,i)=>{ if(i in R) out.verdicts[c.dataset.fn]=R[i]?'%(yes_key)s':'%(no_key)s'; });
+  return out;
+}
+function save(){
+  const blob=new Blob([JSON.stringify(payload(),null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob); a.download='%(slug)s-review.json'; a.click();
+  const o=document.getElementById('out'); o.style.display='block';
+  o.textContent=JSON.stringify(payload(),null,2);
+  if(navigator.clipboard) navigator.clipboard.writeText(JSON.stringify(payload()));
+  o.scrollIntoView({behavior:'smooth'});
+}
+window.addEventListener('DOMContentLoaded',()=>{
+  for(const i in R) paint(i);
+  document.getElementById('cnt').textContent='\\u5df2\\u5224 '+Object.keys(R).length+' / '+N;
+});
+"""
+
+
+def render(items: Sequence[dict[str, Any]], *, title: str, lede: str,
+           slug: str, yes_key: str = "b", no_key: str = "a") -> str:
+    """Build the whole page as one self-contained HTML string."""
+    yes = items[0].get("yes", "B 对了") if items else "B 对了"
+    no = items[0].get("no", "A 对了") if items else "A 对了"
+    cards = "".join(_card(i, it) for i, it in enumerate(items))
+    js = _JS % {"n": len(items), "slug": slug,
+                "yes_key": yes_key, "no_key": no_key}
+    return (f'<!doctype html><html lang="zh"><meta charset="utf-8">'
+            f'<title>{html.escape(title)}</title><style>{_CSS}</style>'
+            f'<header><h1>{html.escape(title)}</h1>'
+            f'<p class="lede">{lede}</p></header>{cards}'
+            f'<div id="bar"><span id="cnt">已判 0 / {len(items)}</span>'
+            f'<button onclick="save()">保存结果</button></div><pre id="out"></pre>'
+            f'<script>const YES={json.dumps(yes)},NO={json.dumps(no)};{js}</script>')
+
+
+def write(items: Sequence[dict[str, Any]], dest: Path, **kw) -> Path:
+    dest = Path(dest)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(render(list(items), **kw), encoding="utf-8")
+    return dest
+
+
+def load_verdicts(path: Path) -> dict[str, str]:
+    """Read back what the reviewer saved. Tolerates the clipboard form too."""
+    raw = Path(path).read_text(encoding="utf-8")
+    try:
+        d = json.loads(raw)
+        return {k: str(v) for k, v in (d.get("verdicts") or d).items()}
+    except json.JSONDecodeError:
+        # The plain-text shape the first version produced.
+        out: dict[str, str] = {}
+        for line in raw.splitlines():
+            parts = line.split()
+            if len(parts) >= 2 and "." in parts[-1]:
+                out[parts[-1]] = parts[0]
+        return out

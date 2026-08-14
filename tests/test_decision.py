@@ -469,3 +469,62 @@ def test_missing_axes_do_not_crash_the_guard(config):
                     vlm_label="keep", vlm_axes={"technical": None},
                     vlm_authority="primary")
     assert dec is Decision.KEEP
+
+
+# ── v2.53 — "rescue": the authority the evidence actually earned ──────
+#
+# The owner reviewed 18 frames the rule stack hard-culled and M3 kept,
+# and agreed with M3 on 17 (94%). That is a strong verified result about
+# ONE behaviour — spotting a frame the detectors wrongly discard — and
+# not a result about judging in general: across the measured set M3
+# scores well below the rule stack.
+#
+# So this mode grants exactly that one power and nothing else.
+
+def test_rescue_overturns_a_hard_cull(config):
+    dec, reasons = decide(0.72, ["closed_eyes"], config, scene="portrait",
+                          vlm_label="keep", vlm_axes={"technical": 4},
+                          vlm_authority="rescue")
+    assert dec is Decision.KEEP
+    assert any("vlm_rescued(closed_eyes)" in r for r in reasons)
+
+
+def test_rescue_has_no_say_on_anything_else(config):
+    """The 94% was measured on hard-cull overrides only. Extending that
+    authority to rows nobody reviewed would be inventing evidence."""
+    dec, reasons = decide(0.9, [], config, vlm_label="cull",
+                          vlm_axes={"technical": 1}, vlm_authority="rescue")
+    assert dec is Decision.KEEP, "M3 demoted a row it has no mandate over"
+    assert not any("vlm" in r for r in reasons)
+
+
+def test_rescue_cannot_turn_a_keep_into_a_cull(config):
+    dec, _ = decide(0.2, ["closed_eyes"], config, scene="portrait",
+                    vlm_label="cull", vlm_authority="rescue")
+    assert dec is Decision.CULL      # agrees with the rule; nothing rescued
+
+
+def test_rescue_still_refuses_an_incoherent_verdict(config):
+    """"Keep" beside its own 1★ technical is the model contradicting
+    itself, and that guard applies to every mode that can override."""
+    dec, reasons = decide(0.72, ["severely_blurry"], config, scene="portrait",
+                          vlm_label="keep", vlm_axes={"technical": 1},
+                          vlm_authority="rescue")
+    assert dec is Decision.CULL
+    assert not any("rescued" in r for r in reasons)
+
+
+def test_rescue_can_land_on_maybe(config):
+    """Most of the reviewed overrides were cull→maybe, not cull→keep."""
+    dec, _ = decide(0.72, ["closed_eyes"], config, scene="portrait",
+                    vlm_label="maybe", vlm_axes={"technical": 4},
+                    vlm_authority="rescue")
+    assert dec is Decision.MAYBE
+
+
+def test_rescue_is_weaker_than_primary(config):
+    """Structural: the same input that primary would flip, rescue leaves
+    alone whenever no hard-cull flag fired."""
+    args = dict(vlm_label="cull", vlm_axes={"technical": 3})
+    assert decide(0.9, [], config, vlm_authority="primary", **args)[0] is Decision.CULL
+    assert decide(0.9, [], config, vlm_authority="rescue", **args)[0] is Decision.KEEP

@@ -96,3 +96,13 @@ dist_wheel/
 library/
 vectors.npy
 manifest.jsonl
+
+# v2.53 — the eval report names real photographs and describes what is in
+# them ("越南渔妇", "戴斗笠牧鹅女"). Filenames plus content descriptions of
+# a photographer's clients are exactly what the hygiene rules exist for,
+# and a pre-push diff audit would only catch it the first time. The
+# headline numbers are safe and live in the README; the per-row detail
+# stays on the machine that produced it.
+docs/M3-EVAL.md
+*-review.html
+*-review.json

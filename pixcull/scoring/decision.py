@@ -179,6 +179,30 @@ def decide(
     # contradicting itself, and that is exactly the over-confidence the
     # meta-judge was built to catch. Those fall back to the rule.
     vlm_says = (vlm_label or "").strip().lower()
+
+    # v2.53 — "rescue": the mode the evidence actually supports.
+    #
+    # The owner reviewed 18 frames the rule stack hard-culled and M3 kept.
+    # They agreed with M3 on 17 — 94%. That is a strong, verified result
+    # about ONE behaviour: M3 is very good at spotting a frame the
+    # detectors wrongly discard, because it was handed the blink count and
+    # the Laplacian variance and chose to overrule them anyway.
+    #
+    # It is NOT a result about judging in general. M3 disagrees with the
+    # rule on 200 rows; 182 of those were never reviewed, and on the
+    # measured set as a whole it scores well below the rule stack.
+    #
+    # So this mode gives M3 exactly the authority the data earns it and
+    # not one bit more: it may overturn a hard-cull, and it may not touch
+    # anything else. A frame the rule was going to keep or send to maybe
+    # is none of its business.
+    if vlm_authority == "rescue" and vlm_says in _VLM_LABELS and triggered:
+        tech = (vlm_axes or {}).get("technical")
+        if (vlm_says in ("keep", "maybe")
+                and not (tech is not None and float(tech) <= 2.0)):
+            return _VLM_LABELS[vlm_says], [
+                *reasons, f"vlm_rescued({','.join(sorted(triggered))})"]
+
     if vlm_authority == "primary" and vlm_says in _VLM_LABELS:
         tech = (vlm_axes or {}).get("technical")
         incoherent = (
