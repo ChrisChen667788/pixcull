@@ -66,7 +66,17 @@ def _card(i: int, it: dict[str, Any]) -> str:
         f'<i>{"☆" * (5 - int(axes.get(k) or 0))}</i></b></div>'
         for k, zh in _AXES)
     note = html.escape(str(it.get("note") or ""))
-    return f'''<article class="card" data-fn="{html.escape(it['fn'])}">
+    # v2.53.1 — the answer differs per card, so it travels with the card.
+    #
+    # The first batch was entirely cull→keep, so one fixed pair of labels
+    # worked and I wrote it that way. The second batch is 88% keep→maybe,
+    # where "M3 was right" means `maybe` — and a page-level pair silently
+    # recorded `keep`/`cull` for every one of them. A whole review pass
+    # would have produced labels for a question nobody was asked.
+    yes_v = html.escape(str(it.get("yes_value") or it.get("b") or "keep"))
+    no_v = html.escape(str(it.get("no_value") or it.get("a") or "cull"))
+    return f'''<article class="card" data-fn="{html.escape(it['fn'])}"
+         data-yes="{yes_v}" data-no="{no_v}">
   <img src="{thumbnail_data_uri(Path(it['path']))}" alt="">
   <div class="meta">
     <div class="hd"><code>{html.escape(it['fn'])}</code>
@@ -82,8 +92,8 @@ def _card(i: int, it: dict[str, Any]) -> str:
     <p class="why">{html.escape(str(it.get('why') or ''))}</p>
     <div class="axes">{stars}</div>
     <div class="judge">
-      <button class="ok"  onclick="mark({i},1)">{html.escape(it.get('yes','B 对了'))}</button>
-      <button class="bad" onclick="mark({i},0)">{html.escape(it.get('no','A 对了'))}</button>
+      <button class="ok"  onclick="mark({i},1)">{html.escape(str(it.get('yes') or f"M3 对了 · {it.get('b','')}"))}</button>
+      <button class="bad" onclick="mark({i},0)">{html.escape(str(it.get('no') or f"规则对了 · {it.get('a','')}"))}</button>
       <span class="mk" id="mk{i}"></span>
     </div>
   </div>
@@ -147,7 +157,7 @@ function paint(i){
   const ok=R[i], c=document.querySelectorAll('.card')[i], m=document.getElementById('mk'+i);
   if(ok===undefined) return;
   c.classList.remove('done-ok','done-bad'); c.classList.add(ok?'done-ok':'done-bad');
-  m.textContent=ok?'\\u2713 '+YES:'\\u2717 '+NO;
+  m.textContent=(ok?'\\u2713 ':'\\u2717 ')+(ok?c.dataset.yes:c.dataset.no);
   m.style.color=ok?'var(--ok)':'var(--bad)';
 }
 function mark(i,ok){
@@ -157,7 +167,7 @@ function mark(i,ok){
 function payload(){
   const cards=document.querySelectorAll('.card');
   const out={reviewed_at:new Date().toISOString(),verdicts:{}};
-  cards.forEach((c,i)=>{ if(i in R) out.verdicts[c.dataset.fn]=R[i]?'%(yes_key)s':'%(no_key)s'; });
+  cards.forEach((c,i)=>{ if(i in R) out.verdicts[c.dataset.fn]=R[i]?c.dataset.yes:c.dataset.no; });
   return out;
 }
 function save(){
@@ -214,3 +224,46 @@ def load_verdicts(path: Path) -> dict[str, str]:
             if len(parts) >= 2 and "." in parts[-1]:
                 out[parts[-1]] = parts[0]
         return out
+
+
+def stratify(items: Sequence[dict[str, Any]], limit: int, *,
+             priority: Iterable[str] = (),
+             group: str = "scene") -> list[dict[str, Any]]:
+    """Pick ``limit`` items that represent the pool, not its first page.
+
+    ``--limit`` used to truncate, which is a prefix and not a sample: the
+    first 40 rows of a shoot are the first 40 rows of a shoot. Measured on
+    the real disagreement pool, a prefix would have drawn most of its 40
+    from one scene while a whole failure mode sat further down the file.
+
+    Two rules, in order:
+
+    **Priority buckets are taken whole.** Some disagreements matter more
+    per row than others. When M3 wants to CULL what the rule keeps, being
+    wrong destroys a keeper; when it wants to demote a keep to maybe,
+    being wrong costs a second look. There were 19 of the first kind and
+    166 of the second, so proportional sampling would have shown 4 of the
+    19 — covering the cheap failure well and the expensive one barely.
+
+    **The rest is spread across groups**, round-robin, so a scene with
+    49 rows and one with 8 both get looked at. A correction set drawn
+    entirely from landscapes teaches you about landscapes.
+    """
+    pri = set(priority)
+    chosen = [it for it in items if it.get("bucket") in pri][:limit]
+
+    rest: dict[str, list[dict[str, Any]]] = {}
+    for it in items:
+        if it.get("bucket") in pri:
+            continue
+        rest.setdefault(str(it.get(group) or "—"), []).append(it)
+
+    # Round-robin across groups until the quota is met or the pool is dry.
+    while len(chosen) < limit and any(rest.values()):
+        for key in sorted(rest, key=lambda k: (-len(rest[k]), k)):
+            if not rest[key]:
+                continue
+            chosen.append(rest[key].pop(0))
+            if len(chosen) >= limit:
+                break
+    return chosen

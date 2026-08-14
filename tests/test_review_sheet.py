@@ -164,3 +164,98 @@ def test_eval_accepts_a_saved_review():
     from pixcull import cli
     assert "--review" in inspect.getsource(cli.m3_eval)
     assert "load_verdicts" in inspect.getsource(cli.m3_eval)
+
+
+# ---------------------------------------------------------------------------
+# v2.53.1 — the answer differs per card
+# ---------------------------------------------------------------------------
+
+def test_each_card_records_its_own_verdict(photo):
+    """A page-level pair of labels is wrong the moment the pool has more
+    than one direction in it.
+
+    The first batch was entirely cull→keep, so one fixed pair worked. The
+    second is 88% keep→maybe, where "M3 was right" means `maybe` — and the
+    fixed pair silently recorded `keep`/`cull` for every one of them. A
+    whole review pass would have produced labels for a question nobody
+    was asked.
+    """
+    items = [
+        {"fn": "a.jpg", "path": str(photo), "a": "keep", "b": "maybe",
+         "yes_value": "maybe", "no_value": "keep", "axes": {}},
+        {"fn": "b.jpg", "path": str(photo), "a": "keep", "b": "cull",
+         "yes_value": "cull", "no_value": "keep", "axes": {}},
+    ]
+    doc = render(items, title="t", lede="l", slug="s")
+    assert 'data-yes="maybe"' in doc and 'data-yes="cull"' in doc
+    assert doc.count('data-no="keep"') == 2
+
+
+def test_the_saved_label_comes_from_the_card_not_the_page(photo):
+    doc = render([{"fn": "a.jpg", "path": str(photo), "a": "keep",
+                   "b": "maybe", "axes": {}}], title="t", lede="l", slug="s")
+    assert "c.dataset.yes" in doc and "c.dataset.no" in doc
+
+
+def test_button_text_names_the_actual_decision(photo):
+    """"M3 对了 · 该留" on a demotion asks the reviewer the wrong
+    question."""
+    doc = render([{"fn": "a.jpg", "path": str(photo), "a": "keep",
+                   "b": "maybe", "axes": {}}], title="t", lede="l", slug="s")
+    assert "M3 对了 · maybe" in doc
+    assert "规则对了 · keep" in doc
+
+
+# ---------------------------------------------------------------------------
+# v2.53.1 — sampling, not truncation
+# ---------------------------------------------------------------------------
+
+def _pool():
+    """19 high-stakes rows buried under 166 cheap ones, as measured."""
+    out = [{"fn": f"cull{i}.jpg", "bucket": "keep->cull", "scene": "portrait"}
+           for i in range(19)]
+    for i in range(166):
+        out.append({"fn": f"maybe{i}.jpg", "bucket": "keep->maybe",
+                    "scene": ["landscape", "portrait", "event"][i % 3]})
+    return out
+
+
+def test_the_expensive_bucket_is_covered_in_full():
+    """M3 wanting to CULL a rule-keep can destroy a keeper; a demotion to
+    maybe costs a second look. Proportional sampling would show 4 of the
+    19 — covering the cheap failure well and the expensive one barely."""
+    from pixcull.report.review_sheet import stratify
+    picked = stratify(_pool(), 40, priority=("keep->cull",))
+    assert sum(1 for p in picked if p["bucket"] == "keep->cull") == 19
+
+
+def test_the_remainder_spreads_across_scenes():
+    """A correction set drawn entirely from landscapes teaches you about
+    landscapes."""
+    from pixcull.report.review_sheet import stratify
+    picked = stratify(_pool(), 40, priority=("keep->cull",))
+    rest = [p for p in picked if p["bucket"] != "keep->cull"]
+    scenes = {p["scene"] for p in rest}
+    assert len(scenes) >= 3, f"only sampled {scenes}"
+
+
+def test_a_prefix_would_have_been_worse():
+    """The property under test, stated as a comparison."""
+    from pixcull.report.review_sheet import stratify
+    pool = _pool()
+    prefix_scenes = {p["scene"] for p in pool[:40] if p["bucket"] != "keep->cull"}
+    sampled = stratify(pool, 40, priority=("keep->cull",))
+    sampled_scenes = {p["scene"] for p in sampled if p["bucket"] != "keep->cull"}
+    assert len(sampled_scenes) >= len(prefix_scenes)
+
+
+def test_sampling_never_exceeds_the_quota():
+    from pixcull.report.review_sheet import stratify
+    assert len(stratify(_pool(), 40, priority=("keep->cull",))) == 40
+    assert len(stratify(_pool(), 5, priority=("keep->cull",))) == 5
+
+
+def test_a_small_pool_is_returned_whole():
+    from pixcull.report.review_sheet import stratify
+    small = _pool()[:6]
+    assert len(stratify(small, 40, priority=("keep->cull",))) == 6

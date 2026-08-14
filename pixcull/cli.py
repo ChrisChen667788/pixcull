@@ -1224,15 +1224,29 @@ def m3_review(
             continue
         items.append({
             "fn": fn, "path": p, "scene": scene, "axes": axes,
+            # The stakes differ per direction, so record it: M3 wanting to
+            # CULL a rule-keep can destroy a keeper, while a demotion to
+            # maybe costs a second look. stratify() covers the first kind
+            # in full rather than proportionally.
+            "bucket": f"{rule_dec.value}->{m3_dec.value}",
             "a": rule_dec.value, "b": m3_dec.value,
             "a_label": "规则", "b_label": "M3",
             "note": ("推翻了 " + rescued[0].split("(")[1].rstrip(")")
                      if rescued else ""),
             "why": v.overall_rationale,
-            "yes": "M3 对了 · 该留", "no": "M3 错了 · 该扔",
+            # The verdict saved for each answer is that side's actual
+            # decision, which varies per row: a keep→maybe demotion
+            # records `maybe` when M3 was right, not `keep`.
+            "yes_value": m3_dec.value, "no_value": rule_dec.value,
+            "yes": f"M3 对了 · {m3_dec.value}",
+            "no": f"规则对了 · {rule_dec.value}",
         })
-        if len(items) >= limit:
-            break
+
+    if items and len(items) > limit:
+        from pixcull.report.review_sheet import stratify
+        # keep->cull first (destroying a keeper), then maybe->cull.
+        items = stratify(items, limit,
+                         priority=("keep->cull", "maybe->cull"))
 
     if not items:
         console.print("[yellow]Nothing to review.[/yellow] "
