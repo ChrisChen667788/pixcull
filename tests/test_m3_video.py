@@ -270,3 +270,34 @@ def test_transcode_is_attempted_before_giving_up():
         "stream copy must be tried first — it is free and correct for "
         "most H.264 deliverables")
     assert "ClipTooLarge" in src
+
+
+# ---------------------------------------------------------------------------
+# v2.52.6 — the wire format, now verified rather than guessed
+# ---------------------------------------------------------------------------
+
+def test_the_confirmed_shape_is_the_first_candidate():
+    """Probed against the live CN endpoint on 2026-08-14.
+
+    The first guess turned out to be right. That is worth pinning, and it
+    is also worth being clear that "my guess was right" and "I verified
+    it" are different claims — only the second is safe to build 3000 API
+    calls on, which is why score_video still refuses to run until a probe
+    has recorded a shape.
+    """
+    from pixcull.scoring.m3 import VIDEO_PART_SHAPES
+    part = VIDEO_PART_SHAPES["video_url_object"]("data:video/mp4;base64,AA==",
+                                                 1.0)
+    assert part == {"type": "video_url",
+                    "video_url": {"url": "data:video/mp4;base64,AA==",
+                                  "fps": 1.0}}
+
+
+def test_the_module_no_longer_claims_the_shape_is_unknown():
+    from pathlib import Path
+
+    from pixcull.scoring import m3
+    doc = (m3.__doc__ or "")
+    assert "CONFIRMED against the live API" in doc
+    assert "not pinned down" not in doc
+    assert Path(m3.__file__).exists()

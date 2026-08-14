@@ -18,6 +18,12 @@
 | **cull** | 1.000 | 1.000 | 1.000 | 0.136 | 0.107 | 0.120 |
 | **macro** | | | **1.000** | | | **0.361** |
 
+## Why 36 rows produced nothing
+
+| reason | rows |
+|---|---|
+| LLM budget exhausted for today | 36 |
+
 ## The guard rails
 
 - `vlm_incoherent` fired **0** times (0.0%) — below 1% suggests dead code

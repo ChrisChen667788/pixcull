@@ -98,6 +98,10 @@ class EvalResult:
     #: rows where the rule stack and the human label already disagreed.
     #: Zero means the labels cannot adjudicate between two systems.
     n_label_disagreements: int = 0
+    #: error string → count. "36 errored" without saying WHY is the kind
+    #: of silence this whole module exists to remove: a truncation, an
+    #: auth failure and a decode error need three different fixes.
+    error_reasons: dict[str, int] = field(default_factory=dict)
     elapsed_s: float = 0.0
     prompt_tokens: int = 0
     completion_tokens: int = 0
@@ -288,6 +292,12 @@ def evaluate(
 
         if verdict is None or getattr(verdict, "error", None):
             res.n_errors += 1
+            why = str(getattr(verdict, "error", "") or "no verdict returned")
+            # Collapse to the shape of the failure, not its instance —
+            # 36 rows with 36 distinct filenames in the message is a wall,
+            # 36 rows with one reason is a finding.
+            key = why.split(" — ")[0].split(":")[0].strip()[:60]
+            res.error_reasons[key] = res.error_reasons.get(key, 0) + 1
             _tally(res.rule, truth, rule_dec.value)
             continue
 
@@ -389,6 +399,11 @@ def render_report(res: EvalResult, *, labels_path: str = "",
         f"| **macro** | | | **{res.rule_macro_f1:.3f}** | | | "
         f"**{res.vlm_macro_f1:.3f}** |")
 
+    if res.error_reasons:
+        lines += ["", f"## Why {res.n_errors} rows produced nothing", "",
+                  "| reason | rows |", "|---|---|"]
+        for why, n in sorted(res.error_reasons.items(), key=lambda kv: -kv[1]):
+            lines.append(f"| {why} | {n} |")
     lines += ["", "## The guard rails", "",
               f"- `vlm_incoherent` fired **{res.n_incoherent}** times "
               f"({100 * res.n_incoherent / max(1, res.n_scored):.1f}%) — "

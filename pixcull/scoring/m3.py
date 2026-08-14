@@ -42,14 +42,21 @@ Wire contract (verified against vendor docs 2026-08-12)
 * whole request body ≤ 64 MB; 200 RPM / 10M TPM; audio is NOT accepted
   on chat completions
 
-**The exact video content-part JSON is the one thing not pinned down.**
-The vendor's own docs page was unreachable and no third-party mirror
-carries the literal schema — only the field name, the limits and the
-formats.  Rather than hard-code a guess into the scoring path and let it
-fail as a silent null, :data:`VIDEO_PART_SHAPES` lists the candidate
-encodings and the doctor probes them against the live endpoint, writing
-the winner to :func:`capability_path`.  :meth:`MiniMaxM3Judge.score_video`
-uses the recorded winner and refuses to guess when none is recorded.
+**The video content-part JSON is now CONFIRMED against the live API**
+(2026-08-14, CN region): ``video_url_object`` —
+``{"type": "video_url", "video_url": {"url": <data URI>, "fps": 1.0}}``.
+
+It was not confirmable from documentation: the vendor's page was
+unreachable and no third-party mirror carried the literal schema, only
+the field name and the limits.  So rather than hard-code a guess into the
+scoring path and let it fail as a silent null,
+:data:`VIDEO_PART_SHAPES` lists the candidates and ``pixcull m3 doctor
+--video`` probes them against the real endpoint, recording the winner in
+:func:`capability_path`.  The first candidate turned out to be right —
+but "my guess was right" and "I verified it" are different claims, and
+only the second one is safe to build 3000 API calls on.
+:meth:`MiniMaxM3Judge.score_video` still refuses to run until a probe has
+recorded a shape.
 """
 
 from __future__ import annotations
