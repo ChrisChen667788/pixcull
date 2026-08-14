@@ -26,15 +26,66 @@ DRY=""
 say() { printf '\n\033[1m%s\033[0m\n' "$*"; }
 die() { printf '\n\033[31m%s\033[0m\n' "$*" >&2; exit 1; }
 
+# This script prompts for a secret. If stdin is not a terminal, every
+# `read` and every `security` prompt silently consumes whatever is piped
+# in — and I demonstrated that by "dry-running" it with `printf 'n\n' |`,
+# which set the owner's stored key to an empty string. A password prompt
+# fed from a pipe is not a prompt, it is an assignment.
+[[ -t 0 ]] || die "run this from a terminal — it prompts for a secret, and
+piped input would be stored AS the secret. (No changes were made.)"
+
 [[ -x "$PY" ]] || die "no venv at $PY"
 [[ -f "$LABELS" ]] || die "label sheet missing: $LABELS"
 [[ -f "$SCORES" ]] || die "eval input missing: $SCORES"
 
 # ── 1. key ────────────────────────────────────────────────────────────
-if "$PY" -c 'import sys;from pixcull.scoring.m3 import api_key_from_env;sys.exit(0 if api_key_from_env() else 1)' 2>/dev/null; then
-  say "1/4  key — already in the keychain, leaving it alone"
-else
-  say "1/4  key"
+#
+# "A key is stored" and "the key works" are different facts, and the
+# first version only checked the first one — so someone replacing a dead
+# key was told "already in the keychain, leaving it alone" and sent round
+# the same loop again. Probe liveness instead of presence.
+say "1/4  key"
+KEY_STATE="$("$PY" - <<'EOF'
+try:
+    from pixcull.scoring.m3 import REGIONS, api_key_from_env
+    k = api_key_from_env()
+    if not k:
+        print("missing"); raise SystemExit
+    from openai import OpenAI
+    errs = []
+    for url in REGIONS.values():
+        try:
+            OpenAI(api_key=k, base_url=url, max_retries=0).chat.completions.create(
+                model="minimax-m3", messages=[{"role": "user", "content": "ping"}],
+                max_tokens=4, timeout=25)
+            print("ok"); raise SystemExit
+        except SystemExit:
+            raise
+        except Exception as exc:
+            errs.append(str(exc))
+    joined = " ".join(errs)
+    print("nobalance" if ("1008" in joined or "402" in joined) else "bad")
+except SystemExit:
+    raise
+except Exception:
+    print("missing")
+EOF
+)"
+case "$KEY_STATE" in
+  ok)
+    echo "     the stored key works — leaving it alone" ;;
+  nobalance)
+    echo "     the stored key AUTHENTICATES but its account has no credit."
+    echo "     Two ways forward, and only you can pick:"
+    echo "       · top up that account, then re-run this script; or"
+    echo "       · paste a key from a funded account below."
+    read -rp "     Replace the stored key now? [y/N] " ans
+    [[ "$ans" =~ ^[Yy]$ ]] || die "left as is. Top up, then re-run." ;;
+  *)
+    echo "     no usable key stored." ;;
+esac
+
+if [[ "$KEY_STATE" != "ok" ]]; then
   echo "     'security' will prompt for it below. Paste and press Enter —"
   echo "     it is hidden, and it goes straight into the keychain."
   # -w with NO value makes security prompt (twice, to confirm) and read
@@ -43,10 +94,27 @@ else
   # in place if the item already exists.
   security add-generic-password -U -a "$USER" -s MINIMAX_API_KEY -w \
     || die "keychain write failed (or you cancelled)"
-  "$PY" -c 'import sys;from pixcull.scoring.m3 import api_key_from_env;sys.exit(0 if api_key_from_env() else 1)' \
-    || die "stored, but PixCull still cannot read it back — check that the
-item is named MINIMAX_API_KEY under your login keychain"
-  echo "     stored, and PixCull can read it"
+  # Verify against the live API, not just that it reads back. A key that
+  # is stored, readable and still refused has fixed nothing, and finding
+  # that out at photo 1 of 408 is worse than finding it out here.
+  "$PY" - <<'EOF' || die "the new key was stored but the API still refuses it — see the message above"
+import sys
+from pixcull.scoring.m3 import REGIONS, api_key_from_env, explain_api_error
+from openai import OpenAI
+k = api_key_from_env()
+last = None
+for url in REGIONS.values():
+    try:
+        OpenAI(api_key=k, base_url=url, max_retries=0).chat.completions.create(
+            model="minimax-m3", messages=[{"role": "user", "content": "ping"}],
+            max_tokens=4, timeout=25)
+        print(f"     verified against {url}")
+        sys.exit(0)
+    except Exception as exc:
+        last = exc
+print("     " + (explain_api_error(last) or str(last)[:200]))
+sys.exit(1)
+EOF
 fi
 
 # ── 2. consent ────────────────────────────────────────────────────────
