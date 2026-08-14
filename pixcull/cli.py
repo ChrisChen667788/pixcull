@@ -930,6 +930,10 @@ def m3_doctor(
             table.add_row(label, f"[red]{detail}[/red]")
 
     _row("auth + model string", caps.get("text"))
+    # The failure the owner actually hits. Printing a raw 402 next to a
+    # raw 401 leaves them to work out which of two opposite fixes applies.
+    from pixcull.scoring.m3 import explain_api_error
+    _hint = explain_api_error(Exception(str(caps.get("text") or "")))
     _row("json_object output", caps.get("json_object"))
     _row("image input", caps.get("image"), "pass --image <photo>")
 
@@ -947,6 +951,8 @@ def m3_doctor(
         if detail != "ok":
             console.print(f"  [dim]video shape {name}: {detail}[/dim]")
 
+    if _hint:
+        console.print(f"\n[yellow]{_hint}[/yellow]")
     if save:
         save_capabilities(caps)
         console.print(f"[dim]saved → {capability_path()}[/dim]")

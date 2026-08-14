@@ -659,3 +659,42 @@ def test_a_billing_failure_is_reported_over_an_auth_failure():
     i_ret = src.index("return caps", i_bill)
     assert i_bill < i_ret
     assert "billing[0] if billing" in src
+
+
+# ---------------------------------------------------------------------------
+# 13. Telling the two failures apart — v2.52.3
+# ---------------------------------------------------------------------------
+
+def test_a_402_says_the_key_is_fine():
+    """402 and 401 need opposite fixes and look alike in a traceback.
+
+    402 = the key authenticated and the account is empty → top up.
+    401 = the key does not belong to this region → the doctor's sweep.
+    Reporting them interchangeably sent a real debugging session hunting
+    for a bad key that was fine all along.
+    """
+    hint = m3.explain_api_error(Exception(
+        "Error code: 402 - {'error': {'type': 'insufficient_balance_error', "
+        "'message': 'insufficient balance (1008)'}}"))
+    assert "GOOD" in hint and "Top up" in hint
+    assert "invalid" not in hint.lower()
+
+
+def test_a_401_points_at_the_region_not_the_key():
+    hint = m3.explain_api_error(Exception(
+        "Error code: 401 - {'error': {'message': 'invalid api key (2049)'}}"))
+    assert "REGION" in hint
+    assert "doctor" in hint
+
+
+def test_an_unrelated_error_gets_no_invented_advice():
+    assert m3.explain_api_error(Exception("ConnectionResetError")) == ""
+
+
+def test_the_legacy_route_trap_is_written_down():
+    """`/v1/text/chatcompletion_v2` answers HTTP 200 with the real failure
+    in base_resp.status_code. We do not use it, so this records the hazard
+    for whoever adds the next route rather than guarding a live path."""
+    assert 1008 in m3.MINIMAX_STATUS
+    src = Path(m3.__file__).read_text("utf-8")
+    assert "base_resp" in src

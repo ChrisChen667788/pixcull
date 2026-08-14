@@ -950,5 +950,39 @@ runs the whole pipeline on this machine and is fully supported.
 """
 
 
+#: MiniMax's own status codes, which do NOT always ride on the HTTP
+#: status. The legacy `/v1/text/chatcompletion_v2` route answers
+#: **HTTP 200** with the real failure buried in `base_resp.status_code`
+#: — an HTTP-200 check there reads a hard failure as a success. We call
+#: `/v1/chat/completions`, which returns a proper 402, so this is a note
+#: for whoever adds the next route rather than a live hazard.
+MINIMAX_STATUS = {
+    1008: "insufficient balance",
+    2049: "invalid api key",
+}
+
+
+def explain_api_error(exc: Exception) -> str:
+    """Turn a MiniMax failure into the action that fixes it.
+
+    Worth a function because the two common ones need OPPOSITE fixes and
+    look similar in a stack trace. Getting this backwards cost a real
+    session: a China key against the international host answers `401
+    invalid api key`, which sent us hunting for a bad key that was fine.
+    """
+    msg = str(exc)
+    if "1008" in msg or "insufficient_balance" in msg or "402" in msg:
+        return ("MiniMax reports insufficient balance (1008). The key is "
+                "GOOD — it authenticated. Top up the account; ~400 photos "
+                "is about \u00a52. Nothing here can work around an empty "
+                "account.")
+    if "2049" in msg or "invalid api key" in msg:
+        return ("MiniMax rejected the key (2049). Most often this is the "
+                "WRONG REGION rather than a bad key: api.minimaxi.com (CN) "
+                "and api.minimax.io (international) are separate accounts. "
+                "`pixcull m3 doctor` tries both.")
+    return ""
+
+
 class ConsentRequired(RuntimeError):
     """Raised instead of uploading when no grant is on file."""
