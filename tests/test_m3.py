@@ -642,8 +642,9 @@ def test_the_doctor_sweeps_regions_rather_than_asking():
     identical to a bad key."""
     import inspect
     src = inspect.getsource(m3.probe_capabilities)
-    assert "for name, url in REGIONS.items()" in src
-    assert "region_attempts" in src
+    assert "probe_key(" in src, (
+        "the doctor no longer sweeps regions — it would be asking the "
+        "owner which region their account is in")
 
 
 def test_a_billing_failure_is_reported_over_an_auth_failure():
@@ -653,12 +654,17 @@ def test_a_billing_failure_is_reported_over_an_auth_failure():
     means the key does not belong here. Reporting whichever region was
     tried last would send the owner to reissue a working key.
     """
+    # v2.52.4 — the ordering now lives in probe_key, which has its own
+    # tests below. What this asserts is that probe_capabilities defers to
+    # it rather than re-deciding.
     import inspect
-    src = inspect.getsource(m3.probe_capabilities)
-    i_bill = src.index("insufficient_balance")
-    i_ret = src.index("return caps", i_bill)
-    assert i_bill < i_ret
-    assert "billing[0] if billing" in src
+    assert "probe_key(" in inspect.getsource(m3.probe_capabilities)
+    src = inspect.getsource(m3.probe_key)
+    # The final decision block: billing is checked before falling through
+    # to badkey. (An earlier "badkey" return exists for a missing SDK, so
+    # a plain index() comparison would compare against the wrong one.)
+    tail = src[src.index("joined = "):]
+    assert tail.index("1008") < tail.index('return "badkey"')
 
 
 # ---------------------------------------------------------------------------
@@ -698,3 +704,128 @@ def test_the_legacy_route_trap_is_written_down():
     assert 1008 in m3.MINIMAX_STATUS
     src = Path(m3.__file__).read_text("utf-8")
     assert "base_resp" in src
+
+
+# ---------------------------------------------------------------------------
+# 14. One region sweep — v2.52.4
+# ---------------------------------------------------------------------------
+#
+# I wrote this loop by hand FOUR times in one session and got it wrong the
+# same way in three of them: deciding from the LAST region's error. CN
+# answers 402 (key good, out of credit); global answers 401 (wrong
+# region). Whichever is tried last wins, so a working key gets reported as
+# invalid and the owner is sent to reissue it. That happened twice.
+#
+# The property being lost — the billing signal must win no matter which
+# region produced it — belongs to the whole sweep, not to one iteration.
+# Duplicating the loop duplicates the chance to lose it, so these tests
+# pin the behaviour AND the fact that there is only one implementation.
+
+class _FakeCompletions:
+    def __init__(self, by_url, url):
+        self.by_url, self.url = by_url, url
+
+    def create(self, **kw):
+        outcome = self.by_url.get(self.url)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+
+def _region_stub(monkeypatch, by_url):
+    def _OpenAI(*, api_key=None, base_url=None, **kw):
+        return types.SimpleNamespace(
+            chat=types.SimpleNamespace(
+                completions=_FakeCompletions(by_url, base_url)))
+    mod = types.ModuleType("openai")
+    mod.OpenAI = _OpenAI
+    monkeypatch.setitem(sys.modules, "openai", mod)
+
+
+def test_the_billing_signal_wins_from_either_region(monkeypatch):
+    """The exact bug, in the exact order that produced it."""
+    _region_stub(monkeypatch, {
+        m3.REGIONS["cn"]: Exception("Error code: 402 insufficient balance (1008)"),
+        m3.REGIONS["global"]: Exception("Error code: 401 invalid api key (2049)"),
+    })
+    state, detail = m3.probe_key(FAKE_KEY)
+    assert state == "nobalance", (
+        f"a key that is merely out of credit was reported as {state!r} — "
+        f"this sends the owner to reissue a key that works")
+    assert "GOOD" in detail
+
+
+def test_order_does_not_change_the_diagnosis(monkeypatch):
+    """Same two answers, regions swapped. Must land on the same verdict."""
+    _region_stub(monkeypatch, {
+        m3.REGIONS["cn"]: Exception("Error code: 401 invalid api key (2049)"),
+        m3.REGIONS["global"]: Exception("Error code: 402 insufficient balance (1008)"),
+    })
+    assert m3.probe_key(FAKE_KEY)[0] == "nobalance"
+
+
+def test_a_genuinely_bad_key_is_still_called_bad(monkeypatch):
+    _region_stub(monkeypatch, {
+        m3.REGIONS["cn"]: Exception("401 invalid api key (2049)"),
+        m3.REGIONS["global"]: Exception("401 invalid api key (2049)"),
+    })
+    state, detail = m3.probe_key(FAKE_KEY)
+    assert state == "badkey"
+    assert "REGION" in detail
+
+
+def test_a_working_region_is_returned(monkeypatch):
+    _region_stub(monkeypatch, {
+        m3.REGIONS["cn"]: Exception("401 invalid api key (2049)"),
+        m3.REGIONS["global"]: _Resp("pong"),
+    })
+    state, detail = m3.probe_key(FAKE_KEY)
+    assert state == "ok" and detail == m3.REGIONS["global"]
+
+
+def test_no_key_is_not_a_bad_key():
+    assert m3.probe_key("")[0] == "missing"
+
+
+def test_there_is_exactly_one_region_sweep_in_the_codebase():
+    """The structural guard. Four copies is how three of them went wrong."""
+    import ast
+    import re
+    root = Path(__file__).resolve().parent.parent
+    sweeps = []
+
+    def _iterates_regions(node) -> bool:
+        it = getattr(node, "iter", None)
+        return (isinstance(it, ast.Call)
+                and isinstance(it.func, ast.Attribute)
+                and it.func.attr in ("items", "values")
+                and isinstance(it.func.value, ast.Name)
+                and it.func.value.id == "REGIONS")
+
+    for f in (root / "pixcull").rglob("*.py"):
+        if any(seg in f.parts for seg in (".venv", "dist", "build")):
+            continue
+        try:
+            tree = ast.parse(f.read_text(encoding="utf-8", errors="ignore"))
+        except SyntaxError:
+            continue
+        # ast.For only — a dict/set comprehension over REGIONS is a lookup
+        # table, not an auth sweep, and banning those would push the code
+        # toward worse shapes for no safety.
+        for node in ast.walk(tree):
+            if isinstance(node, ast.For) and _iterates_regions(node):
+                sweeps.append(f"{f.relative_to(root)}:{node.lineno}")
+    for f in (root / "scripts").rglob("*.sh"):
+        text = f.read_text(encoding="utf-8", errors="ignore")
+        for m in re.finditer(r"REGIONS\.(?:items|values)\(\)", text):
+            sweeps.append(f"{f.relative_to(root)}:{text[:m.start()].count(chr(10)) + 1}")
+    assert len(sweeps) == 1, (
+        f"the region sweep is duplicated across {len(sweeps)} places: "
+        f"{sweeps}. Every copy is another chance to decide from the wrong "
+        f"region's error — call probe_key() instead.")
+
+
+def test_probe_capabilities_uses_the_shared_sweep():
+    import inspect
+    src = inspect.getsource(m3.probe_capabilities)
+    assert "probe_key(" in src

@@ -97,6 +97,11 @@ REGIONS: dict[str, str] = {
 }
 DEFAULT_REGION = "cn"
 
+#: url → region name. A reverse map rather than a genexp over REGIONS,
+#: so that "iterating REGIONS" means exactly one thing in this codebase:
+#: an auth sweep. tests/test_m3.py asserts there is only one of those.
+REGION_BY_URL: dict[str, str] = {v: k for k, v in REGIONS.items()}
+
 BASE_URL = REGIONS[DEFAULT_REGION]
 MODEL = "minimax-m3"
 
@@ -791,47 +796,22 @@ def probe_capabilities(api_key: str,
         caps["text"] = f"openai SDK not installed: {exc}"
         return caps
 
-    def _auth_ok(url: str) -> tuple[bool, str]:
-        try:
-            OpenAI(api_key=api_key, base_url=url, max_retries=0
-                   ).chat.completions.create(
-                model=model, messages=[{"role": "user", "content": "ping"}],
-                max_tokens=4, timeout=30)
-            return True, "ok"
-        except Exception as exc:  # noqa: BLE001
-            return False, f"{type(exc).__name__}: {exc}"[:300]
-
-    # Try every region before reporting failure. Asking the owner "which
-    # MiniMax region is your account in?" is asking them to know something
-    # the console never told them, and the wrong answer looks exactly like
-    # a bad key.
-    caps["region_attempts"] = {}
-    for name, url in REGIONS.items():
-        ok, detail = _auth_ok(url)
-        caps["region_attempts"][name] = detail
-        if ok:
-            base_url, caps["base_url"], caps["region"] = url, url, name
-            break
-
-    client = OpenAI(api_key=api_key, base_url=base_url, max_retries=0)
-
-    def _try(fn) -> _Attempt:
-        try:
-            fn()
-            return _Attempt(True, "ok")
-        except Exception as exc:  # noqa: BLE001
-            return _Attempt(False, f"{type(exc).__name__}: {exc}"[:300])
-
-    # 1. auth + model string — already answered by the region sweep.
-    caps["text"] = caps["region_attempts"].get(caps.get("region") or "", "")
-    if not caps.get("region"):
-        # Nothing authenticated anywhere. Report the most informative
-        # failure: a 402 means the key is GOOD and the account is empty,
-        # which is a completely different fix from a 401.
-        billing = [d for d in caps["region_attempts"].values()
-                   if "insufficient_balance" in d or "402" in d]
-        caps["text"] = (billing[0] if billing
-                        else next(iter(caps["region_attempts"].values()), ""))
+    # v2.52.4 — one region sweep for the whole codebase.
+    #
+    # This block used to own a fourth hand-written copy of it. Three of
+    # the four decided from the LAST region's error, which meant a key
+    # that is merely out of credit (CN: 402) got reported as invalid
+    # (global: 401) and sent the owner to reissue a working key. Twice.
+    # The property that keeps being lost — the billing signal must win
+    # regardless of which region produced it — belongs to the sweep as a
+    # whole, so it lives in one function now.
+    state, detail = probe_key(api_key, model=model)
+    caps["key_state"] = state
+    caps["text"] = "ok" if state == "ok" else detail
+    if state == "ok":
+        base_url = caps["base_url"] = detail
+        caps["region"] = REGION_BY_URL.get(detail, DEFAULT_REGION)
+    else:
         return caps
 
     # 2. structured output
@@ -960,6 +940,42 @@ MINIMAX_STATUS = {
     1008: "insufficient balance",
     2049: "invalid api key",
 }
+
+
+def probe_key(api_key: str, *, model: str = MODEL) -> tuple[str, str]:
+    """Try a key against every region. Returns ``(state, detail)``.
+
+    ``state`` is one of ``ok`` / ``nobalance`` / ``badkey`` / ``missing``.
+
+    This exists because I wrote the same loop by hand three times in one
+    session and got it wrong the same way twice: reporting the LAST
+    region's error. CN answers 402 (key good, no balance) and global
+    answers 401 (wrong region), so whichever is tried last decides the
+    diagnosis — and "your key is invalid" sends someone to reissue a key
+    that was working. The billing signal has to win no matter which
+    region produced it, which is a property of the whole sweep, not of
+    one iteration. One function, one place to get it right.
+    """
+    if not api_key:
+        return "missing", "no key stored"
+    try:
+        from openai import OpenAI
+    except ImportError as exc:
+        return "badkey", f"openai SDK missing: {exc}"
+    errors: list[str] = []
+    for url in REGIONS.values():
+        try:
+            OpenAI(api_key=api_key, base_url=url, max_retries=0
+                   ).chat.completions.create(
+                model=model, messages=[{"role": "user", "content": "ping"}],
+                max_tokens=4, timeout=30)
+            return "ok", url
+        except Exception as exc:  # noqa: BLE001
+            errors.append(str(exc))
+    joined = " ".join(errors)
+    if "1008" in joined or "insufficient_balance" in joined or "402" in joined:
+        return "nobalance", explain_api_error(Exception(joined))
+    return "badkey", explain_api_error(Exception(joined)) or joined[:300]
 
 
 def explain_api_error(exc: Exception) -> str:

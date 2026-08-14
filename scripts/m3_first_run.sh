@@ -45,32 +45,9 @@ piped input would be stored AS the secret. (No changes were made.)"
 # key was told "already in the keychain, leaving it alone" and sent round
 # the same loop again. Probe liveness instead of presence.
 say "1/4  key"
-KEY_STATE="$("$PY" - <<'EOF'
-try:
-    from pixcull.scoring.m3 import REGIONS, api_key_from_env
-    k = api_key_from_env()
-    if not k:
-        print("missing"); raise SystemExit
-    from openai import OpenAI
-    errs = []
-    for url in REGIONS.values():
-        try:
-            OpenAI(api_key=k, base_url=url, max_retries=0).chat.completions.create(
-                model="minimax-m3", messages=[{"role": "user", "content": "ping"}],
-                max_tokens=4, timeout=25)
-            print("ok"); raise SystemExit
-        except SystemExit:
-            raise
-        except Exception as exc:
-            errs.append(str(exc))
-    joined = " ".join(errs)
-    print("nobalance" if ("1008" in joined or "402" in joined) else "bad")
-except SystemExit:
-    raise
-except Exception:
-    print("missing")
-EOF
-)"
+KEY_STATE="$("$PY" -c '
+from pixcull.scoring.m3 import api_key_from_env, probe_key
+print(probe_key(api_key_from_env())[0])' 2>/dev/null || echo missing)"
 case "$KEY_STATE" in
   ok)
     echo "     the stored key works — leaving it alone" ;;
@@ -97,24 +74,21 @@ if [[ "$KEY_STATE" != "ok" ]]; then
   # Verify against the live API, not just that it reads back. A key that
   # is stored, readable and still refused has fixed nothing, and finding
   # that out at photo 1 of 408 is worse than finding it out here.
-  "$PY" - <<'EOF' || die "the new key was stored but the API still refuses it — see the message above"
+  # Verify against the live API, not just that it reads back. Stored,
+  # readable and still refused has fixed nothing, and finding that out at
+  # photo 1 of 408 is worse than finding it out here.
+  #
+  # Uses the SAME probe_key() as the check above. Hand-writing the region
+  # sweep a second time is exactly how this block came to report "invalid
+  # key" for a key that was merely out of credit: it read the last
+  # region's 401 instead of the first region's 402.
+  "$PY" -c '
 import sys
-from pixcull.scoring.m3 import REGIONS, api_key_from_env, explain_api_error
-from openai import OpenAI
-k = api_key_from_env()
-last = None
-for url in REGIONS.values():
-    try:
-        OpenAI(api_key=k, base_url=url, max_retries=0).chat.completions.create(
-            model="minimax-m3", messages=[{"role": "user", "content": "ping"}],
-            max_tokens=4, timeout=25)
-        print(f"     verified against {url}")
-        sys.exit(0)
-    except Exception as exc:
-        last = exc
-print("     " + (explain_api_error(last) or str(last)[:200]))
-sys.exit(1)
-EOF
+from pixcull.scoring.m3 import api_key_from_env, probe_key
+state, detail = probe_key(api_key_from_env())
+print("     " + ("verified against " + detail if state == "ok" else detail))
+sys.exit(0 if state == "ok" else 1)' \
+    || die "the stored key still cannot run the eval — see above"
 fi
 
 # ── 2. consent ────────────────────────────────────────────────────────
