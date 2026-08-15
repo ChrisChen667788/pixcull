@@ -1174,6 +1174,10 @@ def m3_review(
     limit: int = typer.Option(60, "--limit",
                               help="Cap the page. 60 is about as many as "
                                    "anyone reviews carefully in one sitting."),
+    serve: bool = typer.Option(True, "--serve/--no-serve",
+                               help="Serve the page over loopback and open "
+                                    "it, instead of leaving a file:// path "
+                                    "whose save button the browser blocks."),
 ) -> None:
     """Build a page for judging M3 against your own eye.
 
@@ -1284,7 +1288,99 @@ def m3_review(
     if no_verdict:
         console.print(f"[dim]{no_verdict} rows skipped: no cached verdict "
                       f"(building this page never spends money)[/dim]")
-    console.print(f"[dim]open {dest}[/dim]")
+    if serve:
+        _serve_review_page(dest, REVIEW_PORT, open_browser=True)
+    else:
+        # Deliberately NOT `open <file>`: that lands the reviewer on a
+        # file:// origin where the save button fails silently.
+        console.print(f"[dim]pixcull m3 open {dest}[/dim]")
+
+
+# v2.53.2 — the review page is served, not double-clicked.
+#
+# Opening it as a `file://` document put the reviewer on an origin where
+# Safari blocks blob downloads outright, and where localStorage is
+# restricted.  Both failures are silent: the buttons look alive and the
+# save button opens its panel, but nothing lands.  Over loopback HTTP the
+# page is on an ordinary origin and behaves like any other web page —
+# verified end to end in a real browser.
+#
+# THE PORT IS FIXED ON PURPOSE.  localStorage is keyed by origin, and the
+# reviewer's in-progress verdicts are the scarcest input this system has.
+# An ephemeral port would hand them a different origin on every run and
+# silently show an empty sheet after they had already judged half of it.
+REVIEW_PORT = 8731
+
+
+def _review_server(page: Path, port: int):
+    """Build (do not start) the loopback server for one review page."""
+    import http.server
+
+    body = Path(page).read_bytes()
+
+    # One file, not the directory.  A review run's folder also holds the
+    # label CSVs and the eval input — client data that has no reason to be
+    # reachable, even from this machine.
+    class _Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):                                   # noqa: N802
+            if self.path.split("?")[0] not in ("/", "/index.html"):
+                self.send_error(404)
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *a):                          # noqa: N802
+            pass
+
+    return http.server.ThreadingHTTPServer(("127.0.0.1", port), _Handler)
+
+
+def _serve_review_page(page: Path, port: int, *, open_browser: bool) -> None:
+    """Serve exactly one HTML file on loopback until Ctrl-C."""
+    import webbrowser
+
+    page = Path(str(page)).expanduser()
+    if not page.is_file():
+        console.print(f"[red]{page} not found.[/red] Build it first with "
+                      f"`pixcull m3 review`.")
+        raise typer.Exit(code=1)
+
+    srv = _review_server(page, port)
+    url = f"http://127.0.0.1:{srv.server_address[1]}/"
+    console.print(f"[green]{page.name}[/green] → {url}")
+    console.print("[dim]loopback only; judge, then 保存结果. Ctrl-C when "
+                  "done.[/dim]")
+    if open_browser:
+        webbrowser.open(url)
+    try:
+        srv.serve_forever()
+    except KeyboardInterrupt:
+        console.print("\n[dim]stopped[/dim]")
+    finally:
+        srv.server_close()
+
+
+@m3_app.command("open")
+def m3_open(
+    page: Path = typer.Argument(Path("~/pixcull_review.html"),
+                                help="A page built by `pixcull m3 review`."),
+    port: int = typer.Option(REVIEW_PORT, "--port",
+                             help="Keep this stable across sessions — "
+                                  "localStorage is per-origin, so a "
+                                  "different port hides verdicts you have "
+                                  "already recorded."),
+    open_browser: bool = typer.Option(True, "--open/--no-open"),
+) -> None:
+    """Serve a review page over loopback and open it in the browser.
+
+    Use this instead of double-clicking the file.  A `file://` page is
+    subject to browser restrictions that make the save button fail
+    without saying so.
+    """
+    _serve_review_page(page, port, open_browser=open_browser)
 
 
 @m3_app.command("status")

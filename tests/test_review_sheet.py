@@ -305,3 +305,59 @@ def test_save_reports_which_file_to_write(photo):
     assert "FILE='my-batch-review.json'" in page, (
         "the target filename is not stated, so a reviewer whose download "
         "was blocked cannot know what to name the paste")
+
+
+# ── v2.53.2: the page is served, not double-clicked ───────────────────
+
+def _fetch(srv, path):
+    import urllib.error
+    import urllib.request
+    url = f"http://127.0.0.1:{srv.server_address[1]}{path}"
+    try:
+        with urllib.request.urlopen(url, timeout=5) as r:
+            return r.status, r.read()
+    except urllib.error.HTTPError as e:
+        return e.code, b""
+
+
+def test_serving_exposes_the_page_and_nothing_else(tmp_path):
+    """A review folder also holds the label CSVs — client data.
+
+    Serving the directory would put the whole shoot's metadata on a
+    listening socket for the sake of one HTML file.
+    """
+    import threading
+
+    from pixcull.cli import _review_server
+
+    page = tmp_path / "sheet.html"
+    page.write_text("<h1>ok</h1>", encoding="utf-8")
+    (tmp_path / "training.csv").write_text("client,data", encoding="utf-8")
+
+    srv = _review_server(page, 0)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        assert _fetch(srv, "/") == (200, b"<h1>ok</h1>")
+        assert _fetch(srv, "/training.csv")[0] == 404
+        assert _fetch(srv, "/sheet.html")[0] == 404
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+
+def test_review_port_is_fixed_so_the_origin_is_stable():
+    """localStorage is keyed by origin, so the port cannot be ephemeral.
+
+    An ephemeral port hands the reviewer a different origin on every
+    run — the sheet opens empty, showing none of the verdicts they
+    already recorded, and nothing reports that anything was lost.
+    """
+    import inspect
+
+    from pixcull.cli import REVIEW_PORT, m3_open
+
+    assert REVIEW_PORT != 0, "port 0 means a new origin every run"
+    default = inspect.signature(m3_open).parameters["port"].default
+    got = getattr(default, "default", default)
+    assert got == REVIEW_PORT, (
+        f"`m3 open` defaults to port {got}, not the fixed {REVIEW_PORT}")

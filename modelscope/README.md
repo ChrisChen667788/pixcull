@@ -792,10 +792,18 @@ MIT 开源,让下一个摄影师不用再从头造一遍。
 照片上花十分钟**,才产生了第一批能分辨两个系统的标注。
 
 ```bash
+# 建页并起在 http://127.0.0.1:8731/,逐张判,点「保存结果」→ review.json
 pixcull m3 review --labels labels.csv --scores run/scores.csv --out ~/review.html
-# 打开,逐张判,点「保存结果」→ review.json
-pixcull m3 eval --labels labels.csv --scores run/scores.csv --review ~/review.json
+pixcull m3 open ~/review.html          # 重开之前建好的页
+# --review 可重复,一轮复核给一个,自动合并
+pixcull m3 eval --labels labels.csv --scores run/scores.csv \
+                --review ~/pass-1.json --review ~/pass-2.json
 ```
+
+这页是**起在本地回环上、而不是双击打开文件**的。在 `file://` 源下,浏览器
+会拦掉保存按钮用的 blob 下载、并限制 `localStorage` —— 两者都不报错,页面
+看着能用,实际什么都没存下。端口固定是因为 `localStorage` 按源隔离:临时
+端口会让判到一半的复核者下次打开看到一张空表。
 
 每张卡片给出原图、两边各自的判决、**被推翻的是哪个硬性剔除标记**、模型
 自己的理由,以及六轴星级。两个按钮,没有需要校准的量表 —— 一个在琢磨

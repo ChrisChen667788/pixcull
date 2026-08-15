@@ -919,16 +919,26 @@ separate the two systems.
 # 1. score a labelled set with the cloud judge
 pixcull m3 eval --labels labels.csv --scores run/scores.csv
 
-# 2. build a review page from the disagreements (free — cache only)
+# 2. build a review page from the disagreements (free — cache only) and
+#    serve it at http://127.0.0.1:8731/ — judge each frame, 保存结果
 pixcull m3 review --labels labels.csv --scores run/scores.csv \
                   --out ~/review.html
 
-# 3. open it, judge each frame, click 保存结果 → review.json
+# 3. re-open a page you built earlier
+pixcull m3 open ~/review.html
 
-# 4. feed your verdicts back; they override the label sheet
+# 4. feed your verdicts back; they override the label sheet.
+#    Repeatable — pass one --review per review pass and they merge.
 pixcull m3 eval --labels labels.csv --scores run/scores.csv \
-                --review ~/review.json
+                --review ~/pass-1.json --review ~/pass-2.json
 ```
+
+The page is **served over loopback rather than opened as a file**. On a
+`file://` origin a browser blocks the blob download the save button
+uses and restricts `localStorage` — silently, both of them, so the
+sheet looks alive while recording nothing. The port is fixed because
+`localStorage` is keyed by origin: an ephemeral one would show an empty
+sheet to a reviewer who had already judged half of it.
 
 Each card shows the photograph, what each system decided, **which
 hard-cull flag was overturned**, the model's own reasoning, and its six
