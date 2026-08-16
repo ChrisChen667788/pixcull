@@ -605,3 +605,128 @@ def test_stratified_weights_recover_the_population_rate():
     # so the macro is half of it.
     assert cm["keep"].f1 == pytest.approx(0.9473684, abs=1e-6)
     assert _macro(cm) == pytest.approx(0.4736842, abs=1e-6)
+
+
+# ── v2.55: a point estimate that cannot say how stable it is ──────────
+
+def _mixed_outcomes():
+    """The stratified pass's actual shape: each arm wins somewhere.
+
+    21 keep rows carrying the keep stratum's ×24.27 weight, 7 cull rows
+    at ×1.93. The rule stack catches 2 of 7 culls; primary catches 6 but
+    drops 3 more keeps. That trade is the whole question, and on 28 rows
+    it is not resolvable.
+    """
+    out = []
+    for i in range(21):
+        out.append(("keep", "keep" if i < 20 else "cull", "keep",
+                    "keep" if i < 17 else "cull", 24.27))
+    for i in range(7):
+        out.append(("cull", "cull" if i < 2 else "keep", "cull",
+                    "cull" if i < 6 else "keep", 1.93))
+    return out
+
+
+def _clean_outcomes(n_keep, n_cull, w_keep=1.0, w_cull=1.0):
+    """Primary strictly better, no counter-examples."""
+    out = []
+    for i in range(n_keep):
+        out.append(("keep", "keep" if i < n_keep - 4 else "cull", "keep",
+                    "keep", w_keep))
+    for i in range(n_cull):
+        out.append(("cull", "keep", "cull", "cull", w_cull))
+    return out
+
+
+def test_a_small_sample_reports_an_interval_that_spans_zero():
+    """The stratified pass: +13.6 points, 95% CI [-12.0, +41.4].
+
+    28 scoreable rows, 7 of them `cull`. The point estimate printed to
+    three decimals and the line under it said SHIP. Resampling says the
+    sample cannot tell the mode apart from no change at all — and this
+    project has already reached a wrong conclusion off a confident
+    single number three times.
+    """
+    from pixcull.scoring.vlm_eval import EvalResult, bootstrap_delta
+    res = EvalResult(n_scored=28)
+    res.outcomes = _mixed_outcomes()
+    pt, lo, hi = bootstrap_delta(res, "vlm", rounds=1500)
+    assert lo <= 0 <= hi, f"expected a spanning CI on 28 rows: [{lo}, {hi}]"
+    assert hi - lo > 20, "an interval this narrow would not match the data"
+
+
+def test_more_rows_narrow_the_interval_off_zero():
+    """Same effect, twenty times the rows."""
+    from pixcull.scoring.vlm_eval import EvalResult, bootstrap_delta
+    small = EvalResult(); small.outcomes = _clean_outcomes(21, 7)
+    big = EvalResult(); big.outcomes = _clean_outcomes(420, 140)
+    _, slo, shi = bootstrap_delta(small, "vlm", rounds=800)
+    _, blo, bhi = bootstrap_delta(big, "vlm", rounds=800)
+    assert (bhi - blo) < (shi - slo), "more rows must not widen the interval"
+    assert blo > 0, f"a real effect on 560 rows should clear zero: [{blo},{bhi}]"
+
+
+def test_reweighting_a_stratified_sample_can_flip_the_sign():
+    """Why the weights are not a nicety.
+
+    Stratifying over-samples the rare class on purpose — here `cull` is
+    52% of the sample and 7% of the corpus. `primary` happens to be
+    strong exactly there, so on the raw sample it scores +15.4. Weighted
+    back to the corpus it scores −3.5. Same rows, same model, opposite
+    conclusion.
+
+    (I first assumed weighting mainly widened the interval. Measured, it
+    does not — on both a clean and a mixed fixture the weighted interval
+    is slightly narrower. What it moves is the estimate itself, which is
+    the thing that decides the default.)
+    """
+    from pixcull.scoring.vlm_eval import EvalResult, bootstrap_delta
+
+    def mixed(w_keep, w_cull):
+        out = []
+        for i in range(21):
+            out.append(("keep", "keep" if i < 20 else "cull", "keep",
+                        "keep" if i < 17 else "cull", w_keep))
+        for i in range(7):
+            out.append(("cull", "cull" if i < 2 else "keep", "cull",
+                        "cull" if i < 6 else "keep", w_cull))
+        return out
+
+    flat = EvalResult(); flat.outcomes = mixed(1.0, 1.0)
+    wtd = EvalResult(); wtd.outcomes = mixed(24.27, 1.93)
+    raw = bootstrap_delta(flat, "vlm", rounds=1500)[0]
+    corrected = bootstrap_delta(wtd, "vlm", rounds=1500)[0]
+    assert raw > 0 > corrected, (
+        f"expected the sign to flip: raw {raw:+.1f}, weighted "
+        f"{corrected:+.1f} — if it no longer does, this fixture has "
+        f"drifted and the lesson needs re-deriving, not deleting")
+
+
+def test_the_verdict_will_not_ship_a_mode_whose_interval_spans_zero():
+    """The contradiction that printed for one run.
+
+    The table said `primary +13.6` and the verdict said SHIP, while the
+    CI printed between them contained zero. A tool that recommends a
+    change its own interval calls noise is worse than one that says
+    nothing.
+    """
+    res = _res(_AWFUL, _AWFUL, _PERFECT, selection="all")
+    res.ci = {"primary": (-12.0, 41.4), "rescue": (-24.5, 14.8)}
+    v = res.verdict
+    assert "NOT DISTINGUISHABLE" in v, v
+    assert "SHIP" not in v
+
+
+def test_the_verdict_still_ships_when_the_interval_clears_zero():
+    res = _res(_AWFUL, _AWFUL, _PERFECT, selection="all")
+    res.ci = {"primary": (6.2, 31.0), "rescue": (-24.5, 14.8)}
+    assert "SHIP `vlm_authority=primary`" in res.verdict
+
+
+def test_the_interval_is_reproducible():
+    """A CI that moves per run invites re-rolling until it agrees."""
+    from pixcull.scoring.vlm_eval import EvalResult, bootstrap_delta
+    res = EvalResult(n_scored=28)
+    res.outcomes = _mixed_outcomes()
+    assert (bootstrap_delta(res, "vlm", rounds=400)
+            == bootstrap_delta(res, "vlm", rounds=400))

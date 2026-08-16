@@ -1240,6 +1240,20 @@ def m3_eval(
             f"formed independently. On the other "
             f"{res.n_scored - sub.n_scored} the rule stack's own decision "
             f"is the answer key, so any change scores as an error.[/dim]")
+        # v2.55 — the point estimate has been wrong three times here
+        # (circular labels, disagreement-selected sample, no cull ground
+        # truth). Each time it was one confident number that said nothing
+        # about its own stability. Resample before believing it.
+        from pixcull.scoring.vlm_eval import bootstrap_delta
+        sub.compute_cis()
+        for arm, name in (("vlm", "primary"), ("rescue", "rescue")):
+            pt, lo, hi = bootstrap_delta(sub, arm)
+            spans = lo <= 0 <= hi
+            console.print(
+                f"[{'yellow' if spans else 'green'}]{name:8s} "
+                f"{pt:+6.1f} pts   95% CI [{lo:+.1f}, {hi:+.1f}]"
+                f"{'  ← spans 0: not distinguishable from no change' if spans else ''}"
+                f"[/]")
         console.print(f"\n[bold]{sub.verdict}[/bold]\n")
     console.print(
         f"[yellow]{res.n_overrides} hard-cull override(s) need your eyes[/] — "

@@ -138,6 +138,24 @@ class EvalResult:
     #: a tie it never played.
     truth_counts: dict[str, int] = field(default_factory=dict)
     arm_changes: dict[str, int] = field(default_factory=dict)
+    #: v2.55 — (truth, rule, rescue, primary, weight) per scoreable row,
+    #: kept so the headline delta can be resampled. A macro-F1 computed
+    #: on 45 rows with 7 culls prints to three decimals and looks like a
+    #: measurement; whether it survives two of those rows flipping is a
+    #: different question, and the only one that matters before changing
+    #: a default.
+    outcomes: list[tuple[str, str, str, str, float]] = field(
+        default_factory=list)
+    #: arm → (low, high) percentile CI in macro-F1 points, once
+    #: ``compute_cis()`` has run. The verdict refuses to recommend a mode
+    #: whose interval contains zero: a tool that says SHIP on a number
+    #: its own interval calls noise is worse than one that says nothing.
+    ci: dict[str, tuple[float, float]] = field(default_factory=dict)
+
+    def compute_cis(self, rounds: int = 2000) -> None:
+        for arm in ("rescue", "vlm"):
+            _, lo, hi = bootstrap_delta(self, arm, rounds=rounds)
+            self.ci["primary" if arm == "vlm" else arm] = (lo, hi)
     disagreements: list[Disagreement] = field(default_factory=list)
     by_scene: dict[str, dict[str, float]] = field(default_factory=dict)
 
@@ -262,6 +280,21 @@ class EvalResult:
                     f"rescue {d_res:+.1f}). Label a RANDOM sample to get a "
                     f"number that can decide the default.")
         best = self.best_mode
+        # v2.55 — a point estimate on 45 rows prints to three decimals and
+        # reads as a measurement. Resampled, this one was +13.6 with a 95%
+        # interval of [-12.0, +41.4]: the sample cannot tell the mode
+        # apart from no change at all, and the line above it still said
+        # SHIP. Changing a product default on that is exactly the mistake
+        # the circular label set already caused once.
+        if best != "off" and best in self.ci:
+            lo, hi = self.ci[best]
+            if lo <= 0 <= hi:
+                d = {"rescue": d_res, "primary": d_pri}[best]
+                return (f"NOT DISTINGUISHABLE — `{best}` scores {d:+.1f} "
+                        f"macro-F1 points, but resampling gives 95% CI "
+                        f"[{lo:+.1f}, {hi:+.1f}], which contains zero. "
+                        f"{self.n_effective} scoreable rows is too few to "
+                        f"move a default. Label more of the rare class.")
         if best == "off":
             return (f"KEEP M3 OPT-IN — neither mode clears the noise floor "
                     f"(primary {d_pri:+.1f}, rescue {d_res:+.1f} macro-F1 "
@@ -489,6 +522,9 @@ def evaluate(
             if rescue_dec.value != rule_dec.value:
                 res.arm_changes["rescue"] = res.arm_changes.get(
                     "rescue", 0) + 1
+        if truth in _SCORED:
+            res.outcomes.append((truth, rule_dec.value, rescue_dec.value,
+                                 vlm_dec.value, w))
         scene_hits.setdefault(scene or "—", []).append(
             (truth, rule_dec.value, vlm_dec.value))
 
@@ -608,3 +644,43 @@ def render_report(res: EvalResult, *, labels_path: str = "",
             lines.append(f"\n_…and {len(res.disagreements) - 200} more "
                          f"(truncated; full list in the JSON sidecar)._")
     return "\n".join(lines) + "\n"
+
+
+def bootstrap_delta(res: EvalResult, arm: str = "vlm", *,
+                    rounds: int = 2000, seed: int = 20260816
+                    ) -> tuple[float, float, float]:
+    """Percentile CI for (arm macro-F1 − rule macro-F1), in points.
+
+    Resamples the scored rows with replacement.  The point estimate here
+    has been wrong three times in this project's history — first from
+    circular labels, then from a disagreement-selected sample, then from
+    a sample with no ``cull`` ground truth at all — and each time it was
+    a single confident number with nothing to say about its own
+    stability.  A +13.6 that spans zero under resampling is not a reason
+    to change a default; a +13.6 that does not is.
+
+    Deterministic seed: a confidence interval that moves every time you
+    run it invites re-rolling until it agrees with you.
+    """
+    import random
+
+    rows = res.outcomes
+    if not rows:
+        return (0.0, 0.0, 0.0)
+    idx = {"rule": 1, "rescue": 2, "vlm": 3}[arm]
+
+    def _delta(sample) -> float:
+        a: dict[str, Confusion] = {}
+        b: dict[str, Confusion] = {}
+        for truth, *preds, w in sample:
+            _tally(a, truth, preds[0], w)
+            _tally(b, truth, preds[idx - 1], w)
+        return (_macro(b) - _macro(a)) * 100
+
+    rng = random.Random(seed)
+    n = len(rows)
+    deltas = sorted(_delta([rows[rng.randrange(n)] for _ in range(n)])
+                    for _ in range(rounds))
+    lo = deltas[int(0.025 * rounds)]
+    hi = deltas[min(rounds - 1, int(0.975 * rounds))]
+    return (_delta(rows), lo, hi)
