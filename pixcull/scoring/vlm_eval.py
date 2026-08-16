@@ -51,9 +51,14 @@ class Confusion:
     """One label's confusion counts against the human's verdict."""
 
     label: str
-    tp: int = 0
-    fp: int = 0
-    fn: int = 0
+    # v2.54.2 — float, because stratified samples carry inverse-probability
+    # weights. The corpus is 89% keep, so a 40-row uniform sample expects
+    # ~2.8 culls and the owner's returned zero scoreable ones. Sampling
+    # each stratum evenly and weighting by (population / sampled) is the
+    # only way to measure `cull` at a budget a human will actually review.
+    tp: float = 0.0
+    fp: float = 0.0
+    fn: float = 0.0
 
     @property
     def precision(self) -> float:
@@ -123,6 +128,16 @@ class EvalResult:
     #: first version of this bug cost ¥8 and half a day and this one
     #: produces a *more* convincing wrong answer.
     selection: str = "all"
+    #: v2.54.2 — how many rows of each scored truth the sample actually
+    #: contains, and how many rows each arm decided differently from the
+    #: rule stack. Both exist because a macro-F1 hides the difference
+    #: between "these modes tie" and "this sample never exercised them",
+    #: and those need opposite responses. The owner's 40-row random
+    #: sample contained ZERO `cull` labels and put every rescue-eligible
+    #: row in the unscored `maybe` bucket, so `rescue` reported +0.0 —
+    #: a tie it never played.
+    truth_counts: dict[str, int] = field(default_factory=dict)
+    arm_changes: dict[str, int] = field(default_factory=dict)
     disagreements: list[Disagreement] = field(default_factory=list)
     by_scene: dict[str, dict[str, float]] = field(default_factory=dict)
 
@@ -137,6 +152,27 @@ class EvalResult:
     @property
     def rescue_macro_f1(self) -> float:
         return _macro(self.rescue)
+
+    @property
+    def n_effective(self) -> int:
+        """Rows that can make anyone right or wrong (`maybe` cannot)."""
+        return sum(self.truth_counts.values())
+
+    @property
+    def unmeasurable(self) -> list[str]:
+        """Scored labels with no ground-truth examples in this sample.
+
+        Their F1 is 0.000 for every arm by construction, which drags the
+        macro down uniformly and reads as three mediocre modes rather
+        than as a question the sample cannot answer.
+        """
+        return [x for x in _SCORED if not self.truth_counts.get(x)]
+
+    @property
+    def unexercised(self) -> list[str]:
+        """Arms that never changed a scored row, so were never tested."""
+        return [a for a in ("rescue", "primary")
+                if not self.arm_changes.get(a)]
 
     @property
     def best_mode(self) -> str:
@@ -192,6 +228,27 @@ class EvalResult:
         # and those are separate switches.
         d_pri = (self.vlm_macro_f1 - self.rule_macro_f1) * 100
         d_res = (self.rescue_macro_f1 - self.rule_macro_f1) * 100
+        # v2.54.2 — before ranking anything, check the sample can rank.
+        #
+        # A label with no ground-truth examples scores 0.000 for every
+        # arm, and an arm that never changed a scored row reports a
+        # perfect tie. Both print as an ordinary number. The owner's
+        # 40-row random sample hit both at once: zero `cull` labels, and
+        # every rescue-eligible row landed on `maybe`, which is excluded
+        # from scoring. `rescue +0.0` meant "never played", not "no gain".
+        if self.unmeasurable:
+            return (f"CANNOT RANK — this sample has no `"
+                    f"{'`/`'.join(self.unmeasurable)}` ground truth, so "
+                    f"that F1 is 0.000 for every mode by construction and "
+                    f"the macro is halved for all of them equally. "
+                    f"{self.n_effective} of {self.n_scored} rows are "
+                    f"scoreable at all (`maybe` is excluded). Label a "
+                    f"sample that contains both outcomes.")
+        if self.unexercised:
+            return (f"NOT MEASURED — `{'`, `'.join(self.unexercised)}` "
+                    f"changed no scoreable row in this sample, so the "
+                    f"reported tie is a mode that never ran. Sample rows "
+                    f"where it would act.")
         # A sample drawn where the two systems disagreed cannot rank
         # them. Every row in it is a row the rule stack got wrong often
         # enough to argue about; the rule's score there is a floor, not
@@ -224,7 +281,8 @@ def _macro(cm: dict[str, Confusion]) -> float:
     return sum(vals) / len(vals) if vals else 0.0
 
 
-def _tally(cm: dict[str, Confusion], truth: str, pred: str) -> None:
+def _tally(cm: dict[str, Confusion], truth: str, pred: str,
+           w: float = 1.0) -> None:
     # A row the human marked `maybe` cannot make anyone right or wrong.
     # Counting a "keep" prediction against it as a false positive would
     # penalise the model for disagreeing with an explicit shrug — and
@@ -235,11 +293,11 @@ def _tally(cm: dict[str, Confusion], truth: str, pred: str) -> None:
     for label in _SCORED:
         c = cm.setdefault(label, Confusion(label))
         if pred == label and truth == label:
-            c.tp += 1
+            c.tp += w
         elif pred == label and truth != label:
-            c.fp += 1
+            c.fp += w
         elif pred != label and truth == label:
-            c.fn += 1
+            c.fn += w
 
 
 def load_labels(path: Path) -> dict[str, dict[str, str]]:
@@ -281,6 +339,7 @@ def evaluate(
     workers: int = 8,
     only: set[str] | None = None,
     selection: str = "all",
+    row_weights: dict[str, float] | None = None,
 ) -> EvalResult:
     """Score every labelled row three ways — off / rescue / primary.
 
@@ -288,6 +347,14 @@ def evaluate(
     sheet itself when it carries the detector metrics).  Rows without a
     human label are skipped: an unlabelled row cannot make anyone right
     or wrong.
+
+    ``row_weights`` maps filename → inverse-probability weight, for a
+    stratified sample.  The corpus is ~89% ``keep``, so a uniform 40-row
+    sample expects fewer than three ``cull`` rows and the owner's
+    returned none that were scoreable; sampling each stratum evenly and
+    weighting by (population / sampled) measures both outcomes at a
+    budget a person will actually sit through, and stays unbiased for
+    the population rather than for the sample.
 
     ``only`` restricts the run to a set of filenames.  v2.54 — this
     exists because the circularity that invalidated the first
@@ -369,14 +436,15 @@ def evaluate(
             # 36 rows with one reason is a finding.
             key = why.split(" — ")[0].split(":")[0].strip()[:60]
             res.error_reasons[key] = res.error_reasons.get(key, 0) + 1
-            _tally(res.rule, truth, rule_dec.value)
+            ew = (row_weights or {}).get(fn, 1.0)
+            _tally(res.rule, truth, rule_dec.value, ew)
             # A row with no verdict is not a row the model got wrong — in
             # production every authority mode falls back to the rule stack
             # here. Tallying rule into `rule` alone gave the VLM arms fewer
             # rows than the rule arm and quietly compared two different
             # populations; feed all three the same outcome instead.
-            _tally(res.vlm, truth, rule_dec.value)
-            _tally(res.rescue, truth, rule_dec.value)
+            _tally(res.vlm, truth, rule_dec.value, ew)
+            _tally(res.rescue, truth, rule_dec.value, ew)
             continue
 
         usage = getattr(verdict, "usage", None)
@@ -406,9 +474,21 @@ def evaluate(
 
         if rule_dec.value != truth:
             res.n_label_disagreements += 1
-        _tally(res.rule, truth, rule_dec.value)
-        _tally(res.vlm, truth, vlm_dec.value)
-        _tally(res.rescue, truth, rescue_dec.value)
+        w = (row_weights or {}).get(fn, 1.0)
+        _tally(res.rule, truth, rule_dec.value, w)
+        _tally(res.vlm, truth, vlm_dec.value, w)
+        _tally(res.rescue, truth, rescue_dec.value, w)
+        # Counted on SCOREABLE rows only, which is the whole point: an
+        # arm that only ever acts on `maybe` rows has changed nothing
+        # the metric can see, and must not be reported as a tie.
+        if truth in _SCORED:
+            res.truth_counts[truth] = res.truth_counts.get(truth, 0) + 1
+            if vlm_dec.value != rule_dec.value:
+                res.arm_changes["primary"] = res.arm_changes.get(
+                    "primary", 0) + 1
+            if rescue_dec.value != rule_dec.value:
+                res.arm_changes["rescue"] = res.arm_changes.get(
+                    "rescue", 0) + 1
         scene_hits.setdefault(scene or "—", []).append(
             (truth, rule_dec.value, vlm_dec.value))
 

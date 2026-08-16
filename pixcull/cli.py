@@ -1069,7 +1069,8 @@ def m3_eval(
         from pixcull.report.review_sheet import load_selection, load_verdicts
         applied, seen = 0, {}
         sels = {load_selection(s) for s in review}
-        review_selection = ("random" if sels == {"random"}
+        review_selection = (sels.pop() if len(sels) == 1
+                            and sels <= {"random", "stratified"}
                             else "disagreements")
         for src in review:
             for fn, verdict in load_verdicts(src).items():
@@ -1179,9 +1180,47 @@ def m3_eval(
     # "rescue wins", and reporting only the first would have sent the
     # product the wrong way on the strength of a rigged denominator.
     if reviewed_fns:
+        # A stratified sample is biased ON PURPOSE and by a known amount,
+        # which is the only kind of bias you can subtract back out. Each
+        # row stands for (stratum population / stratum sampled) rows of
+        # the corpus, so the estimate is unbiased for the corpus rather
+        # than for the sample. Computed here, from the population, rather
+        # than trusted from the verdict file: the sheet knows what it
+        # sampled, it does not know what it sampled FROM.
+        weights = None
+        if review_selection == "stratified":
+            from pixcull.scoring.decision import decide as _decide
+            from pixcull.scoring.vlm_eval import _flags_of as _fl
+            _cfg = PixCullConfig.load()
+
+            def _stratum(r):
+                try:
+                    f = float(r.get("score_final") or 0)
+                except (TypeError, ValueError):
+                    f = 0.0
+                d, _ = _decide(f, _fl(r), _cfg, "standard",
+                               scene=str(r.get("scene") or ""))
+                return d.value
+
+            pop, samp, of = {}, {}, {}
+            for r in rows:
+                fn_ = (r.get("filename") or "").strip()
+                if fn_ not in lab:
+                    continue
+                st = _stratum(r)
+                pop[st] = pop.get(st, 0) + 1
+                of[fn_] = st
+                if fn_ in reviewed_fns:
+                    samp[st] = samp.get(st, 0) + 1
+            weights = {fn_: pop[st] / samp[st]
+                       for fn_, st in of.items()
+                       if fn_ in reviewed_fns and samp.get(st)}
+            console.print("[dim]stratum weights: " + ", ".join(
+                f"{st} {samp[st]}/{pop[st]}→×{pop[st]/samp[st]:.2f}"
+                for st in sorted(samp)) + "[/dim]")
         sub = evaluate(rows, lab, judge, PixCullConfig.load(),
                        vertical=vertical, only=reviewed_fns,
-                       selection=review_selection)
+                       selection=review_selection, row_weights=weights)
         t2 = Table(title=f"same modes, {sub.n_scored} independently "
                          f"reviewed rows only")
         t2.add_column("", style="bold")
@@ -1222,7 +1261,12 @@ def m3_review(
                                   "included. Only 'random' produces labels "
                                   "that can rank the two systems; the other "
                                   "two sample the rule stack exactly where "
-                                  "it is weakest."),
+                                  "it is weakest | 'stratified' — even "
+                                  "coverage of each rule decision, which "
+                                  "`m3 eval` reweights back to the corpus. "
+                                  "Use this: a uniform sample of a 89%-keep "
+                                  "corpus contains too few culls to score "
+                                  "one."),
     limit: int = typer.Option(60, "--limit",
                               help="Cap the page. 60 is about as many as "
                                    "anyone reviews carefully in one sitting."),
@@ -1335,7 +1379,34 @@ def m3_review(
                 "note": f"两边都判 {rule_dec.value}",
             })
 
-    if only == "random" and items:
+    if only == "stratified" and items:
+        # Even coverage of each rule-stack decision, NOT proportional.
+        # The corpus is 89% keep / 7% cull, so a proportional 40-row
+        # sample expects <3 culls — and the owner's actual random pass
+        # returned zero SCOREABLE ones, because both sampled culls were
+        # judged `maybe`. Without cull ground truth the cull F1 is 0.000
+        # for every mode and the comparison cannot run at all.
+        #
+        # The bias this introduces is exact and therefore removable:
+        # `m3 eval` reweights each row by (stratum population / stratum
+        # sampled), which is unbiased for the corpus rather than for the
+        # sample. That is the whole reason the stratum is recorded.
+        import hashlib as _h
+        buckets: dict[str, list] = {}
+        for it in items:
+            buckets.setdefault(it["a"], []).append(it)
+        for b in buckets.values():
+            b.sort(key=lambda it: _h.sha1(it["fn"].encode()).hexdigest())
+        picked, i = [], 0
+        while len(picked) < limit and any(buckets.values()):
+            for key in sorted(buckets):          # round-robin over strata
+                if buckets[key] and len(picked) < limit:
+                    picked.append(buckets[key].pop(0))
+            i += 1
+            if i > limit:
+                break
+        items = picked
+    elif only == "random" and items:
         # Deterministic and seedless: a stable hash of the filename, so
         # the same corpus always yields the same sample and a reviewer can
         # resume a batch. Math.random / random.random would silently pick
@@ -1359,11 +1430,13 @@ def m3_review(
     dest = write(
         items, Path(str(out)).expanduser(),
         title={"overrides": f"M3 推翻硬性剔除 · {len(items)} 张待复核",
-               "random": f"随机抽样复核 · {len(items)} 张(含两边一致的)"}
+               "random": f"随机抽样复核 · {len(items)} 张(含两边一致的)",
+               "stratified": f"分层抽样复核 · {len(items)} 张(各判决等量)"}
               .get(only, f"M3 与规则分歧 · {len(items)} 张"),
-        slug={"overrides": "m3-overrides",
-              "random": "m3-random"}.get(only, "m3-disagreements"),
-        selection="random" if only == "random" else "disagreements",
+        slug={"overrides": "m3-overrides", "random": "m3-random",
+              "stratified": "m3-stratified"}.get(only, "m3-disagreements"),
+        selection=(only if only in ("random", "stratified")
+                   else "disagreements"),
         yes_key="keep", no_key="cull",
         lede="这些照片本机检测器判定必须剔除,但 M3 <b>在 prompt 里已经读到了"
              "那些实测值</b>,仍然选择保留。<br>「证据融合」成立与否就压在这批"

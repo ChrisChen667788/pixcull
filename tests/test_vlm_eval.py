@@ -127,6 +127,8 @@ def test_maybe_is_excluded_from_the_headline(cfg):
 
 def test_verdict_says_no_when_m3_is_worse():
     res = EvalResult(n_scored=608, n_label_disagreements=40)
+    res.truth_counts = {"keep": 300, "cull": 308}
+    res.arm_changes = {"rescue": 40, "primary": 40}
     res.rule = {"keep": Confusion("keep", tp=90, fp=10, fn=10),
                 "cull": Confusion("cull", tp=90, fp=10, fn=10)}
     res.vlm = {"keep": Confusion("keep", tp=50, fp=50, fn=50),
@@ -144,6 +146,8 @@ def test_verdict_says_no_when_m3_is_worse():
 def test_verdict_refuses_to_call_noise_an_improvement():
     """The failure mode that would make this whole version theatre."""
     res = EvalResult(n_scored=608, n_label_disagreements=40)
+    res.truth_counts = {"keep": 300, "cull": 308}
+    res.arm_changes = {"rescue": 40, "primary": 40}
     same = {"keep": Confusion("keep", tp=90, fp=10, fn=10),
             "cull": Confusion("cull", tp=90, fp=10, fn=10)}
     res.rule = same
@@ -157,6 +161,8 @@ def test_verdict_refuses_to_call_noise_an_improvement():
 
 def test_verdict_says_yes_only_on_a_real_margin():
     res = EvalResult(n_scored=608, n_label_disagreements=40)
+    res.truth_counts = {"keep": 300, "cull": 308}
+    res.arm_changes = {"rescue": 40, "primary": 40}
     res.rule = {"keep": Confusion("keep", tp=50, fp=50, fn=50),
                 "cull": Confusion("cull", tp=50, fp=50, fn=50)}
     res.vlm = {"keep": Confusion("keep", tp=95, fp=5, fn=5),
@@ -303,11 +309,23 @@ def test_rows_without_a_label_are_dropped_at_load(tmp_path):
 
 
 def test_report_leads_with_the_verdict(cfg):
-    # 0.9/"cull" makes the rule disagree with the label on one row, so
-    # the circularity guard does not fire and the ranking verdict shows.
-    rows = _rows([("a.jpg", 0.9, "", "p"), ("b.jpg", 0.1, "", "p")])
-    labels = _labels({"a.jpg": "cull", "b.jpg": "cull"})
+    # The fixture has to clear three guards before a RANKING verdict can
+    # appear at all, and each one is a real defect this eval has shipped:
+    #   * the labels must disagree with the rule somewhere (v2.49.3
+    #     circularity) — a.jpg is scored keep and labelled cull;
+    #   * both scored labels must be present (v2.54.2) — otherwise the
+    #     missing one is 0.000 for every arm and nothing can be compared;
+    #   * some arm must actually change a scored row. `rescue` only acts
+    #     on a HARD cull, so b.jpg carries `closed_eyes` — a low score
+    #     alone leaves rescue idle, which is how this fixture first
+    #     tripped the new guard.
+    rows = _rows([("a.jpg", 0.9, "", "p"),
+                  ("b.jpg", 0.1, "closed_eyes", "p")])
+    labels = _labels({"a.jpg": "cull", "b.jpg": "keep"})
     res = evaluate(rows, labels, ScriptedJudge({}), cfg)
+    assert not res.unmeasurable and not res.unexercised, (
+        "fixture no longer reaches the ranking path: "
+        f"unmeasurable={res.unmeasurable} unexercised={res.unexercised}")
     md = render_report(res, labels_path="l.csv")
     head = md.split("\n\n")[1]
     assert any(w in head for w in ("SHIP `vlm_authority=", "KEEP M3 OPT-IN",
@@ -451,10 +469,19 @@ def _res(rule_f1_src, rescue_src, primary_src, **kw):
     r = EvalResult(n_scored=100, n_label_disagreements=20, **kw)
     for truth, pred in rule_f1_src:
         _tally(r.rule, truth, pred)
+        r.truth_counts[truth] = r.truth_counts.get(truth, 0) + 1
     for truth, pred in rescue_src:
         _tally(r.rescue, truth, pred)
     for truth, pred in primary_src:
         _tally(r.vlm, truth, pred)
+    # v2.54.2 — a hand-built result must state what its sample contained
+    # and which arms actually acted, or the "cannot rank" / "not
+    # measured" guards fire first. That strictness is the point: a
+    # result that cannot say those things cannot rank anything either.
+    r.arm_changes = {"rescue": sum(1 for a, b in zip(rescue_src, rule_f1_src)
+                                   if a[1] != b[1]) or 1,
+                     "primary": sum(1 for a, b in zip(primary_src, rule_f1_src)
+                                    if a[1] != b[1]) or 1}
     return r
 
 
@@ -516,3 +543,65 @@ def test_missing_provenance_is_treated_as_biased(tmp_path):
     assert load_selection(new) == "random"
 
     assert load_selection(tmp_path / "nope.json") == "disagreements"
+
+
+def test_a_sample_with_no_cull_labels_refuses_to_rank():
+    """The owner's 40-row random pass, reproduced.
+
+    A 89%-keep corpus yields fewer than three culls in 40 uniform draws,
+    and the owner judged both of the ones that appeared as `maybe` —
+    which is excluded from scoring. So `cull` F1 was 0.000 for all three
+    arms, the macro was halved for all three equally, and the table
+    looked like three mediocre modes rather than a question the sample
+    could not answer.
+    """
+    from pixcull.scoring.vlm_eval import EvalResult
+    res = _res(_PERFECT, _PERFECT, _AWFUL, selection="all")
+    res.truth_counts = {"keep": 20}          # zero culls
+    v = res.verdict
+    assert "CANNOT RANK" in v, v
+    assert "cull" in v and "0.000" in v
+    assert "SHIP" not in v
+    assert isinstance(res, EvalResult)
+
+
+def test_an_arm_that_never_acted_is_not_reported_as_a_tie():
+    """`rescue +0.0` meant "never played", not "no gain".
+
+    In the random pass every rescue-eligible row landed on `maybe`, so
+    rescue changed nothing the metric could see and scored an exact tie
+    with the rule stack. A tie and an untested mode print the same
+    number and call for opposite responses.
+    """
+    res = _res(_PERFECT, _PERFECT, _PERFECT, selection="all")
+    res.truth_counts = {"keep": 20, "cull": 20}
+    res.arm_changes = {"primary": 5, "rescue": 0}
+    v = res.verdict
+    assert "NOT MEASURED" in v, v
+    assert "rescue" in v
+    assert "KEEP M3 OPT-IN" not in v, "an untested mode is not a tie"
+
+
+def test_stratified_weights_recover_the_population_rate():
+    """Inverse-probability weighting, checked against a known answer.
+
+    Population: 90 keeps, 10 culls. Sample 10 of each, so a keep row
+    stands for 9 and a cull row for 1. A judge that is perfect on keeps
+    and wrong on every cull must score as if it had seen the real 90/10
+    mix, not the sampled 50/50 one — otherwise stratifying to reach the
+    rare class silently rewrites what the number means.
+    """
+    from pixcull.scoring.vlm_eval import Confusion, _macro, _tally
+    cm: dict[str, Confusion] = {}
+    for _ in range(10):
+        _tally(cm, "keep", "keep", 9.0)
+        _tally(cm, "cull", "keep", 1.0)
+    keep = cm["keep"]
+    assert keep.tp == pytest.approx(90.0)
+    assert keep.fp == pytest.approx(10.0)      # the culls, at weight 1
+    assert keep.precision == pytest.approx(0.9)
+    assert cm["cull"].f1 == 0.0
+    # keep F1 = 2·0.9·1.0/1.9 = 0.947368; cull has no true positives,
+    # so the macro is half of it.
+    assert cm["keep"].f1 == pytest.approx(0.9473684, abs=1e-6)
+    assert _macro(cm) == pytest.approx(0.4736842, abs=1e-6)
