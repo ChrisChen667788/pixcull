@@ -131,8 +131,14 @@ def test_verdict_says_no_when_m3_is_worse():
                 "cull": Confusion("cull", tp=90, fp=10, fn=10)}
     res.vlm = {"keep": Confusion("keep", tp=50, fp=50, fn=50),
                "cull": Confusion("cull", tp=50, fp=50, fn=50)}
-    assert "WORSE" in res.verdict
-    assert "do NOT flip" in res.verdict
+    # v2.54 — the verdict ranks three modes now, so a test that sets only
+    # two is asking about a mode it never configured: an unset `rescue`
+    # scores 0.000 and loses for the wrong reason. Give it a losing hand
+    # on purpose.
+    res.rescue = dict(res.vlm)
+    v = res.verdict
+    assert "KEEP M3 OPT-IN" in v, v
+    assert "noise floor" in v
 
 
 def test_verdict_refuses_to_call_noise_an_improvement():
@@ -143,9 +149,10 @@ def test_verdict_refuses_to_call_noise_an_improvement():
     res.rule = same
     res.vlm = {"keep": Confusion("keep", tp=90, fp=10, fn=10),
                "cull": Confusion("cull", tp=91, fp=10, fn=9)}
+    res.rescue = dict(same)
     v = res.verdict
-    assert "NO MEANINGFUL DIFFERENCE" in v
-    assert "noise" in v
+    assert "KEEP M3 OPT-IN" in v, v
+    assert "noise floor" in v
 
 
 def test_verdict_says_yes_only_on_a_real_margin():
@@ -154,7 +161,9 @@ def test_verdict_says_yes_only_on_a_real_margin():
                 "cull": Confusion("cull", tp=50, fp=50, fn=50)}
     res.vlm = {"keep": Confusion("keep", tp=95, fp=5, fn=5),
                "cull": Confusion("cull", tp=95, fp=5, fn=5)}
-    assert "BETTER" in res.verdict
+    res.rescue = dict(res.rule)
+    v = res.verdict
+    assert "SHIP `vlm_authority=primary`" in v, v
 
 
 def test_total_failure_is_not_reported_as_a_tie():
@@ -174,7 +183,16 @@ def test_errored_rows_do_not_silently_flatter_m3(cfg):
     If a failed call were simply dropped, M3 would be scored only on the
     rows it managed to answer — and a model that errors on everything
     hard would look *better* than the rule stack, which is scored on all
-    of them. The rule tally must still count those rows.
+    of them.
+
+    v2.54 — this used to assert `rule_total > vlm_total`, which made the
+    asymmetry a REQUIREMENT and left the very hole the paragraph above
+    warns about wide open: fewer rows for the model is exactly how it
+    gets scored on an easier subset. Every arm now takes the rule
+    stack's own outcome on an errored row, which is what production
+    does — a model with no verdict does not override anything. So the
+    arms cover identical rows, and a judge that fails on everything ties
+    the rule stack instead of beating it.
     """
     rows = _rows([("a.jpg", 0.9, "", "p"), ("b.jpg", 0.1, "", "p"),
                   ("c.jpg", 0.9, "", "p")])
@@ -186,8 +204,18 @@ def test_errored_rows_do_not_silently_flatter_m3(cfg):
     assert res.n_scored == 2
     rule_total = sum(c.tp + c.fp + c.fn for c in res.rule.values())
     vlm_total = sum(c.tp + c.fp + c.fn for c in res.vlm.values())
-    assert rule_total > vlm_total, (
-        "the rule stack must be judged on the rows M3 could not answer")
+    rescue_total = sum(c.tp + c.fp + c.fn for c in res.rescue.values())
+    assert rule_total == vlm_total == rescue_total, (
+        "the three arms must cover the same rows, or the comparison is "
+        "between different populations")
+
+    # The property the docstring is actually about, asserted directly.
+    allfail = evaluate(rows, labels,
+                       ScriptedJudge({}, errors={"a.jpg", "b.jpg", "c.jpg"}),
+                       cfg)
+    assert allfail.n_errors == 3
+    assert allfail.vlm_macro_f1 == allfail.rule_macro_f1, (
+        "a judge that answers nothing must tie the rule stack, never beat it")
 
 
 def test_unlabelled_rows_are_skipped(cfg):
@@ -282,8 +310,8 @@ def test_report_leads_with_the_verdict(cfg):
     res = evaluate(rows, labels, ScriptedJudge({}), cfg)
     md = render_report(res, labels_path="l.csv")
     head = md.split("\n\n")[1]
-    assert any(w in head for w in ("BETTER", "WORSE", "NO MEANINGFUL",
-                                   "NO DATA")), head
+    assert any(w in head for w in ("SHIP `vlm_authority=", "KEEP M3 OPT-IN",
+                                   "NOT A RANKING", "NO DATA")), head
     assert "need eyes on them" in md or "eyes" in md
 
 
@@ -413,3 +441,78 @@ def test_the_report_says_the_table_is_not_a_ranking(cfg):
     md = render_report(evaluate(rows, labels, ScriptedJudge({}), cfg))
     assert "Read no further for a ranking" in md
     assert "scored against its own answers" in md
+
+
+# ── v2.54: three authority modes, and knowing when not to rank ────────
+
+def _res(rule_f1_src, rescue_src, primary_src, **kw):
+    """Build an EvalResult whose three arms have known outcomes."""
+    from pixcull.scoring.vlm_eval import EvalResult, _tally
+    r = EvalResult(n_scored=100, n_label_disagreements=20, **kw)
+    for truth, pred in rule_f1_src:
+        _tally(r.rule, truth, pred)
+    for truth, pred in rescue_src:
+        _tally(r.rescue, truth, pred)
+    for truth, pred in primary_src:
+        _tally(r.vlm, truth, pred)
+    return r
+
+
+_PERFECT = [("keep", "keep")] * 10 + [("cull", "cull")] * 10
+_AWFUL = [("keep", "cull")] * 10 + [("cull", "keep")] * 10
+
+
+def test_a_disagreement_sample_refuses_to_rank():
+    """The second shape of the circularity bug, and the more convincing one.
+
+    Rows chosen BECAUSE two systems disagreed measure the rule stack
+    only where it is weakest. Its score there is a floor, not an
+    estimate, and the model consequently looks great. The first version
+    of this defect (labels copied from the rule) pointed the other way
+    and cost ¥8 to discover; believing this one ships the opposite
+    mistake with more confidence.
+    """
+    res = _res(_AWFUL, _PERFECT, _PERFECT, selection="disagreements")
+    assert res.rescue_macro_f1 > res.rule_macro_f1        # model "wins"
+    v = res.verdict
+    assert "NOT A RANKING" in v, v
+    assert "RANDOM" in v.upper(), "does not say what sample would work"
+    assert "SHIP" not in v, "recommended a default off a rigged sample"
+
+
+def test_a_census_is_allowed_to_rank():
+    res = _res(_AWFUL, _PERFECT, _AWFUL, selection="all")
+    assert res.best_mode == "rescue"
+    assert "SHIP `vlm_authority=rescue`" in res.verdict
+
+
+def test_a_mode_that_only_ties_is_not_shipped():
+    """A cloud call that buys nothing is worse than no cloud call.
+
+    It costs money, adds a dependency that can fail, and contradicts
+    every claim in the README about what the network is for.
+    """
+    res = _res(_PERFECT, _PERFECT, _PERFECT, selection="all")
+    assert res.best_mode == "off"
+    assert "KEEP M3 OPT-IN" in res.verdict
+
+
+def test_missing_provenance_is_treated_as_biased(tmp_path):
+    """Verdict files written before v2.54 carry no `selection`.
+
+    Every batch built before it was disagreement-selected, and the safe
+    reading of an unknown provenance is the one that refuses to rank.
+    """
+    import json as _json
+
+    from pixcull.report.review_sheet import load_selection
+
+    old = tmp_path / "old.json"
+    old.write_text(_json.dumps({"verdicts": {"a.jpg": "keep"}}))
+    assert load_selection(old) == "disagreements"
+
+    new = tmp_path / "new.json"
+    new.write_text(_json.dumps({"selection": "random", "verdicts": {}}))
+    assert load_selection(new) == "random"
+
+    assert load_selection(tmp_path / "nope.json") == "disagreements"

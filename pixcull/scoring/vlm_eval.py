@@ -107,6 +107,22 @@ class EvalResult:
     completion_tokens: int = 0
     rule: dict[str, Confusion] = field(default_factory=dict)
     vlm: dict[str, Confusion] = field(default_factory=dict)
+    #: v2.54 — the third arm, and the reason this eval stopped being a
+    #: yes/no question. `primary` lets M3 overrule the rule stack in both
+    #: directions; `rescue` lets it only promote a frame the rules
+    #: condemned, never condemn one they kept. The owner's 51 reviewed
+    #: frames say those two powers have wildly different hit rates, so
+    #: measuring only `primary` was measuring a mode nobody should ship.
+    rescue: dict[str, Confusion] = field(default_factory=dict)
+    #: v2.54 — HOW the evaluated rows were chosen. "all" is a census;
+    #: "disagreements" means the rows were selected precisely where the
+    #: two systems differed, which is a sample drawn where the rule stack
+    #: is most likely to be wrong. A ranking computed on it flatters the
+    #: model for the same structural reason the original label set
+    #: flattered the rule. Recorded rather than remembered, because the
+    #: first version of this bug cost ¥8 and half a day and this one
+    #: produces a *more* convincing wrong answer.
+    selection: str = "all"
     disagreements: list[Disagreement] = field(default_factory=list)
     by_scene: dict[str, dict[str, float]] = field(default_factory=dict)
 
@@ -117,6 +133,27 @@ class EvalResult:
     @property
     def vlm_macro_f1(self) -> float:
         return _macro(self.vlm)
+
+    @property
+    def rescue_macro_f1(self) -> float:
+        return _macro(self.rescue)
+
+    @property
+    def best_mode(self) -> str:
+        """Which `vlm_authority` the measurement actually supports.
+
+        A tie goes to `off`: shipping a cloud call that buys nothing is
+        worse than not shipping it, because it costs money and adds a
+        dependency that can fail.
+        """
+        scores = {"off": self.rule_macro_f1,
+                  "rescue": self.rescue_macro_f1,
+                  "primary": self.vlm_macro_f1}
+        best = max(scores, key=lambda k: scores[k])
+        # 2 points is the noise floor this module already uses.
+        if scores[best] - scores["off"] < 0.02:
+            return "off"
+        return best
 
     @property
     def verdict(self) -> str:
@@ -148,16 +185,38 @@ class EvalResult:
                     "anything different scores worse. This measures "
                     "agreement-with-the-rule, not correctness. Label a set "
                     "where you overruled the model, then re-run.")
-        delta = (self.vlm_macro_f1 - self.rule_macro_f1) * 100
-        if delta >= 2.0:
-            return (f"M3 BETTER by {delta:+.1f} macro-F1 points — the "
-                    f"positioning rewrite is justified.")
-        if delta <= -2.0:
-            return (f"M3 WORSE by {delta:+.1f} macro-F1 points — do NOT "
-                    f"flip the default. Keep M3 opt-in.")
-        return (f"NO MEANINGFUL DIFFERENCE ({delta:+.1f} macro-F1 points). "
-                f"On {self.n_scored} rows this is noise. Flipping the "
-                f"default buys nothing and costs the local-first claim.")
+        # v2.54 — the question is no longer "M3 or not" but "which
+        # authority mode". Reporting only `primary` answered a question
+        # the product does not have to ask: a model can be bad at
+        # overruling a keep and still be excellent at rescuing a cull,
+        # and those are separate switches.
+        d_pri = (self.vlm_macro_f1 - self.rule_macro_f1) * 100
+        d_res = (self.rescue_macro_f1 - self.rule_macro_f1) * 100
+        # A sample drawn where the two systems disagreed cannot rank
+        # them. Every row in it is a row the rule stack got wrong often
+        # enough to argue about; the rule's score there is a floor, not
+        # an estimate. This is the same defect as the circular label set,
+        # wearing selection bias instead of label leakage — and it points
+        # the other way, so believing it ships the opposite mistake.
+        if self.selection == "disagreements":
+            return (f"NOT A RANKING — these rows were selected because the "
+                    f"two systems disagreed, so the rule stack is measured "
+                    f"only where it is weakest (primary {d_pri:+.1f}, "
+                    f"rescue {d_res:+.1f}). Label a RANDOM sample to get a "
+                    f"number that can decide the default.")
+        best = self.best_mode
+        if best == "off":
+            return (f"KEEP M3 OPT-IN — neither mode clears the noise floor "
+                    f"(primary {d_pri:+.1f}, rescue {d_res:+.1f} macro-F1 "
+                    f"points on {self.n_scored} rows).")
+        if best == "rescue":
+            return (f"SHIP `vlm_authority=rescue` — rescue {d_res:+.1f} "
+                    f"macro-F1 points, while primary is {d_pri:+.1f}. M3 "
+                    f"earns the power to overturn a cull, not the power to "
+                    f"overturn a keep.")
+        return (f"SHIP `vlm_authority=primary` — {d_pri:+.1f} macro-F1 "
+                f"points (rescue {d_res:+.1f}). M3 is better than the rule "
+                f"stack in both directions.")
 
 
 def _macro(cm: dict[str, Confusion]) -> float:
@@ -220,17 +279,29 @@ def evaluate(
     limit: int | None = None,
     progress: Callable[[int, int, str], None] | None = None,
     workers: int = 8,
+    only: set[str] | None = None,
+    selection: str = "all",
 ) -> EvalResult:
-    """Score every labelled row twice — rule stack, then M3 — and compare.
+    """Score every labelled row three ways — off / rescue / primary.
 
     ``rows`` are score records (a run's ``scores.csv``, or the label
     sheet itself when it carries the detector metrics).  Rows without a
     human label are skipped: an unlabelled row cannot make anyone right
     or wrong.
+
+    ``only`` restricts the run to a set of filenames.  v2.54 — this
+    exists because the circularity that invalidated the first
+    measurement does not disappear when *some* labels become
+    independent, it only shrinks.  On the owner's set, 51 of 408 rows
+    carry a reviewed label and the remaining 357 still hold the rule
+    stack's own decision; every row a model changes there is scored as
+    an error BY CONSTRUCTION.  Passing the reviewed filenames gives the
+    one comparison on this data that is not partly rigged.
     """
-    res = EvalResult()
+    res = EvalResult(selection=selection)
     todo = [r for r in rows
-            if (r.get("filename") or "").strip() in labels]
+            if (r.get("filename") or "").strip() in labels
+            and (only is None or (r.get("filename") or "").strip() in only)]
     if limit:
         todo = todo[:limit]
     res.n_rows = len(todo)
@@ -299,6 +370,13 @@ def evaluate(
             key = why.split(" — ")[0].split(":")[0].strip()[:60]
             res.error_reasons[key] = res.error_reasons.get(key, 0) + 1
             _tally(res.rule, truth, rule_dec.value)
+            # A row with no verdict is not a row the model got wrong — in
+            # production every authority mode falls back to the rule stack
+            # here. Tallying rule into `rule` alone gave the VLM arms fewer
+            # rows than the rule arm and quietly compared two different
+            # populations; feed all three the same outcome instead.
+            _tally(res.vlm, truth, rule_dec.value)
+            _tally(res.rescue, truth, rule_dec.value)
             continue
 
         usage = getattr(verdict, "usage", None)
@@ -313,6 +391,11 @@ def evaluate(
             scene=scene, vertical=vertical,
             vlm_label=getattr(verdict, "overall_label", None),
             vlm_axes=axes, vlm_authority="primary")
+        rescue_dec, _ = decide(
+            final, flags, config, strictness,  # type: ignore[arg-type]
+            scene=scene, vertical=vertical,
+            vlm_label=getattr(verdict, "overall_label", None),
+            vlm_axes=axes, vlm_authority="rescue")
 
         res.n_scored += 1
         if any("vlm_incoherent" in r for r in reasons):
@@ -325,6 +408,7 @@ def evaluate(
             res.n_label_disagreements += 1
         _tally(res.rule, truth, rule_dec.value)
         _tally(res.vlm, truth, vlm_dec.value)
+        _tally(res.rescue, truth, rescue_dec.value)
         scene_hits.setdefault(scene or "—", []).append(
             (truth, rule_dec.value, vlm_dec.value))
 
@@ -387,17 +471,22 @@ def render_report(res: EvalResult, *, labels_path: str = "",
                   "it was scored against its own answers. The M3 column is "
                   "a disagreement rate, not an error rate.", ""]
     lines += ["", "## Agreement with the human", "",
-              "| | rule P | rule R | rule F1 | M3 P | M3 R | M3 F1 |",
-              "|---|---|---|---|---|---|---|"]
+              "Three authority modes on the same rows. `off` is the rule "
+              "stack alone; `rescue` lets M3 overturn a cull but never a "
+              "keep; `primary` lets it overturn either.", "",
+              "| | off (rule) | rescue | primary |",
+              "|---|---|---|---|"]
     for label in _SCORED:
         r = res.rule.get(label, Confusion(label))
+        s = res.rescue.get(label, Confusion(label))
         v = res.vlm.get(label, Confusion(label))
-        lines.append(
-            f"| **{label}** | {r.precision:.3f} | {r.recall:.3f} | "
-            f"{r.f1:.3f} | {v.precision:.3f} | {v.recall:.3f} | {v.f1:.3f} |")
+        lines.append(f"| **{label}** F1 | {r.f1:.3f} | {s.f1:.3f} | "
+                     f"{v.f1:.3f} |")
     lines.append(
-        f"| **macro** | | | **{res.rule_macro_f1:.3f}** | | | "
-        f"**{res.vlm_macro_f1:.3f}** |")
+        f"| **macro** | **{res.rule_macro_f1:.3f}** | "
+        f"**{res.rescue_macro_f1:.3f}** | **{res.vlm_macro_f1:.3f}** |")
+    lines.append("")
+    lines.append(f"**Supported default: `vlm_authority={res.best_mode}`**")
 
     if res.error_reasons:
         lines += ["", f"## Why {res.n_errors} rows produced nothing", "",

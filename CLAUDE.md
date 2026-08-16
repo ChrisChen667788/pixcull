@@ -54,10 +54,19 @@ script now strips `README.md`/`*.md`/`docs/` LFS rules and pins
 `README.md text` before each upload.  Never use `--github-links` unless
 you specifically want CDN-linked images instead of ModelScope-hosted.
 
-New screenshots: next free number is **24** (01–23 used; 17 =
+New screenshots: next free number is **25** (01–24 used; 17 =
 attribution-heatmap, 18 = video-review, 19 = video-grade, 20 =
 scenes-navigator, 21 = verdict-glassbox, 22 = transparency-tools, 23 =
-video-timeline).  **18 / 19 / 23 are shot from the owner's own GoPro
+video-timeline, 24 = review-sheet).
+
+**24 is shot from the owner's own reviewed frames** (owner-authorised
+2026-08-16, "用我刚标注的这组真实照片截图…有人像人脸的那几张就不要了").
+Three face-free frames, hand-checked at full resolution — **not** by
+trusting `face_count`.  That column said 0 on a frame containing a
+plainly visible face: a woman lying on snow in a 5280×3956 aerial, far
+too small for the detector but perfectly resolvable to a reader.  A
+300 px contact sheet missed her too.  **Screen candidates by eye at
+≥1400 px; `face_count == 0` is not evidence of no face.**  **18 / 19 / 23 are shot from the owner's own GoPro
 footage** (owner-authorised 2026-07-30): winter sledding, subject filmed
 from behind throughout, no resolvable faces, GPMF carries no GPS
 samples, and the working copy is re-encoded with `-map_metadata -1`

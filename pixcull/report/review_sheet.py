@@ -154,6 +154,7 @@ border-radius:8px;padding:14px;display:none;cursor:copy}
 # or a stray ⌘W must not cost them the pass they already did.
 _JS = """
 const N=%(n)d, KEY='pixcull-review-%(slug)s', FILE='%(slug)s-review.json';
+const SELECTION=%(selection)s;
 const R=JSON.parse(localStorage.getItem(KEY)||'{}');
 function paint(i){
   const ok=R[i], c=document.querySelectorAll('.card')[i], m=document.getElementById('mk'+i);
@@ -168,7 +169,13 @@ function mark(i,ok){
 }
 function payload(){
   const cards=document.querySelectorAll('.card');
-  const out={reviewed_at:new Date().toISOString(),verdicts:{}};
+  // `selection` rides along because a verdict file is read months later
+  // by a program deciding whether these rows can rank two systems. Rows
+  // picked BECAUSE the systems disagreed cannot: they sample the rule
+  // stack only where it is weakest. Without this field the reader has to
+  // guess, and the flattering guess is the wrong one.
+  const out={reviewed_at:new Date().toISOString(),
+             selection:SELECTION,verdicts:{}};
   cards.forEach((c,i)=>{ if(i in R) out.verdicts[c.dataset.fn]=R[i]?c.dataset.yes:c.dataset.no; });
   return out;
 }
@@ -214,13 +221,15 @@ window.addEventListener('DOMContentLoaded',()=>{
 
 
 def render(items: Sequence[dict[str, Any]], *, title: str, lede: str,
-           slug: str, yes_key: str = "b", no_key: str = "a") -> str:
+           slug: str, yes_key: str = "b", no_key: str = "a",
+           selection: str = "disagreements") -> str:
     """Build the whole page as one self-contained HTML string."""
     yes = items[0].get("yes", "B 对了") if items else "B 对了"
     no = items[0].get("no", "A 对了") if items else "A 对了"
     cards = "".join(_card(i, it) for i, it in enumerate(items))
     js = _JS % {"n": len(items), "slug": slug,
-                "yes_key": yes_key, "no_key": no_key}
+                "yes_key": yes_key, "no_key": no_key,
+                "selection": json.dumps(selection)}
     return (f'<!doctype html><html lang="zh"><meta charset="utf-8">'
             f'<title>{html.escape(title)}</title><style>{_CSS}</style>'
             f'<header><h1>{html.escape(title)}</h1>'
@@ -297,3 +306,20 @@ def stratify(items: Sequence[dict[str, Any]], limit: int, *,
             if len(chosen) >= limit:
                 break
     return chosen
+
+
+def load_selection(path: Path) -> str:
+    """How the frames in a saved verdict file were chosen.
+
+    Files written before v2.54 carry no such field.  They are treated as
+    ``"disagreements"``, because that is what every batch built so far
+    actually was — and because the safe default when provenance is
+    missing is the one that refuses to rank, not the one that produces a
+    flattering number.
+    """
+    try:
+        d = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return "disagreements"
+    sel = d.get("selection") if isinstance(d, dict) else None
+    return str(sel) if sel else "disagreements"

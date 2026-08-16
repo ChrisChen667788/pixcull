@@ -1062,9 +1062,15 @@ def m3_eval(
     # LAST --review: passing both review passes threw the first one's
     # judgements away and reported a smaller, quieter number as if it were
     # the whole evidence base.
+    reviewed_fns: set[str] = set()
+    # Biased unless every pass says otherwise — see load_selection().
+    review_selection = "all"
     if review:
-        from pixcull.report.review_sheet import load_verdicts
+        from pixcull.report.review_sheet import load_selection, load_verdicts
         applied, seen = 0, {}
+        sels = {load_selection(s) for s in review}
+        review_selection = ("random" if sels == {"random"}
+                            else "disagreements")
         for src in review:
             for fn, verdict in load_verdicts(src).items():
                 # The same frame judged twice, differently, is the reviewer
@@ -1076,6 +1082,11 @@ def m3_eval(
                         f"{seen[fn][0].name} says {seen[fn][1]}, "
                         f"{src.name} says {verdict}; using {verdict}")
                 seen[fn] = (src, verdict)
+                if fn in lab:
+                    # Independent whether or not it CHANGED the label: a
+                    # frame you looked at and confirmed is still your
+                    # judgement, not the rule stack's echo.
+                    reviewed_fns.add(fn)
                 if fn in lab and lab[fn].get("manual_label") != verdict:
                     lab[fn] = {**lab[fn], "manual_label": verdict}
                     applied += 1
@@ -1142,19 +1153,55 @@ def m3_eval(
     out.write_text(render_report(res, labels_path=str(labels.name),
                                  model=MODEL), encoding="utf-8")
 
-    table = Table(title="M3 vs rule stack")
+    table = Table(title="vlm_authority — three modes, same rows")
     table.add_column("", style="bold")
-    table.add_column("rule", justify="right")
-    table.add_column("M3", justify="right")
+    table.add_column("off (rule)", justify="right")
+    table.add_column("rescue", justify="right")
+    table.add_column("primary", justify="right")
     for label in ("keep", "cull"):
-        r = res.rule.get(label)
-        v = res.vlm.get(label)
+        r, s, v = (res.rule.get(label), res.rescue.get(label),
+                   res.vlm.get(label))
         table.add_row(f"{label} F1", f"{r.f1:.3f}" if r else "—",
+                      f"{s.f1:.3f}" if s else "—",
                       f"{v.f1:.3f}" if v else "—")
     table.add_row("macro F1", f"{res.rule_macro_f1:.3f}",
-                  f"{res.vlm_macro_f1:.3f}")
+                  f"{res.rescue_macro_f1:.3f}", f"{res.vlm_macro_f1:.3f}")
     console.print(table)
     console.print(f"\n[bold]{res.verdict}[/bold]\n")
+
+    # v2.54 — the same three modes on the rows the owner actually judged.
+    #
+    # The full-set table above is still ~87% circular: only the reviewed
+    # filenames carry a label that can disagree with the rule stack, and
+    # on every other row the rule's own decision IS the answer key, so a
+    # model is scored as wrong for changing anything. That is not a
+    # rounding error — it is the difference between "rescue loses" and
+    # "rescue wins", and reporting only the first would have sent the
+    # product the wrong way on the strength of a rigged denominator.
+    if reviewed_fns:
+        sub = evaluate(rows, lab, judge, PixCullConfig.load(),
+                       vertical=vertical, only=reviewed_fns,
+                       selection=review_selection)
+        t2 = Table(title=f"same modes, {sub.n_scored} independently "
+                         f"reviewed rows only")
+        t2.add_column("", style="bold")
+        for c in ("off (rule)", "rescue", "primary"):
+            t2.add_column(c, justify="right")
+        for label in ("keep", "cull"):
+            r, s, v = (sub.rule.get(label), sub.rescue.get(label),
+                       sub.vlm.get(label))
+            t2.add_row(f"{label} F1", f"{r.f1:.3f}" if r else "—",
+                       f"{s.f1:.3f}" if s else "—",
+                       f"{v.f1:.3f}" if v else "—")
+        t2.add_row("macro F1", f"{sub.rule_macro_f1:.3f}",
+                   f"{sub.rescue_macro_f1:.3f}", f"{sub.vlm_macro_f1:.3f}")
+        console.print(t2)
+        console.print(
+            f"[dim]{sub.n_scored} of {res.n_scored} rows carry a label you "
+            f"formed independently. On the other "
+            f"{res.n_scored - sub.n_scored} the rule stack's own decision "
+            f"is the answer key, so any change scores as an error.[/dim]")
+        console.print(f"\n[bold]{sub.verdict}[/bold]\n")
     console.print(
         f"[yellow]{res.n_overrides} hard-cull override(s) need your eyes[/] — "
         f"evidence fusion stands or falls on whether they were right.")
@@ -1170,7 +1217,12 @@ def m3_review(
                              help="'overrides' — frames M3 rescued from a "
                                   "hard cull (the highest-signal set) | "
                                   "'disagreements' — every row the two "
-                                  "systems decided differently."),
+                                  "systems decided differently | 'random' — "
+                                  "an unbiased sample of ALL rows, agreement "
+                                  "included. Only 'random' produces labels "
+                                  "that can rank the two systems; the other "
+                                  "two sample the rule stack exactly where "
+                                  "it is weakest."),
     limit: int = typer.Option(60, "--limit",
                               help="Cap the page. 60 is about as many as "
                                    "anyone reviews carefully in one sitting."),
@@ -1240,7 +1292,12 @@ def m3_review(
         rescued = [x for x in reasons if "vlm_kept_despite" in x]
         if only == "overrides" and not rescued:
             continue
-        if only != "overrides" and rule_dec.value == m3_dec.value:
+        # 'random' keeps agreements on purpose: a sample drawn only from
+        # disagreements measures the rule stack solely on the rows it is
+        # arguing about, which is a floor rather than an estimate. The
+        # rows where both systems already agree are most of the corpus
+        # and they are what makes the comparison honest.
+        if only == "disagreements" and rule_dec.value == m3_dec.value:
             continue
         items.append({
             "fn": fn, "path": p, "scene": scene, "axes": axes,
@@ -1262,7 +1319,16 @@ def m3_review(
             "no": f"规则对了 · {rule_dec.value}",
         })
 
-    if items and len(items) > limit:
+    if only == "random" and items:
+        # Deterministic and seedless: a stable hash of the filename, so
+        # the same corpus always yields the same sample and a reviewer can
+        # resume a batch. Math.random / random.random would silently pick
+        # a different 40 on every rebuild.
+        import hashlib as _h
+        items.sort(key=lambda it: _h.sha1(
+            it["fn"].encode("utf-8")).hexdigest())
+        items = items[:limit]
+    elif items and len(items) > limit:
         from pixcull.report.review_sheet import stratify
         # keep->cull first (destroying a keeper), then maybe->cull.
         items = stratify(items, limit,
@@ -1276,9 +1342,12 @@ def m3_review(
 
     dest = write(
         items, Path(str(out)).expanduser(),
-        title=f"M3 推翻硬性剔除 · {len(items)} 张待复核"
-              if only == "overrides" else f"M3 与规则分歧 · {len(items)} 张",
-        slug="m3-overrides" if only == "overrides" else "m3-disagreements",
+        title={"overrides": f"M3 推翻硬性剔除 · {len(items)} 张待复核",
+               "random": f"随机抽样复核 · {len(items)} 张(含两边一致的)"}
+              .get(only, f"M3 与规则分歧 · {len(items)} 张"),
+        slug={"overrides": "m3-overrides",
+              "random": "m3-random"}.get(only, "m3-disagreements"),
+        selection="random" if only == "random" else "disagreements",
         yes_key="keep", no_key="cull",
         lede="这些照片本机检测器判定必须剔除,但 M3 <b>在 prompt 里已经读到了"
              "那些实测值</b>,仍然选择保留。<br>「证据融合」成立与否就压在这批"

@@ -963,20 +963,49 @@ a list of `{photo, what A said, what B said, why}` — so a future
 comparison between rule versions, or between two models, reuses it
 rather than reinventing it.
 
+![The review sheet — three frames where MiniMax M3 and the rule stack
+disagreed, each with the model's own reasoning and its six axis scores;
+two already judged, one still open](docs/screenshots/24-review-sheet.png)
+
 ### What it found
 
-On the first pass, the owner reviewed 18 frames the rule stack had
-hard-culled and MiniMax M3 kept, and **agreed with M3 on 17 of them**.
-That is a strong, verified result about one specific behaviour: M3 is
-very good at rescuing a frame the detectors wrongly discard, because it
-was handed the blink count and the sharpness variance and chose to
-overrule them anyway.
+Two passes, **51 frames** judged by the photographer against the model.
 
-It is **not** a result about judging in general — across the whole
-measured set M3 still scores well below the rule stack. So the evidence
-buys M3 exactly one power and no more, and that is what
+**Pass 1 — the rescues.** 18 frames the rule stack hard-culled and M3
+kept: the owner **agreed with M3 on 17**. M3 is very good at rescuing a
+frame the detectors wrongly discard, because it was handed the blink
+count and the sharpness variance and chose to overrule them anyway.
+
+**Pass 2 — everything else.** 40 frames sampled across the remaining
+disagreements, with all 19 of the highest-stakes ones taken whole. The
+result splits cleanly by direction:
+
+| M3 wants to… | it was right |
+|---|---|
+| promote a frame the rules condemned (`cull →` keep/maybe) | **7 of 7** |
+| demote a `maybe` to `cull` | **3 of 3** |
+| soften a `keep` to `maybe` | 6 of 11 |
+| **cull a frame the rules kept** | **8 of 19** |
+
+**M3 is reliable at rescuing and unreliable at condemning.** On the one
+move that destroys a photograph — culling a keeper — it is worse than a
+coin flip. So the evidence buys exactly one power, and that is what
 `--vlm-authority rescue` grants: it may overturn a hard cull, and it may
 not touch anything else.
+
+### What it does not yet establish
+
+Both passes sampled **where the two systems disagreed**, which measures
+the rule stack only on the rows it is arguing about. On that sample M3
+looks far better than it does on the full set; on the full set 87% of the
+labels are still the rule stack's own decisions, so any change scores as
+an error. **Neither number can pick a default** — one is biased toward
+the rule, the other toward the model, and `pixcull m3 eval` now says so
+rather than printing the flattering one.
+
+`pixcull m3 review --only random` builds the sample that can: rows drawn
+without regard to whether the systems agree. Until that is labelled,
+`vlm_authority` stays `off` by default.
 
 ## Screenshots
 
