@@ -15,6 +15,13 @@ this repo.  Read it before each session.
    (must be green; **5 skips expected** — 2 face-fixture + 3 zeroconf).
    Locally also `--ignore` `test_lightbox_stability.py` and
    `test_visual_smoke.py` (headless capture is killed by this host).
+   **Stop any `pixcull m3 open` / `serve` first** (`pkill -f 'pixcull m3
+   open'`).  A review server left running costs the suite enough headroom
+   that `test_clip_cache_freeride` and `test_e2e_smoke` fail with
+   `Cannot send a request, as the client has been closed` and a CLIP
+   offline-load error — which reads as a real CLIP regression and is
+   not one.  Verified 2026-08-16: 2 failed with it up, 1990 passed with
+   it stopped, same commit.
    **The ASR real-engine lane needs its weights pointed at:** export
    `MODELSCOPE_CACHE=/Volumes/<drive>/pixcull-models/modelscope` (and
    `HF_HOME=…/hf` for MLX-Whisper) or `tests/test_transcribe_real_engine.py`

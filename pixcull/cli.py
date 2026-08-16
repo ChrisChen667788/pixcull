@@ -1496,6 +1496,24 @@ def _review_server(page: Path, port: int):
     return http.server.ThreadingHTTPServer(("127.0.0.1", port), _Handler)
 
 
+def _page_title_on(port: int) -> str:
+    """The <title> of whatever already holds the port, for the error.
+
+    Naming the squatter is the whole value: "已判完的那批" turns a
+    baffling collision into an obvious one.
+    """
+    import re
+    import urllib.request
+    try:
+        with urllib.request.urlopen(
+                f"http://127.0.0.1:{port}/", timeout=2) as r:
+            head = r.read(4096).decode("utf-8", "replace")
+    except OSError:
+        return ""
+    m = re.search(r"<title>([^<]{1,120})</title>", head)
+    return f"“{m.group(1).strip()}”" if m else ""
+
+
 def _serve_review_page(page: Path, port: int, *, open_browser: bool) -> None:
     """Serve exactly one HTML file on loopback until Ctrl-C."""
     import webbrowser
@@ -1506,7 +1524,33 @@ def _serve_review_page(page: Path, port: int, *, open_browser: bool) -> None:
                       f"`pixcull m3 review`.")
         raise typer.Exit(code=1)
 
-    srv = _review_server(page, port)
+    try:
+        srv = _review_server(page, port)
+    except OSError as exc:
+        import errno as _errno
+        if exc.errno != _errno.EADDRINUSE:
+            raise
+        # v2.54.3 — the fixed port makes this collision routine: finish a
+        # batch, leave the server up, build the next batch, and the new
+        # one cannot bind. Python's own message is `[Errno 48] Address
+        # already in use` under forty lines of traceback, which names
+        # neither the cause nor the fix.
+        #
+        # The dangerous outcome is not the crash. It is opening the URL
+        # anyway and being served the PREVIOUS batch — already judged,
+        # visually identical in structure — and reading that as "the new
+        # sample did not build".
+        console.print(f"[red]Port {port} is already serving "
+                      f"{_page_title_on(port) or 'another page'}.[/red]")
+        console.print(
+            "[dim]That is almost certainly an earlier `pixcull m3 open` "
+            "still running — stop it with Ctrl-C in its terminal, or:[/dim]")
+        console.print(f"[dim]    pkill -f 'pixcull m3 open'[/dim]")
+        console.print(
+            f"[dim]`--port` works too, but a different port is a different "
+            f"origin, and localStorage is per-origin: verdicts you record "
+            f"there will not appear when you come back to {port}.[/dim]")
+        raise typer.Exit(code=1) from None
     url = f"http://127.0.0.1:{srv.server_address[1]}/"
     console.print(f"[green]{page.name}[/green] → {url}")
     console.print("[dim]loopback only; judge, then 保存结果. Ctrl-C when "

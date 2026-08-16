@@ -385,3 +385,49 @@ def test_no_card_can_record_the_same_verdict_either_way(photo):
     assert not bad, (
         f"{len(bad)} card(s) record the same verdict for both buttons: "
         f"{bad} — the reviewer cannot disagree with anything")
+
+
+# ── v2.54.3: the fixed port collides, routinely ───────────────────────
+
+def test_a_busy_port_names_the_squatter_instead_of_a_traceback(tmp_path):
+    """Finish a batch, leave the server up, build the next one — collision.
+
+    The fixed port is deliberate (localStorage is per-origin), so this
+    is the normal path, not an edge case. Python's own answer is
+    `[Errno 48] Address already in use` under forty lines of traceback,
+    naming neither the cause nor the fix.
+
+    The dangerous outcome is not the crash: it is opening the URL anyway
+    and being served the PREVIOUS batch — already judged, structurally
+    identical — and concluding the new sample failed to build.
+    """
+    import threading
+
+    import typer
+
+    from pixcull.cli import _page_title_on, _review_server, _serve_review_page
+
+    held = tmp_path / "old.html"
+    held.write_text("<title>随机抽样复核 · 40 张</title><p>old",
+                    encoding="utf-8")
+    srv = _review_server(held, 0)
+    port = srv.server_address[1]
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        assert "随机抽样复核" in _page_title_on(port), (
+            "cannot name what is on the port, so the error cannot either")
+
+        fresh = tmp_path / "new.html"
+        fresh.write_text("<title>new</title>", encoding="utf-8")
+        with pytest.raises(typer.Exit) as e:
+            _serve_review_page(fresh, port, open_browser=False)
+        assert e.value.exit_code == 1
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+
+def test_title_probe_is_quiet_on_a_dead_port():
+    """The error path must not raise its own error."""
+    from pixcull.cli import _page_title_on
+    assert _page_title_on(9) == ""
