@@ -361,3 +361,27 @@ def test_review_port_is_fixed_so_the_origin_is_stable():
     got = getattr(default, "default", default)
     assert got == REVIEW_PORT, (
         f"`m3 open` defaults to port {got}, not the fixed {REVIEW_PORT}")
+
+
+def test_no_card_can_record_the_same_verdict_either_way(photo):
+    """Two buttons that write the same value ask nothing.
+
+    The `random` batch is ~40% rows where both systems already agree —
+    which is precisely what makes it an unbiased sample. Rendered with
+    the disagreement question ("which was right?") those cards offer one
+    answer twice, so the reviewer cannot disagree and the row silently
+    echoes the rule stack back into the label set. That is the
+    circularity the random sample exists to escape, rebuilt inside it.
+    """
+    items = _items(photo, 2)
+    items[0].update({"a": "keep", "b": "keep",
+                     "yes_value": "keep", "no_value": "cull",
+                     "yes": "留下 · keep", "no": "删掉 · cull"})
+    page = render(items, title="t", lede="l", slug="s")
+    import re
+    pairs = re.findall(r'data-yes="(\w+)"\s+data-no="(\w+)"', page)
+    assert pairs, "no cards rendered"
+    bad = [p for p in pairs if p[0] == p[1]]
+    assert not bad, (
+        f"{len(bad)} card(s) record the same verdict for both buttons: "
+        f"{bad} — the reviewer cannot disagree with anything")

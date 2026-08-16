@@ -1318,6 +1318,22 @@ def m3_review(
             "yes": f"M3 对了 · {m3_dec.value}",
             "no": f"规则对了 · {rule_dec.value}",
         })
+        # An agreement row cannot ask "which one was right" — there is
+        # only one answer on offer, so BOTH buttons would record the same
+        # verdict and the reviewer could not disagree with anything. The
+        # `random` batch is 40% agreements by design (that is what makes
+        # it unbiased), so left alone those rows would echo the rule stack
+        # straight back into the label set: the exact circularity this
+        # sample exists to escape, rebuilt inside it.
+        #
+        # So the question changes with the row. Keep/cull is also the
+        # axis the F1 actually scores; `maybe` is excluded from it.
+        if rule_dec.value == m3_dec.value:
+            items[-1].update({
+                "yes_value": "keep", "no_value": "cull",
+                "yes": "留下 · keep", "no": "删掉 · cull",
+                "note": f"两边都判 {rule_dec.value}",
+            })
 
     if only == "random" and items:
         # Deterministic and seedless: a stable hash of the filename, so
