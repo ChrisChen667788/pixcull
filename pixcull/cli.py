@@ -1168,6 +1168,15 @@ def m3_eval(
     table.add_row("macro F1", f"{res.rule_macro_f1:.3f}",
                   f"{res.rescue_macro_f1:.3f}", f"{res.vlm_macro_f1:.3f}")
     console.print(table)
+    # v2.56.1 — on EVERY path, not just the `--review` one.
+    #
+    # v2.55 gated the verdict on a bootstrap interval, then wired
+    # compute_cis() only into the reviewed-subset branch. A run driven by
+    # `--labels blind.json` therefore printed "SHIP `vlm_authority=
+    # rescue`" with no interval computed at all — the exact contradiction
+    # v2.55 existed to remove, still live one branch over. Both of that
+    # run's intervals spanned zero.
+    _print_cis(res)
     console.print(f"\n[bold]{res.verdict}[/bold]\n")
 
     # v2.54 — the same three modes on the rows the owner actually judged.
@@ -1244,16 +1253,7 @@ def m3_eval(
         # (circular labels, disagreement-selected sample, no cull ground
         # truth). Each time it was one confident number that said nothing
         # about its own stability. Resample before believing it.
-        from pixcull.scoring.vlm_eval import bootstrap_delta
-        sub.compute_cis()
-        for arm, name in (("vlm", "primary"), ("rescue", "rescue")):
-            pt, lo, hi = bootstrap_delta(sub, arm)
-            spans = lo <= 0 <= hi
-            console.print(
-                f"[{'yellow' if spans else 'green'}]{name:8s} "
-                f"{pt:+6.1f} pts   95% CI [{lo:+.1f}, {hi:+.1f}]"
-                f"{'  ← spans 0: not distinguishable from no change' if spans else ''}"
-                f"[/]")
+        _print_cis(sub)
         console.print(f"\n[bold]{sub.verdict}[/bold]\n")
     console.print(
         f"[yellow]{res.n_overrides} hard-cull override(s) need your eyes[/] — "
@@ -1508,6 +1508,20 @@ def _review_server(page: Path, port: int):
             pass
 
     return http.server.ThreadingHTTPServer(("127.0.0.1", port), _Handler)
+
+
+def _print_cis(res) -> None:
+    """Resample, print, and — via compute_cis — let the verdict use it."""
+    from pixcull.scoring.vlm_eval import bootstrap_delta
+    res.compute_cis()
+    for arm, name in (("vlm", "primary"), ("rescue", "rescue")):
+        pt, lo, hi = bootstrap_delta(res, arm)
+        spans = lo <= 0 <= hi
+        console.print(
+            f"[{'yellow' if spans else 'green'}]{name:8s} {pt:+6.1f} pts"
+            f"   95% CI [{lo:+.1f}, {hi:+.1f}]"
+            + ("  ← spans 0: not distinguishable from no change"
+               if spans else "") + "[/]")
 
 
 def _page_title_on(port: int) -> str:

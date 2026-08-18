@@ -332,7 +332,14 @@ def test_report_leads_with_the_verdict(cfg):
     md = render_report(res, labels_path="l.csv")
     head = md.split("\n\n")[1]
     assert any(w in head for w in ("SHIP `vlm_authority=", "KEEP M3 OPT-IN",
-                                   "NOT A RANKING", "NO DATA")), head
+                                   "NOT A RANKING", "NO DATA",
+                                   # v2.56.1 — a two-row fixture puts one
+                                   # row in each class, so an arm that
+                                   # misses its single `cull` scores 0
+                                   # there and is refused. That is the
+                                   # guard working, not the report
+                                   # failing to lead with a verdict.
+                                   "DO NOT SHIP")), head
     assert "need eyes on them" in md or "eyes" in md
 
 
@@ -825,3 +832,61 @@ def test_labels_can_come_straight_from_a_blind_json(tmp_path):
     got = load_labels(p)
     assert got["a.jpg"]["manual_label"] == "keep"
     assert got["b.jpg"]["manual_label"] == "cull", "case must be normalised"
+
+
+# ── v2.56.1: two holes the blind pass found ───────────────────────────
+
+def test_an_arm_that_wins_the_average_by_abandoning_a_class_is_refused():
+    """Blind labels came out 140 keep / 10 cull, and the metric lied.
+
+    `rescue` scored the best macro-F1 (+3.4) while getting ZERO of those
+    10 culls right. On a truth set that is 93% one class, turning culls
+    into keeps lifts the big class far more than surrendering the small
+    one costs — so the mode that wins the average is the mode that stops
+    doing the job the product exists for.
+    """
+    res = _res(_PERFECT, _PERFECT, _PERFECT, selection="all")
+    res.truth_counts = {"keep": 140, "cull": 10}
+    res.class_disagreements = {"keep": 30, "cull": 8}
+    res.arm_changes = {"rescue": 40, "primary": 40}
+    # rescue: great on keep, nothing on cull. Best macro anyway.
+    res.rescue = {"keep": Confusion("keep", tp=140, fp=10, fn=0),
+                  "cull": Confusion("cull", tp=0, fp=0, fn=10)}
+    res.rule = {"keep": Confusion("keep", tp=100, fp=30, fn=40),
+                "cull": Confusion("cull", tp=1, fp=9, fn=9)}
+    res.vlm = dict(res.rule)
+    res.ci = {"rescue": (1.0, 8.0), "primary": (-3.0, 3.0)}
+    assert res.best_mode == "rescue", "fixture must make rescue win"
+    v = res.verdict
+    assert "DO NOT SHIP `rescue`" in v, v
+    assert "ZERO `cull`" in v
+    assert "SHIP `vlm_authority" not in v
+
+
+def test_every_eval_path_computes_an_interval_before_the_verdict():
+    """v2.55 gated the verdict on a CI, then wired it to ONE branch.
+
+    A run driven by `--labels blind.json` took the other branch and
+    printed `SHIP vlm_authority=rescue` with no interval computed —
+    the exact contradiction v2.55 existed to remove, alive one branch
+    over. Both of that run's intervals turned out to span zero.
+
+    Asserted structurally: `_print_cis` calls `compute_cis`, and every
+    place the CLI prints a verdict is preceded by a `_print_cis` call.
+    """
+    import inspect
+    import re
+
+    from pixcull import cli
+
+    src = inspect.getsource(cli._print_cis)
+    assert "compute_cis" in src, (
+        "_print_cis no longer fills `ci`, so the verdict cannot gate on it")
+
+    body = inspect.getsource(cli.m3_eval)
+    verdicts = [m.start() for m in re.finditer(r"\.verdict", body)]
+    assert verdicts, "m3_eval prints no verdict — this test is stale"
+    for pos in verdicts:
+        before = body[:pos]
+        assert "_print_cis" in before, (
+            "a verdict is printed with no interval computed before it")

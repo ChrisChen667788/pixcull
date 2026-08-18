@@ -327,7 +327,29 @@ class EvalResult:
                     f"only where it is weakest (primary {d_pri:+.1f}, "
                     f"rescue {d_res:+.1f}). Label a RANDOM sample to get a "
                     f"number that can decide the default.")
+        # v2.56.1 — macro-F1 on a lopsided truth set rewards surrender.
+        #
+        # Blind labels on a 150-frame shoot came out 140 keep / 10 cull.
+        # `rescue` scored the best macro (+3.4) while getting 0 of those
+        # 10 culls right: turning culls into keeps lifts the 93% class
+        # far more than abandoning the 7% one costs. The mode that wins
+        # the metric is the mode that stops doing the job the product
+        # exists for.
+        rare = [c for c in _SCORED if self.truth_counts.get(c)]
+        useless = {}
+        for arm, cm in (("rescue", self.rescue), ("primary", self.vlm)):
+            dead = [c for c in rare if cm.get(c) and cm[c].f1 == 0.0]
+            if dead:
+                useless[arm] = dead
         best = self.best_mode
+        if best in useless:
+            cls = "`/`".join(useless[best])
+            return (f"DO NOT SHIP `{best}` — it scores best on macro-F1 "
+                    f"while getting ZERO `{cls}` right. On a truth set "
+                    f"that is {max(self.truth_counts.values())}/"
+                    f"{self.n_effective} one class, abandoning the other "
+                    f"is the cheapest way to win the average. Judge it on "
+                    f"the class you actually need.")
         # v2.55 — a point estimate on 45 rows prints to three decimals and
         # reads as a measurement. Resampled, this one was +13.6 with a 95%
         # interval of [-12.0, +41.4]: the sample cannot tell the mode
