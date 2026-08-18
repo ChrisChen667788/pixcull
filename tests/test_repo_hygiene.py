@@ -246,8 +246,13 @@ def test_no_eval_report_with_real_filenames(tracked_text):
     and belong in the README; the per-row table does not leave the
     machine that produced it.
     """
+    # v2.55.2 — prefix, not equality. `--out` takes any path, and the
+    # first run that passed `docs/M3-EVAL-canon200.md` cleared an exact
+    # match without noticing. A rule written for one filename only ever
+    # guards that filename.
     bad = [str(p) for p, _ in tracked_text
-           if p.name in ("M3-EVAL.md",) or p.name.endswith("-review.html")]
+           if (p.name.startswith("M3-EVAL") and p.suffix == ".md")
+           or p.name.endswith("-review.html")]
     assert not bad, (
         "eval output is tracked: " + ", ".join(bad) +
         "\nThese name real photographs and describe their contents. Keep "

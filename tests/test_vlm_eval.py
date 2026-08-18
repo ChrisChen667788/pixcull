@@ -129,6 +129,7 @@ def test_verdict_says_no_when_m3_is_worse():
     res = EvalResult(n_scored=608, n_label_disagreements=40)
     res.truth_counts = {"keep": 300, "cull": 308}
     res.arm_changes = {"rescue": 40, "primary": 40}
+    res.class_disagreements = {"keep": 20, "cull": 20}
     res.rule = {"keep": Confusion("keep", tp=90, fp=10, fn=10),
                 "cull": Confusion("cull", tp=90, fp=10, fn=10)}
     res.vlm = {"keep": Confusion("keep", tp=50, fp=50, fn=50),
@@ -148,6 +149,7 @@ def test_verdict_refuses_to_call_noise_an_improvement():
     res = EvalResult(n_scored=608, n_label_disagreements=40)
     res.truth_counts = {"keep": 300, "cull": 308}
     res.arm_changes = {"rescue": 40, "primary": 40}
+    res.class_disagreements = {"keep": 20, "cull": 20}
     same = {"keep": Confusion("keep", tp=90, fp=10, fn=10),
             "cull": Confusion("cull", tp=90, fp=10, fn=10)}
     res.rule = same
@@ -163,6 +165,7 @@ def test_verdict_says_yes_only_on_a_real_margin():
     res = EvalResult(n_scored=608, n_label_disagreements=40)
     res.truth_counts = {"keep": 300, "cull": 308}
     res.arm_changes = {"rescue": 40, "primary": 40}
+    res.class_disagreements = {"keep": 20, "cull": 20}
     res.rule = {"keep": Confusion("keep", tp=50, fp=50, fn=50),
                 "cull": Confusion("cull", tp=50, fp=50, fn=50)}
     res.vlm = {"keep": Confusion("keep", tp=95, fp=5, fn=5),
@@ -478,6 +481,9 @@ def _res(rule_f1_src, rescue_src, primary_src, **kw):
     # and which arms actually acted, or the "cannot rank" / "not
     # measured" guards fire first. That strictness is the point: a
     # result that cannot say those things cannot rank anything either.
+    # Non-zero, or the per-class circularity guard fires first — these
+    # fixtures are about the CI, not about label provenance.
+    r.class_disagreements = {c: 5 for c in ("keep", "cull")}
     r.arm_changes = {"rescue": sum(1 for a, b in zip(rescue_src, rule_f1_src)
                                    if a[1] != b[1]) or 1,
                      "primary": sum(1 for a, b in zip(primary_src, rule_f1_src)
@@ -730,3 +736,75 @@ def test_the_interval_is_reproducible():
     res.outcomes = _mixed_outcomes()
     assert (bootstrap_delta(res, "vlm", rounds=400)
             == bootstrap_delta(res, "vlm", rounds=400))
+
+
+def test_a_scores_file_without_a_flags_column_is_refused(cfg):
+    """The one that produced the most convincing wrong table yet.
+
+    A label sheet was fed to `m3 eval` as if it were a scores file. It
+    had `score_final`, so nothing errored — but no `flags` column, and
+    hard culls come only from flags. The rule stack was therefore
+    measured with its detectors removed: `cull` F1 0.000 against 95 real
+    cull labels, `rescue` never firing because no hard cull could
+    trigger, and a clean three-column table reporting all of it as the
+    rule stack's opinion.
+
+    An absent COLUMN is the fault. An empty VALUE is legitimate — that
+    frame tripped nothing — so the two must not be conflated.
+    """
+    spec = [("a.jpg", 0.9, "", "p"), ("b.jpg", 0.1, "", "p")]
+    labels = _labels({"a.jpg": "cull", "b.jpg": "keep"})
+
+    bare = [{k: v for k, v in r.items() if k != "flags"} for r in _rows(spec)]
+    res = evaluate(bare, labels, ScriptedJudge({}), cfg)
+    assert res.n_missing_flags_column == res.n_rows
+    v = res.verdict
+    assert "INVALID INPUT" in v, v
+    assert "flags" in v and "pixcull run" in v
+
+    withcol = evaluate(_rows(spec), labels, ScriptedJudge({}), cfg)
+    assert withcol.n_missing_flags_column == 0, (
+        "an empty flags value is a frame that tripped nothing, not a "
+        "missing column")
+    assert "INVALID INPUT" not in withcol.verdict
+
+
+def test_a_class_whose_labels_came_from_the_rule_is_refused(cfg):
+    """The circularity bug's third costume, and the best-hidden one.
+
+    A 200-frame shoot's `manual_label` turned out to be the pipeline's
+    own decisions. Overall disagreement was 20% — healthy-looking, so
+    the global `n_label_disagreements == 0` check passed — but all 95
+    `cull` labels were the rule's own culls, exactly. `cull` F1 came out
+    1.000 and the noise in the `keep` class hid it.
+
+    The class carrying the headline was the circular one, so the check
+    has to be per class. A global rate cannot express this.
+    """
+    # keep: rule and label differ on 2 of 4 → that class is fine.
+    # cull: rule and label agree on all 3 → that class is circular.
+    rows = _rows([("k1.jpg", 0.9, "", "p"), ("k2.jpg", 0.9, "", "p"),
+                  ("k3.jpg", 0.1, "", "p"), ("k4.jpg", 0.1, "", "p"),
+                  ("c1.jpg", 0.1, "closed_eyes", "p"),
+                  ("c2.jpg", 0.1, "closed_eyes", "p"),
+                  ("c3.jpg", 0.1, "closed_eyes", "p")])
+    labels = _labels({"k1.jpg": "keep", "k2.jpg": "keep",
+                      "k3.jpg": "keep", "k4.jpg": "keep",
+                      "c1.jpg": "cull", "c2.jpg": "cull", "c3.jpg": "cull"})
+    res = evaluate(rows, labels, ScriptedJudge({}), cfg)
+    assert res.class_disagreements.get("cull") == 0, (
+        "fixture must make `cull` circular")
+    assert res.class_disagreements.get("keep"), (
+        "fixture must leave `keep` non-circular, or the global check "
+        "would have caught it and this test proves nothing")
+    assert res.n_label_disagreements > 0, (
+        "the global check must PASS here — that is the whole point")
+    v = res.verdict
+    assert "CIRCULAR ON `cull`" in v, v
+    assert "1.000 by construction" in v
+    # What the condition guarantees is RECALL, not F1: the rule caught
+    # every labelled cull. F1 is only 1.000 when it also culled nothing
+    # else — true of the real 200-frame shoot, not of this fixture,
+    # where the rule culls two `keep` rows as well.
+    assert res.rule.get("cull").recall == pytest.approx(1.0)
+    assert res.rule.get("cull").f1 < 1.0

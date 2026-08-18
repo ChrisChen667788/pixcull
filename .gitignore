@@ -103,6 +103,9 @@ manifest.jsonl
 # and a pre-push diff audit would only catch it the first time. The
 # headline numbers are safe and live in the README; the per-row detail
 # stays on the machine that produced it.
-docs/M3-EVAL.md
+# Any eval report, not just the default filename: `m3 eval --out`
+# takes a path, and the first run that used a suffix
+# (docs/M3-EVAL-canon200.md) sailed straight past an exact match.
+docs/M3-EVAL*.md
 *-review.html
 *-review.json

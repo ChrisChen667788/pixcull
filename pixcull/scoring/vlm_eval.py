@@ -138,6 +138,27 @@ class EvalResult:
     #: a tie it never played.
     truth_counts: dict[str, int] = field(default_factory=dict)
     arm_changes: dict[str, int] = field(default_factory=dict)
+    #: v2.55.1 — rows whose input CSV carried no `flags` column at all.
+    #: Hard culls are driven ENTIRELY by flags, so a scores file without
+    #: that column runs the rule stack with half its inputs missing and
+    #: reports the result as the rule stack's opinion. Measured on a
+    #: 200-frame shoot: `cull` F1 0.000 against 95 real cull labels, and
+    #: `rescue` never fired because no hard cull ever triggered. Nothing
+    #: errored; the table just said the rules never cull.
+    n_missing_flags_column: int = 0
+    #: v2.55.2 — per scored class: how many rows carrying that label the
+    #: rule stack decided DIFFERENTLY. Zero means the rule's RECALL on
+    #: that class is 1.000 by construction (and its F1 too whenever it
+    #: also has no false positives there, which is the usual case when
+    #: the labels were copied from it).
+    #:
+    #: The global check (`n_label_disagreements == 0`) cannot see this. On
+    #: a 200-frame shoot the labels disagreed with the rule on 20% of rows
+    #: — healthy-looking — while all 95 `cull` labels were the rule's own
+    #: culls, exactly. `cull` F1 came out 1.000 and the noise in the
+    #: `keep` class hid it. The class carrying the headline was the
+    #: circular one.
+    class_disagreements: dict[str, int] = field(default_factory=dict)
     #: v2.55 — (truth, rule, rescue, primary, weight) per scoreable row,
     #: kept so the headline delta can be resampled. A macro-F1 computed
     #: on 45 rows with 7 culls prints to three decimals and looks like a
@@ -151,13 +172,14 @@ class EvalResult:
     #: whose interval contains zero: a tool that says SHIP on a number
     #: its own interval calls noise is worse than one that says nothing.
     ci: dict[str, tuple[float, float]] = field(default_factory=dict)
+    disagreements: list[Disagreement] = field(default_factory=list)
+    by_scene: dict[str, dict[str, float]] = field(default_factory=dict)
 
     def compute_cis(self, rounds: int = 2000) -> None:
+        """Fill ``ci`` so ``verdict`` can refuse an indistinguishable win."""
         for arm in ("rescue", "vlm"):
             _, lo, hi = bootstrap_delta(self, arm, rounds=rounds)
             self.ci["primary" if arm == "vlm" else arm] = (lo, hi)
-    disagreements: list[Disagreement] = field(default_factory=list)
-    by_scene: dict[str, dict[str, float]] = field(default_factory=dict)
 
     @property
     def rule_macro_f1(self) -> float:
@@ -221,6 +243,17 @@ class EvalResult:
         if not self.n_scored:
             return ("NO DATA — every call failed. This is a configuration "
                     "problem; run `pixcull m3 doctor`.")
+        # v2.55.1 — before anything else: did the rule stack get its
+        # inputs? Hard culls come only from `flags`, so a scores file
+        # without that column cannot cull for the right reasons and the
+        # comparison is against a crippled opponent, not the rule stack.
+        if self.n_missing_flags_column:
+            return (f"INVALID INPUT — the scores file has no `flags` "
+                    f"column, so no hard cull can fire on any of "
+                    f"{self.n_missing_flags_column} rows and the rule "
+                    f"stack is being measured with its detectors removed. "
+                    f"Re-run `pixcull run` on these photos and evaluate "
+                    f"the resulting scores.csv, not a label sheet.")
         # v2.49.3 — the labels have to be able to disagree with the rule
         # stack, or this comparison is circular.
         #
@@ -233,6 +266,21 @@ class EvalResult:
         # The run reported "M3 WORSE by 63.9 points" and that number
         # measured disagreement-with-the-rule, not correctness. ¥8 and
         # twenty minutes to learn it.
+        # v2.55.2 — per class, because a global rate hides this.
+        circular = [c for c in _SCORED
+                    if self.truth_counts.get(c)
+                    and not self.class_disagreements.get(c)]
+        if circular and self.n_label_disagreements:
+            cs = "`/`".join(circular)
+            return (f"CIRCULAR ON `{cs}` — the rule stack decided `{cs}` "
+                    f"on every single row labelled `{cs}`, so its recall "
+                    f"there is 1.000 by construction no matter how good "
+                    f"either system is (F1 too, whenever it also has no "
+                    f"false positives — which is what happened). Overall "
+                    f"disagreement is {self.n_label_disagreements}/"
+                    f"{self.n_scored}, which looks healthy and is not: the "
+                    f"noise lives in the other class. These labels came "
+                    f"from the rule stack.")
         if self.n_label_disagreements == 0:
             return ("INVALID — the label set never disagrees with the rule "
                     "stack, so the rule scores 1.000 by construction and "
@@ -399,6 +447,10 @@ def evaluate(
     one comparison on this data that is not partly rigged.
     """
     res = EvalResult(selection=selection)
+    # "flags" absent as a COLUMN is the failure; an empty value is a
+    # legitimate "this frame tripped nothing".  Distinguishing the two is
+    # the whole point — the first means the detectors never ran.
+    _seen_flag_col = False
     todo = [r for r in rows
             if (r.get("filename") or "").strip() in labels
             and (only is None or (r.get("filename") or "").strip() in only)]
@@ -449,6 +501,8 @@ def evaluate(
         fn = str(row.get("filename", "")).strip()
         truth = labels[fn]["manual_label"]
         scene = str(row.get("scene") or "")
+        if "flags" in row:
+            _seen_flag_col = True
         flags = _flags_of(row)
         try:
             final = float(row.get("score_final") or 0.0)
@@ -507,6 +561,10 @@ def evaluate(
 
         if rule_dec.value != truth:
             res.n_label_disagreements += 1
+        if truth in _SCORED:
+            res.class_disagreements[truth] = (
+                res.class_disagreements.get(truth, 0)
+                + (1 if rule_dec.value != truth else 0))
         w = (row_weights or {}).get(fn, 1.0)
         _tally(res.rule, truth, rule_dec.value, w)
         _tally(res.vlm, truth, vlm_dec.value, w)
@@ -535,6 +593,8 @@ def evaluate(
                 rationale=str(getattr(verdict, "overall_rationale", ""))[:160],
                 overrode_hard_cull=overrode))
 
+    if not _seen_flag_col:
+        res.n_missing_flags_column = res.n_rows
     res.elapsed_s = time.time() - t0
 
     for scene, hits in scene_hits.items():
