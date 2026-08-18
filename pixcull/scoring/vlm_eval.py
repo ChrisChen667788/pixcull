@@ -382,6 +382,24 @@ def _tally(cm: dict[str, Confusion], truth: str, pred: str,
 
 
 def load_labels(path: Path) -> dict[str, dict[str, str]]:
+    """filename -> row.  Accepts a label CSV or a blind-label JSON.
+
+    v2.56 — the JSON form is what `pixcull m3 label` writes.  It exists
+    so a blind pass can be ground truth directly, with no CSV to edit in
+    between: every hand-edit of a label sheet in this project's history
+    has been an opportunity to paste the rule stack's own answers back
+    in, and four separate label sets did exactly that.
+    """
+    if Path(path).suffix.lower() == ".json":
+        import json as _json
+        raw = _json.loads(Path(path).read_text(encoding="utf-8"))
+        verdicts = raw.get("verdicts", raw) if isinstance(raw, dict) else {}
+        return {fn: {"filename": fn, "manual_label": str(v).lower()}
+                for fn, v in verdicts.items() if fn and v}
+    return _load_labels_csv(path)
+
+
+def _load_labels_csv(path: Path) -> dict[str, dict[str, str]]:
     """filename → row, from the owner's corrected label sheet.
 
     ``utf-8-sig``: the sheet round-trips through Excel and carries a BOM,

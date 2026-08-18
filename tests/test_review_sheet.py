@@ -431,3 +431,72 @@ def test_title_probe_is_quiet_on_a_dead_port():
     """The error path must not raise its own error."""
     from pixcull.cli import _page_title_on
     assert _page_title_on(9) == ""
+
+
+# ── v2.56: blind labelling — the structural fix ───────────────────────
+
+def test_a_blind_card_shows_the_photo_and_nothing_else(photo):
+    """Four circular label sets, four disguises, one root cause.
+
+    Labels copied from the rule stack; a sample drawn where the systems
+    disagreed; a sample with no `cull` ground truth; a shoot whose
+    `manual_label` WAS the pipeline's output. Every one was formed by a
+    person looking at a decision and agreeing with it, and every one was
+    caught by a guard written for the previous disguise.
+
+    A blind card cannot produce them — so this asserts on ABSENCE, over
+    the card markup rather than the whole page (the stylesheet and the
+    base64 thumbnails both contain arbitrary substrings).
+    """
+    import re
+    it = {"fn": "secret_name.jpg", "path": str(photo), "scene": "portrait",
+          "a": "cull", "b": "keep", "a_label": "规则", "b_label": "M3",
+          "why": "模型给出的理由", "note": "closed_eyes",
+          "axes": {"technical": 5, "moment": 4}}
+    page = render([it], title="t", lede="l", slug="s",
+                  selection="blind", blind=True)
+    card = re.search(r'<article class="card blind".*?</article>',
+                     page, re.S).group(0)
+    card = re.sub(r'src="data:[^"]*"', 'src="X"', card)
+
+    for leaked in ("模型给出的理由", "closed_eyes", "portrait", "★",
+                   "规则", "M3"):
+        assert leaked not in card, f"blind card leaks {leaked!r}: {card}"
+
+    # The filename stays in `data-fn` — the verdicts have to join back to
+    # rows somehow, and a filename carries no system opinion. What must
+    # not happen is RENDERING it: the reviewer sees `#1`, not a name that
+    # might group frames or hint at a burst.
+    assert 'data-fn="secret_name.jpg"' in card, "labels could not be joined"
+    visible = re.sub(r"<[^>]+>", " ", card)
+    assert "secret_name.jpg" not in visible, (
+        "the filename is displayed, not just carried")
+    assert "#1" in visible, "the reviewer needs some handle on the frame"
+    assert 'data-yes="keep"' in card and 'data-no="cull"' in card
+    assert card.count("<button") == 2
+
+
+def test_blind_labels_declare_their_own_provenance(photo):
+    page = render([{"fn": "a.jpg", "path": str(photo)}],
+                  title="t", lede="l", slug="s",
+                  selection="blind", blind=True)
+    assert 'const SELECTION="blind"' in page
+
+
+def test_an_unreadable_file_does_not_lose_the_whole_batch(photo, tmp_path):
+    """A folder of originals always contains something that is not one.
+
+    `._NAME.JPG` AppleDouble forks are written by macOS onto every
+    non-HFS volume — which is precisely the external drive a
+    photographer keeps originals on. One of them aborted a 150-frame
+    build with UnidentifiedImageError.
+    """
+    junk = tmp_path / "._decoy.jpg"
+    junk.write_bytes(b"not an image")
+    items = [{"fn": "good.jpg", "path": str(photo)},
+             {"fn": "._decoy.jpg", "path": str(junk)}]
+    dest = write(items, tmp_path / "out.html", title="t", lede="l",
+                 slug="s", blind=True, selection="blind")
+    body = dest.read_text(encoding="utf-8")
+    assert body.count('class="card blind"') == 1
+    assert "已判 0 / 1" in body, "the count must reflect what was rendered"

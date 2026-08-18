@@ -59,6 +59,37 @@ def thumbnail_data_uri(path: Path, px: int = THUMB_PX) -> str:
     return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
 
 
+def _blind_card(i: int, it: dict[str, Any]) -> str:
+    """A photograph and one question. Nothing else on the card.
+
+    v2.56 — every circular label set this project has produced was
+    formed by a person looking at a decision and agreeing with it. Four
+    times, in four disguises: labels copied from the rule stack; a
+    sample drawn where the systems disagreed; a sample with no `cull`
+    ground truth; and a shoot whose `manual_label` WAS the pipeline's
+    output. Each was caught after the fact by a guard written for the
+    previous one.
+
+    A blind card cannot produce those labels. No decision, no rationale,
+    no axis scores, no flags, no filename hint of what a detector
+    thought — because a reviewer who can see the answer is no longer an
+    independent source of it. This is the only fix in the family that is
+    structural rather than a check applied afterwards.
+    """
+    return f'''<article class="card blind" data-fn="{html.escape(it['fn'])}"
+         data-yes="keep" data-no="cull">
+  <img src="{thumbnail_data_uri(Path(it['path']))}" alt="">
+  <div class="meta">
+    <div class="hd"><code>#{i + 1}</code></div>
+    <div class="judge">
+      <button class="ok"  onclick="mark({i},1)">留下 · keep</button>
+      <button class="bad" onclick="mark({i},0)">删掉 · cull</button>
+      <span class="mk" id="mk{i}"></span>
+    </div>
+  </div>
+</article>'''
+
+
 def _card(i: int, it: dict[str, Any]) -> str:
     axes = it.get("axes") or {}
     stars = "".join(
@@ -144,6 +175,11 @@ button.bad:hover{border-color:var(--bad);color:var(--bad)}
 border-top:1px solid var(--line);padding:11px 20px;display:flex;gap:14px;
 align-items:center;justify-content:center;font-size:13px}
 #hint{color:var(--dim);font-size:12px;max-width:52ch;line-height:1.45}
+.card.blind{grid-template-columns:minmax(0,1fr) 210px}
+.card.blind .meta{justify-content:space-between}
+.card.blind .hd code{font-size:13px;color:var(--dim)}
+.card.blind .judge{border-top:none;flex-direction:column;align-items:stretch;gap:9px}
+.card.blind button{padding:13px}
 #out{width:100%;max-width:1000px;margin:0 auto;font:12px ui-monospace,monospace;
 white-space:pre-wrap;background:var(--card);border:1px solid var(--line);
 border-radius:8px;padding:14px;display:none;cursor:copy}
@@ -222,11 +258,12 @@ window.addEventListener('DOMContentLoaded',()=>{
 
 def render(items: Sequence[dict[str, Any]], *, title: str, lede: str,
            slug: str, yes_key: str = "b", no_key: str = "a",
-           selection: str = "disagreements") -> str:
+           selection: str = "disagreements", blind: bool = False) -> str:
     """Build the whole page as one self-contained HTML string."""
     yes = items[0].get("yes", "B 对了") if items else "B 对了"
     no = items[0].get("no", "A 对了") if items else "A 对了"
-    cards = "".join(_card(i, it) for i, it in enumerate(items))
+    render_one = _blind_card if blind else _card
+    cards = "".join(render_one(i, it) for i, it in enumerate(items))
     js = _JS % {"n": len(items), "slug": slug,
                 "yes_key": yes_key, "no_key": no_key,
                 "selection": json.dumps(selection)}
@@ -243,6 +280,26 @@ def render(items: Sequence[dict[str, Any]], *, title: str, lede: str,
 
 
 def write(items: Sequence[dict[str, Any]], dest: Path, **kw) -> Path:
+    """Render and save, skipping frames whose pixels will not load.
+
+    A folder of originals reliably contains something that is not an
+    image — a resource fork, a truncated copy, a sidecar. Losing the
+    whole batch to one of them wastes the reviewer's time, and silently
+    dropping it would misstate how many frames were actually offered.
+    """
+    items = list(items)
+    good, skipped = [], []
+    for it in items:
+        try:
+            thumbnail_data_uri(Path(it["path"]))
+            good.append(it)
+        except Exception as exc:                       # noqa: BLE001
+            skipped.append(f"{it.get('fn')}: {type(exc).__name__}")
+    if skipped:
+        print(f"[review] skipped {len(skipped)} unreadable file(s): "
+              + ", ".join(skipped[:5])
+              + (" …" if len(skipped) > 5 else ""))
+    items = good
     dest = Path(dest)
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(render(list(items), **kw), encoding="utf-8")

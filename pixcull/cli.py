@@ -1599,6 +1599,104 @@ def m3_open(
     _serve_review_page(page, port, open_browser=open_browser)
 
 
+@m3_app.command("label")
+def m3_label(
+    folder: Path = typer.Option(..., "--folder", exists=True,
+                                help="A folder of photographs."),
+    out: Path = typer.Option(Path("~/pixcull_blind.html"), "--out"),
+    limit: int = typer.Option(150, "--limit"),
+    scores: Path = typer.Option(None, "--scores", exists=True,
+                                help="Optional run output. If given, the "
+                                     "sample is stratified over the rule "
+                                     "stack's decisions and `m3 eval` "
+                                     "reweights it back to the corpus."),
+    serve: bool = typer.Option(True, "--serve/--no-serve"),
+) -> None:
+    """Label photographs BLIND — no system's opinion on screen.
+
+    Every circular label set this project has produced came from a
+    person looking at a decision and agreeing with it. Four times, in
+    four disguises, each caught after the fact by a guard written for
+    the previous one. A blind pass cannot produce them: the card carries
+    the photograph, a serial number and two buttons, and nothing else.
+
+    Costs nothing and needs no scoring first — label, then score, then
+    compare. That order is what makes the labels usable as ground truth.
+    """
+    import hashlib as _h
+
+    from pixcull.report.review_sheet import write
+
+    exts = {".jpg", ".jpeg", ".png", ".JPG", ".JPEG", ".PNG"}
+    # `._NAME.JPG` are AppleDouble resource forks, which macOS writes
+    # onto every non-HFS volume — exactly the external drives a
+    # photographer keeps originals on. They carry a real image suffix and
+    # are not images, and one of them aborted a 150-frame build.
+    files = sorted(p for p in Path(str(folder)).expanduser().iterdir()
+                   if p.suffix in exts and not p.name.startswith("._"))
+    if not files:
+        console.print(f"[red]No photographs in {folder}.[/red]")
+        raise typer.Exit(code=1)
+
+    strata: dict[str, str] = {}
+    if scores is not None:
+        import csv as _csv
+
+        from pixcull.config import PixCullConfig
+        from pixcull.scoring.decision import decide
+        from pixcull.scoring.vlm_eval import _flags_of
+        cfg = PixCullConfig.load()
+        with open(scores, encoding="utf-8-sig", newline="") as fh:
+            for r in _csv.DictReader(fh):
+                try:
+                    sf = float(r.get("score_final") or 0)
+                except (TypeError, ValueError):
+                    sf = 0.0
+                d, _ = decide(sf, _flags_of(r), cfg, "standard",
+                              scene=str(r.get("scene") or ""))
+                strata[(r.get("filename") or "").strip()] = d.value
+
+    def _key(p: Path) -> str:
+        return _h.sha1(p.name.encode("utf-8")).hexdigest()
+
+    if strata:
+        buckets: dict[str, list[Path]] = {}
+        for p in files:
+            buckets.setdefault(strata.get(p.name, "unscored"), []).append(p)
+        for b in buckets.values():
+            b.sort(key=_key)
+        picked: list[Path] = []
+        while len(picked) < limit and any(buckets.values()):
+            drained = True
+            for k in sorted(buckets):
+                if buckets[k] and len(picked) < limit:
+                    picked.append(buckets[k].pop(0))
+                    drained = False
+            if drained:
+                break
+        chosen = picked
+        console.print("[dim]strata: " + ", ".join(
+            f"{k} {sum(1 for p in chosen if strata.get(p.name) == k)}"
+            for k in sorted({strata.get(p.name, "unscored")
+                             for p in chosen})) + "[/dim]")
+    else:
+        chosen = sorted(files, key=_key)[:limit]
+
+    items = [{"fn": p.name, "path": str(p)} for p in chosen]
+    dest = write(items, Path(str(out)).expanduser(), blind=True,
+                 slug="blind", selection="blind",
+                 title=f"盲标 · {len(items)} 张",
+                 lede="只有照片。<b>没有任何系统的判决、理由或评分</b> —— "
+                      "看到答案的人就不再是独立的答案来源。<br>"
+                      "两个按钮:这张你会留还是删。判完存成 JSON,"
+                      "再拿去和系统比。")
+    console.print(f"[green]{len(items)} frames[/green] → {dest}")
+    if serve:
+        _serve_review_page(dest, REVIEW_PORT, open_browser=True)
+    else:
+        console.print(f"[dim]pixcull m3 open {dest}[/dim]")
+
+
 @m3_app.command("status")
 def m3_status() -> None:
     """Show the recorded capabilities, key presence, and today's spend."""

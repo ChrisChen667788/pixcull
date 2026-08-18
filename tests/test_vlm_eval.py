@@ -808,3 +808,20 @@ def test_a_class_whose_labels_came_from_the_rule_is_refused(cfg):
     # where the rule culls two `keep` rows as well.
     assert res.rule.get("cull").recall == pytest.approx(1.0)
     assert res.rule.get("cull").f1 < 1.0
+
+
+def test_labels_can_come_straight_from_a_blind_json(tmp_path):
+    """No CSV to hand-edit between labelling and measuring.
+
+    Every hand-edit of a label sheet in this project's history was an
+    opportunity to paste the rule stack's answers back in, and four
+    separate label sets did exactly that.
+    """
+    import json as _json
+    p = tmp_path / "blind-review.json"
+    p.write_text(_json.dumps({"selection": "blind",
+                              "verdicts": {"a.jpg": "keep",
+                                           "b.jpg": "CULL"}}))
+    got = load_labels(p)
+    assert got["a.jpg"]["manual_label"] == "keep"
+    assert got["b.jpg"]["manual_label"] == "cull", "case must be normalised"
