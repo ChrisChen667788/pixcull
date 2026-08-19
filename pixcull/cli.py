@@ -892,6 +892,207 @@ m3_app = typer.Typer(
 app.add_typer(m3_app, name="m3")
 
 
+@app.command("calibrate")
+def calibrate(
+    labels: Path = typer.Option(..., "--labels", exists=True,
+                                help="A blind pass from `pixcull m3 label`."),
+    scores: Path = typer.Option(..., "--scores", exists=True,
+                                help="scores.csv from `pixcull run` on the "
+                                     "same frames."),
+    write: bool = typer.Option(False, "--write",
+                               help="Save the profile. Without this the "
+                                    "command only reports what it would do."),
+    out: Path = typer.Option(None, "--out",
+                             help="Profile path (default: "
+                                  "~/.pixcull/personal_profile.json)."),
+) -> None:
+    """Fit the keep/cull boundary to YOUR eye, from a blind pass.
+
+    The rule stack ships one threshold for everybody. Measured against a
+    blind pass on a real shoot it culled 53 of 150 frames while the
+    photographer culled 10 — over-culling by 5.3x. A threshold that wrong
+    for one photographer is not a bug in the detectors, it is a constant
+    standing in for a preference.
+
+    Reads the labels you produced blind, fits the shift, and REPORTS
+    before it writes: how far the boundary moves, how many frames change
+    decision, and what happens to the frames you actually wanted deleted.
+    A calibration that cannot show its own effect is a badge.
+    """
+    import csv as _csv
+    import json as _json
+
+    from pixcull.config import PixCullConfig
+    from pixcull.scoring.decision import decide
+    from pixcull.scoring.personalized import (
+        BASELINE_KEEP_RATE, MIN_ANNS_FOR_PERSONALIZATION,
+        profile_from_preferences, save_profile,
+    )
+    from pixcull.scoring.vlm_eval import _flags_of, load_labels
+
+    lab = load_labels(Path(str(labels)).expanduser())
+    raw = _json.loads(Path(str(labels)).expanduser().read_text("utf-8"))
+    provenance = (raw.get("selection") or "") if isinstance(raw, dict) else ""
+    if provenance != "blind":
+        console.print(
+            f"[red]{labels.name} is not a blind pass[/red] "
+            f"(selection={provenance or 'unknown'!r}). Fitting a threshold "
+            f"to labels formed while a verdict was on screen calibrates you "
+            f"to the rule stack — this project has done that once already, "
+            f"and was off by 3.1x. Build one with `pixcull m3 label`.")
+        raise typer.Exit(code=1)
+
+    with open(scores, encoding="utf-8-sig", newline="") as fh:
+        rows = [r for r in _csv.DictReader(fh)
+                if (r.get("filename") or "").strip() in lab]
+    if not rows:
+        console.print("[red]No overlap[/red] between the labels and the "
+                      "scores file — are they the same frames?")
+        raise typer.Exit(code=1)
+
+    cfg = PixCullConfig.load()
+
+    def _truth(r):
+        return lab[(r.get("filename") or "").strip()]["manual_label"]
+
+    def _decide_with(r, shift):
+        try:
+            sf = float(r.get("score_final") or 0)
+        except (TypeError, ValueError):
+            sf = 0.0
+        d, _ = decide(sf, _flags_of(r), cfg, "standard",
+                      scene=str(r.get("scene") or ""), personal_shift=shift)
+        return d.value
+
+    # --- fit ----------------------------------------------------------
+    scene_counts: dict = {}
+    axis_sum: dict = {"keep": {}, "cull": {}}
+    axis_n: dict = {"keep": 0, "cull": 0}
+    AXES = ("technical", "subject", "composition", "light", "moment",
+            "aesthetic")
+    for r in rows:
+        t = _truth(r)
+        sc = scene_counts.setdefault(str(r.get("scene") or "—"),
+                                     {"keep": 0, "maybe": 0, "cull": 0})
+        sc[t] = sc.get(t, 0) + 1
+        if t in axis_n:
+            axis_n[t] += 1
+            for a in AXES:
+                try:
+                    axis_sum[t][a] = axis_sum[t].get(a, 0.0) + float(
+                        r.get(f"rubric_{a}_stars") or 0)
+                except (TypeError, ValueError):
+                    pass
+    prefs = {
+        "user_id": "local",
+        "total_human_annotations": len(rows),
+        "scene_decision_counts": scene_counts,
+        "avg_rubric_when": {
+            k: {a: v / max(axis_n[k], 1) for a, v in axis_sum[k].items()}
+            for k in ("keep", "cull")},
+        "label_provenance": "blind",
+    }
+    prof = profile_from_preferences(prefs)
+    shift = prof.keep_threshold_shift
+
+    # --- report -------------------------------------------------------
+    before = {r["filename"]: _decide_with(r, 0.0) for r in rows}
+    after = {r["filename"]: _decide_with(r, shift) for r in rows}
+    truth = {r["filename"]: _truth(r) for r in rows}
+    changed = [f for f in before if before[f] != after[f]]
+
+    def _cull_recall(dec):
+        want = [f for f in truth if truth[f] == "cull"]
+        hit = [f for f in want if dec[f] == "cull"]
+        return len(hit), len(want)
+
+    def _over_cull(dec):
+        return sum(1 for f in dec if dec[f] == "cull")
+
+    t = Table(title=f"calibration on {len(rows)} blind-labelled frames")
+    t.add_column("", style="bold")
+    t.add_column("before", justify="right")
+    t.add_column("after", justify="right")
+    b_hit, n_want = _cull_recall(before)
+    a_hit, _ = _cull_recall(after)
+    t.add_row("keep threshold shift", "0.000", f"{shift:+.3f}")
+    t.add_row("frames the rule culls", str(_over_cull(before)),
+              str(_over_cull(after)))
+    t.add_row(f"of your {n_want} culls, found", str(b_hit), str(a_hit))
+    t.add_row("decisions changed", "—", str(len(changed)))
+    console.print(t)
+    console.print(f"[dim]you culled {sum(1 for v in truth.values() if v == 'cull')}"
+                  f" of {len(rows)}; the rule ships a threshold fitted to "
+                  f"{BASELINE_KEEP_RATE:.0%} keep[/dim]")
+
+    if len(rows) < MIN_ANNS_FOR_PERSONALIZATION:
+        console.print(f"[yellow]{len(rows)} frames — a profile needs "
+                      f"{MIN_ANNS_FOR_PERSONALIZATION}.[/yellow] Label more "
+                      f"before writing one.")
+        raise typer.Exit(code=1)
+
+    # v2.59 — when the threshold cannot help, say WHY and name what can.
+    #
+    # A shift moves the score boundary. It cannot touch a hard cull,
+    # because those fire on flags regardless of score. Measured on the
+    # first real calibration: all 53 of the rule's culls were
+    # flag-driven and none came from the threshold, so a -0.080 shift
+    # moved 26 decisions and changed neither the over-culling nor the
+    # recall. Reporting only "this fit does nothing" would leave the
+    # photographer with a negative result and no next step.
+    from pixcull.scoring.decision import _HARD_CULL_FLAGS_FOR_REPORT
+    flag_culls, thresh_culls = 0, 0
+    per_flag: dict = {}
+    n_cull_truth = sum(1 for v in truth.values() if v == "cull")
+    for r in rows:
+        fn = r["filename"]
+        fl = set(_flags_of(r))
+        hard = fl & _HARD_CULL_FLAGS_FOR_REPORT
+        if before[fn] == "cull":
+            if hard:
+                flag_culls += 1
+            else:
+                thresh_culls += 1
+        for f in fl:
+            seen, hits = per_flag.get(f, (0, 0))
+            per_flag[f] = (seen + 1, hits + (truth[fn] == "cull"))
+
+    if flag_culls and not thresh_culls:
+        console.print(
+            f"[yellow]The threshold cannot help here.[/yellow] All "
+            f"{flag_culls} of the rule's culls fire on hard flags, which a "
+            f"score shift does not touch; none came from the boundary.")
+        base = n_cull_truth / max(len(rows), 1)
+        worst = sorted(
+            ((f, n, h) for f, (n, h) in per_flag.items() if n >= 5),
+            key=lambda x: (x[2] / x[1]))
+        if worst and base > 0:
+            console.print("[dim]flags that fire often and predict your culls "
+                          "poorly (baseline "
+                          f"{base:.1%}):[/dim]")
+            for f, n, h in worst[:3]:
+                lift = (h / n) / base
+                console.print(f"[dim]    {f:24s} fired {n:3d}, of those you "
+                              f"culled {h:2d}  ({h/n:5.1%}, {lift:.1f}x)[/dim]")
+            console.print("[dim]A flag under 1.0x is costing you frames it "
+                          "cannot justify. Scene exemptions live in "
+                          "decision.py's hard_cull set.[/dim]")
+    elif a_hit <= b_hit and _over_cull(after) >= _over_cull(before):
+        console.print("[yellow]This fit finds no more of your culls and "
+                      "culls no less.[/yellow] Writing it would change the "
+                      "boundary for nothing.")
+
+    if not write:
+        console.print("[dim]Report only. `--write` saves the profile.[/dim]")
+        return
+    dest = Path(str(out)).expanduser() if out else (
+        Path.home() / ".pixcull" / "personal_profile.json")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    save_profile(prof, dest)
+    console.print(f"[green]written[/green] {dest} "
+                  f"(provenance=blind, n={len(rows)})")
+
+
 @m3_app.command("doctor")
 def m3_doctor(
     image: Path = typer.Option(None, "--image",

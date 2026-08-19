@@ -1,0 +1,140 @@
+"""v2.59 — `pixcull calibrate`, and the negative result it found first.
+
+The rule stack ships one keep/cull threshold for everybody. On a blind
+pass it culled 53 of 150 frames while the photographer culled 10.
+Calibration is the obvious fix and, measured, it is not one: every one
+of those 53 culls fires on a hard flag, which a score shift cannot
+touch. The command has to be able to say that.
+"""
+
+from __future__ import annotations
+
+import csv
+import json
+from pathlib import Path
+
+import pytest
+from typer.testing import CliRunner
+
+from pixcull.cli import app
+
+_COLS = ["filename", "scene", "flags", "score_final",
+         "rubric_technical_stars", "rubric_subject_stars",
+         "rubric_composition_stars", "rubric_light_stars",
+         "rubric_moment_stars", "rubric_aesthetic_stars"]
+
+
+def _scores(tmp_path, rows) -> Path:
+    p = tmp_path / "scores.csv"
+    with open(p, "w", newline="", encoding="utf-8") as fh:
+        w = csv.DictWriter(fh, fieldnames=_COLS)
+        w.writeheader()
+        for fn, flags, sf in rows:
+            # NOT `landscape`: decision.py exempts `no_clear_subject` for
+            # tiny-subject scenes, so a landscape fixture silently tests
+            # nothing. The first draft of this test used one and the
+            # branch never fired.
+            w.writerow({"filename": fn, "scene": "portrait", "flags": flags,
+                        "score_final": sf,
+                        **{c: 3 for c in _COLS if c.startswith("rubric_")}})
+    return p
+
+
+def _labels(tmp_path, verdicts, selection="blind") -> Path:
+    p = tmp_path / "blind-review.json"
+    p.write_text(json.dumps({"selection": selection, "verdicts": verdicts}),
+                 encoding="utf-8")
+    return p
+
+
+def test_labels_that_saw_a_verdict_are_refused(tmp_path):
+    """Fitting to non-blind labels calibrates you to the rule stack.
+
+    This project did exactly that once: a profile learned from 608
+    "corrections" whose labels were the rule's own output concluded the
+    photographer culls 20.4% when the blind answer is 6.7% — off by
+    3.1x, while the UI said "tuned to you".
+    """
+    rows = [(f"{i}.jpg", "", 0.8) for i in range(60)]
+    s = _scores(tmp_path, rows)
+    lab = _labels(tmp_path, {f"{i}.jpg": "keep" for i in range(60)},
+                  selection="disagreements")
+    res = CliRunner().invoke(app, ["calibrate", "--labels", str(lab),
+                                   "--scores", str(s)])
+    assert res.exit_code == 1
+    assert "not a blind pass" in res.output
+    assert "3.1x" in res.output, "the refusal does not say what went wrong"
+
+
+def test_it_reports_before_it_writes(tmp_path):
+    """A profile changes every future run, so writing is opt-in."""
+    rows = [(f"{i}.jpg", "", 0.9) for i in range(60)]
+    s = _scores(tmp_path, rows)
+    lab = _labels(tmp_path, {f"{i}.jpg": "keep" for i in range(60)})
+    dest = tmp_path / "profile.json"
+    res = CliRunner().invoke(app, ["calibrate", "--labels", str(lab),
+                                   "--scores", str(s), "--out", str(dest)])
+    assert res.exit_code == 0, res.output
+    assert not dest.exists(), "a bare calibrate wrote a profile"
+    assert "Report only" in res.output
+
+    res2 = CliRunner().invoke(app, ["calibrate", "--labels", str(lab),
+                                    "--scores", str(s), "--out", str(dest),
+                                    "--write"])
+    assert res2.exit_code == 0, res2.output
+    assert dest.exists()
+    saved = json.loads(dest.read_text())
+    assert saved["label_provenance"] == "blind", (
+        "the written profile does not record where its labels came from, "
+        "so the v2.57 provenance gate will refuse to apply it")
+
+
+def test_a_flag_driven_cull_says_the_threshold_cannot_help(tmp_path):
+    """The finding, as a test.
+
+    `no_clear_subject` is a hard cull: it fires regardless of score, so
+    no shift of the boundary reaches it. Reporting "this fit does
+    nothing" without saying why leaves the photographer with a dead end.
+    """
+    rows = [(f"k{i}.jpg", "", 0.9) for i in range(50)]
+    rows += [(f"c{i}.jpg", "no_clear_subject", 0.9) for i in range(20)]
+    s = _scores(tmp_path, rows)
+    verdicts = {f"k{i}.jpg": "keep" for i in range(50)}
+    verdicts.update({f"c{i}.jpg": "keep" for i in range(18)})
+    verdicts.update({f"c{i}.jpg": "cull" for i in (18, 19)})
+    lab = _labels(tmp_path, verdicts)
+
+    res = CliRunner().invoke(app, ["calibrate", "--labels", str(lab),
+                                   "--scores", str(s)])
+    assert res.exit_code == 0, res.output
+    assert "threshold cannot help" in res.output
+    assert "no_clear_subject" in res.output, (
+        "the flag doing the culling is not named")
+    assert "hard flags" in res.output
+
+
+def test_the_hard_cull_list_is_not_a_second_copy():
+    """Two lists of hard-cull flags is how one goes stale.
+
+    The report needs to name these flags; `decide()` needs to act on
+    them. They are the same set, exported once.
+    """
+    import inspect
+
+    from pixcull.scoring.decision import _HARD_CULL_FLAGS_FOR_REPORT, decide
+
+    body = inspect.getsource(decide)
+    for flag in _HARD_CULL_FLAGS_FOR_REPORT:
+        assert f'"{flag}"' in body, (
+            f"{flag} is in the exported set but decide() no longer treats "
+            f"it as a hard cull — the report would name a flag that does "
+            f"nothing")
+
+
+def test_mismatched_inputs_fail_loudly(tmp_path):
+    s = _scores(tmp_path, [("a.jpg", "", 0.9)])
+    lab = _labels(tmp_path, {"zzz.jpg": "keep"})
+    res = CliRunner().invoke(app, ["calibrate", "--labels", str(lab),
+                                   "--scores", str(s)])
+    assert res.exit_code == 1
+    assert "No overlap" in res.output

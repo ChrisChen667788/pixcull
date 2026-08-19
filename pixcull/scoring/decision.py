@@ -53,6 +53,15 @@ _VLM_LABELS: dict[str, Decision] = {
 }
 
 
+#: v2.59 — the same set `decide()` builds, exported so a report can name
+#: these flags without a second hardcoded copy. Two lists of hard-cull
+#: flags is how one of them silently goes stale.
+_HARD_CULL_FLAGS_FOR_REPORT = frozenset({
+    "closed_eyes", "motion_blur_on_face", "severely_overexposed",
+    "no_clear_subject", "severely_blurry",
+})
+
+
 def decide(
     final_score: float,
     flags: list[str],
