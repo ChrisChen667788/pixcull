@@ -77,6 +77,12 @@ def decide(
     rescorer_prob_keep: float | None = None,
     vertical: str | None = None,
     personal_shift: float = 0.0,
+    #: v2.60.1 — {flag: [scene, ...]} learned from THIS photographer's
+    #: blind pass. Kept out of the global exemption sets on purpose: the
+    #: proposals that produce it come from one shoot, and n=10 from one
+    #: card is a fact about that card until it is a fact about the
+    #: photographer. Per-profile it costs nobody else anything.
+    personal_exemptions: dict | None = None,
     vlm_label: str | None = None,
     vlm_axes: dict[str, float | None] | None = None,
     # v2.58 — `off` by default, downgraded from `primary`.
@@ -195,6 +201,11 @@ def decide(
     # ``motion_blur_on_face``; wedding tolerates ``shadows_clipped``).
     if vert_policy is not None and vert_policy.tolerated_flags:
         hard_cull = hard_cull - set(vert_policy.tolerated_flags)
+    # v2.60.1 — the photographer's own, applied last so it can only
+    # widen tolerance, never re-arm a flag the rules already forgave.
+    for _flag, _scenes in (personal_exemptions or {}).items():
+        if scene in set(_scenes):
+            hard_cull = hard_cull - {_flag}
 
     triggered = set(flags) & hard_cull
 

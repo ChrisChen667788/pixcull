@@ -205,3 +205,68 @@ def test_exemptions_are_proposed_only_on_enough_firings(tmp_path):
         "flags that fire")[0], (
         "a scene with 3 firings was proposed — the evidence bar is not "
         "holding, and this is exactly how n=3 becomes a product decision")
+
+
+def test_a_learned_exemption_reaches_the_decision(tmp_path, monkeypatch):
+    """Advertised-but-unreachable is this repo's named recurring defect.
+
+    A profile can carry scene exemptions, `calibrate --write` can put
+    them there, and `decide()` can act on them — and none of that is
+    worth anything unless the value arrives at the call that produces
+    `decision`. Asserted through the real call, not by reading either
+    end of the wire.
+    """
+    from pixcull.config import PixCullConfig
+    from pixcull.scoring.decision import Decision, decide
+    from pixcull.scoring.personalized import (
+        PersonalProfile, load_profile, save_profile,
+    )
+
+    cfg = PixCullConfig.load()
+    base, _ = decide(0.7, ["no_clear_subject"], cfg, "standard", scene="event")
+    assert base is Decision.CULL, "fixture no longer starts from a cull"
+
+    got, _ = decide(0.7, ["no_clear_subject"], cfg, "standard", scene="event",
+                    personal_exemptions={"no_clear_subject": ["event"]})
+    assert got is not Decision.CULL, "the exemption never reached decide()"
+
+    # It must survive a round trip, or it lasts one process.
+    prof = PersonalProfile(
+        user_id="local", n_annotations=150, keep_rate=0.93, cull_rate=0.07,
+        keep_threshold_shift=-0.02, axis_keep_means={}, axis_cull_means={},
+        most_cared_axis=None, label_provenance="blind",
+        scene_exemptions={"no_clear_subject": ["event"]})
+    p = tmp_path / "profile.json"
+    save_profile(prof, p)
+    assert load_profile(p).scene_exemptions == {"no_clear_subject": ["event"]}
+
+    # And the orchestrator must hand it to the call that decides.
+    import inspect
+
+    from pixcull.pipeline import orchestrator
+    src = inspect.getsource(orchestrator.run_pipeline)
+    assert "personal_exemptions=_personal_exempt" in src, (
+        "the pipeline loads exemptions but never passes them to decide()")
+
+
+def test_an_exemption_can_only_widen_tolerance(tmp_path):
+    """A personal entry must not re-arm a flag the rules already forgave.
+
+    Applied last and only ever subtracting, so the worst a bad profile
+    can do is keep a frame — never destroy one that the shipped rules
+    would have kept.
+    """
+    from pixcull.config import PixCullConfig
+    from pixcull.scoring.decision import Decision, decide
+
+    cfg = PixCullConfig.load()
+    # `landscape` already exempts no_clear_subject globally.
+    got, _ = decide(0.7, ["no_clear_subject"], cfg, "standard",
+                    scene="landscape",
+                    personal_exemptions={"closed_eyes": ["landscape"]})
+    assert got is not Decision.CULL
+
+    # A nonsense profile cannot turn a keep into a cull.
+    got2, _ = decide(0.9, [], cfg, "standard", scene="portrait",
+                     personal_exemptions={"anything": ["portrait"]})
+    assert got2 is not Decision.CULL

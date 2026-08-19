@@ -524,6 +524,7 @@ def run_pipeline(
     # into fuse_score. Both are no-ops without an active profile, so generic
     # runs are byte-identical (verified by an A/B regression).
     _personal_shift = 0.0
+    _personal_exempt: dict = {}
     _axis_pref: dict[str, float] | None = None
     try:
         from pixcull.scoring.personalized import load_profile
@@ -531,6 +532,7 @@ def run_pipeline(
         if _pp is not None and _pp.is_active():
             from pixcull.scoring.personal_learn import axis_weights
             _personal_shift = float(_pp.keep_threshold_shift)
+            _personal_exempt = dict(getattr(_pp, "scene_exemptions", {}) or {})
             _axis_pref = axis_weights(_pp)
             _top = max(_axis_pref, key=lambda a: _axis_pref[a]) if _axis_pref else "—"
             console.print(
@@ -588,6 +590,10 @@ def run_pipeline(
             scene=row["scene"],
             rescorer_prob_keep=r_prob,
             vertical=vertical,           # V17.2 — per-batch override
+            # v2.60.1 — advertised-but-unreachable is this repo's named
+            # recurring defect; the exemptions have to arrive HERE, at the
+            # call that produces `decision`, not merely be loaded above.
+            personal_exemptions=_personal_exempt,
             personal_shift=_personal_shift,   # v2.4-P0-2b — your taste
         )
 

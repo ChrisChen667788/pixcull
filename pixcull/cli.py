@@ -1042,6 +1042,7 @@ def calibrate(
     # photographer with a negative result and no next step.
     from pixcull.scoring.decision import _HARD_CULL_FLAGS_FOR_REPORT
     flag_culls, thresh_culls = 0, 0
+    proposals: list = []
     per_flag: dict = {}
     n_cull_truth = sum(1 for v in truth.values() if v == "cull")
     for r in rows:
@@ -1075,7 +1076,6 @@ def calibrate(
         # confident conclusion from a handful of rows more than once, and
         # a scene that fired three times says nothing about a scene.
         MIN_FIRINGS = 8
-        proposals = []
         by_scene: dict = {}
         for r in rows:
             fn = r["filename"]
@@ -1123,6 +1123,18 @@ def calibrate(
     if not write:
         console.print("[dim]Report only. `--write` saves the profile.[/dim]")
         return
+    # v2.60.1 — the proposals are the point of writing at all now, so
+    # they travel with the profile. Global defaults stay untouched: one
+    # shoot is evidence about one shoot.
+    learned: dict = {}
+    for f, sc, _n, _h, _why in proposals:
+        learned.setdefault(f, [])
+        if sc not in learned[f]:
+            learned[f].append(sc)
+    prof.scene_exemptions = learned
+    if learned:
+        console.print(f"[dim]writing {sum(len(v) for v in learned.values())} "
+                      f"scene exemption(s) into the profile[/dim]")
     dest = Path(str(out)).expanduser() if out else (
         Path.home() / ".pixcull" / "personal_profile.json")
     dest.parent.mkdir(parents=True, exist_ok=True)

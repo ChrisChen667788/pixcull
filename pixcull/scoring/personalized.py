@@ -30,7 +30,7 @@ batches.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
 from pathlib import Path
 from typing import Optional
@@ -74,6 +74,10 @@ class PersonalProfile:
     #: "" means unknown, which is what every profile written before this
     #: field carries. Unknown is not trusted: see is_active().
     label_provenance: str = ""
+    #: v2.60.1 — {flag: [scene, ...]}. Learned per photographer rather
+    #: than shipped, because the evidence behind any one entry is one
+    #: shoot's worth.
+    scene_exemptions: dict = field(default_factory=dict)
 
     #: Provenances that can move a threshold. `blind` is what
     #: `pixcull m3 label` writes — the photographer judged the frame with
@@ -189,6 +193,7 @@ def save_profile(profile: PersonalProfile, path: Path) -> None:
         "axis_cull_means":   profile.axis_cull_means,
         "most_cared_axis":   profile.most_cared_axis,
         "label_provenance":  profile.label_provenance,
+        "scene_exemptions":  profile.scene_exemptions,
     }
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2),
                      encoding="utf-8")
@@ -214,4 +219,5 @@ def load_profile(path: Path) -> Optional[PersonalProfile]:
         axis_cull_means=data.get("axis_cull_means") or {},
         most_cared_axis=data.get("most_cared_axis"),
         label_provenance=str(data.get("label_provenance") or ""),
+        scene_exemptions=data.get("scene_exemptions") or {},
     )
