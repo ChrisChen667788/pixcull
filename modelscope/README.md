@@ -876,6 +876,39 @@ v2.58 之前出厂值就是 `primary`。盲标结果是它被降下来的原因:
   组里。唯一的判别量是构图。**这位摄影师删的是编辑上弱的照片** —— 检测器
   看不见,而模型本该补上这一块。
 
+### 把边界拟合到你的眼睛 —— `pixcull calibrate`
+
+规则栈给所有人发同一个 keep/cull 阈值。盲标那一卷里,它判了 53 张 cull,
+而摄影师只删 10 张。
+
+```bash
+pixcull m3 label --folder shoot/ --limit 150        # 盲标,不花钱
+pixcull run shoot/ --output run/ --vlm-mode off
+pixcull calibrate --labels ~/Downloads/blind-review.json \
+                  --scores run/scores.csv            # 只报告;--write 才写入
+```
+
+**先报告,后写入** —— 档案会改变之后每一次运行。第一次真实标定的结论是
+**负面且有用的**:-0.080 的偏移移动了 26 个判决,却既没少砍也没多找到,
+因为那 53 张 cull **全部由硬性 flag 触发**,而分数偏移碰不到 flag。
+
+所以它不停在"没用",而是指出杠杆:
+
+```
+The threshold cannot help here. All 53 of the rule's culls fire on hard flags.
+flags that fire often and predict your culls poorly (baseline 6.7%):
+    no_clear_subject   fired 84, of those you culled 5  (6.0%, 0.9x)
+```
+
+证据够的时候,它会提出**按场景**的豁免 —— 单位是 `(flag, 场景)`,因为
+`no_clear_subject` 对风光毫无意义、对人像却是关键。提案要求该场景至少触发
+8 次:**一卷素材只是关于这一卷的事实**。采纳的豁免写进你的个人档案,不动
+出厂默认,而且**只能放宽、不能收紧** —— 一份错档案最坏是留下一张该删的,
+永远不会毁掉一张该留的。
+
+标注是键盘驱动的:<kbd>K</kbd> 留、<kbd>X</kbd> 删、<kbd>U</kbd> 撤销上一张、
+<kbd>S</kbd> 保存,断点续标 —— 因为一次有效的测量大约需要 1250 张。
+
 ### 在你自己的库上复现
 
 ```bash

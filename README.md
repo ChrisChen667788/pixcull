@@ -1035,6 +1035,44 @@ Two things that fall out of the same data, both uncomfortable:
   editorially weak pictures — which is what a detector cannot see and
   what the model was supposed to be for.
 
+### Fit the boundary to your eye — `pixcull calibrate`
+
+The rule stack ships one keep/cull threshold for everybody. On the
+blind pass it culled 53 of 150 frames where the photographer culled 10.
+
+```bash
+pixcull m3 label --folder shoot/ --limit 150        # blind, free
+pixcull run shoot/ --output run/ --vlm-mode off
+pixcull calibrate --labels ~/Downloads/blind-review.json \
+                  --scores run/scores.csv            # reports; --write saves
+```
+
+It reports before it writes, because a profile changes every future
+run. On the first real calibration the report was **negative and
+useful**: a -0.080 shift moved 26 decisions and changed neither the
+over-culling nor the recall, because every one of those 53 culls fires
+on a hard flag and a score shift cannot reach a flag.
+
+So it names the lever instead of stopping there:
+
+```
+The threshold cannot help here. All 53 of the rule's culls fire on hard flags.
+flags that fire often and predict your culls poorly (baseline 6.7%):
+    no_clear_subject   fired 84, of those you culled 5  (6.0%, 0.9x)
+```
+
+Where the evidence supports it, the command proposes per-scene
+exemptions — `(flag, scene)`, because `no_clear_subject` is meaningless
+for a landscape and load-bearing for a portrait. Proposals need at
+least 8 firings in that scene: one shoot is a fact about one shoot.
+Accepted exemptions live in your profile, never in the shipped
+defaults, and can only ever widen tolerance — the worst a wrong profile
+can do is keep a frame, never destroy one.
+
+Labelling is keyboard-driven: <kbd>K</kbd> keeps, <kbd>X</kbd> culls,
+<kbd>U</kbd> undoes the last one, <kbd>S</kbd> saves. It resumes where
+you left off, because a properly powered pass is ~1250 frames.
+
 ### How to reproduce this on your own library
 
 ```bash
