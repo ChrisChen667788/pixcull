@@ -155,7 +155,16 @@ h1{font:600 25px/1.3 Charter,"Songti SC",serif;margin:0 0 8px}
 border:1px solid var(--line);border-radius:9px;overflow:hidden;
 display:grid;grid-template-columns:minmax(0,420px) 1fr}
 @media(max-width:820px){.card{grid-template-columns:1fr}}
-.card img{width:100%;height:100%;object-fit:cover;display:block;background:#000}
+/* v2.57 — fixed aspect, not `height:100%`. Once EXIF orientation was
+   honoured, portrait frames rendered at their true aspect and stretched
+   the card to ~630px with a void beside the text; the bug had been
+   hiding the layout problem.
+   `max-height` did not fix it: `height:100%` inside an auto-height grid
+   row resolves to auto, so the row was sized by the image's intrinsic
+   height and the cap never bound. Pinning the ratio makes every card the
+   same height and lets `cover` centre-crop a tall frame. */
+.card img{width:100%;aspect-ratio:4/3;height:auto;object-fit:cover;
+display:block;background:#000}
 .meta{padding:16px 18px;display:flex;flex-direction:column;gap:11px}
 .hd{display:flex;gap:10px;align-items:baseline}
 .hd code{font:12px ui-monospace,monospace;color:var(--brass)}

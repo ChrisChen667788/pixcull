@@ -969,43 +969,59 @@ two already judged, one still open](docs/screenshots/24-review-sheet.png)
 
 ### What it found
 
-Two passes, **51 frames** judged by the photographer against the model.
+Three passes, and the third one is the only one that can be trusted.
 
-**Pass 1 — the rescues.** 18 frames the rule stack hard-culled and M3
-kept: the owner **agreed with M3 on 17**. M3 is very good at rescuing a
-frame the detectors wrongly discard, because it was handed the blink
-count and the sharpness variance and chose to overrule them anyway.
+**Passes 1–2 (51 frames) sampled where the two systems disagreed.** That
+measures the rule stack only on rows it is already arguing about, so it
+flatters whichever side you point it at. It did establish one thing by
+direction: M3 was right on 7 of 7 frames it promoted out of a cull, and
+on 8 of 19 it wanted to cull from a keep — reliable at rescuing,
+unreliable at condemning.
 
-**Pass 2 — everything else.** 40 frames sampled across the remaining
-disagreements, with all 19 of the highest-stakes ones taken whole. The
-result splits cleanly by direction:
+**Pass 3 was blind.** 150 frames from an untouched card, labelled with
+the photograph, a serial number and two buttons on screen and nothing
+else — then scored, in that order, so the labels cannot echo any system.
+The photographer marked 10 for deletion:
 
-| M3 wants to… | it was right |
+| on the 10 frames the photographer would delete | found |
 |---|---|
-| promote a frame the rules condemned (`cull →` keep/maybe) | **7 of 7** |
-| demote a `maybe` to `cull` | **3 of 3** |
-| soften a `keep` to `maybe` | 6 of 11 |
-| **cull a frame the rules kept** | **8 of 19** |
+| the rule stack | **2** |
+| `vlm_authority=primary` | 1 |
+| `vlm_authority=rescue` | 0 |
 
-**M3 is reliable at rescuing and unreliable at condemning.** On the one
-move that destroys a photograph — culling a keeper — it is worse than a
-coin flip. So the evidence buys exactly one power, and that is what
-`--vlm-authority rescue` grants: it may overturn a hard cull, and it may
-not touch anything else.
+Both authority modes' macro-F1 deltas have 95% confidence intervals
+spanning zero. The rule stack also culls **53 of 150 while the
+photographer culls 10** — over-culling by 5.3x.
 
-### What it does not yet establish
+**So: the headline job is not solved, by the rules or by the model.**
+`vlm_authority` stays `off`, and this section will keep saying so until
+a blind pass says otherwise.
 
-Both passes sampled **where the two systems disagreed**, which measures
-the rule stack only on the rows it is arguing about. On that sample M3
-looks far better than it does on the full set; on the full set 87% of the
-labels are still the rule stack's own decisions, so any change scores as
-an error. **Neither number can pick a default** — one is biased toward
-the rule, the other toward the model, and `pixcull m3 eval` now says so
-rather than printing the flattering one.
+Two things that fall out of the same data, both uncomfortable:
 
-`pixcull m3 review --only random` builds the sample that can: rows drawn
-without regard to whether the systems agree. Until that is labelled,
-`vlm_authority` stays `off` by default.
+* **The detector flags do not predict this photographer's culls.**
+  Against a 6.7% baseline: `no_clear_subject` 6.0% (0.9x — worse than
+  chance), `severely_underexposed` 0%, `severely_blurry` 0%. Frames
+  carrying **no flag at all** are the most-culled group, at 8.3%.
+* **The culled frames are not defective.** They are sharper than
+  average, pass technical checks more often, and none are in a burst.
+  The one discriminator is composition. This photographer deletes
+  editorially weak pictures — which is what a detector cannot see and
+  what the model was supposed to be for.
+
+### How to reproduce this on your own library
+
+```bash
+pixcull m3 label --folder /path/to/shoot --limit 150   # blind, free
+pixcull run /path/to/shoot --output run/ --vlm-mode off
+pixcull m3 eval --labels ~/Downloads/blind-review.json --scores run/scores.csv
+```
+
+The eval refuses to rank a sample that cannot support a ranking: labels
+copied from the rule stack, a sample with no `cull` ground truth, an
+authority mode that never fired, or an interval that spans zero each
+produce a named refusal instead of a number.
+
 
 ## Screenshots
 
