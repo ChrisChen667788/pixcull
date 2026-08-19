@@ -994,8 +994,12 @@ spanning zero. The rule stack also culls **53 of 150 while the
 photographer culls 10** — over-culling by 5.3x.
 
 **So: the headline job is not solved, by the rules or by the model.**
-`vlm_authority` stays `off`, and this section will keep saying so until
-a blind pass says otherwise.
+**The cloud judge stays off by default** — `pixcull run` does not call
+it unless you pass `--vlm-mode`, so a default run sends nothing. When
+you do turn it on, `vlm_authority` ships as `primary`, i.e. full
+authority; on this evidence that is more than it has earned, and until
+a blind pass says otherwise the honest recommendation is to leave the
+judge off.
 
 Two things that fall out of the same data, both uncomfortable:
 
