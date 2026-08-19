@@ -91,12 +91,28 @@ def test_openai_is_a_core_dependency_not_an_extra():
 # 2. CLI reach
 # ---------------------------------------------------------------------------
 
-def test_run_command_exposes_the_vision_judge():
-    from typer.testing import CliRunner
+def _run_option_names() -> set[str]:
+    """Option names on `pixcull run`, from the command, not its help text.
 
-    from pixcull.cli import app
-    out = CliRunner().invoke(app, ["run", "--help"]).output
-    assert "--vlm-mode" in out, (
+    v2.57.1 — this scraped the rendered `--help`, and Rich wraps a long
+    option name across lines when the terminal is narrow. On CI's
+    80-column console `--vlm-mode` came back as `--vlm-` + `mode` and the
+    substring check failed, reporting a missing feature that was present
+    the whole time. Ask the parser what it accepts.
+    """
+    import inspect
+
+    from pixcull.cli import run as run_cmd
+    names = set()
+    for prm in inspect.signature(run_cmd).parameters.values():
+        default = prm.default
+        for attr in ("param_decls", "opts"):
+            names.update(getattr(default, attr, None) or [])
+    return names
+
+
+def test_run_command_exposes_the_vision_judge():
+    assert "--vlm-mode" in _run_option_names(), (
         "pixcull run cannot turn the vision judge on — run_pipeline "
         "defaults it to 'off' and nothing overrides that")
 
@@ -170,10 +186,22 @@ def test_the_upload_is_announced(monkeypatch, tmp_path, capsys):
 # ---------------------------------------------------------------------------
 
 def _write_cfg(tmp_path, **keys):
-    d = tmp_path / "Library" / "Application Support" / "PixCull"
-    d.mkdir(parents=True, exist_ok=True)
-    (d / "config.json").write_text(json.dumps(keys), encoding="utf-8")
-    return d / "config.json"
+    """Write config.json where THIS platform's loader will look.
+
+    v2.57.1 — this wrote only the macOS path
+    (`Library/Application Support/PixCull`). `_load_app_config_into_env`
+    branches on `sys.platform` and reads `~/.pixcull/` on Linux, so on CI
+    the loader found nothing, returned early, and three tests failed —
+    while passing on every machine the author owns. Writing both keeps
+    the test honest wherever it runs.
+    """
+    written = []
+    for d in (tmp_path / "Library" / "Application Support" / "PixCull",
+              tmp_path / ".pixcull"):
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "config.json").write_text(json.dumps(keys), encoding="utf-8")
+        written.append(d / "config.json")
+    return written[0]
 
 
 def test_minimax_key_reaches_the_environment(monkeypatch, tmp_path):
@@ -243,3 +271,37 @@ def test_launcher_prefers_m3_when_it_has_the_credentials():
         "M3 must outrank the on-device model — it sees the pixels AND "
         "reads the measurements")
     assert isinstance(tree, ast.Module)
+
+
+def test_the_config_is_found_on_both_platforms(monkeypatch, tmp_path):
+    """The loader branches on `sys.platform`; the tests only knew one arm.
+
+    macOS reads `~/Library/Application Support/PixCull/config.json`,
+    everything else reads `~/.pixcull/config.json`. Three tests wrote
+    only the macOS path and asserted the key arrived, so they passed on
+    every machine the author owns and failed the moment CI ran them on
+    Linux — reporting a broken feature that worked.
+
+    Both arms are exercised here explicitly, so a platform this repo is
+    not developed on cannot be the only thing that notices.
+    """
+    import os
+    import sys as _sys
+
+    import pixcull.report.serve_app as S
+
+    for platform, sub in (("darwin", Path("Library") / "Application Support"
+                                     / "PixCull"),
+                          ("linux", Path(".pixcull"))):
+        home = tmp_path / platform
+        d = home / sub
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "config.json").write_text(
+            json.dumps({"minimax_api_key": "mm-" + platform}), encoding="utf-8")
+
+        monkeypatch.setattr(_sys, "platform", platform)
+        monkeypatch.setattr(Path, "home", classmethod(lambda cls, h=home: h))
+        monkeypatch.delenv("MINIMAX_API_KEY", raising=False)
+        S._load_app_config_into_env()
+        assert os.environ.get("MINIMAX_API_KEY") == "mm-" + platform, (
+            f"config.json was not found on {platform}")

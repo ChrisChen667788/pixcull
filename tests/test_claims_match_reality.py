@@ -157,12 +157,18 @@ def test_the_local_only_escape_hatch_still_exists():
 
 def test_cli_documents_that_photos_are_uploaded():
     """A user turning this on must be told, in the help text, what it does."""
-    from typer.testing import CliRunner
+    import inspect
 
-    from pixcull.cli import app
-    out = CliRunner().invoke(app, ["run", "--help"]).output
-    assert "--vlm-mode" in out
-    assert re.search(r"upload", out, re.I), (
+    from pixcull.cli import run as run_cmd
+
+    # The NAME comes from the parser — Rich wraps it across lines on a
+    # narrow console, which failed on CI while passing locally (v2.57.1).
+    # The WORDING still has to be read out of the help string, because
+    # that is the thing a user actually sees.
+    prm = inspect.signature(run_cmd).parameters["vlm_mode"]
+    decls = set(getattr(prm.default, "param_decls", None) or [])
+    assert "--vlm-mode" in decls, f"option renamed or gone: {decls}"
+    assert re.search(r"upload", str(getattr(prm.default, "help", "")), re.I), (
         "--vlm-mode's help does not say photos are uploaded")
 
 
