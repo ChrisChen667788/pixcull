@@ -37,7 +37,7 @@ _FONT_CANDIDATES = (
 
 
 def _font(size: int):
-    from PIL import ImageFont
+    from PIL import ImageFont, ImageOps
     for path in _FONT_CANDIDATES:
         try:
             return ImageFont.truetype(path, size)
@@ -165,7 +165,7 @@ def render_contact_sheet(
             x = margin + c * (cell_w + gutter)
             y = margin + title_h + r * (cell_h + gutter)
             try:
-                im = Image.open(img_path).convert("RGB")
+                im = ImageOps.exif_transpose(Image.open(img_path)).convert("RGB")
                 im.thumbnail((cell_w, thumb_h))
                 canvas.paste(im, (x + (cell_w - im.width) // 2,
                                   y + (thumb_h - im.height) // 2))

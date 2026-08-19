@@ -45,7 +45,7 @@ from typing import Iterable
 # never fires for user-trusted local files the pipeline has already
 # read once.  Local-import to keep Pillow optional.
 try:
-    from PIL import Image as _PILImage  # type: ignore
+    from PIL import Image as _PILImage  # type: ignore, ImageOps
     _PILImage.MAX_IMAGE_PIXELS = 256_000_000  # ~256 MP
 except Exception:
     pass
@@ -210,12 +210,17 @@ def inline_thumb(
     if image_path is None or not image_path.is_file():
         return _empty_data_uri()
     try:
-        from PIL import Image  # type: ignore
+        # v2.56.2 — ImageOps must come in on THIS line. The module-level
+        # import does not reach here, and the `except Exception` below
+        # turned the resulting NameError into a silent 1x1 placeholder:
+        # the PDF still built, every thumbnail was blank, and only a test
+        # asserting the mime type noticed.
+        from PIL import Image, ImageOps  # type: ignore
     except ImportError:
         # Pillow is a core dep but tests run minimal envs occasionally.
         return _empty_data_uri()
     try:
-        with Image.open(image_path) as im:
+        with ImageOps.exif_transpose(Image.open(image_path)) as im:
             im = im.convert("RGB")
             im.thumbnail((max_side, max_side))
             from io import BytesIO

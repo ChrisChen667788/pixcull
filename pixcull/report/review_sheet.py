@@ -49,9 +49,17 @@ def thumbnail_data_uri(path: Path, px: int = THUMB_PX) -> str:
     the file: a 45 MP RAW-derived JPEG decodes at 1/8 scale in a fraction
     of the time, and the result is downscaled anyway.
     """
-    from PIL import Image
+    from PIL import Image, ImageOps
     im = Image.open(path)
     im.draft("RGB", (px * 2, px * 2))
+    # v2.56.2 — `io/loader.py` says "every code path now goes through
+    # ImageOps.exif_transpose" (V16.1). This module opened PIL directly
+    # and was not one of them: 67 of 150 frames in a blind labelling pass
+    # were shown to the reviewer lying on their side. The aggregate cull
+    # rate happened not to move (6.0% sideways vs 7.2% upright), so
+    # nothing in the numbers would ever have revealed it — I found it by
+    # looking at the photographs.
+    im = ImageOps.exif_transpose(im)
     im = im.convert("RGB")
     im.thumbnail((px, px), Image.LANCZOS)
     buf = io.BytesIO()

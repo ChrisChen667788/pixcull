@@ -215,8 +215,8 @@ def _check_dominant_color(row: dict, rule: dict,
     except ValueError:
         return None
     try:
-        from PIL import Image
-        with Image.open(image_path) as im:
+        from PIL import Image, ImageOps
+        with ImageOps.exif_transpose(Image.open(image_path)) as im:
             im = im.convert("RGB")
             # Downsize for speed — 64 px square gives a stable mean
             # color for ~5 ms vs ~500 ms on a 50 MP shot.
