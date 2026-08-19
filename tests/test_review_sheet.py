@@ -530,7 +530,8 @@ const nodes={cnt:el(),hint:el(),out:el(),pos:el()};
 for(let i=0;i<N;i++) nodes['mk'+i]=el();
 globalThis.localStorage={getItem:k=>store[k]??null,setItem:(k,v)=>{store[k]=v}};
 let kh=null;
-globalThis.document={querySelectorAll:()=>cards,getElementById:id=>nodes[id],
+const bar={style:{}};
+globalThis.document={querySelector:()=>bar,querySelectorAll:()=>cards,getElementById:id=>nodes[id],
   createElement:()=>({click(){},remove(){}}),body:{appendChild(){}},
   addEventListener:(t,f)=>{if(t==='keydown')kh=f;}};
 globalThis.Blob=class{constructor(p){this.parts=p}};
@@ -545,7 +546,8 @@ api.focusCard(0);
 for(const k of %s) kh({key:k,preventDefault(){},metaKey:false,ctrlKey:false,altKey:false});
 console.log(JSON.stringify({verdicts:JSON.parse(store[Object.keys(store)[0]]||'{}'),
   count:nodes.cnt.textContent, pos:nodes.pos.textContent,
-  focused:cards.filter(c=>c.classList._s.has('cur')).length}));
+  focused:cards.filter(c=>c.classList._s.has('cur')).length,
+  bar:bar.style.width}));
 """ % (n, js, _json.dumps(keys))
     with tempfile.TemporaryDirectory() as d:
         f = Path(d) / "h.mjs"
@@ -598,3 +600,23 @@ def test_the_page_still_renders_after_percent_escaping(photo, tmp_path):
     assert "%(" not in page, "an unsubstituted format placeholder survived"
     assert "(CUR+d)%cards.length" in page, (
         "the modulo did not survive escaping — the advance loop is broken")
+
+
+def test_progress_survives_a_reload_and_shows_how_far_in_you_are(photo,
+                                                                 tmp_path):
+    """A 1250-frame pass spans days, so it has to be resumable AND legible.
+
+    localStorage already survived a reload; what was missing is any
+    sense of whether this sitting is worth starting. "312 / 1250" is a
+    number, a bar is an answer.
+    """
+    items = [{"fn": f"{i}.jpg", "path": str(photo)} for i in range(5)]
+    page = write(items, tmp_path / "p.html", blind=True, slug="kb",
+                 selection="blind", title="t", lede="l").read_text("utf-8")
+    got = _run_page_js(page, ["k", "x", "k"])
+    assert got["bar"] == "60%", f"progress bar reads {got['bar']!r}"
+
+    # And the counter and bar cannot drift apart, because one function
+    # writes both — a previous version updated the count in three places
+    # and the undo path forgot one.
+    assert "3 / 5" in got["count"]

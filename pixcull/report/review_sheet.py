@@ -193,6 +193,10 @@ border-top:1px solid var(--line);padding:11px 20px;display:flex;gap:14px;
 align-items:center;justify-content:center;font-size:13px}
 #hint{color:var(--dim);font-size:12px;max-width:52ch;line-height:1.45}
 #pos{color:var(--dim);font-size:12px;font-variant-numeric:tabular-nums}
+#prog{flex:1;max-width:220px;height:4px;border-radius:2px;background:var(--line);
+overflow:hidden}
+#prog>i{display:block;height:100%;background:var(--brass);width:0;
+transition:width .18s ease}
 #keys{color:var(--dim);font-size:11.5px}
 #keys kbd{border:1px solid var(--line);border-radius:3px;padding:0 4px;
 font:11px ui-monospace,monospace;color:var(--ink)}
@@ -221,9 +225,16 @@ function paint(i){
   m.textContent=(ok?'\\u2713 ':'\\u2717 ')+(ok?c.dataset.yes:c.dataset.no);
   m.style.color=ok?'var(--ok)':'var(--bad)';
 }
+function tick(){
+  const done=Object.keys(R).length;
+  document.getElementById('cnt').textContent='\\u5df2\\u5224 '+done+' / '+N;
+  const bar=document.querySelector('#prog>i');
+  // v2.61.1 — a 1250-frame pass spans days. "312 / 1250" is a number;
+  // a bar is a sense of whether this sitting is worth starting.
+  if(bar) bar.style.width=(N?100*done/N:0)+'%%';
+}
 function mark(i,ok){
-  R[i]=ok; localStorage.setItem(KEY,JSON.stringify(R)); paint(i);
-  document.getElementById('cnt').textContent='\\u5df2\\u5224 '+Object.keys(R).length+' / '+N;
+  R[i]=ok; localStorage.setItem(KEY,JSON.stringify(R)); paint(i); tick();
 }
 function payload(){
   const cards=document.querySelectorAll('.card');
@@ -330,7 +341,7 @@ document.addEventListener('keydown', e=>{
 });
 window.addEventListener('DOMContentLoaded',()=>{
   for(const i in R) paint(i);
-  document.getElementById('cnt').textContent='\\u5df2\\u5224 '+Object.keys(R).length+' / '+N;
+  tick();
   let first=0; while(first<N && (first in R)) first++;
   focusCard(Math.min(first, N-1));
 });
