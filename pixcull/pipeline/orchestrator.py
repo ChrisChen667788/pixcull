@@ -291,8 +291,19 @@ def _write_clip_cache(df: pd.DataFrame, output: Path) -> int:
         tmp = cache_path.with_suffix(cache_path.suffix + ".tmp")
         output.mkdir(parents=True, exist_ok=True)
         with open(tmp, "wb") as fh:
+            # v2.56.4 — stamp the preprocessing, from the same constant
+            # semantic_search checks. These vectors come from the worker,
+            # which loads through io.loader and is already upright; the
+            # stamp is what stops `load_embeddings_cache` from throwing
+            # them away alongside the genuinely stale ones.
+            #
+            # There are TWO writers of this file. Stamping only the other
+            # one broke 13 tests: the cache written here loaded as
+            # "pre-v2.56.4" and was discarded on every read.
+            from pixcull.scoring.semantic_search import PREPROC_VERSION
             np.savez(fh, filenames=np.array(names), vectors=arr,
-                     model=np.array("clip-vit-base-patch32"))
+                     model=np.array("clip-vit-base-patch32"),
+                     preproc=np.array(PREPROC_VERSION))
         tmp.rename(cache_path)
         console.print(f"[cyan]CLIP cache:[/] {len(names)} vectors "
                       f"→ {cache_path.name} [dim](semantic search + "

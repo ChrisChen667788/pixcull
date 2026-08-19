@@ -58,11 +58,12 @@ _ALLOWED_WITHOUT: dict[str, str] = {
     #   composition_classifier — 17% of rotated frames classify to a
     #     different composition rule. Reaches only counterfactual.py's
     #     "how to improve this shot" advice; no score column.
-    #   semantic_search — CLIP vectors built from untransposed pixels
-    #     (cli.py, serve_app.py, on the photo library). Degrades search
-    #     and the CLIP near-dup collapse for portrait frames. Fixing it
-    #     means rebuilding embeddings, not rescoring.
-    #   attribution — the heatmap is rendered to the user sideways.
+    #   semantic_search — FIXED v2.56.4. Was embedding untransposed
+    #     pixels on the photo library, so portrait frames landed near
+    #     the wrong neighbours in search and in the CLIP near-dup
+    #     collapse. Any embeddings cache built before that is stale.
+    #   attribution — FIXED v2.56.4. The heatmap is drawn back over the
+    #     photograph, so a sideways input produced a sideways overlay.
     #   temporal / dup_frames / reel_caption — video frames, which
     #     ffmpeg writes without an EXIF orientation tag at all.
     #   color_grade — receives bytes from its caller, and grading is
@@ -73,8 +74,6 @@ _ALLOWED_WITHOUT: dict[str, str] = {
     # without fixing the module is how this becomes a rubber stamp.
     "pixcull/scoring/composition_classifier.py": "UNREVIEWED advice path",
     "pixcull/scoring/counterfactual.py": "UNREVIEWED advice path",
-    "pixcull/scoring/attribution.py": "UNREVIEWED heatmap orientation",
-    "pixcull/scoring/semantic_search.py": "UNREVIEWED CLIP embeddings",
     "pixcull/scoring/temporal.py": "UNREVIEWED video frames (no EXIF)",
     "pixcull/scoring/dup_frames.py": "UNREVIEWED video frames (no EXIF)",
     "pixcull/scoring/reel_caption.py": "UNREVIEWED video frames (no EXIF)",
@@ -169,7 +168,7 @@ def test_the_unreviewed_debt_stays_visible():
     """
     unreviewed = {k for k, v in _ALLOWED_WITHOUT.items()
                   if v.startswith("UNREVIEWED")}
-    assert len(unreviewed) == 8, (
+    assert len(unreviewed) == 6, (
         f"the unreviewed-orientation pile changed size ({len(unreviewed)}). "
         f"If a module was fixed, drop its entry. If one was added, that is "
         f"a new instance of a bug we already know about: {sorted(unreviewed)}")
@@ -198,3 +197,113 @@ def test_the_unreviewed_debt_stays_visible():
         src = (ROOT / rel).read_text(encoding="utf-8")
         assert "exif_transpose" not in src, (
             f"{rel} now transposes — delete its _ALLOWED_WITHOUT entry")
+
+
+def _sideways(tmp_path, name="portrait.jpg"):
+    """A landscape-pixel file tagged 'rotate 90° CCW to display'."""
+    from PIL import Image
+    p = tmp_path / name
+    exif = Image.Exif()
+    exif[0x0112] = 8
+    im = Image.new("RGB", (400, 200), (30, 30, 30))
+    # A bright bar along one long edge, so orientation is detectable in
+    # the output rather than inferred from the aspect ratio alone.
+    for x in range(400):
+        for y in range(0, 20):
+            im.putpixel((x, y), (250, 250, 250))
+    im.save(p, "JPEG", exif=exif, quality=95)
+    return p
+
+
+def test_clip_embeds_the_upright_frame(tmp_path):
+    """Behaviour, not the presence of a call.
+
+    CLIP embeds pixels. A portrait frame stored sideways embeds as a
+    sideways photograph, so it lands near the wrong neighbours in both
+    semantic search and the CLIP near-dup collapse — silently, because
+    the results still look like results.
+    """
+    from pixcull.scoring.semantic_search import load_for_clip
+
+    src = _sideways(tmp_path)
+    got = load_for_clip(src)
+    assert got.height > got.width, (
+        f"the encoder receives a landscape frame, got {got.size}")
+    # The bright bar lives on one long edge; after an upright transpose
+    # it must be down a SIDE, not across the top.
+    left = sum(got.getpixel((2, y))[0] for y in range(got.height))
+    top = sum(got.getpixel((x, 2))[0] for x in range(got.width))
+    assert left > top, ("the frame is the right shape but the wrong way "
+                        "round — transposed with the wrong operation")
+
+
+def test_the_attribution_heatmap_matches_the_displayed_frame(tmp_path):
+    """A sideways heatmap over an upright photo points at nothing.
+
+    Also pins the ORDER: transposing after the square resize would hand
+    the model a frame whose aspect ratio never existed.
+    """
+    from PIL import Image, ImageOps
+
+    from pixcull.scoring.attribution import load_for_attribution
+
+    src = _sideways(tmp_path)
+    got = load_for_attribution(src, size=64)
+    assert got.size == (64, 64), "the model input must stay square"
+
+    upright = ImageOps.exif_transpose(Image.open(src)).convert("RGB")
+    want = upright.resize((64, 64))
+    diff = sum(abs(a - b)
+               for a, b in zip(list(got.convert("L").tobytes()),
+                               list(want.convert("L").tobytes())))
+    assert diff == 0, (
+        "the resized frame does not match transpose-then-resize, so the "
+        "model sees a different picture than the viewer")
+
+    wrong = Image.open(src).convert("RGB").resize((64, 64))
+    wrong_diff = sum(abs(a - b)
+                     for a, b in zip(list(got.convert("L").tobytes()),
+                                     list(wrong.convert("L").tobytes())))
+    assert wrong_diff > 0, (
+        "transposing changed nothing — the fixture is not actually "
+        "rotated and this test proves nothing")
+
+
+def test_an_embeddings_cache_from_before_the_fix_is_discarded(tmp_path):
+    """Fixing the encoder does nothing if the old vectors are reused.
+
+    A cache written before v2.56.4 holds portrait frames embedded on
+    their side. It loads cleanly, has the right shape, and describes
+    different pictures — so `load_embeddings_cache` has to reject it on
+    provenance, not on age or readability.
+    """
+    import numpy as np
+
+    from pixcull.scoring.semantic_search import (
+        PREPROC_VERSION, load_embeddings_cache,
+    )
+
+    cur = tmp_path / "cur.npz"
+    with open(cur, "wb") as fh:
+        np.savez(fh, filenames=np.array(["a.jpg"]),
+                 vectors=np.zeros((1, 4), dtype=np.float32),
+                 model=np.array("clip-vit-base-patch32"),
+                 preproc=np.array(PREPROC_VERSION))
+    assert load_embeddings_cache(cur) is not None, "a current cache must load"
+
+    old = tmp_path / "old.npz"
+    with open(old, "wb") as fh:       # no `preproc` key at all
+        np.savez(fh, filenames=np.array(["a.jpg"]),
+                 vectors=np.zeros((1, 4), dtype=np.float32),
+                 model=np.array("clip-vit-base-patch32"))
+    assert load_embeddings_cache(old) is None, (
+        "a pre-v2.56.4 cache was reused — every portrait vector in it "
+        "was built from a sideways frame")
+
+    stale = tmp_path / "stale.npz"
+    with open(stale, "wb") as fh:
+        np.savez(fh, filenames=np.array(["a.jpg"]),
+                 vectors=np.zeros((1, 4), dtype=np.float32),
+                 model=np.array("clip-vit-base-patch32"),
+                 preproc=np.array("something-else"))
+    assert load_embeddings_cache(stale) is None

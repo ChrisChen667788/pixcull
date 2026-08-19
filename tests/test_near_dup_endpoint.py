@@ -16,6 +16,8 @@ import urllib.request
 from pathlib import Path
 
 import numpy as np
+
+from pixcull.scoring.semantic_search import PREPROC_VERSION
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -48,7 +50,8 @@ def server(tmp_path):
     vecs /= np.linalg.norm(vecs, axis=1, keepdims=True)
     with open(root / "smoke_run" / "output" / "embeddings.npz", "wb") as fh:
         np.savez(fh, filenames=np.array(fns), vectors=vecs,
-                 model=np.array("clip-vit-base-patch32"))
+                 model=np.array("clip-vit-base-patch32"),
+                 preproc=np.array(PREPROC_VERSION))
 
     env = {**os.environ, "PIXCULL_DEMO_ROOT": str(root)}
     port = _free_port()

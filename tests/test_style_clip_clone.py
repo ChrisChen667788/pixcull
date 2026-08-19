@@ -11,6 +11,8 @@ from pathlib import Path
 
 import pytest
 
+from pixcull.scoring.semantic_search import PREPROC_VERSION
+
 # numpy is a soft dependency of the style-V2 module — skip the
 # whole test file if not present (style-V1 / cli_audit tests don't
 # need it).
@@ -33,6 +35,7 @@ def _mk_cache(tmp_path: Path, fns: list[str], vectors) -> Path:
         filenames=np.array(fns),
         vectors=np.asarray(vectors, dtype=np.float32),
         model="test/clip-v1",
+        preproc=PREPROC_VERSION,
     )
     return path
 

@@ -59,6 +59,27 @@ def _feature_tensor(feats):
         f"unexpected CLIP feature output: {type(feats).__name__}")
 
 
+#: Bump when anything about how pixels reach CLIP changes. A cache built
+#: under an older value is not merely old, it is WRONG — v2.56.4 embedded
+#: portrait frames sideways, and a silently reused cache would keep every
+#: one of those vectors after the code was fixed.
+PREPROC_VERSION = "v2.56.4-exif"
+
+
+def load_for_clip(path):
+    """Open one photo the way CLIP must see it.
+
+    Extracted so the orientation guarantee is testable as behaviour
+    rather than as the presence of a call in a source file. CLIP embeds
+    pixels: a portrait frame stored sideways embeds as a sideways
+    photograph and lands near the wrong neighbours in search and in the
+    near-dup collapse — silently, because results still look like
+    results. 45% of a real 150-frame shoot carried Orientation 8.
+    """
+    from PIL import Image, ImageOps
+    return ImageOps.exif_transpose(Image.open(path)).convert("RGB")
+
+
 def build_embeddings_cache(
     image_paths: list[Path],
     cache_path: Path,
@@ -74,7 +95,7 @@ def build_embeddings_cache(
     Skips paths that fail to load. The cache only contains successfully-
     encoded entries.
     """
-    from PIL import Image
+    from PIL import Image, ImageOps
     import torch
     from pixcull.detectors.scene import _clip
 
@@ -88,7 +109,12 @@ def build_embeddings_cache(
         names: list[str] = []
         for p in batch:
             try:
-                imgs.append(Image.open(p).convert("RGB"))
+                # v2.56.4 — transpose first. CLIP embeds pixels, so a
+                # portrait frame stored sideways embeds as a sideways
+                # photograph: it lands near the wrong neighbours in
+                # search AND in the CLIP near-dup collapse. 45% of a
+                # real 150-frame shoot carried Orientation 8.
+                imgs.append(load_for_clip(p))
                 names.append(p.name)
             except (OSError, ValueError) as e:
                 logger.warning(f"skip {p}: {e}")
@@ -116,6 +142,7 @@ def build_embeddings_cache(
         "filenames": np.array(filenames),
         "vectors":   arr,
         "model":     np.array("clip-vit-base-patch32"),
+        "preproc":   np.array(PREPROC_VERSION),
     }
     # Atomic save: write next to cache_path, then rename.
     # NB: np.savez appends ".npz" to a str/Path target that doesn't already
@@ -141,6 +168,16 @@ def load_embeddings_cache(cache_path: Path) -> Optional[dict]:
         return None
     try:
         z = np.load(cache_path, allow_pickle=False)
+        got = str(z["preproc"]) if "preproc" in z else "(pre-v2.56.4)"
+        if got != PREPROC_VERSION:
+            # Not a soft "stale" — those vectors describe a different
+            # picture. Caches written before v2.56.4 encoded portrait
+            # frames on their side; reusing one silently keeps the bug
+            # after the code is fixed.
+            logger.warning(
+                f"{cache_path}: built with preprocessing {got}, current is "
+                f"{PREPROC_VERSION} — discarding and rebuilding")
+            return None
         return {
             "filenames": z["filenames"],
             "vectors":   z["vectors"],

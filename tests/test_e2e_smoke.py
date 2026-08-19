@@ -49,6 +49,8 @@ from pathlib import Path
 
 import pytest
 
+from pixcull.scoring.semantic_search import PREPROC_VERSION
+
 REPO = Path(__file__).resolve().parent.parent
 
 _SCORES_HEADER = "path,filename,scene,decision,score_final,cluster_id\n"
@@ -220,7 +222,8 @@ def test_journey_library_index_actually_indexes(shoot, tmp_path):
     vecs /= np.linalg.norm(vecs, axis=1, keepdims=True)
     with (shoot["run_dir"] / "embeddings.npz").open("wb") as fh:
         np.savez(fh, filenames=np.array([f"img{i}.jpg" for i in range(n)]),
-                 vectors=vecs, model=np.array("clip-vit-base-patch32"))
+                 vectors=vecs, model=np.array("clip-vit-base-patch32"),
+                 preproc=np.array(PREPROC_VERSION))
 
     lib = tmp_path / "lib"
     res = _cli("library", "index", "--root", str(shoot["root"]),

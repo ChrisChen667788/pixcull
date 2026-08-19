@@ -9,6 +9,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+
+from pixcull.scoring.semantic_search import PREPROC_VERSION
 import pytest
 
 from pixcull.scoring.semantic_search import (
@@ -75,7 +77,8 @@ def test_load_embeddings_cache_round_trip(tmp_path: Path):
     vecs = _norm(np.random.randn(5, 8).astype(np.float32))
     fns = np.array([f"img_{i}.jpg" for i in range(5)])
     np.savez(tmp_path / "embeddings.npz",
-              filenames=fns, vectors=vecs, model=np.array("test-model"))
+              filenames=fns, vectors=vecs, model=np.array("test-model"),
+              preproc=np.array(PREPROC_VERSION))
     loaded = load_embeddings_cache(tmp_path / "embeddings.npz")
     assert loaded is not None
     assert list(loaded["filenames"]) == list(fns)

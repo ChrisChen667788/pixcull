@@ -84,6 +84,19 @@ def _check_torch_available() -> None:
         ) from exc
 
 
+def load_for_attribution(image_path, size: int = 224):
+    """Open one photo the way the viewer will see it.
+
+    The heatmap is drawn back over the photograph, so a sideways input
+    produces an overlay that points at nothing. Transpose happens BEFORE
+    the resize: transposing after would hand the model a frame with the
+    wrong aspect ratio.
+    """
+    from PIL import Image, ImageOps
+    return (ImageOps.exif_transpose(Image.open(image_path))
+            .convert("RGB").resize((size, size)))
+
+
 def build_heatmap(
     image_path: Path,
     axis: str,
@@ -110,11 +123,15 @@ def build_heatmap(
     # Deferred imports — only on actual compute path.
     import torch
     import numpy as np
-    from PIL import Image
+    from PIL import Image, ImageOps
     # The backbone is shared across axes; we keep a per-process cache.
     backbone = _get_backbone()
     head = _get_axis_head(axis)
-    img = Image.open(image_path).convert("RGB").resize((224, 224))
+    # v2.56.4 — the heatmap is drawn back over the photograph, so a
+    # sideways input produced a sideways overlay. Transpose before the
+    # 224x224 resize, not after: the model must see the frame the way
+    # the viewer will.
+    img = load_for_attribution(image_path)
     arr = np.asarray(img, dtype=np.float32) / 255.0
     # Normalize with ImageNet stats (matches timm default)
     arr = (arr - np.array([0.485, 0.456, 0.406])) / np.array([0.229, 0.224, 0.225])
