@@ -61,10 +61,46 @@ class PersonalProfile:
     axis_keep_means:   dict[str, float]   # avg star per axis when KEEP
     axis_cull_means:   dict[str, float]   # avg star per axis when CULL
     most_cared_axis:   Optional[str]      # axis with the biggest keep-cull gap
+    #: v2.57 — where the annotations behind this profile came from.
+    #:
+    #: The profile on the author's own machine was built from 608
+    #: "corrections" whose labels were byte-identical to the rule stack's
+    #: own decisions. It concluded the photographer culls 20.4% of a
+    #: shoot and shifted the keep threshold by -0.060 accordingly. A
+    #: blind pass on the same photographer says the real rate is 6.7% —
+    #: off by 3.1x. The badge said "tuned to you"; it was tuned to the
+    #: rules, and the user had no way to tell.
+    #:
+    #: "" means unknown, which is what every profile written before this
+    #: field carries. Unknown is not trusted: see is_active().
+    label_provenance: str = ""
+
+    #: Provenances that can move a threshold. `blind` is what
+    #: `pixcull m3 label` writes — the photographer judged the frame with
+    #: no system opinion on screen, so the labels cannot echo the rules.
+    TRUSTED = ("blind", "independent")
 
     def is_active(self) -> bool:
-        """Personalization should be applied iff we have enough data."""
+        """Apply personalization iff we have enough data AND can trust it.
+
+        Enough data was the old bar and it is not sufficient: 608 rows of
+        the rule stack's own output is plenty of data and worth nothing.
+        """
+        if self.label_provenance not in self.TRUSTED:
+            return False
         return self.n_annotations >= MIN_ANNS_FOR_PERSONALIZATION
+
+    def inactive_reason(self) -> str:
+        """Why personalization is off, in words a user can act on."""
+        if self.label_provenance not in self.TRUSTED:
+            got = self.label_provenance or "unknown"
+            return (f"label provenance {got!r} — corrections made while the "
+                    f"system's own verdict was on screen can echo it back. "
+                    f"Build a profile from `pixcull m3 label` (blind).")
+        if self.n_annotations < MIN_ANNS_FOR_PERSONALIZATION:
+            return (f"{self.n_annotations} annotations, need "
+                    f"{MIN_ANNS_FOR_PERSONALIZATION}")
+        return ""
 
 
 def profile_from_preferences(prefs: dict) -> PersonalProfile:
@@ -115,6 +151,7 @@ def profile_from_preferences(prefs: dict) -> PersonalProfile:
         axis_cull_means={k: round(float(v), 2)
                           for k, v in cull_means.items() if v is not None},
         most_cared_axis=most_cared,
+        label_provenance=str(prefs.get("label_provenance") or ""),
     )
 
 
@@ -151,6 +188,7 @@ def save_profile(profile: PersonalProfile, path: Path) -> None:
         "axis_keep_means":   profile.axis_keep_means,
         "axis_cull_means":   profile.axis_cull_means,
         "most_cared_axis":   profile.most_cared_axis,
+        "label_provenance":  profile.label_provenance,
     }
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2),
                      encoding="utf-8")
@@ -175,4 +213,5 @@ def load_profile(path: Path) -> Optional[PersonalProfile]:
         axis_keep_means=data.get("axis_keep_means") or {},
         axis_cull_means=data.get("axis_cull_means") or {},
         most_cared_axis=data.get("most_cared_axis"),
+        label_provenance=str(data.get("label_provenance") or ""),
     )

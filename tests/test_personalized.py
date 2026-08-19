@@ -40,6 +40,10 @@ def test_permissive_user_lowers_threshold():
         # 90 keep, 5 maybe, 5 cull = keep_rate 0.9
         "scene_decision_counts": {"landscape": {"keep": 90, "maybe": 5, "cull": 5}},
         "avg_rubric_when": {"keep": {"technical": 4.0}, "cull": {"technical": 2.0}},
+        # v2.57 — volume alone no longer activates a profile. These tests
+        # are about the SHIFT, so they declare a provenance that can carry
+        # one; the gate itself is covered separately below.
+        "label_provenance": "blind",
     }
     p = profile_from_preferences(prefs)
     assert p.is_active()
@@ -56,6 +60,7 @@ def test_strict_user_raises_threshold():
         "total_human_annotations": 100,
         "scene_decision_counts": {"landscape": {"keep": 20, "maybe": 20, "cull": 60}},
         "avg_rubric_when": {"keep": {"technical": 4.8}, "cull": {"technical": 2.0}},
+        "label_provenance": "blind",
     }
     p = profile_from_preferences(prefs)
     assert p.keep_rate < BASELINE_KEEP_RATE
@@ -100,6 +105,7 @@ def test_save_and_load_round_trip(tmp_path: Path):
         axis_keep_means={"technical": 4.3, "subject": 4.5},
         axis_cull_means={"technical": 2.0, "subject": 3.0},
         most_cared_axis="technical",
+        label_provenance="blind",
     )
     path = tmp_path / "profile.json"
     save_profile(p, path)
@@ -130,3 +136,64 @@ def test_empty_preferences_defaults_to_baseline():
     assert p.n_annotations == 0
     assert not p.is_active()
     assert p.keep_threshold_shift == 0.0   # no shift when no signal
+
+
+# ── v2.57: enough data was never the bar ──────────────────────────────
+
+def _profile(**kw):
+    from pixcull.scoring.personalized import PersonalProfile
+    base = dict(user_id="local", n_annotations=608, keep_rate=0.7697,
+                cull_rate=0.2039, keep_threshold_shift=-0.0599,
+                axis_keep_means={}, axis_cull_means={}, most_cared_axis=None)
+    base.update(kw)
+    return PersonalProfile(**base)
+
+
+def test_a_profile_learned_from_the_rule_stack_does_not_move_thresholds():
+    """The fifth circular label set, and the first one that shipped.
+
+    The author's own profile was built from 608 "corrections" whose
+    labels were byte-identical to the rule stack's decisions. It
+    concluded the photographer culls 20.4% and shifted the keep
+    threshold -0.060 to match. A blind pass on the same photographer
+    says 6.7% — off by 3.1x. The UI called it "tuned to you".
+
+    Volume was the old gate and 608 rows clears it comfortably, which is
+    exactly why volume is not the gate any more.
+    """
+    stale = _profile()                      # no provenance: pre-v2.57
+    assert not stale.is_active()
+    assert "provenance" in stale.inactive_reason()
+
+    echoed = _profile(label_provenance="corrections")
+    assert not echoed.is_active(), (
+        "corrections made with the verdict on screen can echo it back")
+
+    blind = _profile(label_provenance="blind")
+    assert blind.is_active(), "a blind pass is exactly what we want to trust"
+
+
+def test_volume_alone_is_not_enough_and_provenance_alone_is_not_either():
+    from pixcull.scoring.personalized import MIN_ANNS_FOR_PERSONALIZATION
+    thin = _profile(label_provenance="blind",
+                    n_annotations=MIN_ANNS_FOR_PERSONALIZATION - 1)
+    assert not thin.is_active()
+    assert "annotations" in thin.inactive_reason()
+
+
+def test_provenance_round_trips_through_disk(tmp_path):
+    """A field that is dropped on save is a guard that lasts one process."""
+    from pixcull.scoring.personalized import load_profile, save_profile
+    p = tmp_path / "profile.json"
+    save_profile(_profile(label_provenance="blind"), p)
+    assert load_profile(p).label_provenance == "blind"
+    assert load_profile(p).is_active()
+
+    # And a file written before the field existed loads as untrusted,
+    # rather than as trusted-by-omission.
+    import json
+    d = json.loads(p.read_text())
+    del d["label_provenance"]
+    p.write_text(json.dumps(d))
+    assert load_profile(p).label_provenance == ""
+    assert not load_profile(p).is_active()
