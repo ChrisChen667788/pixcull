@@ -55,9 +55,9 @@ _ALLOWED_WITHOUT: dict[str, str] = {
     # What IS affected, measured on the 67 rotated frames of a real
     # 150-frame shoot:
     #
-    #   composition_classifier — 17% of rotated frames classify to a
-    #     different composition rule. Reaches only counterfactual.py's
-    #     "how to improve this shot" advice; no score column.
+    #   composition_classifier — FIXED v2.56.5. 17% of rotated frames
+    #     classified to a different rule; it feeds counterfactual.py's
+    #     "how to improve this shot" advice.
     #   semantic_search — FIXED v2.56.4. Was embedding untransposed
     #     pixels on the photo library, so portrait frames landed near
     #     the wrong neighbours in search and in the CLIP near-dup
@@ -66,18 +66,18 @@ _ALLOWED_WITHOUT: dict[str, str] = {
     #     photograph, so a sideways input produced a sideways overlay.
     #   temporal / dup_frames / reel_caption — video frames, which
     #     ffmpeg writes without an EXIF orientation tag at all.
-    #   color_grade — receives bytes from its caller, and grading is
-    #     channel statistics; orientation-independent.
+    #   color_grade — FIXED v2.56.5, defensively. Its only caller passes
+    #     video frames, so this was a no-op — but the function
+    #     re-encodes, and a photo routed through it would have kept the
+    #     sideways pixels while losing the tag that could fix them.
     #
     # Kept as entries rather than fixed because the remaining fixes are
     # the owner's call on cache rebuild cost. Deleting a line here
     # without fixing the module is how this becomes a rubber stamp.
-    "pixcull/scoring/composition_classifier.py": "UNREVIEWED advice path",
     "pixcull/scoring/counterfactual.py": "UNREVIEWED advice path",
     "pixcull/scoring/temporal.py": "UNREVIEWED video frames (no EXIF)",
     "pixcull/scoring/dup_frames.py": "UNREVIEWED video frames (no EXIF)",
     "pixcull/scoring/reel_caption.py": "UNREVIEWED video frames (no EXIF)",
-    "pixcull/scoring/color_grade.py": "UNREVIEWED bytes from caller",
 }
 
 
@@ -168,7 +168,7 @@ def test_the_unreviewed_debt_stays_visible():
     """
     unreviewed = {k for k, v in _ALLOWED_WITHOUT.items()
                   if v.startswith("UNREVIEWED")}
-    assert len(unreviewed) == 6, (
+    assert len(unreviewed) == 4, (
         f"the unreviewed-orientation pile changed size ({len(unreviewed)}). "
         f"If a module was fixed, drop its entry. If one was added, that is "
         f"a new instance of a bug we already know about: {sorted(unreviewed)}")
@@ -307,3 +307,67 @@ def test_an_embeddings_cache_from_before_the_fix_is_discarded(tmp_path):
                  model=np.array("clip-vit-base-patch32"),
                  preproc=np.array("something-else"))
     assert load_embeddings_cache(stale) is None
+
+
+def test_extracted_video_frames_carry_no_orientation_to_honour():
+    """The evidence behind three of the remaining exceptions.
+
+    `temporal`, `dup_frames` and `reel_caption` read frames that ffmpeg
+    wrote, and ffmpeg bakes any container rotation into the pixels
+    rather than emitting an EXIF tag. Verified against a real portrait
+    phone video: frames came out 1844x4096 with no Orientation tag at
+    all.
+
+    Recorded as a test so the exception rests on a checked property. If
+    the extractor ever starts writing an orientation tag, these three
+    stop being exceptions and the note above becomes false.
+    """
+    import inspect
+
+    from pixcull.io import video
+
+    src = inspect.getsource(video)
+    # ffmpeg is invoked with no `-metadata` orientation and no
+    # `-noautorotate`; either would change the property above.
+    assert "-noautorotate" not in src, (
+        "the extractor now disables autorotate, so frames can come out "
+        "sideways and the video modules do need to transpose")
+    assert "Orientation" not in src, (
+        "the extractor now writes an orientation tag; the three video "
+        "exceptions need re-deriving")
+
+
+def test_composition_advice_is_computed_upright(tmp_path):
+    """Advice pointing at the wrong edge of the frame is worse than none."""
+    from PIL import Image, ImageOps
+
+    from pixcull.scoring.composition_classifier import _load_rgb_array
+
+    src = _sideways(tmp_path)
+    got = _load_rgb_array(src)
+    want = (ImageOps.exif_transpose(Image.open(src))
+            .convert("RGB").resize((128, 128)))
+    import numpy as np
+    assert np.abs(got - np.asarray(want, dtype=float) / 255.0).max() < 1e-9
+
+
+def test_grading_does_not_strip_the_only_thing_that_could_fix_it(tmp_path):
+    """`grade_image_bytes` re-encodes, so it must transpose on decode.
+
+    Its caller today passes video frames and this changes nothing for
+    them. The point is the direction of the failure: a JPEG that goes in
+    tagged-and-sideways comes out untagged, and by then no downstream
+    consumer can recover.
+    """
+    import io as _io
+
+    from PIL import Image
+
+    from pixcull.scoring.color_grade import grade_image_bytes
+
+    src = _sideways(tmp_path)
+    out = grade_image_bytes(src.read_bytes(), "none", max_w=64)
+    im = Image.open(_io.BytesIO(out))
+    assert im.height > im.width, (
+        f"graded output is landscape ({im.size}) and no longer carries "
+        "the tag that said otherwise")

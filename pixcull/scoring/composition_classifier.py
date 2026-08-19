@@ -77,10 +77,19 @@ _FOCAL_POINTS: dict[str, tuple[tuple[float, float], ...]] = {
 
 
 def _load_rgb_array(image_path: Path):
-    """Lazy import — keeps style-V1-only deployments numpy-free."""
-    from PIL import Image
+    """Lazy import — keeps style-V1-only deployments numpy-free.
+
+    v2.56.5 — transposed. Composition is orientation-dependent by
+    definition (thirds, lead room, horizon, diagonal energy), and
+    measured on a real shoot 17% of rotated frames classified to a
+    different rule without this. It feeds counterfactual.py's "how to
+    improve this shot" advice, so the wrong answer here is advice
+    pointing at the wrong edge of the frame.
+    """
+    from PIL import Image, ImageOps
     import numpy as np
-    img = Image.open(image_path).convert("RGB").resize((128, 128))
+    img = (ImageOps.exif_transpose(Image.open(image_path))
+           .convert("RGB").resize((128, 128)))
     return np.asarray(img, dtype=float) / 255.0
 
 

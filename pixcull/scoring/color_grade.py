@@ -226,8 +226,15 @@ def grade_image_bytes(
     parametric = preset in PRESETS and preset != "none"
     if not parametric and cube is None and not max_w:
         return jpeg_bytes
-    from PIL import Image
+    from PIL import Image, ImageOps
     with Image.open(io.BytesIO(jpeg_bytes)) as im:
+        # v2.56.5 — transpose on decode. Today's only caller passes video
+        # frames, which carry no Orientation tag (verified: ffmpeg bakes
+        # the rotation into the pixels), so this is a no-op for it. It
+        # matters because this function RE-ENCODES: hand it a photo and
+        # the output would keep the sideways pixels while losing the tag
+        # that could have corrected them. Cheap now, unrecoverable later.
+        im = ImageOps.exif_transpose(im)
         im = im.convert("RGB")
         if max_w and im.width > max_w:
             h = round(im.height * max_w / im.width)
