@@ -393,7 +393,10 @@ def run_pipeline(
     # v2.50 — cloud judging ships on. Authority only means anything
     # when a judge is actually running, so vlm_mode="off" still
     # produces a fully local run: there is no verdict to defer to.
-    vlm_authority: str = "primary",
+    # v2.58 — must move together with decide()'s default; the two are
+    # pinned by a test. Changing only decide() would have been decoration,
+    # because this value is what every real `pixcull run` passes down.
+    vlm_authority: str = "off",
     meta_mode: str = "off",
     vertical: str | None = None,
 ) -> Path:

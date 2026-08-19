@@ -51,7 +51,22 @@ def shipped_vlm_authority() -> str:
 
 
 def uploads_by_default() -> bool:
-    return shipped_vlm_authority() != "off"
+    """Does a plain `pixcull run` send photos anywhere?
+
+    v2.58 — this read `vlm_authority`, which is the wrong variable. The
+    authority level decides how much a verdict may CHANGE; whether one is
+    requested at all is `vlm_mode`. With the two split, a future change
+    that turned uploads on while leaving authority `off` would have kept
+    this lint saying "nothing is uploaded".
+
+    And the real gate is not the signature default either: `pixcull run`
+    resolves `vlm_mode=None` to `"minimax"` when a key is present. So a
+    machine with a key AND recorded consent uploads on a bare
+    `pixcull run` — which is the honest answer, and the one the absolute
+    claims below have to survive.
+    """
+    src = (REPO / "pixcull" / "cli.py").read_text("utf-8")
+    return 'vlm_mode = "minimax" if api_key_from_env()' in src
 
 
 # ---------------------------------------------------------------------------
@@ -210,3 +225,56 @@ def test_eval_accepts_more_than_one_review_pass():
     assert "list" in str(ann).lower(), (
         f"--review is {ann}, not a list: a second --review would silently "
         "replace the first instead of merging")
+
+
+def test_the_three_authority_defaults_cannot_diverge():
+    """`decide`, `run_pipeline` and the CLI each carry this default.
+
+    v2.58 lowered it from `primary` to `off`. Changing only `decide()`
+    would have been decoration: `run_pipeline` has its own default and
+    that is what every real run passes down, so the shipped behaviour
+    would not have moved an inch while the signature suggested it had.
+
+    Pinned mechanically because three copies of one decision is exactly
+    how a repo ends up with a documented default nothing implements.
+    """
+    import inspect
+
+    from pixcull.cli import run as run_cmd
+    from pixcull.pipeline.orchestrator import run_pipeline
+    from pixcull.scoring.decision import decide
+
+    got = {
+        "decide": inspect.signature(decide).parameters[
+            "vlm_authority"].default,
+        "run_pipeline": inspect.signature(run_pipeline).parameters[
+            "vlm_authority"].default,
+    }
+    cli_default = inspect.signature(run_cmd).parameters["vlm_authority"].default
+    got["cli"] = getattr(cli_default, "default", cli_default)
+
+    assert len(set(got.values())) == 1, (
+        f"the authority default disagrees across layers: {got}. The one "
+        f"that governs a real run is run_pipeline's.")
+    assert got["decide"] == "off", (
+        f"shipped authority is {got['decide']!r}. A blind pass gave "
+        f"`primary` 1 of 10 culls with an interval spanning zero; if that "
+        f"changed, change this test WITH the evidence.")
+
+
+def test_turning_the_judge_on_without_authority_says_so():
+    """A paid no-op has to announce itself.
+
+    `--vlm-mode minimax` with the new `off` authority uploads photos,
+    scores them, and changes no decision. That is a legitimate mode — the
+    reasoning still lands in the report — but "I turned the model on and
+    nothing happened" must not be left for the user to work out.
+    """
+    import inspect
+
+    from pixcull.cli import run as run_cmd
+
+    src = inspect.getsource(run_cmd)
+    assert 'vlm_mode != "off" and vlm_authority == "off"' in src, (
+        "nothing detects the judge-on/authority-off combination")
+    assert "Advisory only" in src, "the combination is not reported"

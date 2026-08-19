@@ -65,7 +65,15 @@ def decide(
     personal_shift: float = 0.0,
     vlm_label: str | None = None,
     vlm_axes: dict[str, float | None] | None = None,
-    vlm_authority: str = "primary",
+    # v2.58 — `off` by default, downgraded from `primary`.
+    #
+    # A blind pass (150 frames, labelled before anything was scored) gave
+    # `primary` 1 of the 10 frames the photographer would delete, with a
+    # 95% CI spanning zero. Shipping full override authority on that is
+    # more than the measurement supports. Turning the judge on no longer
+    # silently hands it the power to overrule a keep; that now takes a
+    # second, explicit `--vlm-authority`.
+    vlm_authority: str = "off",
 ) -> tuple[Decision, list[str]]:
     """Map final score + blocking flags to Keep / Maybe / Cull with human-readable reasons.
 

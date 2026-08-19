@@ -61,6 +61,14 @@ def run(
              "Default (unset): 'minimax' when a MiniMax key is present, "
              "else 'off'. Photos ARE uploaded in cloud modes."
     ),
+    vlm_authority: str = typer.Option(
+        "off", "--vlm-authority",
+        help="How much the vision judge may change. 'off' (default) — it "
+             "scores and explains, decisions stay with the rule stack | "
+             "'rescue' — it may overturn a hard cull, nothing else | "
+             "'primary' — it may overrule either way. On a blind 150-frame "
+             "pass 'primary' found 1 of the 10 frames the photographer "
+             "would delete, so it is opt-in."),
     meta_mode: Optional[str] = typer.Option(
         None, "--meta-mode",
         help="Text LLM that consolidates every signal into one calibrated "
@@ -104,9 +112,20 @@ def run(
         if vlm_mode != "off":
             console.print("[dim]Judging with MiniMax M3 — photos are "
                           "uploaded. `--vlm-mode off` keeps a run local.[/dim]")
+    # v2.58 — a judge that runs with no authority is a paid no-op unless
+    # you know that is what you asked for. It still earns its keep (the
+    # verdict and its reasoning show up in the report), but "I turned the
+    # model on and nothing changed" must not be something a user has to
+    # work out for themselves.
+    if vlm_mode != "off" and vlm_authority == "off":
+        console.print(
+            "[yellow]Advisory only[/yellow] — the judge will score and "
+            "explain, but decisions stay with the rule stack. "
+            "`--vlm-authority rescue` lets it overturn a hard cull.")
 
     run_pipeline(
         folder, output,
+        vlm_authority=vlm_authority,
         scene_override=scene,
         strictness=strictness,
         rescorer_mode=rescorer_mode,

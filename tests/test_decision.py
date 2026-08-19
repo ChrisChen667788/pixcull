@@ -338,20 +338,48 @@ def test_authority_off_is_exactly_v247(config):
 
 
 def test_the_shipped_default_is_the_documented_one(config):
-    """v2.50 — cloud judging is on out of the box.
+    """v2.58 — the judge no longer gets authority just for being on.
+
+    v2.50 shipped `primary` "out of the box" on the strength of a
+    measurement that turned out to be circular. The first blind pass —
+    150 frames labelled before anything was scored — gave `primary` 1 of
+    the 10 frames the photographer would delete, with a 95% confidence
+    interval spanning zero.
+
+    So `off` ships: the judge scores and explains, and changing a
+    decision takes an explicit `--vlm-authority`. If this value moves
+    again it should move with a blind pass behind it, and this docstring
+    should say which one.
 
     Paired with tests/test_claims_match_reality.py, which fails if this
-    default and the public copy ever disagree again.
+    default, run_pipeline's and the CLI's ever disagree.
     """
     import inspect
     sig = inspect.signature(decide)
-    assert sig.parameters["vlm_authority"].default == "primary"
+    assert sig.parameters["vlm_authority"].default == "off"
+    # And the behaviour, not just the signature: a hard-culled frame the
+    # judge wants to keep stays culled under the shipped default. Before
+    # v2.58 this same call returned KEEP.
     dec, reasons = decide(0.72, ["closed_eyes"], config, scene="portrait",
                           vlm_label="keep", vlm_axes={"technical": 4})
-    assert dec is Decision.KEEP, (
-        "the judge no longer decides by default — if that is intended, "
-        "tests/test_claims_match_reality.py must be re-run, because the "
-        "README now says photos are uploaded")
+    assert dec is Decision.CULL, (
+        "the judge overruled a hard cull without being given authority")
+
+    # `off` leaves the decision reasons untouched — annotating them is
+    # `shadow`'s job, tested below. The verdict is not lost: run_vlm_stage
+    # writes vlm_overall_label / _rationale / axis stars into scores.csv
+    # and vlm_verdicts.jsonl BEFORE authority is consulted, so a user who
+    # paid for the call still gets the reasoning in the report.
+    assert reasons == ["closed_eyes"], (
+        f"`off` should not touch the reasons at all: {reasons}")
+
+    # ... and it does move once asked.
+    rescued, _ = decide(0.72, ["closed_eyes"], config, scene="portrait",
+                        vlm_label="keep", vlm_axes={"technical": 4},
+                        vlm_authority="rescue")
+    assert rescued is not Decision.CULL, (
+        "`--vlm-authority rescue` no longer reaches the decision, so the "
+        "flag is advertised and unreachable")
 
 
 def test_shadow_records_without_changing_anything(config):

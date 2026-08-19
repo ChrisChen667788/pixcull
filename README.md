@@ -994,12 +994,34 @@ spanning zero. The rule stack also culls **53 of 150 while the
 photographer culls 10** — over-culling by 5.3x.
 
 **So: the headline job is not solved, by the rules or by the model.**
-**The cloud judge stays off by default** — `pixcull run` does not call
-it unless you pass `--vlm-mode`, so a default run sends nothing. When
-you do turn it on, `vlm_authority` ships as `primary`, i.e. full
-authority; on this evidence that is more than it has earned, and until
-a blind pass says otherwise the honest recommendation is to leave the
-judge off.
+### What a default run actually does
+
+Stated precisely, because two earlier versions of this paragraph were
+wrong in the direction that matters. `pixcull run` resolves the judge
+from your machine, not from a fixed default:
+
+| your machine | a bare `pixcull run` |
+|---|---|
+| no MiniMax key | **on-device only, nothing is sent** |
+| key, consent never given | prompts once; declining, or any non-interactive run, stays on-device |
+| key **and** consent recorded | **uploads** — the run prints that it is doing so |
+
+So a key plus one recorded consent is enough for photos to leave the
+machine on every subsequent run. `pixcull m3 consent --revoke` undoes
+it; `--vlm-mode off` overrides per run.
+
+**Authority is a separate switch, and it ships `off`.** Even when the
+judge runs, it scores and explains while decisions stay with the rule
+stack. Letting it act takes a second, explicit flag:
+
+```bash
+pixcull run shoot/ --vlm-mode minimax --vlm-authority rescue   # may overturn a hard cull
+pixcull run shoot/ --vlm-mode minimax --vlm-authority primary  # may overrule either way
+```
+
+`primary` was the shipped default until v2.58. The blind pass is why it
+is not: 1 of 10, interval spanning zero. Turning a model on should not
+silently hand it authority the measurement does not support.
 
 Two things that fall out of the same data, both uncomfortable:
 
