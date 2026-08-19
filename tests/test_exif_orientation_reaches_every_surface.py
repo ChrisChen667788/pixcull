@@ -40,31 +40,45 @@ _ALLOWED_WITHOUT: dict[str, str] = {
     "pixcull/io/exif_audit.py": "reads tags, renders nothing",
     "pixcull/io/icc.py": "reads the colour profile, renders nothing",
 
-    # ---- NOT blessed. Recorded debt, v2.56.2. -------------------------
-    # These open pixels for ANALYSIS and do not transpose, so on a
-    # portrait frame they see the photograph on its side. Measured on a
-    # real 150-frame shoot: 67 frames (45%) carry Orientation 8, and the
-    # 128x128 tensor the composition classifier receives differs by a
-    # mean absolute 0.18 per channel between the two — not a rounding
-    # difference, a different picture.
+    # ---- Recorded debt, traced in v2.56.3. ---------------------------
+    # These open pixels without transposing. v2.56.2 called that "very
+    # likely a real scoring bug"; tracing it, that was WRONG and the
+    # correction matters more than the original alarm:
     #
-    # Composition especially is orientation-dependent by definition
-    # (thirds, lead room, horizon, diagonal energy), and `score_
-    # composition` was the strongest single discriminator in the owner's
-    # own culls. So this is very likely a real scoring bug.
+    #   worker.py:47 loads through `io.loader.load_image`, which DOES
+    #   transpose, and every scoring detector is fed from there —
+    #   including CompositionDetector, which has no Image.open of its
+    #   own. So `score_final`, `decision`, `composition_score`,
+    #   `rule_of_thirds_offset` and all eleven `canon_*` metrics are
+    #   computed on upright pixels. **No score is affected.**
     #
-    # It is listed rather than fixed because fixing it changes every
-    # score in the library and invalidates cached embeddings — an
-    # owner's decision, not a drive-by. Deleting an entry here without
-    # fixing the module is how this becomes a rubber stamp.
-    "pixcull/scoring/composition_classifier.py": "UNREVIEWED analysis path",
-    "pixcull/scoring/temporal.py": "UNREVIEWED analysis path",
-    "pixcull/scoring/dup_frames.py": "UNREVIEWED analysis path",
-    "pixcull/scoring/counterfactual.py": "UNREVIEWED analysis path",
-    "pixcull/scoring/attribution.py": "UNREVIEWED analysis path",
-    "pixcull/scoring/reel_caption.py": "UNREVIEWED analysis path",
-    "pixcull/scoring/color_grade.py": "UNREVIEWED analysis path",
-    "pixcull/scoring/semantic_search.py": "UNREVIEWED analysis path",
+    # What IS affected, measured on the 67 rotated frames of a real
+    # 150-frame shoot:
+    #
+    #   composition_classifier — 17% of rotated frames classify to a
+    #     different composition rule. Reaches only counterfactual.py's
+    #     "how to improve this shot" advice; no score column.
+    #   semantic_search — CLIP vectors built from untransposed pixels
+    #     (cli.py, serve_app.py, on the photo library). Degrades search
+    #     and the CLIP near-dup collapse for portrait frames. Fixing it
+    #     means rebuilding embeddings, not rescoring.
+    #   attribution — the heatmap is rendered to the user sideways.
+    #   temporal / dup_frames / reel_caption — video frames, which
+    #     ffmpeg writes without an EXIF orientation tag at all.
+    #   color_grade — receives bytes from its caller, and grading is
+    #     channel statistics; orientation-independent.
+    #
+    # Kept as entries rather than fixed because the remaining fixes are
+    # the owner's call on cache rebuild cost. Deleting a line here
+    # without fixing the module is how this becomes a rubber stamp.
+    "pixcull/scoring/composition_classifier.py": "UNREVIEWED advice path",
+    "pixcull/scoring/counterfactual.py": "UNREVIEWED advice path",
+    "pixcull/scoring/attribution.py": "UNREVIEWED heatmap orientation",
+    "pixcull/scoring/semantic_search.py": "UNREVIEWED CLIP embeddings",
+    "pixcull/scoring/temporal.py": "UNREVIEWED video frames (no EXIF)",
+    "pixcull/scoring/dup_frames.py": "UNREVIEWED video frames (no EXIF)",
+    "pixcull/scoring/reel_caption.py": "UNREVIEWED video frames (no EXIF)",
+    "pixcull/scoring/color_grade.py": "UNREVIEWED bytes from caller",
 }
 
 
@@ -159,6 +173,27 @@ def test_the_unreviewed_debt_stays_visible():
         f"the unreviewed-orientation pile changed size ({len(unreviewed)}). "
         f"If a module was fixed, drop its entry. If one was added, that is "
         f"a new instance of a bug we already know about: {sorted(unreviewed)}")
+    # The claim that matters: none of these reach a score. Asserted so a
+    # future change that routes one of them into scoring trips the gate
+    # instead of quietly making the note above false.
+    # Parsed, not grepped: the first version of this asserted that the
+    # string "load_image" appeared in worker.py, which a mutation
+    # satisfied with `from PIL import Image as load_image`. An assertion
+    # that a rename can satisfy is not an assertion.
+    worker = ast.parse(
+        (ROOT / "pixcull/pipeline/worker.py").read_text(encoding="utf-8"))
+    routed = any(
+        isinstance(n, ast.ImportFrom) and n.module == "pixcull.io.loader"
+        and any(a.name == "load_image" for a in n.names)
+        for n in ast.walk(worker))
+    assert routed, (
+        "worker.py no longer imports load_image from pixcull.io.loader — "
+        "the note above claims every scoring detector gets upright "
+        "pixels, and that claim now needs re-deriving")
+    comp = (ROOT / "pixcull/detectors/composition.py").read_text("utf-8")
+    assert "Image.open" not in comp, (
+        "detectors/composition.py now opens files itself, so composition "
+        "scores are no longer guaranteed upright")
     for rel in unreviewed:
         src = (ROOT / rel).read_text(encoding="utf-8")
         assert "exif_transpose" not in src, (
