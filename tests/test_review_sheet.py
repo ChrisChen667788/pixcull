@@ -500,3 +500,101 @@ def test_an_unreadable_file_does_not_lose_the_whole_batch(photo, tmp_path):
     body = dest.read_text(encoding="utf-8")
     assert body.count('class="card blind"') == 1
     assert "已判 0 / 1" in body, "the count must reflect what was rendered"
+
+
+# ── v2.61: keyboard labelling ─────────────────────────────────────────
+
+def _run_page_js(page_html: str, keys: list[str], n: int = 5) -> dict:
+    """Execute the page's own JS against a DOM stub and press keys.
+
+    Static assertions cannot tell a working shortcut from a string in a
+    source file, and this project has already shipped a test that a
+    rename satisfied.
+    """
+    import json as _json
+    import shutil
+    import subprocess
+    import tempfile
+
+    if not shutil.which("node"):
+        pytest.skip("node not available")
+    js = page_html[page_html.rindex("<script>") + 8:
+                   page_html.rindex("</script>")]
+    harness = """
+const store={}; const N=%d;
+const cards=[...Array(N)].map((_,i)=>({dataset:{fn:i+'.jpg',yes:'keep',no:'cull'},
+  classList:{_s:new Set(),add(x){this._s.add(x)},remove(x){this._s.delete(x)},
+  toggle(x,on){on?this._s.add(x):this._s.delete(x)}},scrollIntoView(){}}));
+const el=()=>({textContent:'',style:{},scrollIntoView(){}});
+const nodes={cnt:el(),hint:el(),out:el(),pos:el()};
+for(let i=0;i<N;i++) nodes['mk'+i]=el();
+globalThis.localStorage={getItem:k=>store[k]??null,setItem:(k,v)=>{store[k]=v}};
+let kh=null;
+globalThis.document={querySelectorAll:()=>cards,getElementById:id=>nodes[id],
+  createElement:()=>({click(){},remove(){}}),body:{appendChild(){}},
+  addEventListener:(t,f)=>{if(t==='keydown')kh=f;}};
+globalThis.Blob=class{constructor(p){this.parts=p}};
+globalThis.URL={createObjectURL:()=>'blob:x',revokeObjectURL(){}};
+Object.defineProperty(globalThis,'navigator',{value:{clipboard:{writeText:()=>Promise.resolve()}},configurable:true});
+globalThis.getSelection=()=>({removeAllRanges(){},addRange(){}});
+globalThis.setTimeout=()=>{};
+globalThis.window={addEventListener:()=>{}};
+const api=(function(){%s
+return {focusCard};})();
+api.focusCard(0);
+for(const k of %s) kh({key:k,preventDefault(){},metaKey:false,ctrlKey:false,altKey:false});
+console.log(JSON.stringify({verdicts:JSON.parse(store[Object.keys(store)[0]]||'{}'),
+  count:nodes.cnt.textContent, pos:nodes.pos.textContent,
+  focused:cards.filter(c=>c.classList._s.has('cur')).length}));
+""" % (n, js, _json.dumps(keys))
+    with tempfile.TemporaryDirectory() as d:
+        f = Path(d) / "h.mjs"
+        f.write_text(harness, encoding="utf-8")
+        out = subprocess.run(["node", str(f)], capture_output=True, text=True)
+        assert out.returncode == 0, out.stderr[-800:]
+        return _json.loads(out.stdout.strip().splitlines()[-1])
+
+
+def test_one_keystroke_labels_a_frame(photo, tmp_path):
+    """150 frames yielded 10 cull positives; the interval needs ~1250.
+
+    Mouse-and-scroll does not get anyone to 1250 frames.
+    """
+    items = [{"fn": f"{i}.jpg", "path": str(photo)} for i in range(5)]
+    page = write(items, tmp_path / "p.html", blind=True, slug="kb",
+                 selection="blind", title="t", lede="l").read_text("utf-8")
+    got = _run_page_js(page, ["k", "x", "k"])
+    assert got["verdicts"] == {"0": 1, "1": 0, "2": 1}, got
+    assert "3 / 5" in got["count"]
+    assert got["focused"] == 1, "more than one card is highlighted"
+
+
+def test_undo_removes_the_frame_you_just_judged(photo, tmp_path):
+    """Not the one you are looking at.
+
+    Judging advances the focus, so by the time a mis-key registers the
+    cursor has moved on. The first version deleted `R[CUR]` — an empty
+    slot — and undo silently did nothing, which is worse than no undo
+    at all when the point is to label fast.
+    """
+    items = [{"fn": f"{i}.jpg", "path": str(photo)} for i in range(5)]
+    page = write(items, tmp_path / "p.html", blind=True, slug="kb",
+                 selection="blind", title="t", lede="l").read_text("utf-8")
+    got = _run_page_js(page, ["k", "x", "k", "u"])
+    assert got["verdicts"] == {"0": 1, "1": 0}, (
+        f"undo did not remove the last judgement: {got['verdicts']}")
+    assert "2 / 5" in got["count"]
+
+
+def test_the_page_still_renders_after_percent_escaping(photo, tmp_path):
+    """`_JS` goes through %-formatting, so a bare `%` breaks every page.
+
+    A modulo in the advance loop did exactly that, and the failure is
+    total: `render()` raises and no page exists at all.
+    """
+    items = [{"fn": "a.jpg", "path": str(photo)}]
+    page = write(items, tmp_path / "p.html", blind=True, slug="s",
+                 selection="blind", title="t", lede="l").read_text("utf-8")
+    assert "%(" not in page, "an unsubstituted format placeholder survived"
+    assert "(CUR+d)%cards.length" in page, (
+        "the modulo did not survive escaping — the advance loop is broken")

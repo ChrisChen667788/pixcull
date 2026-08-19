@@ -192,6 +192,11 @@ button.bad:hover{border-color:var(--bad);color:var(--bad)}
 border-top:1px solid var(--line);padding:11px 20px;display:flex;gap:14px;
 align-items:center;justify-content:center;font-size:13px}
 #hint{color:var(--dim);font-size:12px;max-width:52ch;line-height:1.45}
+#pos{color:var(--dim);font-size:12px;font-variant-numeric:tabular-nums}
+#keys{color:var(--dim);font-size:11.5px}
+#keys kbd{border:1px solid var(--line);border-radius:3px;padding:0 4px;
+font:11px ui-monospace,monospace;color:var(--ink)}
+.card.cur{box-shadow:0 0 0 2px var(--brass)}
 .card.blind{grid-template-columns:minmax(0,1fr) 210px}
 .card.blind .meta{justify-content:space-between}
 .card.blind .hd code{font-size:13px;color:var(--dim)}
@@ -266,9 +271,68 @@ function selectAll(el){
   const r=document.createRange(); r.selectNodeContents(el);
   const s=getSelection(); s.removeAllRanges(); s.addRange(r);
 }
+// v2.61 — keyboard labelling. 150 blind frames yielded 10 cull
+// positives, and the interval needs roughly 84 scoreable rows with both
+// classes present; at this photographer's 6.7%% rate that is ~1250
+// frames. Mouse-and-scroll does not get anyone to 1250. One keystroke
+// per frame, and the page walks itself.
+let CUR = 0;
+function focusCard(i){
+  const cards=document.querySelectorAll('.card');
+  if(!cards.length) return;
+  CUR = Math.max(0, Math.min(cards.length-1, i));
+  cards.forEach((c,n)=>c.classList.toggle('cur', n===CUR));
+  cards[CUR].scrollIntoView({block:'center', behavior:'smooth'});
+  const bar=document.getElementById('pos');
+  if(bar) bar.textContent = '第 '+(CUR+1)+' / '+cards.length;
+}
+function judge(ok){
+  mark(CUR, ok);
+  // Advance to the next UNJUDGED card, not merely the next one: coming
+  // back to a half-finished batch should resume, not replay.
+  const cards=document.querySelectorAll('.card');
+  for(let d=1; d<=cards.length; d++){
+    // NB `%%`: this block is fed through Python %%-formatting, so a bare
+    // `%%` here silently breaks the whole page render.
+    const n=(CUR+d)%%cards.length;
+    if(!(n in R)){ focusCard(n); return; }
+  }
+  focusCard(Math.min(CUR+1, cards.length-1));
+}
+document.addEventListener('keydown', e=>{
+  if(e.metaKey||e.ctrlKey||e.altKey) return;
+  const k=e.key;
+  if(k==='k'||k==='K'||k==='ArrowRight'){ e.preventDefault(); judge(1); }
+  else if(k==='x'||k==='X'||k==='ArrowLeft'){ e.preventDefault(); judge(0); }
+  else if(k==='j'||k==='J'||k==='ArrowDown'){ e.preventDefault(); focusCard(CUR+1); }
+  else if(k==='ArrowUp'){ e.preventDefault(); focusCard(CUR-1); }
+  else if(k==='u'||k==='U'){
+    // Undo means "the one I just did", not "the one I am looking at".
+    // Judging advances the focus, so by the time a mis-key registers the
+    // cursor has already moved on and `delete R[CUR]` removes nothing.
+    // Step back to the most recent judged card instead — this is what
+    // makes fast keyboard labelling safe to do quickly.
+    e.preventDefault();
+    if(!(CUR in R)){
+      for(let d=1; d<=N; d++){
+        const n=(CUR-d+N)%%N;
+        if(n in R){ focusCard(n); break; }
+      }
+    }
+    delete R[CUR];
+    localStorage.setItem(KEY,JSON.stringify(R));
+    const c=document.querySelectorAll('.card')[CUR];
+    c.classList.remove('done-ok','done-bad');
+    document.getElementById('mk'+CUR).textContent='';
+    document.getElementById('cnt').textContent='\u5df2\u5224 '+Object.keys(R).length+' / '+N;
+  }
+  else if(k==='s'||k==='S'){ e.preventDefault(); save(); }
+});
 window.addEventListener('DOMContentLoaded',()=>{
   for(const i in R) paint(i);
   document.getElementById('cnt').textContent='\\u5df2\\u5224 '+Object.keys(R).length+' / '+N;
+  let first=0; while(first<N && (first in R)) first++;
+  focusCard(Math.min(first, N-1));
 });
 """
 
