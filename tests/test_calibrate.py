@@ -138,3 +138,70 @@ def test_mismatched_inputs_fail_loudly(tmp_path):
                                    "--scores", str(s)])
     assert res.exit_code == 1
     assert "No overlap" in res.output
+
+
+# ── v2.60 ─────────────────────────────────────────────────────────────
+
+def test_an_unknown_scene_does_not_hard_cull_on_subject(tmp_path):
+    """`no_clear_subject` is a claim about what the frame is OF.
+
+    When the classifier could not say what the frame is, that claim is
+    unfounded rather than false — and this is the only flag that
+    destroys a photograph over a judgement about subject matter. An
+    assertion the system says it cannot make must not be grounds for
+    the cull.
+    """
+    from pixcull.config import PixCullConfig
+    from pixcull.scoring.decision import Decision, decide
+
+    cfg = PixCullConfig.load()
+    # NOT `None` / `""`: a caller who omitted the argument has told us
+    # nothing, while a classifier that wrote "unknown" has told us it
+    # could not decide. Only the second is evidence, and
+    # test_missing_scene_uses_strict_interpretation guards the first.
+    for scene in ("unknown", "uncertain"):
+        d, _ = decide(0.7, ["no_clear_subject"], cfg, "standard", scene=scene)
+        assert d is not Decision.CULL, f"hard-culled on scene={scene!r}"
+
+    # Still load-bearing where the scene IS known and subject matters.
+    d, _ = decide(0.7, ["no_clear_subject"], cfg, "standard", scene="portrait")
+    assert d is Decision.CULL, "the flag stopped working where it should"
+
+
+def test_exemptions_are_proposed_only_on_enough_firings(tmp_path):
+    """The guard is the whole feature.
+
+    Naming a bad flag is half an answer; the actionable unit is
+    (flag, scene). But a scene that fired three times says nothing about
+    the scene, and this project has drawn a confident conclusion from a
+    handful of rows more than once.
+    """
+    rows = [(f"k{i}.jpg", "", 0.9) for i in range(50)]
+    # 12 firings in `portrait`, none culled → proposable.
+    rows += [(f"p{i}.jpg", "no_clear_subject", 0.9) for i in range(12)]
+    # 3 firings in `fashion`, none culled → too few to say anything.
+    rows += [(f"f{i}.jpg", "no_clear_subject", 0.9) for i in range(3)]
+    p = tmp_path / "scores.csv"
+    with open(p, "w", newline="", encoding="utf-8") as fh:
+        w = csv.DictWriter(fh, fieldnames=_COLS)
+        w.writeheader()
+        for fn, flags, sf in rows:
+            w.writerow({"filename": fn,
+                        "scene": "fashion" if fn.startswith("f") else "portrait",
+                        "flags": flags, "score_final": sf,
+                        **{c: 3 for c in _COLS if c.startswith("rubric_")}})
+
+    verdicts = {fn: "keep" for fn, _, _ in rows}
+    for i in range(5):
+        verdicts[f"k{i}.jpg"] = "cull"       # a baseline to compare against
+    lab = _labels(tmp_path, verdicts)
+
+    res = CliRunner().invoke(app, ["calibrate", "--labels", str(lab),
+                                   "--scores", str(p)])
+    assert res.exit_code == 0, res.output
+    assert "proposed exemptions" in res.output
+    assert "portrait" in res.output, "the well-evidenced scene was not proposed"
+    assert "fashion" not in res.output.split("proposed exemptions")[1].split(
+        "flags that fire")[0], (
+        "a scene with 3 firings was proposed — the evidence bar is not "
+        "holding, and this is exactly how n=3 becomes a product decision")

@@ -1066,6 +1066,44 @@ def calibrate(
         worst = sorted(
             ((f, n, h) for f, (n, h) in per_flag.items() if n >= 5),
             key=lambda x: (x[2] / x[1]))
+        # v2.60 — propose per-scene exemptions from the labels, with an
+        # evidence bar. Naming a bad flag is only half an answer; the
+        # actionable unit is (flag, scene), because `no_clear_subject` is
+        # meaningless for a landscape and load-bearing for a portrait.
+        #
+        # MIN_FIRINGS is the whole guard. This project has drawn a
+        # confident conclusion from a handful of rows more than once, and
+        # a scene that fired three times says nothing about a scene.
+        MIN_FIRINGS = 8
+        proposals = []
+        by_scene: dict = {}
+        for r in rows:
+            fn = r["filename"]
+            for f in _flags_of(r):
+                if f not in _HARD_CULL_FLAGS_FOR_REPORT:
+                    continue
+                k = (f, str(r.get("scene") or "—"))
+                seen, hits = by_scene.get(k, (0, 0))
+                by_scene[k] = (seen + 1, hits + (truth[fn] == "cull"))
+        for (f, sc), (n, h) in sorted(by_scene.items(),
+                                      key=lambda kv: -kv[1][0]):
+            if n < MIN_FIRINGS:
+                continue
+            if h == 0:
+                proposals.append((f, sc, n, h, "never"))
+            elif base > 0 and (h / n) / base < 0.5:
+                proposals.append((f, sc, n, h, f"{(h/n)/base:.1f}x"))
+        if proposals:
+            console.print("[cyan]proposed exemptions[/cyan] "
+                          f"(>= {MIN_FIRINGS} firings, culled far below "
+                          f"your {base:.1%} baseline):")
+            for f, sc, n, h, why in proposals:
+                console.print(f"    {f} in {sc:14s} fired {n:3d}, you culled "
+                              f"{h:2d}  [{why}]")
+            console.print("[dim]These are proposals, not a fit — a scene "
+                          "that fired a handful of times says nothing about "
+                          "the scene. Widen the pass before acting.[/dim]")
+
         if worst and base > 0:
             console.print("[dim]flags that fire often and predict your culls "
                           "poorly (baseline "

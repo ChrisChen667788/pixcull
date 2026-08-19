@@ -26,6 +26,11 @@ Strictness = Literal["strict", "standard", "lenient"]
 # replay. Astro inherits this for the same reason: a starfield with
 # the milky way doesn't have a "clear subject" in the rule-detector
 # sense.
+#: v2.60 — what the scene classifier writes when it could not decide.
+#: `scene_uncertain` and `scene == "unknown"` coincided on 9 of 9 frames
+#: in the blind pass, so either spelling means the same thing.
+_UNKNOWN_SCENE_LABELS = frozenset({"unknown", "uncertain", "none", "—"})
+
 _TINY_SUBJECT_TOLERANT_SCENES = frozenset({
     "landscape", "street", "architecture",
     "wildlife", "astro",
@@ -154,6 +159,32 @@ def decide(
     }
     # Scene-aware exemption: tiny-subject scenes tolerate `no_clear_subject`.
     if scene in _TINY_SUBJECT_TOLERANT_SCENES:
+        hard_cull = hard_cull - {"no_clear_subject"}
+    # v2.60 — and an UNKNOWN scene tolerates it too, on principle rather
+    # than on taste.
+    #
+    # `no_clear_subject` is a claim about what the frame is of. The
+    # exemptions above exist because that claim is meaningless for a
+    # landscape or an astro frame. When the classifier could not say what
+    # the frame is at all, the claim is not wrong so much as unfounded —
+    # and this is the only flag that hard-culls on a judgement about
+    # subject matter, so it is the only one where not knowing the subject
+    # should buy a reprieve.
+    #
+    # Measured on a blind pass: it fired on 5 `unknown` frames and the
+    # photographer wanted none of them deleted. Small, but the argument
+    # does not rest on that — an assertion the system says it cannot make
+    # should not be grounds for destroying a photograph. The asymmetry
+    # this repo already writes down settles the tie: a missed cull costs
+    # thirty seconds, a wrong cull costs the photograph.
+    #
+    # `scene=None` is NOT this case, and a pre-existing test says so
+    # correctly: a caller who omitted the argument has told us nothing,
+    # while a classifier that wrote "unknown" has told us it could not
+    # decide. Only the second is evidence of uncertainty. My first draft
+    # conflated them and turned an API-usage case into a silent
+    # weakening of the flag for every library caller.
+    if scene in _UNKNOWN_SCENE_LABELS:
         hard_cull = hard_cull - {"no_clear_subject"}
     # V0.8 scene-aware exemption: landscape tolerates `severely_blurry`
     # (intentional long-exposure / ICM). The flag stays on the record so
