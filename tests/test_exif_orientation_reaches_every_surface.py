@@ -58,6 +58,8 @@ _ALLOWED_WITHOUT: dict[str, str] = {
     #   composition_classifier — FIXED v2.56.5. 17% of rotated frames
     #     classified to a different rule; it feeds counterfactual.py's
     #     "how to improve this shot" advice.
+    #   counterfactual — FIXED v2.62. It has its OWN loader; the v2.56.3
+    #     note claiming it shared the classifier's was wrong.
     #   semantic_search — FIXED v2.56.4. Was embedding untransposed
     #     pixels on the photo library, so portrait frames landed near
     #     the wrong neighbours in search and in the CLIP near-dup
@@ -74,7 +76,6 @@ _ALLOWED_WITHOUT: dict[str, str] = {
     # Kept as entries rather than fixed because the remaining fixes are
     # the owner's call on cache rebuild cost. Deleting a line here
     # without fixing the module is how this becomes a rubber stamp.
-    "pixcull/scoring/counterfactual.py": "UNREVIEWED advice path",
     "pixcull/scoring/temporal.py": "UNREVIEWED video frames (no EXIF)",
     "pixcull/scoring/dup_frames.py": "UNREVIEWED video frames (no EXIF)",
     "pixcull/scoring/reel_caption.py": "UNREVIEWED video frames (no EXIF)",
@@ -168,7 +169,7 @@ def test_the_unreviewed_debt_stays_visible():
     """
     unreviewed = {k for k, v in _ALLOWED_WITHOUT.items()
                   if v.startswith("UNREVIEWED")}
-    assert len(unreviewed) == 4, (
+    assert len(unreviewed) == 3, (
         f"the unreviewed-orientation pile changed size ({len(unreviewed)}). "
         f"If a module was fixed, drop its entry. If one was added, that is "
         f"a new instance of a bug we already know about: {sorted(unreviewed)}")
@@ -371,3 +372,28 @@ def test_grading_does_not_strip_the_only_thing_that_could_fix_it(tmp_path):
     assert im.height > im.width, (
         f"graded output is landscape ({im.size}) and no longer carries "
         "the tag that said otherwise")
+
+
+def test_composition_advice_reads_the_frame_the_viewer_sees(tmp_path):
+    """`counterfactual` has its OWN loader.
+
+    v2.56.3 recorded that it shared the composition classifier's and was
+    fixed alongside it. That was simply wrong — a note asserting a fact
+    about code, written without checking. Advice about where to move the
+    horizon is worse than useless computed on a sideways frame.
+    """
+    import numpy as np
+    from PIL import Image, ImageOps
+
+    from pixcull.scoring.counterfactual import _load_rgb
+
+    src = _sideways(tmp_path)
+    got = _load_rgb(src)
+    want = np.asarray(
+        ImageOps.exif_transpose(Image.open(src)).convert("RGB"))
+    assert got.shape == want.shape, f"{got.shape} != {want.shape}"
+    assert np.array_equal(got, want)
+
+    raw = np.asarray(Image.open(src).convert("RGB"))
+    assert got.shape != raw.shape, (
+        "the fixture is not actually rotated, so this proves nothing")

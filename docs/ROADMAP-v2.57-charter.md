@@ -124,3 +124,60 @@ nothing; convert the exception into a positive assertion).
   flags do not predict this photographer's culls, so it would find
   folders the detectors dislike.
 * Anything that improves a number without a blind label behind it.
+
+---
+
+## What actually landed (updated 2026-08-19, v2.57 → v2.62)
+
+Written after the work, with the deviations named. The plan above was
+drawn from the blind measurement; two of its slices survived contact
+unchanged and two were rewritten by what the data said next.
+
+**v2.57 — shipped as planned.** Blind number published in both READMEs,
+personalization provenance gate, GitHub ⇄ ModelScope sync, screenshot
+re-shot. Two corrections fell out of it: the READMEs twice claimed a
+default that the code did not have, and the screenshot re-shoot exposed
+a layout bug the EXIF bug had been hiding.
+
+**v2.58 — NOT in the plan.** `vlm_authority` shipped `primary`; the
+blind pass gave `primary` 1 of 10 with an interval spanning zero. It
+ships `off`, the CLI gained `--vlm-authority`, and three layers that
+each carried the default are pinned together — only `run_pipeline`'s
+governed anything, so changing `decide()` alone would have been
+decoration.
+
+**v2.59 `calibrate` — built as planned, and the result was negative.**
+Fitting the threshold to a blind pass moves 26 decisions and changes
+neither the over-culling nor the recall, because all 53 of the rule's
+culls fire on hard flags and none come from the boundary. A score shift
+cannot reach a flag. The command reports that rather than stopping at
+"this fit does nothing".
+
+**v2.60 / v2.60.1 — the plan's P1-1 became the P0.** The lever is the
+flags, not the threshold. `unknown` scenes stop hard-culling on
+`no_clear_subject` (53 → 48 culls, no recall lost), and learned
+(flag, scene) exemptions live in the profile rather than in the shipped
+defaults. The evidence bar withheld `documentary`, which I had been
+about to exempt by eye.
+
+**v2.61 / v2.61.1 — shipped as planned.** Keyboard labelling and a
+progress bar, because ~1250 frames is the real bar for a usable
+interval and mouse-and-scroll does not get there.
+
+**v2.62 — the orientation debt closed.** `counterfactual` had its own
+loader; a v2.56.3 note claimed otherwise without checking. Three video
+readers remain listed, each backed by a checked property rather than an
+assertion: ffmpeg writes no orientation tag.
+
+### Still open, and why
+
+**v2.59's prompt A/B is not done.** It was scheduled to attack the
+composition failure, and the calibration work displaced it: with the
+rule stack over-culling 4.8x on flags, the model's prompt is not the
+binding constraint. It stays on the list.
+
+**The measurement is still underpowered.** 150 blind frames, 10 cull
+positives. Nothing here has moved `vlm_authority` off `off`, and
+nothing should until a pass with both classes properly represented says
+otherwise. The tooling to collect one now exists; the labelling does
+not.

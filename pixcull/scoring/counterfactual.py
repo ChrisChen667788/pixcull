@@ -77,9 +77,14 @@ RULE_VARIANTS = ("rule_of_thirds", "centered", "diagonal", "golden_ratio")
 
 def _load_rgb(image_path: Path):
     """Lazy import + read into a numpy array (H, W, 3, uint8)."""
-    from PIL import Image
+    from PIL import Image, ImageOps
     import numpy as np
-    img = Image.open(image_path).convert("RGB")
+    # v2.62 — transposed. This module has its OWN loader; a v2.56.3 note
+    # claimed it shared the composition classifier's and was therefore
+    # fixed with it, which was simply wrong. Advice about where to move
+    # the horizon is worse than useless when computed on a frame lying
+    # on its side.
+    img = ImageOps.exif_transpose(Image.open(image_path)).convert("RGB")
     return np.asarray(img)
 
 
