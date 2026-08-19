@@ -839,17 +839,16 @@ def test_labels_can_come_straight_from_a_blind_json(tmp_path):
 def test_an_arm_that_wins_the_average_by_abandoning_a_class_is_refused():
     """Blind labels came out 140 keep / 10 cull, and the metric lied.
 
-    `rescue` scored the best macro-F1 (+3.4) while getting ZERO of those
-    10 culls right. On a truth set that is 93% one class, turning culls
-    into keeps lifts the big class far more than surrendering the small
-    one costs — so the mode that wins the average is the mode that stops
+    `rescue` scored the best macro-F1 while getting ZERO of those 10
+    culls right. On a truth set that is 93% one class, turning culls into
+    keeps lifts the big class far more than surrendering the small one
+    costs — so the mode that wins the average is the mode that stops
     doing the job the product exists for.
     """
     res = _res(_PERFECT, _PERFECT, _PERFECT, selection="all")
     res.truth_counts = {"keep": 140, "cull": 10}
     res.class_disagreements = {"keep": 30, "cull": 8}
     res.arm_changes = {"rescue": 40, "primary": 40}
-    # rescue: great on keep, nothing on cull. Best macro anyway.
     res.rescue = {"keep": Confusion("keep", tp=140, fp=10, fn=0),
                   "cull": Confusion("cull", tp=0, fp=0, fn=10)}
     res.rule = {"keep": Confusion("keep", tp=100, fp=30, fn=40),
@@ -859,7 +858,6 @@ def test_an_arm_that_wins_the_average_by_abandoning_a_class_is_refused():
     assert res.best_mode == "rescue", "fixture must make rescue win"
     v = res.verdict
     assert "DO NOT SHIP `rescue`" in v, v
-    assert "ZERO `cull`" in v
     assert "SHIP `vlm_authority" not in v
 
 
@@ -890,3 +888,34 @@ def test_every_eval_path_computes_an_interval_before_the_verdict():
         before = body[:pos]
         assert "_print_cis" in before, (
             "a verdict is printed with no interval computed before it")
+
+
+def test_an_arm_that_finds_less_than_the_rule_is_refused():
+    """v2.63 — the guard is a comparison now, not a threshold.
+
+    v2.56.1 refused an arm scoring 0.000 on a class with ground truth.
+    On 394 blind frames `rescue` scored 0.043 on `cull`, cleared that
+    bar, won macro-F1 by +5.2 with an interval EXCLUDING zero, and the
+    tool said SHIP — while finding 1 of the 28 frames the photographer
+    wanted deleted, against the rule stack's 5.
+
+    A threshold cannot catch "wins the average by doing less of the
+    job". A comparison against the mode it would replace can.
+    """
+    res = _res(_PERFECT, _PERFECT, _PERFECT, selection="all")
+    res.truth_counts = {"keep": 365, "cull": 28}
+    res.class_disagreements = {"keep": 40, "cull": 20}
+    res.arm_changes = {"rescue": 60, "primary": 60}
+    res.ci = {"rescue": (1.0, 9.6), "primary": (-7.1, 9.2)}
+    # rule catches 5 of 28; rescue catches 1 but is tidy about it.
+    res.rule = {"keep": Confusion("keep", tp=215, fp=20, fn=150),
+                "cull": Confusion("cull", tp=5, fp=125, fn=23)}
+    res.rescue = {"keep": Confusion("keep", tp=279, fp=19, fn=86),
+                  "cull": Confusion("cull", tp=1, fp=16, fn=27)}
+    res.vlm = dict(res.rule)
+    assert res.best_mode == "rescue", "fixture must make rescue win macro"
+    v = res.verdict
+    assert "DO NOT SHIP `rescue`" in v, v
+    assert "LESS of the job" in v
+    assert "recall" in v and "0.04" in v, (
+        f"the refusal does not show the recalls being compared: {v}")

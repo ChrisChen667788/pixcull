@@ -335,21 +335,43 @@ class EvalResult:
         # far more than abandoning the 7% one costs. The mode that wins
         # the metric is the mode that stops doing the job the product
         # exists for.
+        # v2.63 — recall against the RULE STACK, not against zero.
+        #
+        # v2.56.1 refused an arm scoring 0.000 on a class that has ground
+        # truth. On 394 blind frames `rescue` scored 0.043 on `cull`,
+        # cleared that bar, won macro-F1 by +5.2 with an interval
+        # excluding zero, and the tool said SHIP — while finding 1 of the
+        # 28 frames the photographer wanted deleted, against the rule
+        # stack's 5. It wins the average by giving up the job.
+        #
+        # A threshold could not catch that; a comparison can. An arm may
+        # not be recommended if it finds LESS of a class than the mode it
+        # would replace.
         rare = [c for c in _SCORED if self.truth_counts.get(c)]
         useless = {}
         for arm, cm in (("rescue", self.rescue), ("primary", self.vlm)):
             dead = [c for c in rare if cm.get(c) and cm[c].f1 == 0.0]
-            if dead:
-                useless[arm] = dead
+            worse = [c for c in rare
+                     if cm.get(c) and self.rule.get(c)
+                     and cm[c].recall < self.rule[c].recall]
+            if dead or worse:
+                useless[arm] = sorted(set(dead) | set(worse))
         best = self.best_mode
         if best in useless:
             cls = "`/`".join(useless[best])
-            return (f"DO NOT SHIP `{best}` — it scores best on macro-F1 "
-                    f"while getting ZERO `{cls}` right. On a truth set "
-                    f"that is {max(self.truth_counts.values())}/"
-                    f"{self.n_effective} one class, abandoning the other "
-                    f"is the cheapest way to win the average. Judge it on "
-                    f"the class you actually need.")
+            det = []
+            for c in useless[best]:
+                a = (self.rescue if best == "rescue" else self.vlm).get(c)
+                r = self.rule.get(c)
+                if a is not None and r is not None:
+                    det.append(f"`{c}` recall {a.recall:.2f} vs rule "
+                               f"{r.recall:.2f}")
+            return (f"DO NOT SHIP `{best}` — it wins macro-F1 while doing "
+                    f"LESS of the job: {'; '.join(det) or cls}. On a truth "
+                    f"set that is {max(self.truth_counts.values())}/"
+                    f"{self.n_effective} one class, giving up the other is "
+                    f"the cheapest way to win the average. Judge it on the "
+                    f"class you actually need.")
         # v2.55 — a point estimate on 45 rows prints to three decimals and
         # reads as a measurement. Resampled, this one was +13.6 with a 95%
         # interval of [-12.0, +41.4]: the sample cannot tell the mode

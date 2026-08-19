@@ -181,3 +181,40 @@ positives. Nothing here has moved `vlm_authority` off `off`, and
 nothing should until a pass with both classes properly represented says
 otherwise. The tooling to collect one now exists; the labelling does
 not.
+
+---
+
+## v2.63 candidate — `maybe` means "not yet", not "borderline"
+
+Owner's framing, 2026-08-19: a frame that is not a keeper as shot may
+well be one after a crop or a grade, and those originals belong in the
+`maybe` band rather than being scored as near-misses on the same axis
+as a genuine borderline.
+
+This is a gap in the measurement, not only in the product. Every number
+in this charter excludes `maybe` from the headline F1, on the stated
+grounds that "the human used it to mean *I am not sure*". If `maybe`
+actually means *recoverable*, then excluding it is discarding the
+band where the tool could add the most value, and calling that band
+noise.
+
+What would have to be true, in order:
+
+1. **The blind card has no `maybe` button.** It asks keep-or-cull on
+   purpose — two answers, no scale to calibrate. A third option costs
+   that, so it needs to earn its place: does the photographer's
+   `maybe` predict anything the binary does not?
+2. **A recoverable frame is a claim about the crop, not the frame.**
+   The detectors already compute subject mask, thirds offset, lead room
+   and zone clipping — enough to ask "is there a keeper inside this
+   frame". `counterfactual.py` already answers a related question for
+   advice; it has never been evaluated.
+3. **It cannot be measured with what we have.** The 394-frame blind
+   pass is keep/cull. Testing this needs a pass where the photographer
+   marks *recoverable* separately, on frames they would otherwise cull.
+
+So the honest sequencing is: finish powering the keep/cull measurement
+first (that is what the current 394 frames are for), then run one
+labelling pass that asks the recoverable question, and only then decide
+whether the pipeline should surface it. Building the feature before the
+label exists is how this project produced four circular datasets.

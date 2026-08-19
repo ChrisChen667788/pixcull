@@ -1073,6 +1073,28 @@ Labelling is keyboard-driven: <kbd>K</kbd> keeps, <kbd>X</kbd> culls,
 <kbd>U</kbd> undoes the last one, <kbd>S</kbd> saves. It resumes where
 you left off, because a properly powered pass is ~1250 frames.
 
+### The dataset, by provenance
+
+1002 photographs from the owner's own library have entered this
+measurement. They are not equally useful, and the difference is the
+whole story of this repository:
+
+| provenance | frames | usable as ground truth |
+|---|---|---|
+| **blind** — judged before anything was scored | **394** | **yes** |
+| review — judged with a system verdict on screen | 103 | direction only (selection bias) |
+| circular — label *is* the rule stack's decision | 305 | no |
+| circular — label *is* the pipeline's output | 200 | no |
+
+Half of it is unusable, and every one of those 505 frames looked like a
+dataset until someone checked. The blind pass is the only tier that can
+rank two systems, and the photographer re-judged 150 of its frames a
+second time with **zero disagreements**, so its label noise is close to
+nil.
+
+Machine side: 408 frames scored by MiniMax M3, 1002 through the local
+pipeline (72 detector columns each).
+
 ### How to reproduce this on your own library
 
 ```bash
@@ -1086,6 +1108,25 @@ copied from the rule stack, a sample with no `cull` ground truth, an
 authority mode that never fired, or an interval that spans zero each
 produce a named refusal instead of a number.
 
+
+## Acknowledgements
+
+**[MiniMax M3](https://www.minimaxi.com/)** is the vision judge behind
+every cloud measurement in this repository. The evaluation here is
+often unflattering to it — that is the point of an evaluation — and it
+is worth being explicit that the model made the measurement possible at
+all: 800+ scored frames at roughly ¥0.021 each, a reasoning model whose
+`<think>` output is what let the six-axis rubric be checked rather than
+trusted, and an API that never once returned a malformed verdict in the
+whole campaign.
+
+Where the numbers say the rule stack wins, they say so about a
+photographer with a 7% cull rate on coastal and documentary work. They
+are not a verdict on the model in general, and this README will keep
+saying whatever the next blind pass says.
+
+Also gratefully used: OpenAI CLIP, U²-Net (rembg), InsightFace,
+MediaPipe, pyiqa, FunASR/Paraformer, and PySceneDetect.
 
 ## Screenshots
 

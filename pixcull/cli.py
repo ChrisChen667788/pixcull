@@ -1089,6 +1089,18 @@ def calibrate(
                                       key=lambda kv: -kv[1][0]):
             if n < MIN_FIRINGS:
                 continue
+            # v2.63 — only propose what would actually change something.
+            #
+            # This counted FIRINGS, not culls caused. A flag can appear in
+            # `flags` while already being exempt for that scene, so the
+            # first version proposed `no_clear_subject in wildlife` (in
+            # the shipped tolerant set since V18) and `in unknown` (added
+            # in v2.60). Advising someone to do what is already done is
+            # the report's own version of advertised-but-unreachable.
+            probe_flags = [f]
+            d_now, _ = decide(0.9, probe_flags, cfg, "standard", scene=sc)
+            if d_now.value != "cull":
+                continue
             if h == 0:
                 proposals.append((f, sc, n, h, "never"))
             elif base > 0 and (h / n) / base < 0.5:

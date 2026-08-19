@@ -270,3 +270,38 @@ def test_an_exemption_can_only_widen_tolerance(tmp_path):
     got2, _ = decide(0.9, [], cfg, "standard", scene="portrait",
                      personal_exemptions={"anything": ["portrait"]})
     assert got2 is not Decision.CULL
+
+
+def test_it_does_not_propose_an_exemption_that_already_exists(tmp_path):
+    """Advising someone to do what is already done is the report's own
+    version of advertised-but-unreachable.
+
+    The first version counted FIRINGS, not culls caused. A flag can
+    appear in `flags` while already being exempt for that scene, and on
+    a real 394-frame pass it proposed `no_clear_subject in wildlife`
+    (shipped tolerant since V18) and `in unknown` (added v2.60).
+    """
+    rows = [(f"k{i}.jpg", "", 0.9) for i in range(50)]
+    rows += [(f"w{i}.jpg", "no_clear_subject", 0.9) for i in range(12)]
+    p = tmp_path / "scores.csv"
+    with open(p, "w", newline="", encoding="utf-8") as fh:
+        w = csv.DictWriter(fh, fieldnames=_COLS)
+        w.writeheader()
+        for fn, flags, sf in rows:
+            w.writerow({"filename": fn,
+                        # `wildlife` already exempts no_clear_subject.
+                        "scene": "wildlife" if fn.startswith("w") else "portrait",
+                        "flags": flags, "score_final": sf,
+                        **{c: 3 for c in _COLS if c.startswith("rubric_")}})
+    verdicts = {fn: "keep" for fn, _, _ in rows}
+    for i in range(5):
+        verdicts[f"k{i}.jpg"] = "cull"
+    lab = _labels(tmp_path, verdicts)
+
+    res = CliRunner().invoke(app, ["calibrate", "--labels", str(lab),
+                                   "--scores", str(p)])
+    assert res.exit_code == 0, res.output
+    head = res.output.split("flags that fire")[0]
+    assert "wildlife" not in head, (
+        "proposed an exemption that is already in the shipped tolerant "
+        "set — the report counts firings, not culls caused")
