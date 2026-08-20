@@ -1334,13 +1334,7 @@ def m3_eval(
     from pixcull.scoring.vlm_judge import make_minimax_judge
 
     key = api_key_from_env()
-    if not key:
-        console.print("[red]No MiniMax key.[/red] "
-                      "See `pixcull m3 doctor` for how to supply one.")
-        raise typer.Exit(code=2)
-
-    lab = load_labels(labels)
-    # v2.65 — a stratified label file must arrive with its weights.
+    # v2.65 (moved before the key check in v2.65.1) — a stratified label file must arrive with its weights.
     #
     # `--labels blind4-review.json` declared `selection: "stratified"`
     # and the eval scored it unweighted, because the strata lived in a
@@ -1405,6 +1399,12 @@ def m3_eval(
                     applied += 1
         console.print(f"[dim]review: {applied} label(s) replaced by your "
                       f"own verdict, from {len(review)} pass(es)[/dim]")
+    if not key:
+        console.print("[red]No MiniMax key.[/red] "
+                      "See `pixcull m3 doctor` for how to supply one.")
+        raise typer.Exit(code=2)
+
+    lab = load_labels(labels)
     if not lab:
         console.print(f"[red]{labels} has no rows with a manual_label.[/red] "
                       "An unlabelled row cannot make anyone right or wrong.")

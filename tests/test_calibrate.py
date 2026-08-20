@@ -328,7 +328,46 @@ def test_eval_refuses_a_stratified_file_with_no_weights(tmp_path):
                                "verdicts": {f"{i}.jpg": "keep"
                                             for i in range(10)}}),
                    encoding="utf-8")
-    res = CliRunner().invoke(app, ["m3", "eval", "--labels", str(lab),
-                                   "--scores", str(p)])
-    assert res.exit_code == 1, res.output
-    assert "stratified but carries no strata" in res.output
+    # v2.65.1 — asserts the MESSAGE, not the exit code, and runs with no
+    # key reachable.
+    #
+    # The first version checked `exit_code == 1`. `m3 eval` exits 1 for a
+    # missing key too, and the author's key lives in config.json rather
+    # than the environment — so the guard was never reached locally and
+    # the test passed for the wrong reason. CI, with no key at all, hit
+    # the key check first and went red. The guard now runs BEFORE the key
+    # is needed, because validating an input file does not require one.
+    import os
+
+    home = tmp_path / "nokey"
+    (home / ".pixcull").mkdir(parents=True, exist_ok=True)
+    env = {k: v for k, v in os.environ.items()
+           if k not in ("MINIMAX_API_KEY", "DEEPSEEK_API_KEY")}
+    env["HOME"] = str(home)
+    res = CliRunner(env=env).invoke(
+        app, ["m3", "eval", "--labels", str(lab), "--scores", str(p)])
+    assert "stratified but carries no strata" in res.output, (
+        f"exit={res.exit_code}\n{res.output}")
+    assert res.exit_code == 1
+
+
+def test_input_validation_does_not_need_a_key():
+    """v2.65.1 — order matters, and it was wrong.
+
+    `m3 eval` checked for a MiniMax key BEFORE validating the label
+    file, so a stratified file with no weights produced "No MiniMax key"
+    on any machine without one — including CI. Validating an input does
+    not require a key, and a guard placed after the key check protects
+    only people who already have one.
+    """
+    import inspect
+
+    from pixcull.cli import m3_eval
+
+    src = inspect.getsource(m3_eval)
+    guard = src.index("stratified but carries no strata")
+    keychk = src.index("No MiniMax key.")
+    assert guard < keychk, (
+        "the strata guard sits after the key check, so it is unreachable "
+        "without a key — which is exactly how it passed locally and "
+        "failed on CI")
