@@ -338,7 +338,25 @@ def test_authority_off_is_exactly_v247(config):
 
 
 def test_the_shipped_default_is_the_documented_one(config):
-    """v2.58 — the judge no longer gets authority just for being on.
+    """v2.64 — `primary` ships, on evidence rather than on hope.
+
+    v2.64 — `primary`, on 394 blind frames:
+
+        mode      destroys keepers   finds your culls   second looks
+        rule           126 / 366          5 / 28            31
+        primary         15 / 366          4 / 28           195
+
+        macro-F1 +14.6 pts, 95% CI [+6.8, +23.1]
+
+    What `maybe` means was measured, not assumed: 58 of 60 `maybe`s on
+    kept frames were "worth another look after a crop" (97%); 13 of 16
+    on culled frames were genuine misses (81%). Both passes blind.
+
+    If this moves again it should move with a blind pass behind it, and
+    this docstring should say which one.
+
+    Superseded v2.58's `off`, which was itself a correction of v2.50's
+    unmeasured `primary`.
 
     v2.50 shipped `primary` "out of the box" on the strength of a
     measurement that turned out to be circular. The first blind pass —
@@ -356,30 +374,30 @@ def test_the_shipped_default_is_the_documented_one(config):
     """
     import inspect
     sig = inspect.signature(decide)
-    assert sig.parameters["vlm_authority"].default == "off"
+    assert sig.parameters["vlm_authority"].default == "primary"
     # And the behaviour, not just the signature: a hard-culled frame the
     # judge wants to keep stays culled under the shipped default. Before
     # v2.58 this same call returned KEEP.
     dec, reasons = decide(0.72, ["closed_eyes"], config, scene="portrait",
                           vlm_label="keep", vlm_axes={"technical": 4})
-    assert dec is Decision.CULL, (
-        "the judge overruled a hard cull without being given authority")
+    assert dec is not Decision.CULL, (
+        "the judge no longer reaches the decision under the shipped "
+        "default — `primary` is advertised and unreachable")
 
     # `off` leaves the decision reasons untouched — annotating them is
     # `shadow`'s job, tested below. The verdict is not lost: run_vlm_stage
     # writes vlm_overall_label / _rationale / axis stars into scores.csv
     # and vlm_verdicts.jsonl BEFORE authority is consulted, so a user who
     # paid for the call still gets the reasoning in the report.
-    assert reasons == ["closed_eyes"], (
-        f"`off` should not touch the reasons at all: {reasons}")
+    assert any("vlm" in r for r in reasons), (
+        f"the verdict changed the decision but left no trace: {reasons}")
 
-    # ... and it does move once asked.
-    rescued, _ = decide(0.72, ["closed_eyes"], config, scene="portrait",
-                        vlm_label="keep", vlm_axes={"technical": 4},
-                        vlm_authority="rescue")
-    assert rescued is not Decision.CULL, (
-        "`--vlm-authority rescue` no longer reaches the decision, so the "
-        "flag is advertised and unreachable")
+    # ... and `off` still means off, for anyone who asks for it.
+    silent, why = decide(0.72, ["closed_eyes"], config, scene="portrait",
+                         vlm_label="keep", vlm_axes={"technical": 4},
+                         vlm_authority="off")
+    assert silent is Decision.CULL, "`--vlm-authority off` is unreachable"
+    assert why == ["closed_eyes"], f"`off` touched the reasons: {why}"
 
 
 def test_shadow_records_without_changing_anything(config):

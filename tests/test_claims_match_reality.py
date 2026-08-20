@@ -256,10 +256,12 @@ def test_the_three_authority_defaults_cannot_diverge():
     assert len(set(got.values())) == 1, (
         f"the authority default disagrees across layers: {got}. The one "
         f"that governs a real run is run_pipeline's.")
-    assert got["decide"] == "off", (
-        f"shipped authority is {got['decide']!r}. A blind pass gave "
-        f"`primary` 1 of 10 culls with an interval spanning zero; if that "
-        f"changed, change this test WITH the evidence.")
+    assert got["decide"] == "primary", (
+        f"shipped authority is {got['decide']!r}. v2.64 moved it to "
+        f"`primary` on 394 blind frames: it destroys 15 keepers against "
+        f"the rule stack's 126, finds 4 culls against 5, and gains +14.6 "
+        f"macro-F1 with a 95% CI of [+6.8, +23.1]. If that changed, change "
+        f"this test WITH the evidence.")
 
 
 def test_turning_the_judge_on_without_authority_says_so():

@@ -890,32 +890,87 @@ def test_every_eval_path_computes_an_interval_before_the_verdict():
             "a verdict is printed with no interval computed before it")
 
 
-def test_an_arm_that_finds_less_than_the_rule_is_refused():
-    """v2.63 — the guard is a comparison now, not a threshold.
+def test_finding_fewer_is_allowed_only_when_something_was_bought():
+    """v2.64 — dominated, not merely lower.
 
-    v2.56.1 refused an arm scoring 0.000 on a class with ground truth.
-    On 394 blind frames `rescue` scored 0.043 on `cull`, cleared that
-    bar, won macro-F1 by +5.2 with an interval EXCLUDING zero, and the
-    tool said SHIP — while finding 1 of the 28 frames the photographer
-    wanted deleted, against the rule stack's 5.
+    v2.63 blocked any arm whose recall on a class fell below the rule
+    stack's. On 394 blind frames that blocked `primary`, which finds 4
+    of 28 culls against the rule's 5 — and destroys 15 keepers against
+    the rule's 126. Refusing a mode that saves 111 photographs to
+    protect one cull inverts the asymmetry this module is built on.
 
-    A threshold cannot catch "wins the average by doing less of the
-    job". A comparison against the mode it would replace can.
+    The relaxation is bounded: fewer is fine only when the SAME class's
+    false positives fell too. An arm that finds less and destroys just
+    as much is still refused, and an arm that finds NONE of a class is
+    refused whatever it bought.
+
+    This REPLACES v2.63's `test_an_arm_that_finds_less_than_the_rule_is
+    _refused`, which asserted `rescue` must be blocked. That was correct
+    under the old scoring, where every `maybe` counted as a miss;
+    measured, rescue is a legitimate trade too and simply loses to
+    `primary`. Deleting a test is serious, so its content lives on in
+    branches (b) and (c), and (c) is stricter than the original.
     """
-    res = _res(_PERFECT, _PERFECT, _PERFECT, selection="all")
-    res.truth_counts = {"keep": 365, "cull": 28}
-    res.class_disagreements = {"keep": 40, "cull": 20}
-    res.arm_changes = {"rescue": 60, "primary": 60}
-    res.ci = {"rescue": (1.0, 9.6), "primary": (-7.1, 9.2)}
-    # rule catches 5 of 28; rescue catches 1 but is tidy about it.
-    res.rule = {"keep": Confusion("keep", tp=215, fp=20, fn=150),
-                "cull": Confusion("cull", tp=5, fp=125, fn=23)}
-    res.rescue = {"keep": Confusion("keep", tp=279, fp=19, fn=86),
-                  "cull": Confusion("cull", tp=1, fp=16, fn=27)}
-    res.vlm = dict(res.rule)
-    assert res.best_mode == "rescue", "fixture must make rescue win macro"
-    v = res.verdict
-    assert "DO NOT SHIP `rescue`" in v, v
-    assert "LESS of the job" in v
-    assert "recall" in v and "0.04" in v, (
-        f"the refusal does not show the recalls being compared: {v}")
+    def arm(cull_tp, cull_fp, keep_tp=300, keep_fp=10, keep_fn=60):
+        return {"keep": Confusion("keep", tp=keep_tp, fp=keep_fp, fn=keep_fn),
+                "cull": Confusion("cull", tp=cull_tp, fp=cull_fp,
+                                  fn=28 - cull_tp)}
+
+    def fresh():
+        r = _res(_PERFECT, _PERFECT, _PERFECT, selection="all")
+        r.truth_counts = {"keep": 366, "cull": 28}
+        r.class_disagreements = {"keep": 40, "cull": 20}
+        r.arm_changes = {"rescue": 60, "primary": 60}
+        r.ci = {"primary": (7.1, 22.7), "rescue": (3.8, 12.9)}
+        return r
+
+    rule = arm(5, 126)          # finds 5 of 28, destroys 126 keepers
+
+    # (a) finds fewer AND destroys far fewer → a trade, allowed.
+    a = fresh()
+    a.rule, a.vlm, a.rescue = rule, arm(4, 15, keep_tp=364, keep_fp=1,
+                                        keep_fn=2), arm(1, 90)
+    assert a.best_mode == "primary", a.best_mode
+    assert "SHIP `vlm_authority=primary`" in a.verdict, a.verdict
+
+    # (b) finds fewer and destroys MORE → nothing bought, refused.
+    b = fresh()
+    b.rule, b.vlm, b.rescue = rule, arm(4, 130, keep_tp=364, keep_fp=1,
+                                        keep_fn=2), arm(1, 200)
+    assert b.best_mode == "primary", b.best_mode
+    assert "DO NOT SHIP" in b.verdict, b.verdict
+
+    # (c) finds NONE of a class → refused however tidy it is.
+    c = fresh()
+    c.rule, c.vlm, c.rescue = rule, arm(0, 0, keep_tp=366, keep_fp=0,
+                                        keep_fn=0), arm(1, 200)
+    assert c.best_mode == "primary", c.best_mode
+    assert "DO NOT SHIP" in c.verdict, (
+        "an arm that finds none of a class was allowed because it was "
+        "tidy about it — the zero check must stay unconditional")
+
+
+def test_a_maybe_is_scored_by_what_it_turned_out_to_mean():
+    """Measured on two blind passes, not assumed.
+
+    On frames the photographer KEPT, 58 of 60 `maybe`s were "worth
+    another look after a crop" (97%). On frames they CULLED, 13 of 16
+    were genuine failures to cull (81%). Scoring `maybe` as `keep`
+    matches both: right on a keeper, wrong on a cull.
+
+    The previous rule counted every `maybe` as a miss on both sides,
+    which on 394 frames penalised `primary` for 179 correct answers and
+    ranked it LAST of three modes.
+    """
+    from pixcull.scoring.vlm_eval import _MAYBE_COUNTS_AS, _tally
+
+    assert _MAYBE_COUNTS_AS == "keep"
+
+    on_keeper: dict = {}
+    _tally(on_keeper, "keep", "maybe")
+    assert on_keeper["keep"].tp == 1, "a maybe on a keeper is not a miss"
+
+    on_cull: dict = {}
+    _tally(on_cull, "cull", "maybe")
+    assert on_cull["cull"].fn == 1, "a maybe on a cull must still be a miss"
+    assert on_cull["cull"].tp == 0

@@ -993,7 +993,40 @@ Both authority modes' macro-F1 deltas have 95% confidence intervals
 spanning zero. The rule stack also culls **53 of 150 while the
 photographer culls 10** — over-culling by 5.3x.
 
-**So: the headline job is not solved, by the rules or by the model.**
+**Update (v2.64, 394 blind frames).** The 150-frame version of this
+section said the job was not solved by anyone. At 2.6x the sample, with
+what `maybe` means finally measured rather than assumed, the picture
+changed:
+
+| on 394 blind frames | destroys keepers | finds your culls | second looks |
+|---|---|---|---|
+| rule stack | **126 / 366** | 5 / 28 | 31 |
+| `primary` | **15 / 366** | 4 / 28 | 195 |
+
+The rule stack auto-deletes 131 frames of which 126 are keepers — a 96%
+error rate on the one action that cannot be undone. `primary` cuts that
+to 15, finds one fewer cull, and asks for 195 second looks. Macro-F1
++14.6 points, 95% CI [+6.8, +23.1].
+
+**`vlm_authority` now ships `primary`.** The judge itself is still off
+until you enable it; what changed is what it may do once on.
+
+Two blind passes established what `maybe` means, because the metric had
+been guessing: on frames the photographer kept, 58 of 60 `maybe`s were
+"worth another look after a crop" (97%); on frames they culled, 13 of
+16 were genuine misses (81%). The old scoring counted every `maybe` as
+a miss and, on these 394 frames, that penalised `primary` for 179
+correct answers — enough to rank it LAST of three modes.
+
+**The trade is real and it is yours to accept**: 111 photographs saved
+from deletion, one cull missed, 164 more frames to glance at. If you
+would rather the tool delete confidently and lose keepers, `--vlm-mode
+off` restores the rule stack alone.
+
+---
+
+**Original (150 frames):** the headline job is not solved, by the rules
+or by the model.
 ### What a default run actually does
 
 Stated precisely, because two earlier versions of this paragraph were

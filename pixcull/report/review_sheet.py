@@ -84,14 +84,27 @@ def _blind_card(i: int, it: dict[str, Any]) -> str:
     independent source of it. This is the only fix in the family that is
     structural rather than a check applied afterwards.
     """
+    # v2.63.1 — the QUESTION is configurable; the blindness is not.
+    #
+    # The 60-frame `maybe` batch asks "is this worth a second look after
+    # a crop", and the buttons still read "留下 · keep / 删掉 · cull"
+    # because they were hardcoded. The lede explained the
+    # reinterpretation and the buttons contradicted it — the reviewer
+    # would have answered a different question from the one recorded.
+    # That is v2.53.1's bug wearing a new hat, and the fix is the same:
+    # the answer travels with the card.
+    yes_v = html.escape(str(it.get("yes_value") or "keep"))
+    no_v = html.escape(str(it.get("no_value") or "cull"))
+    yes_t = html.escape(str(it.get("yes") or "留下 · keep"))
+    no_t = html.escape(str(it.get("no") or "删掉 · cull"))
     return f'''<article class="card blind" data-fn="{html.escape(it['fn'])}"
-         data-yes="keep" data-no="cull">
+         data-yes="{yes_v}" data-no="{no_v}">
   <img src="{thumbnail_data_uri(Path(it['path']))}" alt="">
   <div class="meta">
     <div class="hd"><code>#{i + 1}</code></div>
     <div class="judge">
-      <button class="ok"  onclick="mark({i},1)">留下 · keep</button>
-      <button class="bad" onclick="mark({i},0)">删掉 · cull</button>
+      <button class="ok"  onclick="mark({i},1)">{yes_t}</button>
+      <button class="bad" onclick="mark({i},0)">{no_t}</button>
       <span class="mk" id="mk{i}"></span>
     </div>
   </div>

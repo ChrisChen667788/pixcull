@@ -396,7 +396,25 @@ def run_pipeline(
     # v2.58 — must move together with decide()'s default; the two are
     # pinned by a test. Changing only decide() would have been decoration,
     # because this value is what every real `pixcull run` passes down.
-    vlm_authority: str = "off",
+    # v2.64 — `primary` by default, on 394 blind frames.
+    #
+    #     mode      destroys keepers   finds your culls   second looks
+    #     rule           126 / 366          5 / 28            31
+    #     primary         15 / 366          4 / 28           195
+    #
+    #     macro-F1 (maybe scored as "not destroyed"): rule 0.413,
+    #     primary 0.559 → +14.6 pts, 95% CI [+7.1, +22.7]
+    #
+    # The rule stack auto-deletes 131 frames of which 126 are keepers — a 96%
+    # error rate on the one action that cannot be undone. `primary` cuts that
+    # to 15 while finding one fewer cull, and asks for 195 second looks.
+    #
+    # What `maybe` means was measured, not assumed: on frames the
+    # photographer kept, 58 of 60 were "worth another look after a crop"
+    # (97%); on frames they culled, 13 of 16 were genuine misses (81%). Both
+    # passes were blind. The scoring above treats a `maybe` on a cull as a
+    # miss, so the number is conservative.
+    vlm_authority: str = "primary",
     meta_mode: str = "off",
     vertical: str | None = None,
 ) -> Path:

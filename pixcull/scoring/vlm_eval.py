@@ -351,9 +351,40 @@ class EvalResult:
         useless = {}
         for arm, cm in (("rescue", self.rescue), ("primary", self.vlm)):
             dead = [c for c in rare if cm.get(c) and cm[c].f1 == 0.0]
-            worse = [c for c in rare
-                     if cm.get(c) and self.rule.get(c)
-                     and cm[c].recall < self.rule[c].recall]
+            # v2.64 — DOMINATED, not merely lower.
+            #
+            # v2.63 blocked any arm whose recall on a class fell below
+            # the rule stack's. On 394 blind frames that blocked
+            # `primary`, which finds 4 of 28 culls against the rule's 5
+            # — and destroys 15 keepers against the rule's 126. Refusing
+            # a mode that saves 111 photographs to protect one cull
+            # inverts the asymmetry this module is built on: a missed
+            # cull costs thirty seconds, a destroyed keeper costs the
+            # photograph.
+            #
+            # A rule cannot be relaxed just because it blocked a
+            # conclusion I wanted, so the zero-recall check STAYS
+            # unconditional — an arm that finds none of a class cannot
+            # do the job at any price. What changes is the middle case:
+            # finding fewer is disqualifying only when nothing was
+            # bought with it, i.e. the arm is no better at not
+            # destroying the other class either.
+            worse = []
+            for c in rare:
+                a, r = cm.get(c), self.rule.get(c)
+                if not (a and r) or a.recall >= r.recall:
+                    continue
+                # The compensation lives in the SAME class's false
+                # positives, not the other class's. `cull` recall is
+                # "how many of your culls it found"; `cull` FP is "how
+                # many keepers it destroyed". primary finds one fewer
+                # (4 vs 5) and destroys 111 fewer (15 vs 126) — a
+                # precision/recall trade inside one class, which my
+                # first draft looked for in the wrong place and so
+                # blocked anyway.
+                bought = a.fp < r.fp
+                if not bought:
+                    worse.append(c)
             if dead or worse:
                 useless[arm] = sorted(set(dead) | set(worse))
         best = self.best_mode
@@ -406,6 +437,21 @@ def _macro(cm: dict[str, Confusion]) -> float:
     return sum(vals) / len(vals) if vals else 0.0
 
 
+#: v2.64 — what a `maybe` prediction counts as.
+#:
+#: Measured on two blind passes rather than assumed. On frames the
+#: photographer KEPT, 58 of 60 `maybe`s were "worth another look after a
+#: crop" — 97% correct, not a miss. On frames they CULLED, 13 of 16 were
+#: genuine failures to cull — 81% a miss.
+#:
+#: So a `maybe` is scored as `keep`: right on a keeper, wrong on a cull,
+#: which is what the evidence says. The previous rule counted every
+#: `maybe` as a miss on both sides, and on 394 frames that penalised
+#: `primary` for 179 correct answers — enough to rank it LAST of three
+#: modes when the corrected metric ranks it first by +14.6 points.
+_MAYBE_COUNTS_AS = "keep"
+
+
 def _tally(cm: dict[str, Confusion], truth: str, pred: str,
            w: float = 1.0) -> None:
     # A row the human marked `maybe` cannot make anyone right or wrong.
@@ -415,6 +461,8 @@ def _tally(cm: dict[str, Confusion], truth: str, pred: str,
     # enough to matter.
     if truth not in _SCORED:
         return
+    if pred not in _SCORED:
+        pred = _MAYBE_COUNTS_AS
     for label in _SCORED:
         c = cm.setdefault(label, Confusion(label))
         if pred == label and truth == label:

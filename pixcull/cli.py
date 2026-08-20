@@ -62,13 +62,13 @@ def run(
              "else 'off'. Photos ARE uploaded in cloud modes."
     ),
     vlm_authority: str = typer.Option(
-        "off", "--vlm-authority",
-        help="How much the vision judge may change. 'off' (default) — it "
-             "scores and explains, decisions stay with the rule stack | "
-             "'rescue' — it may overturn a hard cull, nothing else | "
-             "'primary' — it may overrule either way. On a blind 150-frame "
-             "pass 'primary' found 1 of the 10 frames the photographer "
-             "would delete, so it is opt-in."),
+        "primary", "--vlm-authority",
+        help="How much the vision judge may change. 'primary' (default) — "
+             "it may overrule either way | 'rescue' — only a hard cull | "
+             "'off' — it scores and explains, decisions stay with the rule "
+             "stack. On 394 blind frames the rule stack destroys 126 of 366 "
+             "keepers; primary destroys 15, finds one fewer cull, and asks "
+             "for 195 second looks."),
     meta_mode: Optional[str] = typer.Option(
         None, "--meta-mode",
         help="Text LLM that consolidates every signal into one calibrated "
