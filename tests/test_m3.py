@@ -829,3 +829,58 @@ def test_probe_capabilities_uses_the_shared_sweep():
     import inspect
     src = inspect.getsource(m3.probe_capabilities)
     assert "probe_key(" in src
+
+
+# ── v2.66: the evidence A/B ───────────────────────────────────────────
+
+def test_each_arm_sends_a_different_evidence_block():
+    """The block is what the A/B varies, so the arms must actually differ.
+
+    Every field shipping today is technical, and on the only
+    non-circular data this project has they measure 0.9x lift against
+    the photographer's own culls — worse than chance. Composition is the
+    one signal that separates a cull from a keep, and the judge is
+    currently told none of it.
+    """
+    from pixcull.scoring.m3 import EVIDENCE_ARMS, build_evidence_block
+
+    row = {"laplacian_global": 842, "highlight_clip_pct": 0.4,
+           "face_count": 2, "rule_of_thirds_offset": 0.21,
+           "canon_lead_room": 0.83, "canon_figure_ground": 0.52,
+           "subject_fraction": 0.04}
+    blocks = {a: build_evidence_block(row, a) for a in EVIDENCE_ARMS}
+
+    assert blocks["none"] == "", "the control arm still sends evidence"
+    assert "清晰度" in blocks["technical"]
+    assert "清晰度" not in blocks["composition"], (
+        "the composition arm still carries technical fields, so the A/B "
+        "compares two versions of the same thing")
+    assert "三分点" in blocks["composition"]
+    assert len(blocks["both"]) > max(len(blocks["technical"]),
+                                     len(blocks["composition"]))
+    assert len(set(blocks.values())) == len(blocks), "two arms are identical"
+
+
+def test_the_cache_key_separates_the_arms():
+    """Otherwise the A/B compares a cache against itself.
+
+    Two arms can produce blocks of EQUAL LENGTH and mean entirely
+    different things. The key folded in `len(evidence)` only, so a
+    second arm would have been served the first arm's verdict — every
+    arm scoring identically, with nothing to show it had happened.
+    """
+    import ast
+    import inspect
+
+    from pixcull.scoring.m3 import MiniMaxM3Judge
+
+    src = inspect.getsource(MiniMaxM3Judge.score)
+    key = src[src.index("_content_hash("):src.index("if key:")]
+    assert "evidence_arm" in key, (
+        "the cache key does not include the arm, so arms share verdicts")
+
+    # And the parameter exists to be passed at all.
+    sig = inspect.signature(MiniMaxM3Judge.score)
+    assert "evidence_arm" in sig.parameters
+    assert sig.parameters["evidence_arm"].default == "technical", (
+        "the shipped arm changed without the A/B having been run")

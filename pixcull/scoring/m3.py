@@ -332,6 +332,40 @@ _EVIDENCE_FIELDS: tuple[tuple[str, str, Callable[[Any], str]], ...] = (
     ("dup_group_size", "近重复组大小",  lambda v: str(int(v))),
 )
 
+#: v2.66 — composition fields, for the A/B.
+#:
+#: Every field in _EVIDENCE_FIELDS is technical, and on the only
+#: non-circular data this project has they measure 0.9x lift against the
+#: photographer's own culls — worse than chance. The one signal that
+#: separates a cull from a keep is composition (-0.82 sigma), which the
+#: judge is currently told nothing about even though the local stack
+#: computes eleven of them.
+_COMPOSITION_FIELDS: tuple[tuple[str, str, Callable[[Any], str]], ...] = (
+    ("rule_of_thirds_offset", "主体离三分点距离(0=正中三分点)",
+     lambda v: f"{float(v):.3f}"),
+    ("canon_lead_room", "视线/运动前方留白比",
+     lambda v: f"{float(v):.2f}"),
+    ("canon_figure_ground", "主体与背景分离度",
+     lambda v: f"{float(v):.2f}"),
+    ("canon_balance", "左右视觉重量平衡(0.5=均衡)",
+     lambda v: f"{float(v):.2f}"),
+    ("canon_diagonal_energy", "对角线张力",
+     lambda v: f"{float(v):.2f}"),
+    ("canon_symmetry", "对称度", lambda v: f"{float(v):.2f}"),
+    ("subject_fraction", "主体占画面比例",
+     lambda v: f"{float(v):.3f}"),
+)
+
+#: The three arms. `technical` is what ships today; the others exist to
+#: find out whether the evidence block is helping or crowding out what
+#: the judge could see for itself.
+EVIDENCE_ARMS: dict[str, tuple] = {
+    "technical": _EVIDENCE_FIELDS,
+    "composition": _COMPOSITION_FIELDS,
+    "both": _EVIDENCE_FIELDS + _COMPOSITION_FIELDS,
+    "none": (),
+}
+
 _EVIDENCE_HEADER = """
 ## 客观测量(本机检测器实测,非你的观察)
 以下数值由本地算法测出,精度高于目视判断。请把它们当作事实,
@@ -340,7 +374,8 @@ _EVIDENCE_HEADER = """
 """.strip()
 
 
-def build_evidence_block(row: dict[str, Any] | None) -> str:
+def build_evidence_block(row: dict[str, Any] | None,
+                         arm: str = "technical") -> str:
     """Serialise local detector readings into a prompt section.
 
     This is the load-bearing idea of v2.48.  A VLM asked "is this sharp?"
@@ -356,10 +391,11 @@ def build_evidence_block(row: dict[str, Any] | None) -> str:
     Returns "" when nothing is measurable, so the caller can omit the
     section entirely rather than send an empty heading.
     """
-    if not row:
+    fields = EVIDENCE_ARMS.get(arm, _EVIDENCE_FIELDS)
+    if not row or not fields:
         return ""
     lines: list[str] = []
-    for col, label, fmt in _EVIDENCE_FIELDS:
+    for col, label, fmt in fields:
         val = row.get(col)
         if val is None or val == "":
             continue
@@ -568,6 +604,10 @@ class MiniMaxM3Judge:
         *,
         row: dict[str, Any] | None = None,
         prompt_override: str | None = None,
+        # v2.66 — which evidence block to send. `technical` is what ships;
+        # the other arms exist to find out whether the block helps or
+        # crowds out what the judge could see for itself.
+        evidence_arm: str = "technical",
     ) -> VlmVerdict:
         """Judge one photo, with local measurements supplied as evidence.
 
@@ -582,7 +622,7 @@ class MiniMaxM3Judge:
             axes={a.name: VlmAxisScore(stars=None) for a in RUBRIC_AXES},
             model_name=self.model_name,
         )
-        evidence = build_evidence_block(row)
+        evidence = build_evidence_block(row, evidence_arm)
         if prompt_override is not None:
             # v2.51 — the advice writer asks a different question of the
             # same photo (prose about the frame, not axis stars), and it
@@ -601,7 +641,12 @@ class MiniMaxM3Judge:
                 key = _content_hash(
                     image_path,
                     f"{self._model}|{PROMPT_VERSION}|{scene}|{vertical}|"
-                    f"{len(evidence)}|"
+                    # v2.66 — the ARM, not just the block's length. Two
+                    # arms can produce blocks of equal length and mean
+                    # entirely different things; keying on length alone
+                    # would serve one arm's verdict to another and make
+                    # the A/B compare a cache against itself.
+                    f"{evidence_arm}|{len(evidence)}|"
                     # v2.51 — scoring and advice ask different questions
                     # of the same bytes. Without this the second caller
                     # would be served the first one's answer.
