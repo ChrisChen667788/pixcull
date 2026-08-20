@@ -305,3 +305,30 @@ def test_it_does_not_propose_an_exemption_that_already_exists(tmp_path):
     assert "wildlife" not in head, (
         "proposed an exemption that is already in the shipped tolerant "
         "set — the report counts firings, not culls caused")
+
+
+def test_eval_refuses_a_stratified_file_with_no_weights(tmp_path):
+    """Scoring a stratified sample flat is not approximately right.
+
+    It answers a different question — the tail was over-sampled on
+    purpose. `--labels blind4-review.json` did exactly this and reported
+    a figure from an over-sampled tail while saying nothing.
+    """
+    rows = [(f"{i}.jpg", "", 0.9) for i in range(10)]
+    p = tmp_path / "scores.csv"
+    with open(p, "w", newline="", encoding="utf-8") as fh:
+        w = csv.DictWriter(fh, fieldnames=_COLS)
+        w.writeheader()
+        for fn, flags, sf in rows:
+            w.writerow({"filename": fn, "scene": "portrait", "flags": flags,
+                        "score_final": sf,
+                        **{c: 3 for c in _COLS if c.startswith("rubric_")}})
+    lab = tmp_path / "lab.json"
+    lab.write_text(json.dumps({"selection": "stratified",
+                               "verdicts": {f"{i}.jpg": "keep"
+                                            for i in range(10)}}),
+                   encoding="utf-8")
+    res = CliRunner().invoke(app, ["m3", "eval", "--labels", str(lab),
+                                   "--scores", str(p)])
+    assert res.exit_code == 1, res.output
+    assert "stratified but carries no strata" in res.output

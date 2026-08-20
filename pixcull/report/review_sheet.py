@@ -230,6 +230,11 @@ border-radius:8px;padding:14px;display:none;cursor:copy}
 _JS = """
 const N=%(n)d, KEY='pixcull-review-%(slug)s', FILE='%(slug)s-review.json';
 const SELECTION=%(selection)s;
+// v2.65 — the strata travel with the verdicts. A stratified sample
+// whose weights live in a side file is a number waiting to be computed
+// wrong: `m3 eval --labels` had no way to ask for them and silently
+// produced an UNWEIGHTED figure from an over-sampled tail.
+const STRATA=%(strata)s;
 const R=JSON.parse(localStorage.getItem(KEY)||'{}');
 function paint(i){
   const ok=R[i], c=document.querySelectorAll('.card')[i], m=document.getElementById('mk'+i);
@@ -257,7 +262,7 @@ function payload(){
   // stack only where it is weakest. Without this field the reader has to
   // guess, and the flattering guess is the wrong one.
   const out={reviewed_at:new Date().toISOString(),
-             selection:SELECTION,verdicts:{}};
+             selection:SELECTION,strata:STRATA,verdicts:{}};
   cards.forEach((c,i)=>{ if(i in R) out.verdicts[c.dataset.fn]=R[i]?c.dataset.yes:c.dataset.no; });
   return out;
 }
@@ -363,7 +368,8 @@ window.addEventListener('DOMContentLoaded',()=>{
 
 def render(items: Sequence[dict[str, Any]], *, title: str, lede: str,
            slug: str, yes_key: str = "b", no_key: str = "a",
-           selection: str = "disagreements", blind: bool = False) -> str:
+           selection: str = "disagreements", blind: bool = False,
+           strata: dict[str, Any] | None = None) -> str:
     """Build the whole page as one self-contained HTML string."""
     yes = items[0].get("yes", "B 对了") if items else "B 对了"
     no = items[0].get("no", "A 对了") if items else "A 对了"
@@ -371,7 +377,8 @@ def render(items: Sequence[dict[str, Any]], *, title: str, lede: str,
     cards = "".join(render_one(i, it) for i, it in enumerate(items))
     js = _JS % {"n": len(items), "slug": slug,
                 "yes_key": yes_key, "no_key": no_key,
-                "selection": json.dumps(selection)}
+                "selection": json.dumps(selection),
+                "strata": json.dumps(strata or {})}
     return (f'<!doctype html><html lang="zh"><meta charset="utf-8">'
             f'<title>{html.escape(title)}</title><style>{_CSS}</style>'
             f'<header><h1>{html.escape(title)}</h1>'
@@ -468,6 +475,23 @@ def stratify(items: Sequence[dict[str, Any]], limit: int, *,
             if len(chosen) >= limit:
                 break
     return chosen
+
+
+def load_strata(path: Path) -> dict:
+    """filename -> {"stratum", "pop", "sampled"} from a verdict file.
+
+    v2.65 — a stratified sample states its own weights or it cannot be
+    scored. Keeping them in a side file meant `m3 eval --labels` had no
+    way to ask, and produced an unweighted number from a deliberately
+    over-sampled tail without saying so. That figure happened to
+    UNDERSTATE the effect (+32.6 unweighted vs +37.1 weighted), which is
+    luck rather than a mechanism.
+    """
+    try:
+        d = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return (d.get("strata") or {}) if isinstance(d, dict) else {}
 
 
 def load_selection(path: Path) -> str:

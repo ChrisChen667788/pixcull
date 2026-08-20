@@ -620,3 +620,40 @@ def test_progress_survives_a_reload_and_shows_how_far_in_you_are(photo,
     # writes both — a previous version updated the count in three places
     # and the undo path forgot one.
     assert "3 / 5" in got["count"]
+
+
+def test_a_stratified_page_carries_its_own_weights(photo, tmp_path):
+    """v2.65 — the strata travel with the verdicts.
+
+    A stratified sample whose weights live in a side file is a number
+    waiting to be computed wrong: `m3 eval --labels` had no way to ask
+    for them and scored a deliberately over-sampled tail flat. That run
+    happened to UNDERSTATE the effect (+32.6 vs +37.1 weighted), which
+    is luck, not a mechanism.
+    """
+    from pixcull.report.review_sheet import load_strata
+
+    st = {"a.jpg": {"stratum": "lo", "pop": 21, "sampled": 21},
+          "b.jpg": {"stratum": "hi", "pop": 350, "sampled": 24}}
+    items = [{"fn": f, "path": str(photo)} for f in ("a.jpg", "b.jpg")]
+    page = write(items, tmp_path / "p.html", blind=True, slug="s",
+                 selection="stratified", strata=st,
+                 title="t", lede="l").read_text("utf-8")
+    assert '"stratum": "hi"' in page or '"stratum":"hi"' in page
+    assert "strata:STRATA" in page, "the payload does not carry them"
+
+    saved = tmp_path / "v.json"
+    saved.write_text(json.dumps({"selection": "stratified", "strata": st,
+                                 "verdicts": {"a.jpg": "keep"}}),
+                     encoding="utf-8")
+    got = load_strata(saved)
+    assert got["b.jpg"]["pop"] / got["b.jpg"]["sampled"] == pytest.approx(
+        350 / 24), "the weight cannot be recovered from the saved file"
+
+    # A file with no strata at all yields nothing, so the caller can tell
+    # the difference between "flat sample" and "weights went missing".
+    bare = tmp_path / "bare.json"
+    bare.write_text(json.dumps({"selection": "stratified",
+                                "verdicts": {"a.jpg": "keep"}}),
+                    encoding="utf-8")
+    assert load_strata(bare) == {}

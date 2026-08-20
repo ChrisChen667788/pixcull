@@ -998,10 +998,25 @@ section said the job was not solved by anyone. At 2.6x the sample, with
 what `maybe` means finally measured rather than assumed, the picture
 changed:
 
-| on 394 blind frames | destroys keepers | finds your culls | second looks |
-|---|---|---|---|
-| rule stack | **126 / 366** | 5 / 28 | 31 |
-| `primary` | **15 / 366** | 4 / 28 | 195 |
+| on 493 blind frames | destroys keepers | finds your culls |
+|---|---|---|
+| rule stack | **157 / 450** | 7 / 43 |
+| `rescue` | 26 / 450 | 3 / 43 |
+| `primary` | **20 / 450** | **11 / 43** |
+
+`primary` destroys 87% fewer keepers AND finds 57% more of the frames
+the photographer wanted deleted. On the first 394 it was a trade — one
+cull given up for 111 photographs saved. Adding 100 stratified frames
+reversed even that: it now wins on both axes.
+
+macro-F1 +28.9 points, 95% CI [+14.7, +41.9].
+
+The second batch is 100 frames rather than 1000. Stratifying on the
+local `score_final` (its low band carries 2.4x the cull rate) and
+weighting each row by stratum population / stratum sampled yields
+roughly twice the information per frame labelled, at a fifth of the
+scoring cost. 400 simulations confirm the weighting recovers the true
+rate.
 
 The rule stack auto-deletes 131 frames of which 126 are keepers — a 96%
 error rate on the one action that cannot be undone. `primary` cuts that
@@ -1108,13 +1123,13 @@ you left off, because a properly powered pass is ~1250 frames.
 
 ### The dataset, by provenance
 
-1002 photographs from the owner's own library have entered this
+1102 photographs from the owner's own library have entered this
 measurement. They are not equally useful, and the difference is the
 whole story of this repository:
 
 | provenance | frames | usable as ground truth |
 |---|---|---|
-| **blind** — judged before anything was scored | **394** | **yes** |
+| **blind** — judged before anything was scored | **494** | **yes** |
 | review — judged with a system verdict on screen | 103 | direction only (selection bias) |
 | circular — label *is* the rule stack's decision | 305 | no |
 | circular — label *is* the pipeline's output | 200 | no |

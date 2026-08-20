@@ -1340,6 +1340,36 @@ def m3_eval(
         raise typer.Exit(code=2)
 
     lab = load_labels(labels)
+    # v2.65 — a stratified label file must arrive with its weights.
+    #
+    # `--labels blind4-review.json` declared `selection: "stratified"`
+    # and the eval scored it unweighted, because the strata lived in a
+    # side file nothing knew to read. The result came from a
+    # deliberately over-sampled tail and said so nowhere. Refusing is
+    # the only safe answer: a stratified sample scored flat is not
+    # approximately right, it is a different question.
+    _row_weights: dict[str, float] | None = None
+    if str(labels).lower().endswith(".json"):
+        from pixcull.report.review_sheet import load_selection, load_strata
+        if load_selection(labels) == "stratified":
+            _st = load_strata(labels)
+            if not _st:
+                console.print(
+                    f"[red]{Path(labels).name} says its sample is "
+                    f"stratified but carries no strata.[/red] Scoring it "
+                    f"flat would weight an over-sampled tail as if it "
+                    f"were the corpus. Rebuild the batch with a version "
+                    f"that records them, or pass a census instead.")
+                raise typer.Exit(code=1)
+            _row_weights = {fn: m["pop"] / m["sampled"]
+                            for fn, m in _st.items()
+                            if m.get("sampled")}
+            console.print("[dim]stratum weights from "
+                          f"{Path(labels).name}: " + ", ".join(
+                              f"{s} ×{p/n:.2f}" for s, (p, n) in
+                              sorted({m["stratum"]: (m["pop"], m["sampled"])
+                                      for m in _st.values()}.items())) +
+                          "[/dim]")
     # v2.53.2 — repeatable. As a single Option this silently kept only the
     # LAST --review: passing both review passes threw the first one's
     # judgements away and reported a smaller, quieter number as if it were
@@ -1428,6 +1458,8 @@ def m3_eval(
     judge._cache = VerdictCache(default_cache_path())
     res = evaluate(rows, lab, judge, PixCullConfig.load(),
                    vertical=vertical, limit=limit,
+                   row_weights=_row_weights,
+                   selection="stratified" if _row_weights else "all",
                    progress=lambda n, t, fn: (
                        console.print(f"[dim]{n}/{t} {fn}[/dim]")
                        if n % 25 == 0 or n == t else None))
