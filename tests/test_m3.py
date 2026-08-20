@@ -883,4 +883,40 @@ def test_the_cache_key_separates_the_arms():
     sig = inspect.signature(MiniMaxM3Judge.score)
     assert "evidence_arm" in sig.parameters
     assert sig.parameters["evidence_arm"].default == "technical", (
-        "the shipped arm changed without the A/B having been run")
+        "the shipped arm changed; see docs/EVIDENCE-AB-RESULT.md")
+
+
+def test_the_shipped_arm_is_still_the_one_the_ab_measured():
+    """The recorded winner and the shipped default must not drift apart.
+
+    v2.66's own commit message said "not yet run", and the default sat
+    there for a release backed by nothing.  v2.67 measured it.  That
+    moves the failure mode rather than removing it: from "never tested"
+    to "tested once, then quietly changed" — the same defect wearing a
+    later disguise, and the one this repo keeps re-committing.
+
+    So the doc is not prose here.  It states the measured winner in a
+    line this test reads, and the default has to agree with it.  Change
+    either one alone and the suite says so.
+    """
+    import inspect
+    import re
+
+    from pixcull.scoring.m3 import EVIDENCE_ARMS, MiniMaxM3Judge
+
+    doc = Path(__file__).resolve().parents[1] / "docs" / "EVIDENCE-AB-RESULT.md"
+    assert doc.exists(), (
+        "docs/EVIDENCE-AB-RESULT.md is gone — the shipped arm is unbacked "
+        "again, which is exactly the state v2.66 shipped in")
+    hit = re.search(r"^MEASURED-WINNER:\s*(\S+)\s*$",
+                    doc.read_text(encoding="utf-8"), re.M)
+    assert hit, "the result doc no longer states which arm won"
+    winner = hit.group(1)
+    assert winner in EVIDENCE_ARMS, (
+        f"the doc names an arm that does not exist: {winner!r}")
+
+    default = inspect.signature(
+        MiniMaxM3Judge.score).parameters["evidence_arm"].default
+    assert default == winner, (
+        f"the shipped arm is {default!r} but the A/B measured {winner!r}; "
+        f"re-run the A/B or correct docs/EVIDENCE-AB-RESULT.md")
