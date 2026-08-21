@@ -1398,3 +1398,16 @@
       }
       .stars { font-size: 26px; }
     }
+
+/* v2.69 — filter panel legibility.
+   `.pill-n` is the count that now rides on every decision pill; it must
+   read as an annotation, not as part of the label.
+   `.pill-unknown` is the scene the classifier could not place. It is
+   dimmed and sorted last because it is a statement about the classifier,
+   not about the photograph, and it sat mid-list looking like a category. */
+.pill .pill-n { opacity: 0.5; font-variant-numeric: tabular-nums; }
+.pill.pill-unknown {
+  opacity: 0.62;
+  border-style: dashed;
+}
+.pill.pill-unknown.active { opacity: 1; }

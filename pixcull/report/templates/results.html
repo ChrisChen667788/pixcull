@@ -4624,6 +4624,19 @@
       }
       .stars { font-size: 26px; }
     }
+
+/* v2.69 — filter panel legibility.
+   `.pill-n` is the count that now rides on every decision pill; it must
+   read as an annotation, not as part of the label.
+   `.pill-unknown` is the scene the classifier could not place. It is
+   dimmed and sorted last because it is a statement about the classifier,
+   not about the photograph, and it sat mid-list looking like a category. */
+.pill .pill-n { opacity: 0.5; font-variant-numeric: tabular-nums; }
+.pill.pill-unknown {
+  opacity: 0.62;
+  border-style: dashed;
+}
+.pill.pill-unknown.active { opacity: 1; }
     /* V10.1 Lightbox upgrade: image + full evaluation panel side-by-side. */
     .lightbox {
       position: fixed; inset: 0; background: rgba(0,0,0,0.94);
@@ -6474,7 +6487,7 @@
     <div class="library-panel-backdrop" id="libraryPanelBackdrop"></div>
     <aside class="library-panel" id="libraryPanel">
       <div class="lp-header">
-        <span class="lp-title" data-i18n="library.title">Library</span>
+        <span class="lp-title" data-i18n="library.title">图库</span>
         <button class="lp-collapse" id="lpCollapseBtn"
                 type="button"
                 data-i18n-attr-aria-label="library.collapse.aria"
@@ -6491,9 +6504,9 @@
           <summary data-i18n="library.group.decision">决定 · Decision</summary>
           <div class="lp-content" id="decisionPills">
             <span class="pill active" data-d="all" data-i18n="decision.all">全部</span>
-            <span class="pill" data-d="keep" data-i18n="decision.keep">keep</span>
-            <span class="pill" data-d="maybe" data-i18n="decision.maybe">maybe</span>
-            <span class="pill" data-d="cull" data-i18n="decision.cull">cull</span>
+            <span class="pill" data-d="keep" data-i18n="decision.keep">保留</span>
+            <span class="pill" data-d="maybe" data-i18n="decision.maybe">待定</span>
+            <span class="pill" data-d="cull" data-i18n="decision.cull">剔除</span>
           </div>
         </details>
         <!-- v2.11-P0-1 — always-visible "organise the grid" group: near-dup
@@ -7384,8 +7397,21 @@
     document.querySelectorAll("[data-i18n]").forEach(el => {
       const key = el.getAttribute("data-i18n");
       const txt = I18N_STRINGS[key];
-      if (typeof txt === "string" && txt.length) {
+      if (typeof txt !== "string" || !txt.length) return;
+      // v2.69 — replace the LABEL, keep the furniture.
+      //
+      // `el.textContent = txt` deletes every child, and the decision
+      // pills now carry a `.pill-n` count. Translating the panel erased
+      // the numbers it had just been given. It happened to look fine
+      // because buildDynamicFilters() runs after this and puts them
+      // back — the counts were surviving on call order, which is not a
+      // property anything was checking.
+      if (!el.children.length) {
         el.textContent = txt;
+      } else if (el.firstChild && el.firstChild.nodeType === 3) {
+        el.firstChild.nodeValue = txt;
+      } else {
+        el.insertBefore(document.createTextNode(txt), el.firstChild);
       }
     });
     // Attribute-keyed translations (title / aria-label / placeholder)
@@ -7446,6 +7472,13 @@
       }
       // v2.25 — retranslate the compare tray if it's showing.
       if (typeof _updateCmpPickUI === "function") _updateCmpPickUI();
+      // v2.69 — and the scene / style chips, which are built from row
+      // data through _t() at init, i.e. BEFORE this fetch resolves.
+      // Without this they keep whatever _t() returned against an empty
+      // dictionary: the raw enum. Every `scene.*` string added in this
+      // version would have shipped unreachable — the exact defect this
+      // version exists to remove, reintroduced by its own fix.
+      if (typeof buildDynamicFilters === "function") buildDynamicFilters();
     } catch (_e) { /* non-results contexts have neither element */ }
     return true;
   }
@@ -7467,13 +7500,21 @@
       const next = I18N_CYCLE[(idx + 1) % I18N_CYCLE.length];
       lblEl.textContent = I18N_CHIP_LABEL[next] || "EN";
     }
-    if (stored !== "zh_CN") {
-      // The HTML is rendered server-side in zh — fetch + repaint when
-      // the resolved locale isn't zh, whether it came from an explicit
-      // stored choice OR (v2.23-P1) navigator-language detection on a
-      // fresh visit.
-      _applyLang(stored);
-    }
+    // v2.69 — zh_CN fetches the dictionary too.
+    //
+    // The old fast path skipped it, reasoning that "the HTML is rendered
+    // server-side in zh". That holds for static markup and fails for
+    // everything built by JS: a `_t()` call has no server-rendered
+    // fallback to be correct, only whatever string the caller happened
+    // to type. It failed for static markup as well, wherever the
+    // hardcoded fallback was not actually Chinese — the decision pills
+    // read `keep` / `maybe` / `cull` to the primary audience for as long
+    // as that panel has existed, while `decision.keep = 保留` sat in
+    // zh_CN.json unread.
+    //
+    // 192 strings over loopback. The saving was never worth an
+    // assumption that nothing checked.
+    _applyLang(stored);
     const btn = document.getElementById("langSwitcher");
     if (btn) {
       btn.addEventListener("click", async () => {
@@ -7860,9 +7901,12 @@
     // anchor visible at-a-glance in the workspace bar).  Per-decision
     // counts keep their colour-coded look (keep/maybe/cull semantics).
     `<span>共 <b data-stat="total" class="stat-value-large">${summary.n_total}</b> 张</span>`,
-    `<span class="keep">keep <b data-stat="keep">${summary.n_keep}</b></span>`,
-    `<span class="maybe">maybe <b data-stat="maybe">${summary.n_maybe}</b></span>`,
-    `<span class="cull">cull <b data-stat="cull">${summary.n_cull}</b></span>`,
+    `<span class="keep">${_t("decision.keep", "保留")} `
+      + `<b data-stat="keep">${summary.n_keep}</b></span>`,
+    `<span class="maybe">${_t("decision.maybe", "待定")} `
+      + `<b data-stat="maybe">${summary.n_maybe}</b></span>`,
+    `<span class="cull">${_t("decision.cull", "剔除")} `
+      + `<b data-stat="cull">${summary.n_cull}</b></span>`,
     // v2.15-P0 — the culling pass finally has a finish line: photos still
     // WITHOUT a human-confirmed decision. Ticks down live as you label;
     // at zero the chip flips to "全部已审 ✓" and becomes the XMP-export
@@ -8068,15 +8112,59 @@
         styleCounts[s] = (styleCounts[s] || 0) + 1;
       });
     });
+    // v2.69 — the chips said `landscape`, `documentary`, `stilllife` to a
+    // Chinese photographer: internal enum values rendered raw, in the one
+    // panel they use to navigate a 5,000-frame shoot. `scene.*` had zero
+    // entries in every one of the 13 locales, so there was nothing to
+    // render but the identifier.
+    //
+    // `unknown` sorts last regardless of count and carries its own class.
+    // It is not a twelfth kind of photograph — it is the classifier
+    // saying it could not tell, and listing it between `abstract` and
+    // `fashion` invites filtering by it as though it described the
+    // picture.
+    // v2.69 — counts on the decision pills.
+    //
+    // The panel is where you choose what to look at, and it could not
+    // tell you how many there were: the numbers lived in a separate
+    // strip at the top of the window, so "how much of this shoot is
+    // still undecided" needed two glances and a mental join. Every other
+    // group in this panel already carries its counts.
+    (() => {
+      const by = {all: rows.length, keep: 0, maybe: 0, cull: 0};
+      rows.forEach(r => { if (by[r.decision] !== undefined) by[r.decision] += 1; });
+      document.querySelectorAll("#decisionPills .pill[data-d]").forEach(el => {
+        const n = by[el.dataset.d];
+        if (n === undefined) return;
+        let c = el.querySelector(".pill-n");
+        if (!c) {
+          c = document.createElement("span");
+          c.className = "pill-n";
+          el.appendChild(document.createTextNode(" "));
+          el.appendChild(c);
+        }
+        c.textContent = String(n);
+      });
+    })();
+
+    const _sceneRank = ([s, n]) => (s === "unknown" ? -1 : n);
     const sceneEl = document.getElementById("sceneFilters");
     sceneEl.innerHTML = Object.entries(sceneCounts)
-      .sort((a, b) => b[1] - a[1])
-      .map(([s, n]) => `<span class="pill" data-scene="${esc(s)}">${esc(s)} <span style="opacity:0.5">${n}</span></span>`)
+      .sort((a, b) => _sceneRank(b) - _sceneRank(a))
+      .map(([s, n]) => {
+        const unk = s === "unknown";
+        const tip = unk
+          ? _t("filter.scene_unknown_hint", "场景分类器没能判定的照片") : "";
+        return `<span class="pill${unk ? " pill-unknown" : ""}"`
+          + ` data-scene="${esc(s)}"${tip ? ` title="${esc(tip)}"` : ""}>`
+          + `${esc(_t("scene." + s, s))} <span style="opacity:0.5">${n}</span></span>`;
+      })
       .join("");
     const styleEl = document.getElementById("styleFilters");
     styleEl.innerHTML = Object.entries(styleCounts)
       .sort((a, b) => b[1] - a[1])
-      .map(([s, n]) => `<span class="pill" data-style="${esc(s)}">${esc(s)} <span style="opacity:0.5">${n}</span></span>`)
+      .map(([s, n]) => `<span class="pill" data-style="${esc(s)}">`
+        + `${esc(_t("style." + s, s))} <span style="opacity:0.5">${n}</span></span>`)
       .join("");
     sceneEl.querySelectorAll(".pill").forEach(el => {
       el.addEventListener("click", () => {
