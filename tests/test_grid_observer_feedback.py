@@ -133,3 +133,71 @@ def test_no_grid_observer_requeries_the_grid_per_added_node():
                 or "||" in guard or "if (!" in guard), (
             "the grid is re-queried for every node that arrives; memoise "
             "the count instead")
+
+
+# ---------------------------------------------------------------------------
+# v2.68.2 — layout thrash in the de-materialiser
+# ---------------------------------------------------------------------------
+
+#: Properties whose read forces a synchronous layout.
+_LAYOUT_READS = ("offsetHeight", "offsetWidth", "offsetTop", "offsetLeft",
+                 "getBoundingClientRect", "clientHeight", "clientWidth",
+                 "scrollHeight", "getComputedStyle")
+
+
+def _fn_body(js: str, decl: str) -> str:
+    """Source of a `const name = (args) => {...}` arrow function."""
+    at = js.index(decl)
+    depth, i = 0, js.index("{", at)
+    start = i
+    while i < len(js):
+        if js[i] == "{":
+            depth += 1
+        elif js[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return js[start:i + 1]
+        i += 1
+    raise AssertionError(f"unbalanced braces after {decl!r}")
+
+
+def test_the_dematerialiser_does_not_read_layout_while_mutating():
+    """The 527ms long task, and why throttling could never have fixed it.
+
+    `_dematerialize` removes a card and inserts a placeholder. It used to
+    read `card.offsetHeight` itself, inside a loop that was also doing
+    those removals — so every read after the first forced a fresh
+    layout, and laying out this grid costs 8-10ms because it always has
+    ~5,069 direct children. The de-materialiser swaps their CONTENTS; it
+    never reduces their NUMBER.
+
+    A batch of 50 receding cards therefore paid for 50 full layouts.
+    Measured: 8-10ms per forced layout, 527ms median long task while
+    scrolling, and zero long tasks with the observer disconnected — it
+    was the only source of jank on the page.
+
+    Read-then-write. Same values, all taken before the first mutation.
+    """
+    js = _strip_comments(
+        (SRC / "results.js").read_text(encoding="utf-8"))
+    body = _fn_body(js, "const _dematerialize = ")
+    for prop in _LAYOUT_READS:
+        assert prop not in body, (
+            f"_dematerialize reads `{prop}`, forcing a layout inside the "
+            f"loop that is mutating the grid")
+
+
+def test_the_dematerialiser_batches_its_reads():
+    """Removing the read from the callee is only half of it — the caller
+    has to take every measurement before it starts mutating."""
+    js = _strip_comments((SRC / "results.js").read_text(encoding="utf-8"))
+    at = js.index("_dematIo = new IntersectionObserver")
+    cb = js[at:at + 1400]
+    assert "offsetHeight" in cb, (
+        "nothing measures the card any more; placeholders will all fall "
+        "back to the constant and the scroll position will jump")
+    read_at = cb.index("offsetHeight")
+    write_at = cb.index("_dematerialize(")
+    assert read_at < write_at, (
+        "the heights are read after the mutations start, which is the "
+        "thrash this fix removed")

@@ -10048,12 +10048,17 @@
         _io.unobserve(ph);
         ph.remove();
       };
-      const _dematerialize = (card) => {
+      // v2.68.2 — `h` is measured by the CALLER, before any mutation.
+      // Reading it here forced a layout inside the loop that was also
+      // removing cards, and this grid always has ~5,069 direct children
+      // (the de-materialiser swaps their contents, never their number),
+      // so each forced layout cost 8-10ms. A batch of 50 paid for 50.
+      const _dematerialize = (card, h) => {
         const idx = parseInt(card.dataset.segIdx || "-1", 10);
         if (idx < 0) return;
         const ph = document.createElement("div");
         ph.className = "card-placeholder";
-        ph.style.height = (card.offsetHeight || PLACEHOLDER_HEIGHT) + "px";
+        ph.style.height = (h || PLACEHOLDER_HEIGHT) + "px";
         ph.dataset.idx = String(idx);
         card.parentNode.insertBefore(ph, card);
         imgIo.unobserve(card);
@@ -10063,11 +10068,21 @@
       };
       _dematIo = new IntersectionObserver((entries) => {
         if (token.cancelled) return;
+        // Only recycle a card once it has RECEDED past the wide margin.
+        const doomed = [];
         for (const ent of entries) {
-          // Only recycle a card once it has RECEDED past the wide margin.
           if (!ent.isIntersecting && ent.target.classList.contains("card")) {
-            _dematerialize(ent.target);
+            doomed.push(ent.target);
           }
+        }
+        if (!doomed.length) return;
+        // Phase 1: read every height. Phase 2: mutate. Interleaving them
+        // made this the only source of jank on the page — measured with
+        // the observer disconnected, a 7s scroll produced ZERO long
+        // tasks; connected, the same scroll blocked for 388ms.
+        const heights = doomed.map(c => c.offsetHeight || PLACEHOLDER_HEIGHT);
+        for (let i = 0; i < doomed.length; i++) {
+          _dematerialize(doomed[i], heights[i]);
         }
       }, { rootMargin: "500% 0px", threshold: 0 });
       if (window._pcDematObserver) {
