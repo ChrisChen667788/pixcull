@@ -5,7 +5,7 @@ no right-click-Open dance, just double-click and it runs).
 
 ## Day-zero one-time setup
 
-### 1. Apple Developer account ($99/year)
+### 1. Apple Developer account (paid, annual)
 Enroll at <https://developer.apple.com/programs/enroll/>. Wait
 ~1-3 days for approval.
 
@@ -76,7 +76,7 @@ your website / wherever.
 | First launch | "PixCull cannot be opened — developer cannot be verified" → user has to right-click → Open | Just double-click; runs immediately |
 | Gatekeeper status | Quarantine flag tripped | Trusted by macOS |
 | Internet required to launch? | No | No (because we **stapled** the ticket) |
-| Cost | Free | $99/year for the Developer Program |
+| Cost | Free | Paid Developer Program membership |
 
 ## Auto-update (V7.1+)
 

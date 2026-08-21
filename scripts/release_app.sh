@@ -6,7 +6,7 @@
 #
 # Pre-requisites you have to do ONCE manually
 # ===========================================
-# 1. Apple Developer Program membership — $99/year
+# 1. Apple Developer Program membership (paid, annual)
 #      https://developer.apple.com/programs/enroll/
 #
 # 2. A "Developer ID Application" certificate in your login keychain.

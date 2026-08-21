@@ -15,7 +15,7 @@ photographer can install and use it without touching a terminal. Wraps:
 |---|---|
 | `launcher.py` | Entry point. Runs first-run setup → starts in-process HTTP server → shows menu bar status item → opens browser. |
 | `pixcull.spec` | PyInstaller build recipe. Bundles Python + all deps + bundled V2.1 axis rescorers. Models > 100 MB download on first run instead of bloating the .app. |
-| `NOTARIZATION.md` | How to sign + notarize for wider distribution (requires $99/year Apple Developer account). |
+| `NOTARIZATION.md` | How to sign + notarize for wider distribution (requires a paid Apple Developer account). |
 | `README.md` | This file. |
 
 ## How a user experiences it

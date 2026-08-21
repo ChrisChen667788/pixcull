@@ -257,3 +257,43 @@ def test_no_eval_report_with_real_filenames(tracked_text):
         "eval output is tracked: " + ", ".join(bad) +
         "\nThese name real photographs and describe their contents. Keep "
         "them gitignored and quote only the aggregate numbers.")
+
+
+def test_no_money_amounts(tracked_text):
+    """No currency figures in the public tree.
+
+    Not a style rule.  Prices had accumulated across READMEs, six
+    charters, a dozen code comments, a test docstring and a script
+    header — what the owner paid to run a measurement, what a vendor
+    charges per photo, what a competitor charges per month.  Nobody
+    audits a number that was already there, which is how they got there:
+    every one arrived in a diff that was about something else.
+
+    Removing them once does not keep them out; only a lint does.  Note
+    what this does NOT forbid — the rate table in ``llm_budget`` and the
+    estimator that quotes a user their own bill before a run are code
+    that computes, not documentation that discloses, and they carry no
+    currency markup for this pattern to catch.
+    """
+    money = re.compile(
+        r"¥\s*\d"                          # ¥12, ¥ 12
+        # `元` only as the currency: `元素` is "element" and `元数据`
+        # is "metadata", and "~30 元素" is a DOM-node count.
+        r"|\d[\d,.]*\s*(?:CNY|yuan|元(?![素数]))"
+        r"|\$\s*\d+\.\d"                   # $0.03
+        r"|\$\s*\d{2,}"                    # $99
+        r"|\$\s*\d+\s*[kK]\b"              # $10k
+        r"|\$\s*\d+\s*/"                   # $0/month
+    )
+    hits = []
+    for path, body in tracked_text:
+        rel = path.relative_to(ROOT).as_posix()
+        if rel == "tests/test_repo_hygiene.py":
+            continue
+        for i, line in enumerate(body.splitlines(), 1):
+            m = money.search(line)
+            if m:
+                hits.append(f"{rel}:{i}: {line.strip()[:100]}")
+    assert not hits, (
+        "currency amounts in tracked files — say 'paid, annual' or "
+        "'billed per image' instead of naming a figure:\n" + "\n".join(hits))

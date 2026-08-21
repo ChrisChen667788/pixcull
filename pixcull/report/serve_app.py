@@ -1503,8 +1503,8 @@ def _m3_advice_pass(rows: list, df) -> int:
     Every failure path keeps the template advice.  Advice is commentary
     on a decision already made; nobody's cull should be worse because a
     key expired.  Only ``keep`` and ``maybe`` rows are sent — nobody
-    reads a paragraph about a photo they discarded, and at ~¥0.005 a row
-    that is most of the bill.
+    reads a paragraph about a photo they discarded, and since every row
+    is billed, those rows are most of the bill.
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -3338,7 +3338,8 @@ class _Handler(BaseHTTPRequestHandler):
                 # INFRA-4 — LLM cost ledger
                 {"method": "GET",  "path": "/api/v1/llm_budget",
                  "doc":    "daily LLM spend (yuan) + cap from "
-                          "PIXCULL_LLM_BUDGET_YUAN env (default 10)"},
+                          "PIXCULL_LLM_BUDGET_YUAN env; see "
+                          "llm_budget.cap_yuan() for the default"},
                 # INFRA-2 — multi-machine sync
                 {"method": "GET",  "path": "/api/v1/sync_status",
                  "doc":    "sync target + per-subtree state for "
@@ -9594,7 +9595,8 @@ class _Handler(BaseHTTPRequestHandler):
 
         Returns ``{date_utc, today_yuan, cap_yuan, remaining_yuan,
         calls_today, over_cap, by_model, all_dates[:30]}``. Cap is
-        from ``PIXCULL_LLM_BUDGET_YUAN`` env (default 10 yuan/day).
+        from ``PIXCULL_LLM_BUDGET_YUAN`` env; the default lives in
+        ``llm_budget._DEFAULT_DAILY_CAP_YUAN`` and is not restated here.
         """
         from pixcull.llm_budget import snapshot
         body = _safe_dumps(snapshot()).encode("utf-8")
@@ -12919,7 +12921,7 @@ def main() -> None:
              "(rule + V2.1 model + VLM + detector metrics) into a "
              "calibrated final verdict. Off by default. Values: "
              "'off' | 'deepseek' (V4-Flash) | 'deepseek:deepseek-v4-pro'. "
-             "Requires DEEPSEEK_API_KEY env var. ~¥0.003/image.",
+             "Requires DEEPSEEK_API_KEY env var. Billed per image.",
     )
     args = parser.parse_args()
 
@@ -12992,7 +12994,7 @@ def main() -> None:
     if args.vlm_mode != "off":
         print(f"  VLM mode: {args.vlm_mode} (V3.0 — adds ~10s/img local, ~2s/img API)")
     if args.meta_mode != "off":
-        print(f"  Meta-judge: {args.meta_mode} (V3.1 — adds ~5-10s/img · ~¥0.003/img)")
+        print(f"  Meta-judge: {args.meta_mode} (V3.1 — adds ~5-10s/img, billed per img)")
     if not args.no_open and args.host in ("127.0.0.1", "localhost"):
         threading.Timer(0.4, lambda: webbrowser.open(local_url)).start()
 

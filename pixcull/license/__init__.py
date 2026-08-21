@@ -20,15 +20,15 @@ Free tier
   differentiated reviews) work — we don't gate quality, we gate
   volume.
 
-Pro tier (¥35/月 or ¥299/年)
-=============================
+Pro tier
+========
 * Unlimited monthly volume.
 * Auto-retrain enabled (V11.2 silently uses your annotations).
 * Priority support email.
 * Cloud sync of annotations across devices (V12.1).
 
-Studio tier (¥299/月)
-======================
+Studio tier
+===========
 * All Pro features + LAN multi-user mode.
 * Up to 4 collaborators sharing one license.
 * Custom genre presets / branded reports.

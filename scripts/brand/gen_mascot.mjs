@@ -15,7 +15,7 @@
  * Env: MINIMAX_API_KEY required.
  *
  * Why separate from overlay_wordmark.mjs: the AI call is expensive
- * (~$0.03/image, ~10s/call) and non-deterministic. Splitting lets the
+ * (billed per image, ~10s/call) and non-deterministic. Splitting lets the
  * caller re-run just the text overlay (cheap, fast) when tweaking
  * wordmark layout without burning more API calls.
  */

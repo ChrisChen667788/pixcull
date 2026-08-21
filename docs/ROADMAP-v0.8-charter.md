@@ -25,7 +25,7 @@ v0.8 主线:**"敢公开发布 + 协作起来 + 风格 V2 + i18n"**。
 ### 1. 分发
 
 v0.7-P2-3 给了 Sparkle infra + signing cookbook 但没真的签包。原因
-是 Apple Developer ID 需要 $99/年 + 1-3 天身份验证 — 那是用户行动
+是 Apple Developer ID 需要付费年费 + 1-3 天身份验证 — 那是用户行动
 而非代码工作。同时 brew tap、Win MSI、Linux AppImage 都没动。v0.8
 要把这些真的做完:
 

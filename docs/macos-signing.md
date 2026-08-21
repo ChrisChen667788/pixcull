@@ -8,7 +8,7 @@ new versions.
 
 ## 0. Prerequisites (one-time)
 
-- **Apple Developer Program membership** — $99/year. PixCull
+- **Apple Developer Program membership** — paid, annual. PixCull
   uses the Developer ID program (NOT the Mac App Store), which
   lets us distribute outside the App Store but still get
   notarization.

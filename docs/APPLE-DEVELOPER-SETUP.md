@@ -7,7 +7,8 @@ finish these steps, the signed-DMG + Sparkle pipeline will run
 end-to-end.
 
 Estimated time: **2–4 hours active work + 1–3 day waits on
-Apple's verification queues.** Cost: **$99 USD/year**.
+Apple's verification queues.** The Program is a paid annual
+membership; Apple publishes the current fee.
 
 ## ✅ Action checklist
 
@@ -16,7 +17,7 @@ Apple's verification queues.** Cost: **$99 USD/year**.
 - [ ] Go to <https://developer.apple.com/programs/>
 - [ ] Click "Enroll" (top right) — you need an Apple ID first if you don't have one
 - [ ] Choose **Individual** (NOT Organization unless you're filing as a business)
-- [ ] Pay **$99 USD/year**
+- [ ] Pay the annual membership fee
 - [ ] Wait for the email "Your enrollment has been completed" (usually 1-3 days for identity verification)
 
 > **Note:** China-based Apple IDs can enroll. The billing currency is automatically converted from your local payment method. Avoid the Mac App Store option — we want Developer ID for direct distribution.
@@ -103,7 +104,7 @@ chmod 600 .env
 The signed DMG + the appcast.xml need to be hosted somewhere stable. Options:
 
 - **GitHub Releases** (simplest, free) — appcast.xml ships as a release asset, DMG too. The `SUFeedURL` becomes `https://github.com/ChrisChen667788/pixcull/releases/latest/download/appcast.xml`. Limitation: no phased rollout.
-- **Cloudflare R2** + custom domain (`pixcull.app`) — recommended for v0.8 phased-rollout work; $0/month for free tier.
+- **Cloudflare R2** + custom domain (`pixcull.app`) — recommended for v0.8 phased-rollout work; has a free tier.
 - **S3 + CloudFront** — overkill for v0.7 launch.
 
 If you're not sure, start with **GitHub Releases** — it's already wired in this repo (see `gh release upload`) and zero extra cost. Migrate to R2 in v0.8 when you need phased rollout.
@@ -147,7 +148,7 @@ That's it. Sparkle users now auto-update.
 
 ## 🆘 If you hit a wall
 
-- **"My country can't pay $99"** — Apple accepts most international cards. If your card is rejected, use an Apple Gift Card (purchasable at Apple Stores / Authorized Resellers).
+- **"My country can't pay the fee"** — Apple accepts most international cards. If your card is rejected, use an Apple Gift Card (purchasable at Apple Stores / Authorized Resellers).
 - **"Identity verification taking >5 days"** — email <developer-program-support@apple.com> with your enrollment confirmation #.
 - **"codesign: no identity found"** — re-run `security find-identity -v -p codesigning`. If it's empty, the Xcode certificate request didn't complete; redo step 2.
 - **"notarytool: invalid credentials"** — app-specific password expired. Generate a fresh one (step 3) and re-run `store-credentials`.

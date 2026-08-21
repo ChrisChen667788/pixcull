@@ -59,7 +59,7 @@ top-level routes 跳过 `/api/v1` auth gate 简化控制面板访问。
 `scripts/build_appcast.py`(Sparkle 2.0 EdDSA appcast 生成器)+
 release schema(`docs/sparkle/releases.example.json`)+ 完整 macOS
 signing/notarization cookbook(`docs/macos-signing.md`)。
-**Note**: 实际签包 + 发布需要 Apple Developer ID($99/年)——
+**Note**: 实际签包 + 发布需要 Apple Developer ID(付费年费)——
 infra 已就位,等申请到 cert 即可走流程。
 
 ### 历史时间线 `/history`

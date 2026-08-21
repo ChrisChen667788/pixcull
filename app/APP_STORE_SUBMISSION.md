@@ -5,7 +5,7 @@ Releases / 个人网站直发** 两个分发渠道,二选一或并行。
 
 ## 0. 前置账号 + 工具
 
-- [ ] **Apple Developer Program** 注册,$99/年
+- [ ] **Apple Developer Program** 注册(年费,以 Apple 官网为准)
 - [ ] Xcode + Command Line Tools (`xcode-select --install`)
 - [ ] Developer ID Application 证书装入 Keychain
 - [ ] App-specific password 用于 notarytool

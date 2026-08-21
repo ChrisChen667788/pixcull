@@ -32,7 +32,7 @@ Privacy
 We send DeepSeek METRIC SUMMARIES (numbers + scene/style tokens),
 NEVER image bytes. Photographer's actual photos stay on their
 machine. The prompt is small (<2 KB), the response is small
-(<3 KB), and one generation costs ≈¥0.001.
+(<3 KB), and one generation is a fraction of a per-call charge.
 
 Failure modes
 -------------

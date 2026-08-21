@@ -70,8 +70,8 @@ Use this path when SignPath isn't available — internal builds,
 unapproved projects, or air-gapped signing.
 
 1. Buy a code-signing cert (Sectigo / DigiCert / SSL.com). EV
-   (Extended Validation) certs cost ~$300/yr and unlock instant
-   SmartScreen trust; standard OV certs are ~$80/yr and need ~3
+   (Extended Validation) certs cost more and unlock instant
+   SmartScreen trust; standard OV certs are cheaper but need ~3
    months of telemetry before SmartScreen stops complaining.
 2. Export from your Personal store as a `.pfx`:
    ```powershell

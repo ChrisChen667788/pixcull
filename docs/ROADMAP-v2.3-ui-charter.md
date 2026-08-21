@@ -11,7 +11,7 @@ The repo ships several skills.  Picking the right one is the whole game:
 | Skill | Use here? | Why |
 |---|---|---|
 | **`redesign-skill`** (redesign-existing-projects) | ✅ **master protocol** | "Audit an existing app, fix generic patterns, keep the stack, *small targeted improvements over big rewrites*." Has an explicit fix-priority order. PixCull is an existing vanilla-CSS app — this is exactly our case. |
-| **`soft-skill`** (high-end-visual-design) | ⚠️ **borrow component craft only** | Premium fonts, Double-Bezel nested cards, tinted shadows, spring motion, scroll-entry, magnetic hover — yes. Its *layout* (full-screen hero, `py-40`, asymmetric Bento, Z-axis cascade with rotations) is a **$150k marketing-agency** language that would actively hurt a 200-photo culling tool — **no**. |
+| **`soft-skill`** (high-end-visual-design) | ⚠️ **borrow component craft only** | Premium fonts, Double-Bezel nested cards, tinted shadows, spring motion, scroll-entry, magnetic hover — yes. Its *layout* (full-screen hero, `py-40`, asymmetric Bento, Z-axis cascade with rotations) is a **top-tier marketing-agency** language that would actively hurt a 200-photo culling tool — **no**. |
 | **`minimalist-skill`** (Notion/Linear editorial) | ✅ secondary reference | The calm/editorial register is the right *tool* aesthetic. |
 | **`taste-skill`** (default v2) | ◑ dials + discipline only | Its own header says: *"Not dashboards, not data tables, not multi-step product UI."* PixCull's grid **is** that. Take its **3 dials** + brief-inference discipline; ignore its landing-page rules. |
 

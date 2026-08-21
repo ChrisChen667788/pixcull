@@ -72,7 +72,7 @@ New `pixcull/scoring/m3.py`:
   3000-photo run resumes instead of re-billing
 - retry with exponential backoff on 429/5xx (today: none)
 - budget gate — `check_budget` / `record_call` (today `vlm_judge.py`
-  has **neither**, so the ¥10 daily cap is silently blown past)
+  has **neither**, so the daily cap is silently blown past)
 
 `pixcull m3 doctor` makes **one real call** and reports, per capability,
 what the endpoint actually accepted.

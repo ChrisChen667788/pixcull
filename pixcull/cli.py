@@ -1443,9 +1443,9 @@ def m3_eval(
     todo = min(live, limit) if limit else live
     # v2.49.2 — measured, not assumed. The first estimate used 150 output
     # tokens; M3 is a reasoning model and actually spends ~1400 (it thinks
-    # inside <think> before answering), so the real per-photo cost is
-    # ~¥0.021 rather than ~¥0.005. Under-quoting a bill by 4x is worse
-    # than not quoting it.
+    # inside <think> before answering), so the real per-photo rate is
+    # roughly 4x what was first assumed. Under-quoting a bill by 4x is
+    # worse than not quoting it.
     est = todo * 0.021
     console.print(f"[dim]≈{todo} calls, ≈¥{est:.2f}, "
                   f"≈{todo / 200 * 60:.0f}s at the 200 RPM limit[/dim]")

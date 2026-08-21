@@ -2,10 +2,9 @@
 
 Pre-V32 PixCull would happily call DeepSeek V4-Flash / V4-Pro for
 every photo's meta-judge + every vertical's phrase generation without
-any budget visibility. At per-photo costs of ~¥0.005 (V4-Flash, ~500
-tokens in / 200 tokens out) this is fine for a 100-photo session but
-hostile for a 5000-photo wedding (¥25+) — let alone a studio running
-unattended overnight retrains.
+any budget visibility. These calls are billed per photo, which is fine
+for a 100-photo session and hostile for a 5000-photo wedding — let
+alone a studio running unattended overnight retrains.
 
 INFRA-4 adds:
 
@@ -52,11 +51,11 @@ _MODEL_PRICING: dict[str, tuple[float, float]] = {
     "deepseek-v4-pro":     (0.0040, 0.0160),
     "deepseek-chat":       (0.0010, 0.0040),   # alias for v4-flash
     "deepseek-reasoner":   (0.0040, 0.0160),   # alias for v4-pro
-    # v2.48 — MiniMax M3, the primary vision judge. Vendor list price is
-    # in USD: $0.30/M input, $1.20/M output at the standard tier for
-    # requests under 512K context (both double above it, which PixCull
-    # never approaches — one photo is ~1.5k tokens). Converted at 7.25
-    # CNY/USD.
+    # v2.48 — MiniMax M3, the primary vision judge. Taken from the
+    # vendor's published per-token rates for the standard tier, which
+    # covers requests under 512K context (the rates double above it,
+    # which PixCull never approaches — one photo is ~1.5k tokens), and
+    # converted to CNY.
     #
     # This entry matters more than it looks: without it M3 fell through
     # to _UNKNOWN_MODEL_PRICE, which is DeepSeek-Pro's CNY rate and is

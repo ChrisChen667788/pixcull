@@ -30,8 +30,8 @@ Two modes:
 
 2. **Polish mode** (opt-in, INFRA-4-budgeted) — runs the composed
    caption through DeepSeek V4-Flash with a "rewrite as a single
-   coherent journalistic-style caption" prompt. Better prose,
-   costs ~¥0.003/photo. Gated by ``check_budget`` so a 5000-photo
+   coherent journalistic-style caption" prompt. Better prose, billed
+   per photo. Gated by ``check_budget`` so a 5000-photo
    run can't overrun the daily cap.
 
 Output schema per row:

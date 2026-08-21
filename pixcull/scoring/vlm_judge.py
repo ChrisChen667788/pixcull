@@ -384,8 +384,8 @@ class MlxQwen3VlJudge:
 #
 # Both Deepseek and MiniMax expose OpenAI-compatible /v1/chat/completions
 # endpoints with vision support. Same wire format works for both — only the
-# base_url and model name differ. Cost: roughly ¥0.001-0.005 per image at
-# 1024px resolution (Deepseek-VL-67B and MiniMax abab-6.5-vision tier).
+# base_url and model name differ. Both bill per image; see
+# ``llm_budget._MODEL_PRICING`` for the rates the estimator uses.
 # ---------------------------------------------------------------------------
 
 class OpenAICompatibleVlmJudge:

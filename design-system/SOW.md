@@ -114,7 +114,7 @@ second for CJK**, both supervised by you for consistency.
 **Anywhere**:
 - ImpactInk for English-side launches
 - Smaller agencies who've done Linear / Notion press are usually
-  too expensive (~$10k-20k USD); look one tier down.
+  out of budget at that tier; look one tier down.
 
 ## 4. Procurement steps — what to do, in order
 

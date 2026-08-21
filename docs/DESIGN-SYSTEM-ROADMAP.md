@@ -72,7 +72,7 @@
 
 | 工具 / 资源 | 用途 |
 |---|---|
-| ⭐ **[Glyphs](https://glyphsapp.com/)** ($299, macOS) | 真正自己绘制 typeface 的工具(若有此预算) |
+| ⭐ **[Glyphs](https://glyphsapp.com/)** (付费, macOS) | 真正自己绘制 typeface 的工具(若有此预算) |
 | **[Fontsource](https://fontsource.org/)** | 自托管开源字体打包 |
 | **[Adobe Fonts](https://fonts.adobe.com/)** | Creative Cloud 订阅包含,正版授权 |
 | **[Variable Fonts Playground](https://v-fonts.com/)** | 选 variable font 时的预览工具 |

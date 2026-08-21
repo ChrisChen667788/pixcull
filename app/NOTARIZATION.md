@@ -11,7 +11,7 @@ full path.
 
 ## Prerequisites
 
-- **Apple Developer Program** membership (US$99/year)
+- **Apple Developer Program** membership (paid, annual)
 - **Xcode** or `xcode-select` command-line tools
 - A **Developer ID Application** certificate
   (Account → Certificates → "+", "Developer ID Application")

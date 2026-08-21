@@ -49,7 +49,7 @@ PixCull 有一套真正精巧的 AI 评分后端 + 成熟的透明度/可解释 
   签名公证 → .dmg 发到 GitHub Release → 回填 Homebrew cask 的真 SHA + URL;并把
   `pyproject.toml` 版本对齐。第二刀:英文 USER-GUIDE + 修 results.js 里 3 处硬编码中文
   onboarding 串走 i18n shim。
-- **风险**:Apple 公证需有效开发者账号($99/年)+ CI 里的签名证书;PyInstaller spec
+- **风险**:Apple 公证需有效开发者账号(付费年费)+ CI 里的签名证书;PyInstaller spec
   从未生产验证过,把 torch/transformers/onnxruntime 正确打进 .app 是已知脆弱点。
   缓解:先本机验证 PyInstaller;若公证受阻,退而求其次先发 PyPI wheel。
 

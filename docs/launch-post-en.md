@@ -15,8 +15,8 @@ library module is a normal post-event evening.
 
 The first pass is where AI helps. Burst-peak picking, focus-miss
 detection, eyes-closed detection, exposure sanity — solved problems if
-you wire them right. There are 5+ commercial "AI culling" SaaS apps now
-charging $20–50/month each.
+you wire them right. There are 5+ commercial "AI culling" SaaS apps now, all on
+monthly subscriptions.
 
 But all of them make three trade-offs working photographers shouldn't
 have to swallow.

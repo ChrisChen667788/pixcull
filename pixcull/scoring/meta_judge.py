@@ -42,8 +42,8 @@ Why this beats running VLM directly
    writes editorial-quality Chinese. The meta judge inherits this.
 
 3. **Costs nearly nothing.** Input is ~1.5K tokens of structured data,
-   output ~500 tokens. At V4-Pro 60%-off pricing (¥0.75/M in, ¥1.5/M
-   out), that's ~¥0.002 per image. 100-image batch ≈ ¥0.2.
+   output ~500 tokens — small enough that a 100-image batch barely
+   registers against the daily cap.
 
 4. **Independent evidence chain.** The meta judge can disagree with
    the VLM. When they disagree on a high-stakes axis, that's a strong
@@ -248,7 +248,7 @@ class DeepseekMetaJudge:
         if max_tokens is None:
             # V4-Flash output for our 6-axis schema averages ~700 tokens
             # (Chinese rationales × 6 + overall + 2-3 inconsistencies).
-            # 1500 leaves headroom; cost is ~¥0.003 per call.
+            # 1500 leaves headroom at negligible per-call cost.
             # V4-Pro burns 60-80% of budget on hidden reasoning, so it
             # needs ~4× the visible-output budget to land the JSON.
             max_tokens = 5000 if self._model == PRO_DEEPSEEK_MODEL else 1500
