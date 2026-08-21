@@ -182,6 +182,7 @@ def _shallow_clone(repo_id: str, branch: str, dest: Path) -> bool:
     tok = str(tok).strip().strip('"')
     if not tok:
         return False
+    _SECRETS.add(tok)
     url = f"https://oauth2:{tok}@www.modelscope.cn/{repo_id}.git"
     env = {**_os.environ, "GIT_LFS_SKIP_SMUDGE": "1", "GIT_TERMINAL_PROMPT": "0"}
     r = _sp.run(["git", "clone", "--depth", "1", "--branch", branch,
@@ -192,6 +193,62 @@ def _shallow_clone(repo_id: str, branch: str, dest: Path) -> bool:
               file=sys.stderr)
         return False
     return True
+
+
+def _asset_is_current(repo_id: str, branch: str, rel: str,
+                      local: Path) -> bool:
+    """Is the server already serving what we hold locally?
+
+    Size-equality rather than a digest: ModelScope serves assets through
+    a CDN redirect and exposes no hash we could compare without pulling
+    the whole file.  Length separates the two cases that matter — absent
+    (404, or a zero-length body) and stale (a different render of the
+    same screenshot).  A same-size different-image collision is not a
+    failure mode this sync can produce: the local file is the only place
+    these ever come from.
+    """
+    import urllib.error
+    import urllib.request
+    url = (f"https://www.modelscope.cn/models/{repo_id}/resolve/"
+           f"{branch}/{rel}")
+    try:
+        want = local.stat().st_size
+    except OSError:
+        return False
+    try:
+        with urllib.request.urlopen(url, timeout=30) as resp:
+            got = resp.headers.get("Content-Length")
+            if got is not None:
+                return int(got) == want
+            return len(resp.read()) == want
+    except (urllib.error.URLError, ValueError, OSError):
+        return False
+
+
+#: Every credential this script has constructed, so that _redact() does
+#: not depend on each call site remembering to pass it along.
+_SECRETS: set[str] = set()
+
+
+def _redact(text: str, *secrets: str) -> str:
+    """Strip credentials out of anything this script prints.
+
+    v2.67.1 — a failed push printed git's own error, and git names the
+    remote in it.  The remote is ``https://oauth2:<token>@…`` because
+    that is how the shallow clone authenticates, so the token went to
+    the terminal, the CI log and the scrollback of whoever ran `make
+    modelscope-sync`.  The token is not the interesting part of any
+    error message; nothing is lost by removing it, and it is not enough
+    to redact the one message we know about — every subprocess stream
+    this script surfaces goes through here.
+    """
+    out = str(text)
+    for sec in (*secrets, *_SECRETS):
+        if sec and len(sec) >= 4:
+            out = out.replace(sec, "***")
+    # Belt and braces: any userinfo in a URL, whether or not we were
+    # handed the secret that built it.
+    return re.sub(r"(https?://)[^/\s@]+@", r"\1***@", out)
 
 
 def _git_push_readme(repo_id: str, branch: str, readme_text: str) -> bool:
@@ -211,7 +268,7 @@ def _git_push_readme(repo_id: str, branch: str, readme_text: str) -> bool:
     try:
         from modelscope.hub.repository import Repository
     except Exception as exc:  # noqa: BLE001
-        print(f"[modelscope-sync] Repository unavailable: {exc}",
+        print(f"[modelscope-sync] Repository unavailable: {_redact(exc)}",
               file=sys.stderr)
         return False
     tmp = Path(tempfile.mkdtemp(prefix="ms_sync_")) / "repo"
@@ -221,11 +278,17 @@ def _git_push_readme(repo_id: str, branch: str, readme_text: str) -> bool:
         try:
             Repository(model_dir=str(tmp), clone_from=repo_id)
         except Exception as exc:  # noqa: BLE001
-            print(f"[modelscope-sync] git clone failed: {exc}", file=sys.stderr)
+            print(f"[modelscope-sync] git clone failed: {_redact(exc)}",
+                  file=sys.stderr)
             return False
     cfg = [("filter.lfs.required", "false"), ("filter.lfs.smudge", "cat"),
            ("filter.lfs.clean", "cat"), ("user.email", "noreply@anthropic.com"),
-           ("user.name", "pixcull-sync")]
+           ("user.name", "pixcull-sync"),
+           # v2.67.1 — ModelScope's remote advertises LFS locking, and
+           # git-lfs aborts the push rather than guess.  We touch only
+           # two text files and hold no locks, so verification has
+           # nothing to verify.
+           ("lfs.locksverify", "false")]
     for k, v in cfg:
         subprocess.run(["git", "-C", str(tmp), "config", k, v], check=False)
     (tmp / "README.md").write_text(readme_text, encoding="utf-8")
@@ -236,16 +299,26 @@ def _git_push_readme(repo_id: str, branch: str, readme_text: str) -> bool:
                         "sync: README + .gitattributes as text (de-LFS card)"],
                        capture_output=True, text=True)
     if c.returncode != 0:
-        if "nothing to commit" in (c.stdout + c.stderr):
+        # v2.67.1 — ask git the question instead of reading its prose.
+        # "the card is already current" is a normal, successful outcome
+        # and was being reported as a failed sync; matching the English
+        # sentence "nothing to commit" also fails under any other
+        # locale, and it did: this branch printed `commit failed:` with
+        # an empty string after it, which is a diagnostic that diagnoses
+        # nothing.
+        clean = subprocess.run(["git", "-C", str(tmp), "diff", "--cached",
+                                "--quiet"])
+        if clean.returncode == 0:
             print("[modelscope-sync] README already current", file=sys.stderr)
             return True
-        print(f"[modelscope-sync] commit failed: {c.stderr[:200]}",
+        detail = _redact((c.stdout + c.stderr).strip()) or f"rc={c.returncode}"
+        print(f"[modelscope-sync] commit failed: {detail[:300]}",
               file=sys.stderr)
         return False
     pr = subprocess.run(["git", "-C", str(tmp), "push", "origin",
                          f"HEAD:{branch}"], capture_output=True, text=True)
     if pr.returncode != 0:
-        print(f"[modelscope-sync] git push failed: {pr.stderr[:200]}",
+        print(f"[modelscope-sync] git push failed: {_redact(pr.stderr)[:200]}",
               file=sys.stderr)
         return False
     print("[modelscope-sync] ✓ README pushed as text via git (renders)",
@@ -306,7 +379,25 @@ def _upload_referenced_assets(api, repo_id: str, branch: str,
                           f"in {delay}s", file=sys.stderr)
                     time.sleep(delay)
                     continue
-                print(f"[modelscope-sync]   asset upload failed {rel}: {exc}",
+                # v2.67.1 — an upload that errors is not the same as an
+                # asset that is missing.  Re-uploading a blob the server
+                # already holds can 400 on the LFS batch endpoint, and
+                # the old code counted that as a failed sync: 30 assets
+                # all present and current, reported as "hosted 0/30",
+                # exit 1.  A red sync that is actually fine is worse
+                # than no check — it teaches you to ignore red syncs.
+                #
+                # The invariant was never "upload returned 200"; it is
+                # "the README's images can be fetched from the server".
+                # Check that instead.  It is also strictly stronger: a
+                # 200 from upload never proved retrievability either.
+                if _asset_is_current(repo_id, branch, rel, local):
+                    print(f"[modelscope-sync]   {rel}: upload rejected but "
+                          f"the remote copy is current — counted",
+                          file=sys.stderr)
+                    n += 1
+                    break
+                print(f"[modelscope-sync]   asset upload failed {rel}: {_redact(exc)}",
                       file=sys.stderr)
                 failed.append(rel)
                 break

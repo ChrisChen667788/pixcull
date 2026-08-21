@@ -182,3 +182,109 @@ def test_real_modelscope_readme_rewrites():
     assert n_added > 0, "no relative paths rewritten — schema drift?"
     # Output is strictly longer (added URL prefix to N paths)
     assert len(out) > len(src)
+
+
+# ---------------------------------------------------------------------------
+# v2.67.1 — the release tooling's own failures
+# ---------------------------------------------------------------------------
+
+
+def test_the_token_never_reaches_the_terminal():
+    """A failed push printed git's error, and git names the remote in it.
+
+    The remote is `https://oauth2:<token>@…` — that is how the shallow
+    clone authenticates — so a routine push failure put a live
+    ModelScope credential into the terminal, the CI log, and the
+    scrollback of whoever ran `make modelscope-sync`.  Found the only
+    way these things are found: it happened.
+    """
+    m = _load()
+    tok = "vz-" + "K" * 17
+    m._SECRETS.add(tok)
+    try:
+        msg = (f'Locking support detected on remote "origin". Consider '
+               f'enabling it with:\n  $ git config '
+               f'lfs.https://oauth2:{tok}@www.modelscope.cn/haozi667788/'
+               f'pixcull.git/info/lfs.locksverify true')
+        out = m._redact(msg)
+        assert tok not in out, "the token survived redaction"
+        assert "locksverify" in out, (
+            "redaction ate the message; the error still has to be readable")
+
+        # Not only the secrets we happen to know about.  Built at
+        # runtime, per this repo's rule for anything key-shaped: a
+        # literal here reads as an address to the hygiene lint, and to
+        # any secret scanner pointed at the tree.
+        other = "hunter" + "2"
+        assert other not in m._redact(
+            f"fatal: https://oauth2:{other}@www.modelscope.cn/x.git")
+    finally:
+        m._SECRETS.discard(tok)
+
+
+def test_the_push_does_not_stall_on_lfs_lock_verification():
+    """ModelScope's remote advertises LFS locking; git-lfs then aborts
+    the push rather than guess, and the README never lands."""
+    import inspect
+
+    m = _load()
+    src = inspect.getsource(m._git_push_readme)
+    assert '"lfs.locksverify", "false"' in src, (
+        "nothing tells git-lfs whether to verify locks, so the push that "
+        "carries the model card aborts")
+
+
+def test_an_upload_rejection_is_not_a_missing_asset(monkeypatch, tmp_path):
+    """30 assets present and current, reported as "hosted 0/30", exit 1.
+
+    Re-uploading a blob the server already holds can 400 on the LFS
+    batch endpoint.  The old code read that as a failed sync.  A red
+    sync that is actually fine is worse than no check at all, because it
+    is indistinguishable from the real thing it was built to catch —
+    which is a README referencing images nobody hosted.
+    """
+    m = _load()
+    readme = "![a](docs/screenshots/24-review-sheet.png)\n"
+
+    class _Api:
+        def upload_file(self, **kw):
+            raise RuntimeError("400 Client Error: Bad Request … lfs/objects/batch")
+
+    monkeypatch.setattr(m, "_is_transient", lambda exc: False)
+
+    # Present on the server → counted, and the sync is not failed.
+    monkeypatch.setattr(m, "_asset_is_current", lambda *a, **k: True)
+    n, expected, failed = m._upload_referenced_assets(
+        _Api(), "haozi667788/pixcull", "master", readme, attempts=1)
+    assert (n, expected, failed) == (1, 1, []), (
+        "an asset that is demonstrably on the server was reported missing")
+
+    # Absent from the server → still a failure.  The strictness this
+    # function was written for has to survive the fix.
+    monkeypatch.setattr(m, "_asset_is_current", lambda *a, **k: False)
+    n, expected, failed = m._upload_referenced_assets(
+        _Api(), "haozi667788/pixcull", "master", readme, attempts=1)
+    assert n == 0 and failed == ["docs/screenshots/24-review-sheet.png"], (
+        "a genuinely unhosted asset now passes — the fix removed the check "
+        "instead of correcting it")
+
+
+def test_an_already_current_card_is_not_a_failed_sync():
+    """`commit failed:` followed by an empty string.
+
+    git says "nothing to commit" in English, on stdout, and only when it
+    feels like it; the branch that matched that sentence missed, so a
+    sync whose only remaining work was already done exited 1 with a
+    diagnostic that diagnosed nothing.  Ask git the question — is
+    anything staged — rather than reading its prose, and never print an
+    empty reason.
+    """
+    import inspect
+
+    m = _load()
+    src = inspect.getsource(m._git_push_readme)
+    assert '"diff", "--cached",' in src and '"--quiet"' in src, (
+        "the clean-tree case is still decided by string-matching git's "
+        "English output")
+    assert 'or f"rc={c.returncode}"' in src, (
+        "the failure branch can still print an empty reason")
