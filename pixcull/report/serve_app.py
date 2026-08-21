@@ -1538,6 +1538,22 @@ def _b(v: object) -> bool:
     return _s(v).lower() not in ("", "false", "0", "0.0", "no")
 
 
+def _row_image_path(row: dict) -> str:
+    """The source image for a built row.
+
+    v2.68.6 — the built row calls this `src_path`. It has never called it
+    `path`; that is the name of the column in scores.csv, and the row
+    builder renames it. `_m3_advice_pass` filtered on `r.get("path")`,
+    which is always None, so `todo` was always empty and the whole M3
+    advice pass returned 0 on every run since v2.51 — seventeen versions
+    of a feature that had never once executed.
+
+    Reads both, so an API-fed row that kept the CSV's own name still
+    works.
+    """
+    return _s(row.get("src_path")) or _s(row.get("path"))
+
+
 def _m3_advice_pass(rows: list, df) -> int:
     """Rewrite each row's advice with M3, concurrently. Best-effort.
 
@@ -1563,7 +1579,7 @@ def _m3_advice_pass(rows: list, df) -> int:
 
     todo = [(i, r) for i, r in enumerate(rows)
             if str(r.get("decision", "")) in ("keep", "maybe")
-            and r.get("advice") and r.get("path")]
+            and r.get("advice") and _row_image_path(r)]
     if not todo:
         return 0
 
@@ -1590,7 +1606,7 @@ def _m3_advice_pass(rows: list, df) -> int:
         return idx, enrich_advice(
             rec or row, stars, str(row.get("decision", "")),
             row["advice"], judge,
-            image_path=Path(str(row.get("path") or "")))
+            image_path=Path(_row_image_path(row)))
 
     n = 0
     with ThreadPoolExecutor(max_workers=8) as pool:

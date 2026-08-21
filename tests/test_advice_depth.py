@@ -121,3 +121,52 @@ def test_the_reading_renders_only_when_a_model_wrote_it():
     assert "if (!bodyHtml) return \"\";" in sec[:200], (
         "_sec no longer suppresses empty sections, so template rows will "
         "show an empty reading header")
+
+
+# ---------------------------------------------------------------------------
+# v2.68.6 — the pass that had never run
+# ---------------------------------------------------------------------------
+
+def test_the_advice_pass_can_find_the_image():
+    """`_m3_advice_pass` filtered on a key the built row does not have.
+
+    The row builder renames scores.csv's `path` column to `src_path`.
+    The advice pass filtered `r.get("path")`, which is therefore always
+    None, so `todo` was always empty and the pass returned 0 on every
+    run since v2.51 — seventeen versions of a feature that had never
+    once executed.
+
+    It survived because failing quietly is the CORRECT behaviour here
+    (advice is commentary on a decision already made, and a key expiring
+    must not cost anyone their cull), so an unreachable pass and a
+    working one look identical from outside: template advice, no error.
+
+    Caught by rebuilding a real 200-photo run and noticing the page
+    returned in 1.9s when 190 cloud calls should have taken minutes.
+    """
+    from pixcull.report.serve_app import _row_image_path
+
+    # The shape the row builder actually produces.
+    assert _row_image_path({"src_path": "/a/b.jpg"}) == "/a/b.jpg"
+    # And the CSV's own name, for API-fed rows.
+    assert _row_image_path({"path": "/a/b.jpg"}) == "/a/b.jpg"
+    assert _row_image_path({}) == ""
+    # NaN must not read as a path.
+    assert _row_image_path({"src_path": float("nan")}) == ""
+
+    src = (ROOT / "pixcull/report/serve_app.py").read_text(encoding="utf-8")
+    at = src.index("def _m3_advice_pass")
+    body = src[at:src.index("\ndef ", at + 10)]
+    code = "\n".join(ln for ln in body.splitlines()
+                     if not ln.lstrip().startswith("#"))
+    assert 'r.get("path")' not in code and 'row.get("path")' not in code, (
+        "the advice pass is reading a key the built row does not carry")
+
+
+def test_the_row_builder_and_the_advice_pass_agree_on_the_key():
+    """Whatever the row calls its image, both sides must use the same
+    name — the bug was two halves of one file disagreeing."""
+    src = (ROOT / "pixcull/report/serve_app.py").read_text(encoding="utf-8")
+    assert '"src_path": _s(r.get("path", ""))' in src, (
+        "the row builder's output key changed; _row_image_path must "
+        "follow it or the advice pass goes quiet again")
