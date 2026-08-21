@@ -3950,11 +3950,11 @@
   // Markup helper for one collapsible section.  Use this instead
   // of the legacy `<div class="section">` template so the user
   // gets disclose/collapse + state persistence for free.
-  function _sec(secId, title, bodyHtml) {
+  function _sec(secId, title, bodyHtml, badgeHtml) {
     if (!bodyHtml) return "";
     const open = _sectionOpen(secId) ? " open" : "";
     return `<details class="info-section" data-sec="${esc(secId)}"${open}>
-      <summary>${esc(title)}</summary>
+      <summary>${esc(title)}${badgeHtml || ""}</summary>
       <div class="lb-body">${bodyHtml}</div>
     </details>`;
   }
@@ -4046,6 +4046,27 @@
     const strengthsDetail = (r.advice && r.advice.strengths_detail) || null;
     const weaknessesDetail = (r.advice && r.advice.weaknesses_detail) || null;
     const rationale = (r.advice && r.advice.rationale) || "";
+    // v2.68.4 — say which voice is speaking.
+    //
+    // `photo_advice` is 1,576 lines of templates and zero model calls;
+    // `m3_advice` replaces them with commentary from a model that has
+    // actually looked at the frame. They rendered IDENTICALLY — same
+    // panel, same canon citations — so a photographer reading
+    // "捕捉到动物的神情或动作" had no way to know that the "或" was a
+    // template hedging between two things it cannot distinguish, rather
+    // than an observation.
+    //
+    // The provenance was already in the data (`advice_source`, set in
+    // m3_advice.py) and nothing had ever rendered it. Every canned
+    // phrase that passes for an observation spends the credibility the
+    // real ones earn, so this is an honesty fix before it is a UX one.
+    const _adviceSrc = (r.advice && r.advice.advice_source) || "";
+    const _sawTheFrame = !!_adviceSrc && _adviceSrc !== "template";
+    const _voiceBadge = _sawTheFrame
+      ? `<span class="advice-src saw" title="${esc(_adviceSrc)} 看过这张照片后写的">`
+        + `👁 看过这张</span>`
+      : `<span class="advice-src tmpl" title="由本机测量值套用文案模板生成 — `
+        + `没有任何模型看过这张照片">▤ 模板</span>`;
 
     // V19.4 (bug-fix) — there used to be a local `const esc = ...`
     // here, shadowing the outer IIFE-scope `esc` (declared once near
@@ -4400,8 +4421,8 @@
         ${_sec("ai-judge", "⌬ AI 判读", aiJudgeBody)}
         ${_sec("warnings",  "⚠ 矛盾警示", warningsBody)}
         ${_sec("rationale", "⊕ 为何 maybe", rationaleBody)}
-        ${_sec("strengths", "✓ 优点", strengthsBody)}
-        ${_sec("weaknesses","✎ 改进建议", weaknessesBody)}
+        ${_sec("strengths", "✓ 优点", strengthsBody, _voiceBadge)}
+        ${_sec("weaknesses","✎ 改进建议", weaknessesBody, _voiceBadge)}
         ${_sec("flags",     "⚑ 检测器旗标", flagsBody)}
         ${_sec("reason",    "⚙ 规则栈说明", reasonBody)}
       </div>

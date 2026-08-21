@@ -1094,7 +1094,7 @@ def _rebuild_reel_profile() -> int:
             for line in dec_path.read_text("utf-8").splitlines():
                 try:
                     r = json.loads(line)
-                    latest[int(r["rank"])] = str(r.get("decision") or "")
+                    latest[int(r["rank"])] = _s(r.get("decision"))
                 except (ValueError, KeyError, TypeError):
                     continue
         except (OSError, ValueError):
@@ -1492,6 +1492,52 @@ _EXPOSURE_HIGHLIGHT_DELTA = 4.0
 _EXPOSURE_MIN_CLUSTER = 3
 
 
+def _s(v: object) -> str:
+    """A CSV cell as text, with pandas' NaN treated as absent.
+
+    v2.68.4 — ``str(x or "")`` looks like it handles a missing value and
+    does not: ``bool(float("nan"))`` is **True**, so a NaN column reaches
+    the browser as the literal string ``"nan"``. A photographer's
+    inspector rendered
+
+        VLM 视觉
+        nan
+
+    because the vision judge had not run on that row and the guard that
+    was supposed to blank it let NaN straight through. Sixteen call sites
+    carried the same pattern.
+
+    The CSV round trip matters too: a NaN written out and read back is
+    the *string* ``"nan"``, which no isinstance check will catch, so the
+    text forms are screened as well.
+
+    Same defect family as the v2.13 bug where NaN bypassed an ``is None``
+    check and clamped every score to 1.0 — a value that is neither None
+    nor falsy, in a language where missing usually is both.
+    """
+    if v is None:
+        return ""
+    # No `isinstance(v, float) and v != v` branch: `str(float("nan"))`
+    # is "nan" in CPython and for numpy scalars too, so the text screen
+    # below already covers it — and a mutation test proved the branch
+    # changed nothing. A guard that cannot be made to fail is not a
+    # guard, it is a comment with syntax.
+    out = str(v).strip()
+    return "" if out.lower() in ("nan", "none", "nat", "<na>") else out
+
+
+def _b(v: object) -> bool:
+    """A CSV cell as a bool, with NaN meaning False.
+
+    v2.68.4 — `bool(float("nan"))` is True, so `is_burst_peak` was True
+    on every row where the burst scorer wrote nothing. That is not a
+    cosmetic leak like the "nan" text: it puts the 🏆 "best of this
+    burst" badge on frames that are not in a burst at all, and the badge
+    exists precisely so the photographer can check the picker's work.
+    """
+    return _s(v).lower() not in ("", "false", "0", "0.0", "no")
+
+
 def _m3_advice_pass(rows: list, df) -> int:
     """Rewrite each row's advice with M3, concurrently. Best-effort.
 
@@ -1850,8 +1896,8 @@ def _build_results_uncached(run_id: str) -> tuple[list[dict], dict] | None:
         advice = build_advice(
             row=r,                    # already a plain dict (v2.37)
             final_stars=final_stars,
-            decision=str(r.get("decision", "") or ""),
-            meta_inconsistencies=str(r.get("meta_inconsistencies", "") or ""),
+            decision=_s(r.get("decision", "")),
+            meta_inconsistencies=_s(r.get("meta_inconsistencies", "")),
             idx=_idx,
             vertical=run_vertical,        # V17.3 — business-flavored phrases
         )
@@ -1865,16 +1911,16 @@ def _build_results_uncached(run_id: str) -> tuple[list[dict], dict] | None:
         except (TypeError, ValueError):
             cluster_id = None
         # take time of capture for date sorting
-        dt_str = str(r.get("datetime", "") or "")
+        dt_str = _s(r.get("datetime", ""))
         rows.append({
             "filename": fn,
             # V21.2 — surface the absolute source path so the LR plugin
             # write-back (GET /decisions/<run_id>) can match photos by
             # path rather than basename (different shoots reuse the same
             # IMG_NNNN.jpg filename — basename matching is ambiguous).
-            "src_path": str(r.get("path", "") or ""),
-            "scene": str(r.get("scene", "") or ""),
-            "decision": str(r.get("decision", "") or ""),
+            "src_path": _s(r.get("path", "")),
+            "scene": _s(r.get("scene", "")),
+            "decision": _s(r.get("decision", "")),
             # v2.15-P0 — has a HUMAN confirmed this photo's keep/maybe/cull?
             # (annotations.jsonl overall_label; rubric-stars-only annotations
             # don't count — the culling pass is about the decision.)  Drives
@@ -1897,7 +1943,7 @@ def _build_results_uncached(run_id: str) -> tuple[list[dict], dict] | None:
             # Coerce to empty so the section is hidden when there's
             # nothing to report.
             "flags": _clean_csv_string(r.get("flags")),
-            "reason": str(r.get("reason", "") or ""),
+            "reason": _s(r.get("reason", "")),
             "advice": advice,
             # V22.0 — per-face cluster IDs (list[int], one per
             # meaningful face). -1 = noise / unique-ish face. Empty
@@ -1925,25 +1971,22 @@ def _build_results_uncached(run_id: str) -> tuple[list[dict], dict] | None:
             # clusters (no real burst) all get rank=0 + is_peak=True
             # but the UI ignores them by checking cluster size.
             "peak_rank":      _opt_int(r.get("peak_rank")),
-            "is_burst_peak":  bool(r.get("is_burst_peak"))
-                              if r.get("is_burst_peak") not in
-                                 (None, "", float("nan"))
-                              else False,
+            "is_burst_peak":  _b(r.get("is_burst_peak")),
             # P-AI-5.1 — per-component reason string for the cluster's
             # winner ("眼睛睁开 95%" / "簇内最锐 100%" / "动作差异
             # 最大 85%"). None on non-peak rows + on singletons;
             # surfaced as a tooltip on the 🏆 badge in the lightbox.
-            "burst_peak_reason": (str(r["burst_peak_reason"])
-                                  if r.get("burst_peak_reason") not in
-                                     (None, "", float("nan"))
-                                  else None),
+            # v2.68.4 — `x not in (None, "", float("nan"))` cannot work.
+            # `in` compares with `==`, and `nan != nan`, so a NaN never
+            # matches the NaN in that tuple and sails straight through
+            # to `str()` as "nan". The guard was written BY someone
+            # thinking about NaN, which is what makes it worth a comment
+            # rather than a silent edit.
+            "burst_peak_reason": _s(r.get("burst_peak_reason")) or None,
             # P-PRO-4.1 — wedding moment (only set on rows where
             # scene == wedding).  "unknown" means the classifier
             # abstained on a tight-margin top-2.  None on non-wedding.
-            "wedding_moment": (str(r["wedding_moment"])
-                               if r.get("wedding_moment") not in
-                                  (None, "", float("nan"))
-                               else None),
+            "wedding_moment": _s(r.get("wedding_moment")) or None,
             "wedding_moment_confidence": _f(r.get("wedding_moment_confidence")),
             # v2.20(#2) — raw signals the per-axis why-low prose reads
             "face_max_smile": _f(r.get("face_max_smile")),
@@ -1953,13 +1996,13 @@ def _build_results_uncached(run_id: str) -> tuple[list[dict], dict] | None:
             "cluster_id": cluster_id,
             "datetime": dt_str,
             "style_modes": sorted(sp.modes),
-            "rescorer_pred": (
-                str(r.get("rescorer_pred"))
-                if "rescorer_pred" in df.columns
-                and r.get("rescorer_pred") not in (None, "", float("nan"))
-                and str(r.get("rescorer_pred")) != "nan"
-                else None
-            ),
+            # v2.68.4 — this site had BOTH the broken idiom and a
+            # `str(...) != "nan"` patch bolted on after it, which is the
+            # fingerprint of someone hitting the bug here, fixing the
+            # symptom in this one expression, and leaving the same
+            # unusable guard standing at the two sites above.
+            "rescorer_pred": (_s(r.get("rescorer_pred")) or None
+                              if "rescorer_pred" in df.columns else None),
             "rescorer_prob_keep": _f(r.get("rescorer_prob_keep"))
             if "rescorer_prob_keep" in df.columns else None,
             # Rubric: per-axis stars (the visible 1-5) plus the human
@@ -2007,12 +2050,12 @@ def _build_results_uncached(run_id: str) -> tuple[list[dict], dict] | None:
             # automatically; scoring still uses the RAW for now).
             "has_develop_settings": _row_has_develop_settings(r),
             # V3.x rationales for the modal's 4-way comparison
-            "vlm_overall_rationale": str(r.get("vlm_overall_rationale", "") or ""),
-            "vlm_overall_label": str(r.get("vlm_overall_label", "") or ""),
-            "meta_overall_rationale": str(r.get("meta_overall_rationale", "") or ""),
-            "meta_overall_label": str(r.get("meta_overall_label", "") or ""),
+            "vlm_overall_rationale": _s(r.get("vlm_overall_rationale", "")),
+            "vlm_overall_label": _s(r.get("vlm_overall_label", "")),
+            "meta_overall_rationale": _s(r.get("meta_overall_rationale", "")),
+            "meta_overall_label": _s(r.get("meta_overall_label", "")),
             "meta_confidence": _f(r.get("meta_confidence")),
-            "meta_inconsistencies": str(r.get("meta_inconsistencies", "") or ""),
+            "meta_inconsistencies": _s(r.get("meta_inconsistencies", "")),
         })
 
     # v2.51 — let M3 rewrite the advice, having actually looked at the
@@ -3450,7 +3493,7 @@ class _Handler(BaseHTTPRequestHandler):
                 # P-UX-4 — empty unless the row carries an annotated
                 # reject reason. iOS V0.4+ can show this as a small
                 # chip on the swipe card without re-fetching the row.
-                "cull_reason":   str(r.get("cull_reason") or ""),
+                "cull_reason":   _s(r.get("cull_reason")),
             })
 
         body = _safe_dumps({
@@ -3674,7 +3717,7 @@ class _Handler(BaseHTTPRequestHandler):
                  for r in rows if r.get("filename")]
         scenes = segment_scenes(items, k=max(0.0, k), min_gap_s=max(1.0, min_gap))
         keep_by_fn = {
-            r.get("filename"): (str(r.get("decision") or "").lower() == "keep")
+            r.get("filename"): (_s(r.get("decision")).lower() == "keep")
             for r in rows
         }
 
@@ -10973,7 +11016,7 @@ class _Handler(BaseHTTPRequestHandler):
             he_boost = 0.0
             if _hard_stats is not None:
                 he_boost = _hard_stats.boost_for(
-                    scene=str(r.get("scene", "") or ""),
+                    scene=_s(r.get("scene", "")),
                     vertical=str(r.get("vertical", "") or r.get("scene", "")),
                 )
             return (

@@ -1573,4 +1573,14 @@ def build_advice(
         "rationale": rationale,
         "strengths_detail": strengths_detail,
         "weaknesses_detail": weak_detail,
+        # v2.68.4 — stated, not inferred from absence.
+        #
+        # `m3_advice` has always set `advice_source`; this side set
+        # nothing, so "which voice is this" could only be answered by a
+        # missing key — and a missing key is also what a serialisation
+        # bug looks like. The inspector renders this, and the two kinds
+        # of advice have to be distinguishable to a reader: everything
+        # here is composed from measurements by templates, and no model
+        # has looked at the photograph.
+        "advice_source": "template",
     }
