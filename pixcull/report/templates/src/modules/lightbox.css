@@ -2,6 +2,17 @@
     .lightbox {
       position: fixed; inset: 0; background: rgba(0,0,0,0.94);
       display: none; z-index: 9; backdrop-filter: var(--glass-scrim-filter);
+      /* v2.68.3 — the inspector width, in ONE place.
+         Every control that has to sit clear of the inspector used to
+         hardcode its own guess at this number: the close button at
+         `right: 408px` (380 + 28), the rotate group at `452px`
+         (380 + 72), and `.nav-next` at `right: 18px` — which is not a
+         guess at all, it is the viewport edge, so the "next photo"
+         arrow sat ON TOP of the inspector with half of it off-screen.
+         Absolutely-positioned children of this grid resolve offsets
+         against the whole container, never against the image column,
+         and nothing in the CSS said so. */
+      --lb-inspector-w: 380px;
     }
     /* v2.5 hotfix — the two panes are PINNED to their grid cells.
        They used to rely on auto-placement, so any direct child that
@@ -9,7 +20,7 @@
        silently claimed cell (1,1): image shoved into the 380px info
        column, info-pane wrapped to a second row, page unusable. */
     .lightbox.show {
-      display: grid; grid-template-columns: 1fr 380px;
+      display: grid; grid-template-columns: 1fr var(--lb-inspector-w);
       grid-template-rows: 100%;
     }
     .lightbox.show .img-pane  { grid-row: 1; grid-column: 1; }
@@ -17,7 +28,7 @@
     /* v2.8-DESIGN P0-1 — content-first "zen" toggle (Tab): collapse the
        380px inspector so the photo claims the full viewport. Tab again
        restores it. */
-    .lightbox.show.lb-zen { grid-template-columns: 1fr; }
+    .lightbox.show.lb-zen { --lb-inspector-w: 0px; grid-template-columns: 1fr; }
     .lightbox.show.lb-zen .info-pane { display: none; }
     @media (max-width: 900px) {
       .lightbox.show { grid-template-columns: 1fr; grid-template-rows: 55% 45%; }
@@ -262,7 +273,8 @@
       background: rgba(213,181,132,0.18); color: #eaca98;
     }
     .lightbox .close-btn {
-      position: absolute; top: 18px; right: 408px;
+      position: absolute; top: 18px;
+      right: calc(var(--lb-inspector-w) + 28px);
       width: 32px; height: 32px; border-radius: 6px;
       background: rgba(0,0,0,0.6); color: #fff;
       display: flex; align-items: center; justify-content: center;
@@ -283,12 +295,17 @@
       transition: background 120ms;
     }
     .lightbox .nav-btn:hover { background: rgba(0,0,0,0.85); }
+    /* v2.68.3 — symmetric, both hugging the IMAGE column: 18px inside
+       its left edge and 18px inside its right edge. `right: 18px` put
+       this one against the viewport instead, i.e. inside the
+       inspector. */
     .lightbox .nav-prev { left: 18px; }
-    .lightbox .nav-next { right: 18px; }
+    .lightbox .nav-next { right: calc(var(--lb-inspector-w) + 18px); }
     /* V16.1 — manual rotate group, sits to the LEFT of the close
        button. Three buttons: ↺ (CCW), ↻ (CW), ⟲ (reset to EXIF). */
     .lightbox .rotate-grp {
-      position: absolute; top: 18px; right: 452px;
+      position: absolute; top: 18px;
+      right: calc(var(--lb-inspector-w) + 72px);
       display: flex; gap: 4px; z-index: 11;
     }
     .lightbox .rot-btn {
@@ -443,6 +460,10 @@
       .lightbox .img-pane img { transition-duration: 0.01ms; }
     }
     @media (max-width: 900px) {
+      /* Single column here — the inspector is a ROW below the photo, so
+         it claims no horizontal space and every offset above collapses
+         to the viewport edge on its own. */
+      .lightbox { --lb-inspector-w: 0px; }
       .lightbox .close-btn { right: 18px; }
       .lightbox .nav-btn { width: 38px; height: 50px; }
       .lightbox .rotate-grp { top: 18px; right: 60px; }

@@ -276,8 +276,24 @@
     }, true);
     // Reset drawer state every time the lightbox opens so a
     // previously-expanded session doesn't leak into the next photo.
+    // v2.68.3 — the `info-expanded` check is not redundant; it is the
+    // whole fix.
+    //
+    // `DOMTokenList.remove()` re-serialises and SETS the class attribute
+    // unconditionally — the spec's "update steps" run whether or not the
+    // token was present — and setting an attribute queues a mutation
+    // record even when the value is identical. So this callback, which
+    // observes `class` on `lb` and then writes `class` on `lb`, fed
+    // itself: close the lightbox, `show` goes away, the callback removes
+    // a token that was already absent, that write queues another record,
+    // the callback runs again. Forever, at 100% CPU, until reload.
+    //
+    // It could only ever fire on CLOSE — with `show` present the branch
+    // is skipped — which is exactly the shape of the report: opening a
+    // photo was fine, exiting killed the page.
     const _lbOpenObserver = new MutationObserver(() => {
-      if (!lb.classList.contains("show")) {
+      if (!lb.classList.contains("show")
+          && lb.classList.contains("info-expanded")) {
         lb.classList.remove("info-expanded");
       }
     });
