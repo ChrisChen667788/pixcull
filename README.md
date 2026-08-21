@@ -1070,7 +1070,7 @@ those same numbers makes every individual call worse.
 
 Nothing shipped differently. What changed is that the default is no
 longer a guess, and a test now fails if the shipped arm and the recorded
-winner drift apart. Full result, cost and the two harness mistakes that
+winner drift apart. Full result, and the two harness mistakes that
 nearly buried it: [docs/EVIDENCE-AB-RESULT.md](docs/EVIDENCE-AB-RESULT.md).
 
 ---
@@ -1198,7 +1198,7 @@ produce a named refusal instead of a number.
 every cloud measurement in this repository. The evaluation here is
 often unflattering to it — that is the point of an evaluation — and it
 is worth being explicit that the model made the measurement possible at
-all: 800+ scored frames at roughly ¥0.021 each, a reasoning model whose
+all: 800+ scored frames, a reasoning model whose
 `<think>` output is what let the six-axis rubric be checked rather than
 trusted, and an API that never once returned a malformed verdict in the
 whole campaign.

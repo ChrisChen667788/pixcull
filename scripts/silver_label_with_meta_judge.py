@@ -37,8 +37,7 @@ Output
                                   call, full text)
   training_axis_silver.csv        ready for train_axis_rescorers.py
 
-Cost (default goldenset, 131 images, all human-labeled):
-  ~131 × ¥0.003 = ~¥0.4 total
+Run time (default goldenset, 131 images, all human-labeled):
   ~131 × 10s VLM + 15s meta = 55 min wall-clock if no cached vlm_verdicts.jsonl
   ~131 × 15s meta = 33 min if vlm_verdicts.jsonl present
 

@@ -85,18 +85,19 @@ worse than chance.  It does not follow that handing the composition
 numbers to the judge improves any individual call, and measured, it
 does not.  That distinction is worth more than the A/B result itself.
 
-## Cost and honesty
+## Provenance, and two things that nearly buried this
 
-1,976 calls, ¥38.56 over the day's budget ledger, against a ¥31
-estimate.  The estimate assumed the `technical` arm was already cached;
-v2.66 had folded the arm into the cache key, which correctly invalidated
-every pre-v2.66 verdict.  404 of them were recovered by back-filling
-under the new key — the `technical` block is byte-identical to the
-pre-v2.66 default and `PROMPT_VERSION` has not moved since v2.48, so
-those verdicts are the same answers to the same prompt, and the
-`technical` arm here is literally the same set of verdicts behind the
-published 493-frame result.  Its +29.5 against the published +28.9 is
-therefore a consistency check, not an independent replication.
+1,976 calls, of which the `technical` arm paid for far fewer than it
+looks.  v2.66 had folded the arm into the cache key, which correctly
+invalidated every pre-v2.66 verdict; 404 of those were recovered by
+back-filling under the new key.  The `technical` block is byte-identical
+to the pre-v2.66 default and `PROMPT_VERSION` has not moved since v2.48,
+so those are the same answers to the same prompt.
+
+That also means the `technical` arm here is literally the same set of
+verdicts behind the published 493-frame result.  Its +29.5 against the
+published +28.9 is a **consistency check, not an independent
+replication**, and should not be read as one.
 
 Two failures worth recording, both in the harness rather than the
 product:
@@ -105,16 +106,18 @@ product:
   which quietly pulls a failing arm toward the baseline and manufactures
   "no difference".  It reported +0.4 to +1.8 across all four arms.  The
   fix is exclusion, not substitution.
-- A second pass hit the daily spend cap 54 frames from the end and
-  excluded 10.9% of the sample.  The guard held and refused to report;
-  the frames were the tail of the task list, not the hard ones, and
-  filling them cost ¥3.
+- A second pass ran out of call allowance 54 frames from the end and
+  excluded 10.9% of the sample.  The guard held and refused to report.
+  The gap turned out to be the tail of the task list rather than the
+  hard frames — worth checking rather than assuming, since truncation
+  failures *would* have been difficulty-correlated and would have
+  biased the surviving sample toward easy frames.
 
 ## Follow-up
 
 `max_tokens` is not folded into the cache key.  It changes only how much
 room the judge has to finish thinking, not the question asked, so cached
 verdicts stay valid — but the cache cannot be used to reproduce "what
-would this run do at a smaller budget".  Worth folding in the next time
+would this run do at a smaller token allowance".  Worth folding in the next time
 something else already invalidates the cache; not worth invalidating it
 on its own.

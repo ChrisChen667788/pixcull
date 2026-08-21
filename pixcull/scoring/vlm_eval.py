@@ -125,7 +125,7 @@ class EvalResult:
     #: is most likely to be wrong. A ranking computed on it flatters the
     #: model for the same structural reason the original label set
     #: flattered the rule. Recorded rather than remembered, because the
-    #: first version of this bug cost ¥8 and half a day and this one
+    #: first version of this bug cost half a day and this one
     #: produces a *more* convincing wrong answer.
     selection: str = "all"
     #: v2.54.2 — how many rows of each scored truth the sample actually
@@ -264,8 +264,8 @@ class EvalResult:
         # The rule stack therefore scores exactly 1.000 BY CONSTRUCTION,
         # and any model that differs at all is guaranteed to look worse.
         # The run reported "M3 WORSE by 63.9 points" and that number
-        # measured disagreement-with-the-rule, not correctness. ¥8 and
-        # twenty minutes to learn it.
+        # measured disagreement-with-the-rule, not correctness. A whole
+        # evaluation run to learn it.
         # v2.55.2 — per class, because a global rate hides this.
         circular = [c for c in _SCORED
                     if self.truth_counts.get(c)

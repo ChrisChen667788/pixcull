@@ -509,7 +509,8 @@ def test_a_disagreement_sample_refuses_to_rank():
     only where it is weakest. Its score there is a floor, not an
     estimate, and the model consequently looks great. The first version
     of this defect (labels copied from the rule) pointed the other way
-    and cost ¥8 to discover; believing this one ships the opposite
+    and took a wasted evaluation run to discover; believing this one
+    ships the opposite
     mistake with more confidence.
     """
     res = _res(_AWFUL, _PERFECT, _PERFECT, selection="disagreements")

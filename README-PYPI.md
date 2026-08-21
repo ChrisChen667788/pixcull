@@ -60,7 +60,7 @@ interactive review workspace: keyboard-first grid, ⌘K palette, per-axis
   music), reel-candidate detection with the same glass-box treatment.
 - **13 UI languages**, dark/light studio-neutral themes, WCAG-conscious.
 - **You choose where it runs** — cloud judging by default (photos are uploaded to MiniMax), or `--vlm-mode off` for a fully on-device run. No telemetry either way.
-- **Cloud judging needs a funded MiniMax account.** It is their API and their bill, paid with your own key — roughly ¥2 per 400 photos. Without balance the API returns 402 and PixCull falls back to the on-device rule stack, so nothing breaks; it just stops being the thing the first bullet describes. `pixcull m3 doctor` tells you which of those you are in, and distinguishes 'no balance' from 'bad key' — they look identical otherwise.
+- **Cloud judging needs a funded MiniMax account.** It is their API and their bill, paid with your own key. Without balance the API returns 402 and PixCull falls back to the on-device rule stack, so nothing breaks; it just stops being the thing the first bullet describes. `pixcull m3 doctor` tells you which of those you are in, and distinguishes 'no balance' from 'bad key' — they look identical otherwise.
 
 ## Links
 
