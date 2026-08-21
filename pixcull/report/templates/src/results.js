@@ -7896,7 +7896,13 @@
     _refreshCardBucketTags();
   }
 
-  function _refreshCardBucketTags() {
+  // v2.68.1 — `cards` limits the walk to a subset. Called with the
+  // freshly-materialised cards from the observer, and with nothing (=
+  // the whole grid) when the bucket data itself changed.
+  //
+  // The unconditional full walk is what froze Safari: see
+  // tests/test_grid_observer_feedback.py for the stack.
+  function _refreshCardBucketTags(cards) {
     // Show "🪣 客户精选" badge on cards that belong to any bucket.
     const b = _readBuckets();
     const fnToBuckets = new Map();
@@ -7906,7 +7912,7 @@
         fnToBuckets.get(fn).push(name);
       }
     }
-    grid.querySelectorAll(".card[data-fn]").forEach(card => {
+    (cards || grid.querySelectorAll(".card[data-fn]")).forEach(card => {
       const tags = fnToBuckets.get(card.dataset.fn) || [];
       if (tags.length) {
         card.classList.add("bk-tagged");
@@ -8037,8 +8043,9 @@
     if (card) card.classList.remove("bk-dragging");
   });
   // Make every card draggable. Set the attribute when cards render.
-  const _origGridSetup = () => {
-    grid.querySelectorAll(".card[data-fn]").forEach(c => c.draggable = true);
+  const _origGridSetup = (cards) => {
+    (cards || grid.querySelectorAll(".card[data-fn]")).forEach(
+      c => c.draggable = true);
   };
   _origGridSetup();
   // Re-apply after every re-render (filter change rebuilds DOM).
@@ -8047,10 +8054,27 @@
   // callback dozens of times per second; each fire walks the
   // whole grid + the bucket localStorage map. Throttling cuts
   // wall-clock by ~85% in the 5k synthetic test.
-  const _bucketsObserverFn = _throttle(() => {
-    _origGridSetup();
-    _refreshCardBucketTags();
-  }, 80);
+  // v2.68.1 — react to the cards that ARRIVED, not to the fact that
+  // something changed. The throttle this replaces was aimed at the same
+  // cost and could not fix it: throttling a walk that is itself the
+  // cause of the next mutation only slows the loop down.
+  const _bucketsObserverFn = (muts) => {
+    const added = [];
+    for (const m of muts || []) {
+      for (const n of m.addedNodes) {
+        if (n.nodeType === 1 && n.classList && n.classList.contains("card")
+            && n.dataset && n.dataset.fn) {
+          added.push(n);
+        }
+      }
+    }
+    // A swap that only REMOVED cards (scrolling away) has nothing to
+    // wire up. Returning here is most of the fix: the de-materialiser
+    // fires this constantly during any scroll.
+    if (!added.length) return;
+    _origGridSetup(added);
+    _refreshCardBucketTags(added);
+  };
   const _bucketsObserver = new MutationObserver(_bucketsObserverFn);
   _bucketsObserver.observe(grid, {childList: true});
   // Expose for /admin/perf diagnostics.

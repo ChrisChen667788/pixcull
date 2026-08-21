@@ -19,8 +19,12 @@
       } catch (_e) { /* offline / endpoint missing — ignore */ }
     }
 
-    function _refreshBookmarkBadges() {
-      document.querySelectorAll("#grid .card").forEach(c => {
+    // v2.68.1 — `cards` limits the walk to a subset; see the note on
+    // _refreshCardBucketTags in results.js. This callback and that one
+    // both re-walked every card on every grid mutation, and v2.26's
+    // de-materialiser makes a grid mutation out of every scroll.
+    function _refreshBookmarkBadges(cards) {
+      (cards || document.querySelectorAll("#grid .card")).forEach(c => {
         const fn = c.dataset.fn;
         if (!fn) return;
         const has = _bookmarkCache.has(fn);
@@ -101,7 +105,16 @@
     if (typeof window.MutationObserver === "function") {
       const gridEl = document.getElementById("grid");
       if (gridEl) {
-        const mo = new MutationObserver(() => _refreshBookmarkBadges());
+        const mo = new MutationObserver((muts) => {
+          const added = [];
+          for (const m of muts) {
+            for (const n of m.addedNodes) {
+              if (n.nodeType === 1 && n.classList
+                  && n.classList.contains("card")) added.push(n);
+            }
+          }
+          if (added.length) _refreshBookmarkBadges(added);
+        });
         mo.observe(gridEl, { childList: true });
       }
     }
