@@ -53,23 +53,32 @@ PROMPT = """\
 请只输出 JSON,不要任何其他文字:
 
 {{
-  "rationale": "一句话说明这张为什么是这个判定,要具体到画面内容,
-                不要复述数值",
+  "reading": "2-4 句,连起来说:这张照片在做什么(主体、光、瞬间),
+              它成立或不成立的关键在哪,以及这为什么导致了上面那个判定。
+              这是整段点评里最重要的一项——把观察、判断、后果连成一条线,
+              而不是三句互不相干的话。",
+  "rationale": "一句话概括 reading,给只看一行的人",
   "strengths": ["最多 3 条优点,每条一句,必须指出画面里的具体东西"],
   "weaknesses": ["最多 3 条问题,同上;没有就给空数组"],
-  "suggestions": ["最多 2 条下次怎么拍得更好,要可执行"],
+  "alternative": "换你来拍/来裁,你会怎么改这一张——机位、时机、
+                  取景、光位,挑最要紧的一条,要具体到可执行。
+                  如果这张已经没什么可改的,就给空字符串",
+  "suggestions": ["最多 2 条更一般的下次注意事项"],
   "strengths_detail": [
     {{"axis": "六轴之一", "phrase": "同 strengths 里那条",
-      "source": "摄影正典出处,如 Adams · Zone System;没有就空字符串"}}
+      "source": "只在你真能指名一条摄影正典时才填,如 Adams · Zone System;
+                 拿不准就留空字符串——硬凑的出处比没有出处更糟"}}
   ],
   "weaknesses_detail": [同上结构]
 }}
 
 要求:
 - 说画面,不说数字。"σ²=300" 是数据,"睫毛清晰可数" 才是观察。
+- 不要在两个可能之间打太极。"捕捉到动物的神情或动作" 是模板腔,
+  你看得见画面,就说清楚是神情还是动作、是哪一个。
 - 中文,不要客套话,不要"这张照片展现了……"这种开头。
 - 如果测量值和你看到的冲突(比如数值说糊但画面是有意的动态模糊),
-  在 rationale 里点出来。
+  在 reading 里点出来——那种冲突往往是这张照片最值得说的地方。
 """
 
 
@@ -114,6 +123,14 @@ def _details(v: Any, phrases: list[str], limit: int) -> list[dict[str, str]]:
     no error. When the model omits the detail list entirely we synthesise
     one from the phrases — an uncited strength is still a strength, and
     an empty pane looks like a bug.
+
+    v2.68.5 — what we do NOT do is invent the citation. The prompt used
+    to require a `source` on every line, and a model asked to cite
+    something for a claim that has no canon behind it will produce one:
+    "作品塔 · 图底关系" arrived that way, in a photographer's inspector,
+    attached to a sentence about contrast. A citation nobody can look up
+    costs more than the blank it replaces, because it is the part of the
+    pane that is supposed to be checkable.
     """
     out: list[dict[str, str]] = []
     if isinstance(v, (list, tuple)):
@@ -174,6 +191,22 @@ def advice_from_m3(raw_text: str, *, decision: str,
         parsed.get("weaknesses_detail"), out["weaknesses"], 3)
     out["verdict"] = fallback.get("verdict", decision)
     out["verdict_short"] = fallback.get("verdict_short", decision)
+    # v2.68.5 — the two keys that let a critique be a critique.
+    #
+    # ADDED, never substituted. `build_advice` returns nine keys and
+    # three consumers read them in ways that fail silently when the shape
+    # drifts, so the old shape stays exactly as it was and the depth
+    # arrives beside it. A template row simply has neither key, and the
+    # pane renders what is there.
+    #
+    # `reading` is the point. The old schema asked for three detached
+    # one-line strengths, three weaknesses, two suggestions — and the
+    # connection between an observation, the judgement it supports and
+    # what you would do instead is most of what a senior director is
+    # actually paid for. The schema forbade the connection, so no prompt
+    # wording could have produced it.
+    out["reading"] = str(parsed.get("reading") or "").strip()
+    out["alternative"] = str(parsed.get("alternative") or "").strip()
     out["advice_source"] = "minimax-m3"
     return out
 
@@ -181,7 +214,7 @@ def advice_from_m3(raw_text: str, *, decision: str,
 def enrich_advice(row: dict[str, Any], final_stars: dict[str, Any],
                   decision: str, fallback: dict[str, Any],
                   judge: Any, *, image_path: Path | None = None,
-                  max_tokens: int = 700) -> dict[str, Any]:
+                  max_tokens: int = 3000) -> dict[str, Any]:
     """Template advice in, M3 advice out — or the template again.
 
     Never raises. Advice is decoration on a decision that has already

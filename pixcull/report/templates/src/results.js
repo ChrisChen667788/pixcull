@@ -3926,6 +3926,8 @@
     "ai-judge": false,   // AI judgment (DeepSeek + VLM)
     rationale:  false,   // 为何 maybe
     warnings:   true,    // 矛盾警示 (key state — show when present)
+    reading:    true,    // 读这张照片 — the one section worth opening by
+                         // default: it is the argument, the rest is index
     strengths:  false,   // 优点
     weaknesses: false,   // 改进建议
     flags:      false,   // 检测器旗标
@@ -4060,6 +4062,21 @@
     // m3_advice.py) and nothing had ever rendered it. Every canned
     // phrase that passes for an observation spends the credibility the
     // real ones earn, so this is an honesty fix before it is a UX one.
+    // v2.68.5 — the reading, and the alternative frame.
+    //
+    // These exist only when a model looked at the photograph; a template
+    // row has neither, and the section simply does not render. That is
+    // the honest arrangement: the depth is exactly as available as the
+    // thing that produces it.
+    const _reading = (r.advice && r.advice.reading) || "";
+    const _alternative = (r.advice && r.advice.alternative) || "";
+    const readingBody = _reading
+      ? `<p class="lb-reading">${esc(_reading)}</p>`
+        + (_alternative
+           ? `<p class="lb-alt"><span class="lb-alt-k">换你来拍</span>`
+             + `${esc(_alternative)}</p>`
+           : "")
+      : "";
     const _adviceSrc = (r.advice && r.advice.advice_source) || "";
     const _sawTheFrame = !!_adviceSrc && _adviceSrc !== "template";
     const _voiceBadge = _sawTheFrame
@@ -4421,6 +4438,7 @@
         ${_sec("ai-judge", "⌬ AI 判读", aiJudgeBody)}
         ${_sec("warnings",  "⚠ 矛盾警示", warningsBody)}
         ${_sec("rationale", "⊕ 为何 maybe", rationaleBody)}
+        ${_sec("reading", "◎ 读这张照片", readingBody, _voiceBadge)}
         ${_sec("strengths", "✓ 优点", strengthsBody, _voiceBadge)}
         ${_sec("weaknesses","✎ 改进建议", weaknessesBody, _voiceBadge)}
         ${_sec("flags",     "⚑ 检测器旗标", flagsBody)}

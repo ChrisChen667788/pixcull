@@ -85,6 +85,25 @@
       color: var(--muted); border-color: var(--border);
       background: transparent;
     }
+
+    /* v2.68.5 — the reading. Set as prose, not as a chip list: it is a
+       paragraph with an argument in it, and the pane's other sections
+       are the index to it. Slightly larger and looser than the rest so
+       the eye starts here. */
+    .lightbox .lb-reading {
+      margin: 0 0 10px; font-size: 13px; line-height: 1.75;
+      color: var(--fg);
+    }
+    .lightbox .lb-alt {
+      margin: 0; padding: 8px 10px; border-radius: 6px;
+      background: rgba(213,181,132,0.07);
+      border-left: 2px solid rgba(213,181,132,0.45);
+      font-size: 12.5px; line-height: 1.65; color: var(--fg);
+    }
+    .lightbox .lb-alt-k {
+      display: block; font-size: 10.5px; letter-spacing: 0.04em;
+      color: #d5b584; margin-bottom: 3px;
+    }
     .lightbox .info-pane::-webkit-scrollbar { width: 8px; }
     .lightbox .info-pane::-webkit-scrollbar-thumb {
       background: var(--border-hi); border-radius: 4px;
