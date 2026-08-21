@@ -115,10 +115,19 @@ def test_apply_thresholds_matches_decide_rule_cull(config):
 
 
 def test_apply_thresholds_matches_decide_hard_cull(config):
+    """v2.68 — the property is AGREEMENT, and that is all it ever was.
+
+    The old form pinned both sides to Decision.CULL, which turned a
+    two-implementations-must-match test into a test of what the one
+    implementation happens to return. When flags stopped culling, this
+    failed for a reason it was not built to detect.
+    """
     decided, _ = decide(0.80, ["closed_eyes"], config, scene="portrait")
     applied = pt._apply_thresholds(0.80, ["closed_eyes"], "portrait",
                                      keep_min=0.65, cull_max=0.40)
-    assert decided is applied is Decision.CULL
+    assert decided is applied, "the tuner's mirror drifted from decide()"
+    clean, _ = decide(0.80, [], config, scene="portrait")
+    assert decided is not clean, "closed_eyes stopped firing altogether"
 
 
 def test_apply_thresholds_landscape_severely_blurry_exemption(config):
@@ -133,7 +142,9 @@ def test_apply_thresholds_tolerated_flags():
     """Per-vertical tolerated_flags demote a hard-cull flag."""
     base = pt._apply_thresholds(0.80, ["motion_blur_on_face"], "portrait",
                                   keep_min=0.65, cull_max=0.40)
-    assert base is Decision.CULL
+    clean = pt._apply_thresholds(0.80, [], "portrait",
+                                 keep_min=0.65, cull_max=0.40)
+    assert base is not clean, "the flag was not firing to begin with"
     with_tol = pt._apply_thresholds(
         0.80, ["motion_blur_on_face"], "portrait",
         keep_min=0.65, cull_max=0.40,
@@ -153,12 +164,18 @@ def test_hard_cull_set_matches_decide():
     cfg = PixCullConfig.load()
     score = 0.80  # well above keep_min
     expected = set()
+    # v2.68 — "which flags are in the set" is asked by whether the flag
+    # CHANGES the verdict, not by whether it lands on CULL. The set is
+    # about membership; what membership does to a frame is a separate,
+    # configurable question, and conflating them made this lockstep test
+    # report an empty set the day the action changed.
+    clean, _ = decide(score, [], cfg, scene="portrait")
     for f in ("closed_eyes", "motion_blur_on_face", "severely_overexposed",
                 "no_clear_subject", "severely_blurry",
                 # Things that should NOT hard-cull (sanity)
                 "highlights_clipped", "shadows_clipped", "global_blur"):
         d, _ = decide(score, [f], cfg, scene="portrait")
-        if d is Decision.CULL:
+        if d is not clean:
             expected.add(f)
     assert pt._HARD_CULL_FLAGS == frozenset(expected)
 

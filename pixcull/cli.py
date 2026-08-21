@@ -1049,11 +1049,16 @@ def calibrate(
         fn = r["filename"]
         fl = set(_flags_of(r))
         hard = fl & _HARD_CULL_FLAGS_FOR_REPORT
-        if before[fn] == "cull":
-            if hard:
-                flag_culls += 1
-            else:
-                thresh_culls += 1
+        # v2.68 — a hard flag no longer produces CULL, it produces MAYBE.
+        # What this loop looks for is "the flag decided this frame, not
+        # the score", and that is still exactly what happened; only the
+        # verdict it lands on changed. Keying on CULL alone made the
+        # exemption proposal silently unreachable the moment the policy
+        # flipped: still documented, still tested, and never firing again.
+        if hard and before[fn] != "keep":
+            flag_culls += 1
+        elif before[fn] == "cull":
+            thresh_culls += 1
         for f in fl:
             seen, hits = per_flag.get(f, (0, 0))
             per_flag[f] = (seen + 1, hits + (truth[fn] == "cull"))
@@ -1061,8 +1066,9 @@ def calibrate(
     if flag_culls and not thresh_culls:
         console.print(
             f"[yellow]The threshold cannot help here.[/yellow] All "
-            f"{flag_culls} of the rule's culls fire on hard flags, which a "
-            f"score shift does not touch; none came from the boundary.")
+            f"{flag_culls} of the rule's non-keep verdicts fire on hard "
+            f"flags, which a score shift does not touch; none came from "
+                f"the boundary.")
         base = n_cull_truth / max(len(rows), 1)
         worst = sorted(
             ((f, n, h) for f, (n, h) in per_flag.items() if n >= 5),
@@ -1097,10 +1103,19 @@ def calibrate(
             # the shipped tolerant set since V18) and `in unknown` (added
             # in v2.60). Advising someone to do what is already done is
             # the report's own version of advertised-but-unreachable.
-            probe_flags = [f]
-            d_now, _ = decide(0.9, probe_flags, cfg, "standard", scene=sc)
-            if d_now.value != "cull":
-                continue
+            #
+            # v2.68 — "would change something" is asked by comparing the
+            # flagged verdict against the UNFLAGGED one, not by testing
+            # it against the literal string "cull". The first version
+            # wrote the intent as a value, and the day flags stopped
+            # culling and started demoting, this line silently skipped
+            # every candidate: the proposal survived its own tests and
+            # never fired again. The same mistake, in the same file, in
+            # the same feature, twice.
+            d_now, _ = decide(0.9, [f], cfg, "standard", scene=sc)
+            d_clean, _ = decide(0.9, [], cfg, "standard", scene=sc)
+            if d_now is d_clean:
+                continue        # already exempt here; nothing to propose
             if h == 0:
                 proposals.append((f, sc, n, h, "never"))
             elif base > 0 and (h / n) / base < 0.5:

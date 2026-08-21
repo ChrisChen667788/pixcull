@@ -280,6 +280,7 @@ def decide(
             return _VLM_LABELS[vlm_says], [
                 *reasons, f"vlm_rescued({','.join(sorted(triggered))})"]
 
+    incoherent_note: list[str] = []
     if vlm_authority == "primary" and vlm_says in _VLM_LABELS:
         tech = (vlm_axes or {}).get("technical")
         incoherent = (
@@ -287,8 +288,16 @@ def decide(
             and tech is not None and float(tech) <= 2.0
         )
         if incoherent:
-            reasons.append(
+            # v2.68 — recorded like the shadow note, for the reason the
+            # shadow note already gives a few lines below: it used to be
+            # appended to `reasons`, and `reasons` is only returned on
+            # the hard-cull path. Once a flag demoted instead of culling,
+            # `rule_reasons` was built fresh and this note vanished from
+            # exactly the rows worth recording — the judge contradicting
+            # itself, silently.
+            incoherent_note.append(
                 f"vlm_incoherent(keep_but_technical={float(tech):.0f}★)")
+            reasons.extend(incoherent_note)
         else:
             vdec = _VLM_LABELS[vlm_says]
             vreasons = [*reasons, f"vlm={vlm_says}"]
@@ -307,7 +316,34 @@ def decide(
                    if vlm_authority == "shadow" and vlm_says in _VLM_LABELS
                    else [])
 
-    if triggered:
+    # v2.68 — a hard-cull flag stops deleting photographs.
+    #
+    # Cross-validated on 493 blind frames (5-fold, thresholds fitted on
+    # training folds only, every row scored by a model that never saw
+    # it), against the rule stack alone with the judge off:
+    #
+    #     rule stack           destroys keepers   finds culls   macro-F1
+    #     as it shipped              274              8           0.400
+    #     flags demote to MAYBE       82             21           0.568
+    #
+    # Held-out +16.8 macro-F1 points, 95% CI [+10.8, +23.8], and it
+    # dominates on both axes a photographer feels rather than trading
+    # one for the other.  Every fold picked `maybe` over both `cull` and
+    # `ignore`, under two different objectives.
+    #
+    # The mechanism was already on the record and nobody had costed it:
+    # the detector flags carry **0.9x lift** against this photographer's
+    # culls — worse than chance.  The stack was auto-deleting on a
+    # signal anti-correlated with the thing it deleted for.
+    #
+    # `ignore` loses for a reason worth keeping: with flags gone the
+    # stack culls 1 frame in 494 and finds none of the 43 real culls.
+    # That scores well on a metric that rewards not destroying keepers,
+    # and it is a disablement rather than a calibration.  The flags are
+    # not evidence enough to delete; they are evidence enough to ask.
+    policy = str((config.fusion.get("decision") or {}).get(
+        "flags_policy", "maybe"))
+    if triggered and policy == "cull":
         reasons.extend(shadow_note)
         reasons.extend(sorted(triggered))
         return Decision.CULL, reasons
@@ -315,13 +351,29 @@ def decide(
     # Rule stack's own verdict — same as V0.8/V1.1.
     if final_score >= keep_min:
         rule_decision = Decision.KEEP
-        rule_reasons = [f"score={final_score:.2f}", *shadow_note]
+        rule_reasons = [f"score={final_score:.2f}", *shadow_note,
+                        *incoherent_note]
     elif final_score <= cull_max:
         rule_decision = Decision.CULL
-        rule_reasons = [f"low_score={final_score:.2f}", *flags, *shadow_note]
+        rule_reasons = [f"low_score={final_score:.2f}", *flags, *shadow_note,
+                        *incoherent_note]
     else:
         rule_decision = Decision.MAYBE
-        rule_reasons = [f"score={final_score:.2f}", *flags, *shadow_note]
+        rule_reasons = [f"score={final_score:.2f}", *flags, *shadow_note,
+                        *incoherent_note]
+
+    # v2.68 — a flag demotes, and only ever downward.
+    #
+    # Applied AFTER the score verdict, not before it. The first draft
+    # returned MAYBE from the flag branch directly, which meant a frame
+    # the score alone would have culled came back as MAYBE *because it
+    # was flagged* — the flag making a photograph safer. It also meant
+    # the shipped rule and the cross-validated one were not the same
+    # rule, so the +16.8 points measured in `rule_calibration` described
+    # a system that was never going to run.
+    if triggered and policy == "maybe" and rule_decision is Decision.KEEP:
+        rule_decision = Decision.MAYBE
+        rule_reasons = [*rule_reasons, *sorted(triggered)]
 
     # V1.2 adjudicate mode: the rescorer can override rule=MAYBE only.
     # Rule-keeps and rule-culls are never touched in this phase — we only
@@ -330,9 +382,19 @@ def decide(
     # anyway). See RescorerConfig docstring for the rationale.
     rescorer_mode = getattr(config.rescorer, "mode", "off") \
         if hasattr(config, "rescorer") else "off"
+    # v2.68 — a MAYBE that a flag produced is not adjudicable.
+    #
+    # The flag policy change made every flagged frame a MAYBE, and
+    # `adjudicate` rewrites MAYBE rows — so without this the rescorer
+    # could promote a flagged frame straight to KEEP and cancel the
+    # second look entirely. What the blind labels measured is that a
+    # flag is not evidence enough to DELETE a photograph. Nothing in
+    # them says it is not evidence enough to ask a human to glance at
+    # it, so the ask survives.
     if (
         rescorer_mode == "adjudicate"
         and rule_decision is Decision.MAYBE
+        and not triggered
         and rescorer_prob_keep is not None
     ):
         keep_thr = float(config.rescorer.keep_threshold)

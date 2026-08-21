@@ -188,10 +188,25 @@ fusion:
   # 分级阈值(可被 UI 全局调节:严格/标准/宽松)
   decision:
     keep_min_score: 6.5
-    cull_max_score: 4.0
+    # v2.68 —— 4.0 → 5.75,定于 493 张盲标(5 折交叉验证,阈值只在训练折上拟合)。
+    #
+    # 为什么必须动:去掉 flag 硬删之后,4.0 这条线 494 张里只删 1 张,
+    # 43 张真 cull 一张都找不到 —— 那不是标定,是把功能关掉。
+    #
+    # 为什么是 5.75 而不是 macro-F1 选的 6.5:这批数据 9% 是正例,
+    # 类别高度不平衡,对称口径下"多删"总能让 cull 召回涨得比 keep 精确率
+    # 跌得快,于是它对这个参数的偏好几乎单调递增 —— 给多少边界就顶到多少,
+    # 两次限定网格两次顶在边界。5.75 是权衡曲线上唯一兑换率 ≥ 1 的点
+    # (误删 4 张换回删对 4 张),也是 decision.py 早就写下的那条信条
+    # ——「漏删一张花你三十秒,误删一张花掉那张照片」—— 的直接推论。
+    cull_max_score: 5.75
+    # v2.68 —— 硬性 flag 不再删除照片,降级为 maybe。
+    # cull | maybe | ignore。详见 scoring/decision.py 里的实测表。
+    flags_policy: maybe
     # 其余进入 maybe
   # "严格/标准/宽松"预设:整体阈值偏移
+  # 只有 standard 被测量过(v2.68);strict / lenient 未测,故不动。
   strictness_presets:
     strict:   { keep_min_score: 7.0, cull_max_score: 5.0 }
-    standard: { keep_min_score: 6.5, cull_max_score: 4.0 }
+    standard: { keep_min_score: 6.5, cull_max_score: 5.75 }
     lenient:  { keep_min_score: 5.5, cull_max_score: 3.0 }

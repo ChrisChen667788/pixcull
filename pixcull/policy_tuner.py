@@ -96,10 +96,25 @@ def _apply_thresholds(
         hard_cull = hard_cull - {"no_clear_subject"}
     if scene in _BLUR_TOLERANT:
         hard_cull = hard_cull - {"severely_blurry"}
-    if set(flags) & hard_cull:
+    triggered = set(flags) & hard_cull
+    # v2.68 — the mirror follows decide()'s flag policy, including the
+    # ORDER it applies it in. A firing flag demotes a KEEP to MAYBE and
+    # does nothing else; it does not delete, and it does not rescue a
+    # frame the score alone would have culled.
+    #
+    # Read from the same config decide() reads, not hardcoded here: the
+    # two tests below exist because this file is a second implementation
+    # of the decision, and a second implementation drifts. They caught
+    # this one the day the policy changed, which is the only reason it
+    # is not still culling on flags while the product no longer does.
+    from pixcull.config import PixCullConfig
+    policy = str((PixCullConfig.load().fusion.get("decision") or {}).get(
+        "flags_policy", "maybe"))
+    if triggered and policy == "cull":
         return Decision.CULL
     if final_score >= keep_min:
-        return Decision.KEEP
+        return (Decision.MAYBE if triggered and policy == "maybe"
+                else Decision.KEEP)
     if final_score <= cull_max:
         return Decision.CULL
     return Decision.MAYBE

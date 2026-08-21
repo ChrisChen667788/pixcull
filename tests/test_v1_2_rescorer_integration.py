@@ -35,6 +35,15 @@ import pytest
 REPO_ROOT = Path(__file__).parent.parent
 MODEL_PATH = REPO_ROOT / "models" / "rescorer_v1.joblib"
 
+#: A score that is MAYBE on the shipped thresholds — the rescorer only
+#: adjudicates MAYBE rows, so every test below needs one.
+#:
+#: v2.68 — was the literal 0.55, repeated thirteen times. The cull line
+#: moved from 4.0 to 5.75 on cross-validated blind labels and every one
+#: of those tests went red at once, none of them for a reason that had
+#: anything to do with the rescorer. Named, so the next move is one edit.
+_MID_BAND = 0.61
+
 
 # Importing pixcull.scoring.decision pulls in pixcull.scoring.__init__ which
 # imports AestheticScorer → torchvision. In CI envs without torchvision we
@@ -112,7 +121,7 @@ def test_mode_off_ignores_rescorer(core, prob):
     config, decide, Decision = core
     config.rescorer.mode = "off"
     # Maybe-zone score on landscape: classic V1.1 MAYBE.
-    dec, _ = decide(0.55, [], config, "standard",
+    dec, _ = decide(_MID_BAND, [], config, "standard",
                     scene="landscape", rescorer_prob_keep=prob)
     assert dec is Decision.MAYBE, \
         f"mode=off + prob={prob} should stay MAYBE (rule's verdict)"
@@ -128,7 +137,7 @@ def test_mode_shadow_does_not_alter_decisions(core, prob):
     """Shadow mode is *observation only*. Decisions must match mode=off."""
     config, decide, Decision = core
     config.rescorer.mode = "shadow"
-    dec, _ = decide(0.55, [], config, "standard",
+    dec, _ = decide(_MID_BAND, [], config, "standard",
                     scene="landscape", rescorer_prob_keep=prob)
     assert dec is Decision.MAYBE, \
         f"shadow mode must not alter decisions (got {dec} at prob={prob})"
@@ -144,7 +153,7 @@ def test_adjudicate_promotes_confident_maybe_to_keep(core):
     config, decide, Decision = core
     config.rescorer.mode = "adjudicate"
     config.rescorer.keep_threshold = 0.75
-    dec, reasons = decide(0.55, [], config, "standard",
+    dec, reasons = decide(_MID_BAND, [], config, "standard",
                           scene="landscape", rescorer_prob_keep=0.92)
     assert dec is Decision.KEEP
     assert any("rescorer_promoted" in r for r in reasons), \
@@ -156,7 +165,7 @@ def test_adjudicate_respects_keep_threshold(core):
     config, decide, Decision = core
     config.rescorer.mode = "adjudicate"
     config.rescorer.keep_threshold = 0.75
-    dec, _ = decide(0.55, [], config, "standard",
+    dec, _ = decide(_MID_BAND, [], config, "standard",
                     scene="landscape", rescorer_prob_keep=0.74)
     assert dec is Decision.MAYBE
 
@@ -189,13 +198,27 @@ def test_adjudicate_never_overrides_rule_cull(core):
 
 
 def test_adjudicate_hard_cull_flag_beats_rescorer(core):
-    """Hard-cull flags (closed_eyes, motion_blur_on_face, ...) remain
-    non-negotiable. The rescorer can't overturn them."""
+    """A hard-cull flag still wins against the rescorer.
+
+    v2.68 — what it wins is different, and the guarantee had to be
+    restated rather than dropped. The flag no longer deletes the
+    photograph (0.9x lift against this photographer's culls, worse than
+    chance); it demotes to MAYBE. But `adjudicate` rewrites MAYBE rows,
+    so without an explicit carve-out the rescorer would have promoted
+    the flagged frame to KEEP and cancelled the second look — the flag
+    losing to the rescorer by way of a policy change aimed at something
+    else entirely.
+    """
     config, decide, Decision = core
     config.rescorer.mode = "adjudicate"
     dec, _ = decide(0.80, ["closed_eyes"], config, "standard",
                     scene="portrait", rescorer_prob_keep=0.99)
-    assert dec is Decision.CULL
+    assert dec is Decision.MAYBE, "the rescorer overturned a firing flag"
+    # And the carve-out is specific: an unflagged MAYBE is still
+    # adjudicable, or this would have disabled the mode outright.
+    free, _ = decide(_MID_BAND, [], config, "standard",
+                     scene="portrait", rescorer_prob_keep=0.99)
+    assert free is Decision.KEEP, "adjudicate stopped working entirely"
 
 
 def test_adjudicate_prob_none_falls_back_to_rule(core):
@@ -207,7 +230,7 @@ def test_adjudicate_prob_none_falls_back_to_rule(core):
     """
     config, decide, Decision = core
     config.rescorer.mode = "adjudicate"
-    dec, _ = decide(0.55, [], config, "standard",
+    dec, _ = decide(_MID_BAND, [], config, "standard",
                     scene="landscape", rescorer_prob_keep=None)
     assert dec is Decision.MAYBE
 
@@ -222,7 +245,7 @@ def test_adjudicate_demote_disabled_by_default(core):
     config, decide, Decision = core
     config.rescorer.mode = "adjudicate"
     config.rescorer.maybe_to_cull_threshold = 0.0
-    dec, _ = decide(0.55, [], config, "standard",
+    dec, _ = decide(_MID_BAND, [], config, "standard",
                     scene="landscape", rescorer_prob_keep=0.02)
     assert dec is Decision.MAYBE
 
@@ -232,7 +255,7 @@ def test_adjudicate_demote_fires_when_enabled(core):
     config, decide, Decision = core
     config.rescorer.mode = "adjudicate"
     config.rescorer.maybe_to_cull_threshold = 0.15
-    dec, reasons = decide(0.55, [], config, "standard",
+    dec, reasons = decide(_MID_BAND, [], config, "standard",
                           scene="landscape", rescorer_prob_keep=0.05)
     assert dec is Decision.CULL
     assert any("rescorer_demoted" in r for r in reasons)

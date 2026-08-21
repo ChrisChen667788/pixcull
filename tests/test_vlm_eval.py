@@ -268,13 +268,27 @@ def test_overrides_and_incoherence_are_counted(cfg):
 
 
 def test_disagreements_are_listed_with_who_was_right(cfg):
+    # v2.68 — a flagged frame above the cull line is now MAYBE, not CULL,
+    # so `overrode_hard_cull` is exercised on the row where the flag
+    # fires, and the rule=CULL case gets its own row below the line.
+    # Covering only the first would have quietly dropped the second the
+    # day the flag policy changed.
     rows = _rows([("a.jpg", 0.7, "closed_eyes", "portrait")])
     res = evaluate(rows, _labels({"a.jpg": "keep"}),
                    ScriptedJudge({"a.jpg": "keep"}), cfg)
     assert len(res.disagreements) == 1
     d = res.disagreements[0]
-    assert (d.truth, d.rule, d.vlm) == ("keep", "cull", "keep")
-    assert d.overrode_hard_cull
+    assert (d.truth, d.rule, d.vlm) == ("keep", "maybe", "keep")
+    assert d.overrode_hard_cull, "the flag fired but was not recorded as one"
+
+    # And a frame the rule culls on score alone: no flag, nothing to
+    # override, and the disagreement is still reported.
+    rows2 = _rows([("b.jpg", 0.2, "", "portrait")])
+    res2 = evaluate(rows2, _labels({"b.jpg": "keep"}),
+                    ScriptedJudge({"b.jpg": "keep"}), cfg)
+    d2 = res2.disagreements[0]
+    assert (d2.truth, d2.rule, d2.vlm) == ("keep", "cull", "keep")
+    assert not d2.overrode_hard_cull
 
 
 def test_per_scene_breakdown(cfg):

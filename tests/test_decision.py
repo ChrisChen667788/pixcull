@@ -20,6 +20,28 @@ def config() -> PixCullConfig:
     return PixCullConfig.load()
 
 
+@pytest.fixture(scope="module")
+def cull_policy_config() -> PixCullConfig:
+    """The shipped config with v2.67's flag policy: a flag deletes.
+
+    v2.68 changed what a firing flag *does* — it demotes to MAYBE now,
+    on 493 cross-validated blind frames — and that is orthogonal to
+    **which** flags fire in **which** scenes, which is what most of the
+    tests below are actually about.  Mixing the two would have meant
+    rewriting a scene-exemption test every time the action changed, and
+    the rewrite is where intent gets lost.
+
+    So: exemption-logic tests pin the policy they were written against
+    and keep asserting CULL, which still says exactly what they meant.
+    What the shipped policy does has its own tests, at the bottom.
+    """
+    cfg = PixCullConfig.load()
+    fusion = dict(cfg.fusion)
+    fusion["decision"] = {**(fusion.get("decision") or {}),
+                          "flags_policy": "cull"}
+    return cfg.model_copy(update={"fusion": fusion})
+
+
 @pytest.fixture(autouse=True)
 def _isolate_vertical_overrides(tmp_path, monkeypatch):
     """V18 — isolate vertical-data root so any policy_override.json or
@@ -36,9 +58,9 @@ def _isolate_vertical_overrides(tmp_path, monkeypatch):
     yield
 
 
-def test_no_clear_subject_is_hard_cull_for_portrait(config):
+def test_no_clear_subject_is_hard_cull_for_portrait(cull_policy_config):
     """Portraits without a clear subject really are broken — cull must stick."""
-    dec, reasons = decide(0.72, ["no_clear_subject"], config, scene="portrait")
+    dec, reasons = decide(0.72, ["no_clear_subject"], cull_policy_config, scene="portrait")
     assert dec is Decision.CULL
     assert "no_clear_subject" in reasons
 
@@ -60,19 +82,19 @@ def test_no_clear_subject_is_soft_for_street(config):
     assert dec is Decision.KEEP
 
 
-def test_other_hard_cull_flags_still_fire_on_tolerant_scenes(config):
+def test_other_hard_cull_flags_still_fire_on_tolerant_scenes(cull_policy_config):
     """The exemption is scoped to `no_clear_subject` only. Closed eyes, blown
     highlights, etc. still mean cull everywhere."""
     for flag in ("closed_eyes", "severely_overexposed", "motion_blur_on_face"):
-        dec, reasons = decide(0.72, [flag], config, scene="landscape")
+        dec, reasons = decide(0.72, [flag], cull_policy_config, scene="landscape")
         assert dec is Decision.CULL, f"{flag} should still hard-cull"
         assert flag in reasons
 
 
-def test_missing_scene_uses_strict_interpretation(config):
+def test_missing_scene_uses_strict_interpretation(cull_policy_config):
     """When scene is None (caller omitted it), we don't know whether it's a
     minimalist composition. Fall back to the strict hard-cull behavior."""
-    dec, _ = decide(0.72, ["no_clear_subject"], config, scene=None)
+    dec, _ = decide(0.72, ["no_clear_subject"], cull_policy_config, scene=None)
     assert dec is Decision.CULL
 
 
@@ -109,21 +131,27 @@ def test_v18_astro_tolerates_no_clear_subject(config):
     assert dec is Decision.KEEP
 
 
-def test_v18_wildlife_still_hard_culls_other_flags(config):
+def test_v18_wildlife_still_hard_culls_other_flags(cull_policy_config):
     """The V18 exemption is scoped to no_clear_subject. Closed eyes,
     motion blur on face, severely overexposed still hard-cull a
     wildlife shot."""
     for flag in ("closed_eyes", "motion_blur_on_face",
                   "severely_overexposed"):
-        dec, _ = decide(0.85, [flag], config, scene="wildlife")
+        dec, _ = decide(0.85, [flag], cull_policy_config, scene="wildlife")
         assert dec is Decision.CULL, f"{flag} should still cull wildlife"
 
 
 def test_score_based_decisions_still_work(config):
-    """Without any hard-cull flags, decide() falls through to score thresholds."""
+    """Without any hard-cull flags, decide() falls through to score thresholds.
+
+    v2.68 moved the cull line from 4.0 to 5.75, so the mid-band probe
+    moved with it: 0.55 is now below the line and culls correctly. The
+    band still exists — that was a condition of the change, not a
+    side effect of it.
+    """
     assert decide(0.90, [], config, scene="portrait")[0] is Decision.KEEP
     assert decide(0.30, [], config, scene="portrait")[0] is Decision.CULL
-    assert decide(0.55, [], config, scene="portrait")[0] is Decision.MAYBE
+    assert decide(0.61, [], config, scene="portrait")[0] is Decision.MAYBE
 
 
 def test_strictness_presets_shift_thresholds(config):
@@ -156,11 +184,11 @@ def test_severely_underexposed_low_score_still_culls_via_score(config):
     assert dec is Decision.CULL
 
 
-def test_severely_blurry_still_hard_culls_non_landscape_scenes(config):
+def test_severely_blurry_still_hard_culls_non_landscape_scenes(cull_policy_config):
     """V0.8: the blur exemption is scoped to landscape only. Portrait,
     stilllife, event, wildlife still hard-cull on severely_blurry."""
     for scene in ("portrait", "stilllife", "event", "wildlife", "architecture", "street"):
-        dec, reasons = decide(0.72, ["severely_blurry"], config, scene=scene)
+        dec, reasons = decide(0.72, ["severely_blurry"], cull_policy_config, scene=scene)
         assert dec is Decision.CULL, f"scene={scene}: severely_blurry should still hard-cull"
         assert "severely_blurry" in reasons
 
@@ -177,8 +205,14 @@ def test_severely_blurry_landscape_low_score_goes_to_maybe(config):
     falls through to the score bands — 3J0A3760 (0.455) / 3J0A4411 (0.511)
     are the two photos this fix was targeting. Both land in MAYBE rather
     than CULL — within-one improvement."""
+    # v2.68 — asserted against the unflagged verdict. The point was
+    # never that the frame lands in MAYBE; it is that `severely_blurry`
+    # does not get to decide a landscape. Pinning the destination made
+    # the test fail when the score bands moved underneath it, for a
+    # reason that had nothing to do with what it was guarding.
+    clean, _ = decide(0.50, [], config, scene="landscape")
     dec, _ = decide(0.50, ["severely_blurry"], config, scene="landscape")
-    assert dec is Decision.MAYBE
+    assert dec is clean, "severely_blurry decided a landscape frame"
 
 
 def test_blur_tolerant_scene_set_is_landscape_only(config):
@@ -190,18 +224,18 @@ def test_blur_tolerant_scene_set_is_landscape_only(config):
         assert s not in _BLUR_TOLERANT_SCENES, f"{s} should not be blur-tolerant"
 
 
-def test_missing_scene_still_hard_culls_blur(config):
+def test_missing_scene_still_hard_culls_blur(cull_policy_config):
     """Scene=None (caller omitted it) should fall back to the strict blur
     interpretation — we can't assume the intent was long-exposure."""
-    dec, _ = decide(0.72, ["severely_blurry"], config, scene=None)
+    dec, _ = decide(0.72, ["severely_blurry"], cull_policy_config, scene=None)
     assert dec is Decision.CULL
 
 
-def test_other_hard_cull_flags_still_fire_on_landscape(config):
+def test_other_hard_cull_flags_still_fire_on_landscape(cull_policy_config):
     """V0.8 exemption is scoped to `severely_blurry` + `no_clear_subject` on
     landscape. Other hard-cull flags still fire."""
     for flag in ("closed_eyes", "severely_overexposed", "motion_blur_on_face"):
-        dec, _ = decide(0.72, [flag], config, scene="landscape")
+        dec, _ = decide(0.72, [flag], cull_policy_config, scene="landscape")
         assert dec is Decision.CULL, f"{flag} should still hard-cull on landscape"
 
 
@@ -253,23 +287,23 @@ def test_landscape_keep_min_delta_demotes_marginal_score(config):
     assert dec_landscape is Decision.MAYBE
 
 
-def test_kids_tolerates_motion_blur_on_face(config):
+def test_kids_tolerates_motion_blur_on_face(cull_policy_config):
     """kids policy adds motion_blur_on_face to tolerated_flags. Without
     vertical the flag hard-culls; with kids vertical the row falls
     through to score-based decision."""
-    dec_default, _ = decide(0.72, ["motion_blur_on_face"], config,
+    dec_default, _ = decide(0.72, ["motion_blur_on_face"], cull_policy_config,
                               scene="portrait")
     assert dec_default is Decision.CULL
 
-    dec_kids, _ = decide(0.72, ["motion_blur_on_face"], config,
+    dec_kids, _ = decide(0.72, ["motion_blur_on_face"], cull_policy_config,
                            scene="portrait", vertical="kids")
     assert dec_kids is Decision.KEEP   # 0.72 > kids keep_min (0.60)
 
 
-def test_kids_does_not_tolerate_severe_overexposure(config):
+def test_kids_does_not_tolerate_severe_overexposure(cull_policy_config):
     """tolerated_flags is scoped — kids tolerates motion_blur but NOT
     severely_overexposed (which is always destructive)."""
-    dec_kids, _ = decide(0.72, ["severely_overexposed"], config,
+    dec_kids, _ = decide(0.72, ["severely_overexposed"], cull_policy_config,
                            scene="portrait", vertical="kids")
     assert dec_kids is Decision.CULL
 
@@ -321,7 +355,7 @@ def test_threshold_clamps_to_unit_range(config):
 # photos never leave the machine, and that promise must not be broken by
 # a default flip in a patch release.
 
-def test_authority_off_is_exactly_v247(config):
+def test_authority_off_is_exactly_v247(cull_policy_config):
     """`off` must remain a complete, working escape hatch.
 
     v2.50 flipped the shipped default to `primary`, so this can no longer
@@ -330,7 +364,7 @@ def test_authority_off_is_exactly_v247(config):
     NDA depends on, and the README now promises it by name.
     """
     for label in ("keep", "cull", "maybe"):
-        dec, reasons = decide(0.72, ["closed_eyes"], config, scene="portrait",
+        dec, reasons = decide(0.72, ["closed_eyes"], cull_policy_config, scene="portrait",
                               vlm_label=label, vlm_axes={"technical": 5},
                               vlm_authority="off")
         assert dec is Decision.CULL, f"{label} changed an off-mode decision"
@@ -393,15 +427,21 @@ def test_the_shipped_default_is_the_documented_one(config):
         f"the verdict changed the decision but left no trace: {reasons}")
 
     # ... and `off` still means off, for anyone who asks for it.
+    # v2.68 — compared against the no-judge-at-all verdict rather than
+    # against Decision.CULL. What `off` promises is that the judge does
+    # not reach the decision, and that promise is kept whatever the rule
+    # stack itself decides; naming the destination tied this guarantee
+    # to a threshold that has now moved twice.
+    no_judge, no_why = decide(0.72, ["closed_eyes"], config, scene="portrait")
     silent, why = decide(0.72, ["closed_eyes"], config, scene="portrait",
                          vlm_label="keep", vlm_axes={"technical": 4},
                          vlm_authority="off")
-    assert silent is Decision.CULL, "`--vlm-authority off` is unreachable"
-    assert why == ["closed_eyes"], f"`off` touched the reasons: {why}"
+    assert silent is no_judge, "`--vlm-authority off` is unreachable"
+    assert why == no_why, f"`off` touched the reasons: {why}"
 
 
-def test_shadow_records_without_changing_anything(config):
-    dec, reasons = decide(0.72, ["closed_eyes"], config, scene="portrait",
+def test_shadow_records_without_changing_anything(cull_policy_config):
+    dec, reasons = decide(0.72, ["closed_eyes"], cull_policy_config, scene="portrait",
                           vlm_label="keep", vlm_authority="shadow")
     assert dec is Decision.CULL
     assert "vlm_shadow=keep" in reasons
@@ -436,10 +476,10 @@ def test_primary_lets_the_judge_override_a_hard_cull(config):
         "the photographer must be able to see WHAT was overridden")
 
 
-def test_primary_distrusts_an_incoherent_verdict(config):
+def test_primary_distrusts_an_incoherent_verdict(cull_policy_config):
     """"Keep" alongside its own 1★ technical on a flagged frame is not a
     considered override, it is the model contradicting itself."""
-    dec, reasons = decide(0.72, ["severely_blurry"], config, scene="portrait",
+    dec, reasons = decide(0.72, ["severely_blurry"], cull_policy_config, scene="portrait",
                           vlm_label="keep", vlm_axes={"technical": 1},
                           vlm_authority="primary")
     assert dec is Decision.CULL
@@ -463,16 +503,16 @@ def test_incoherence_guard_only_fires_on_flagged_rows(config):
     assert not any("incoherent" in r for r in reasons)
 
 
-def test_primary_falls_back_when_there_is_no_verdict(config):
+def test_primary_falls_back_when_there_is_no_verdict(cull_policy_config):
     """An API error must degrade to the rule stack, not to chaos.
 
     With M3 primary and the network down, every row arrives here with
     vlm_label=None. The run has to still produce a usable cull.
     """
-    dec, _ = decide(0.72, ["closed_eyes"], config, scene="portrait",
+    dec, _ = decide(0.72, ["closed_eyes"], cull_policy_config, scene="portrait",
                     vlm_label=None, vlm_authority="primary")
     assert dec is Decision.CULL
-    dec, _ = decide(0.9, [], config, vlm_label=None, vlm_authority="primary")
+    dec, _ = decide(0.9, [], cull_policy_config, vlm_label=None, vlm_authority="primary")
     assert dec is Decision.KEEP
 
 
@@ -550,10 +590,10 @@ def test_rescue_cannot_turn_a_keep_into_a_cull(config):
     assert dec is Decision.CULL      # agrees with the rule; nothing rescued
 
 
-def test_rescue_still_refuses_an_incoherent_verdict(config):
+def test_rescue_still_refuses_an_incoherent_verdict(cull_policy_config):
     """"Keep" beside its own 1★ technical is the model contradicting
     itself, and that guard applies to every mode that can override."""
-    dec, reasons = decide(0.72, ["severely_blurry"], config, scene="portrait",
+    dec, reasons = decide(0.72, ["severely_blurry"], cull_policy_config, scene="portrait",
                           vlm_label="keep", vlm_axes={"technical": 1},
                           vlm_authority="rescue")
     assert dec is Decision.CULL

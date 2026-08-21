@@ -159,13 +159,21 @@ def test_an_unknown_scene_does_not_hard_cull_on_subject(tmp_path):
     # nothing, while a classifier that wrote "unknown" has told us it
     # could not decide. Only the second is evidence, and
     # test_missing_scene_uses_strict_interpretation guards the first.
+    # v2.68 — asserted against the UNFLAGGED verdict rather than against
+    # a named Decision. What matters is whether the flag decided the
+    # frame, and that question outlives any particular thing a flag does
+    # when it fires: the same test had to be rewritten the day flags
+    # stopped culling and started demoting.
     for scene in ("unknown", "uncertain"):
+        clean, _ = decide(0.7, [], cfg, "standard", scene=scene)
         d, _ = decide(0.7, ["no_clear_subject"], cfg, "standard", scene=scene)
-        assert d is not Decision.CULL, f"hard-culled on scene={scene!r}"
+        assert d is clean, f"the flag still decided the frame on scene={scene!r}"
 
     # Still load-bearing where the scene IS known and subject matters.
-    d, _ = decide(0.7, ["no_clear_subject"], cfg, "standard", scene="portrait")
-    assert d is Decision.CULL, "the flag stopped working where it should"
+    clean, _ = decide(0.7, [], cfg, "standard", scene="portrait")
+    d, r = decide(0.7, ["no_clear_subject"], cfg, "standard", scene="portrait")
+    assert d is not clean, "the flag stopped working where it should"
+    assert "no_clear_subject" in r, "it fired without saying why"
 
 
 def test_exemptions_are_proposed_only_on_enough_firings(tmp_path):
@@ -223,12 +231,13 @@ def test_a_learned_exemption_reaches_the_decision(tmp_path, monkeypatch):
     )
 
     cfg = PixCullConfig.load()
+    clean, _ = decide(0.7, [], cfg, "standard", scene="event")
     base, _ = decide(0.7, ["no_clear_subject"], cfg, "standard", scene="event")
-    assert base is Decision.CULL, "fixture no longer starts from a cull"
+    assert base is not clean, "fixture no longer starts from a flag firing"
 
     got, _ = decide(0.7, ["no_clear_subject"], cfg, "standard", scene="event",
                     personal_exemptions={"no_clear_subject": ["event"]})
-    assert got is not Decision.CULL, "the exemption never reached decide()"
+    assert got is clean, "the exemption never reached decide()"
 
     # It must survive a round trip, or it lasts one process.
     prof = PersonalProfile(

@@ -162,12 +162,24 @@ def test_the_local_only_escape_hatch_still_exists():
     from pixcull.scoring.decision import Decision, decide
 
     cfg = PixCullConfig.load()
+    # v2.68 — the claim is "the judge does not reach the decision", so it
+    # is asserted against the no-judge verdict. Pinning it to CULL tied
+    # an honesty guarantee to a rule-stack threshold, and the guarantee
+    # then failed when that threshold moved for unrelated reasons.
+    local_only, _ = decide(0.72, ["closed_eyes"], cfg, scene="portrait")
     dec, reasons = decide(0.72, ["closed_eyes"], cfg, scene="portrait",
                           vlm_label="keep", vlm_axes={"technical": 5},
                           vlm_authority="off")
-    assert dec is Decision.CULL, (
+    assert dec is local_only, (
         "vlm_authority='off' no longer means 'ignore the cloud judge'")
     assert not any("vlm" in r for r in reasons)
+    # And it is a real decision, not a degenerate one: a judge saying
+    # "keep" on a flagged frame must be able to differ from `off`.
+    with_judge, _ = decide(0.72, ["closed_eyes"], cfg, scene="portrait",
+                           vlm_label="keep", vlm_axes={"technical": 5},
+                           vlm_authority="primary")
+    assert with_judge is not local_only, (
+        "`off` and `primary` agree here, so this asserts nothing")
 
 
 def test_cli_documents_that_photos_are_uploaded():
