@@ -1038,6 +1038,41 @@ from deletion, one cull missed, 164 more frames to glance at. If you
 would rather the tool delete confidently and lose keepers, `--vlm-mode
 off` restores the rule stack alone.
 
+**Update (v2.67): what the evidence block is worth.** Before the judge
+looks at the photograph it is handed a block of local detector numbers.
+That design shipped in v2.48 and had never once been tested. Four arms
+over the same 493 blind frames, identical but for the evidence sent:
+
+| evidence sent with the image | macro-F1 | destroys keepers | finds culls |
+|---|---|---|---|
+| technical — sharpness, clipping, faces, burst (ships) | **0.695** | **21** | **28** |
+| composition — thirds, lead room, figure/ground, balance, … | 0.666 | 40 | 29 |
+| both | 0.525 | 34 | 7 |
+| nothing at all — the control nobody had run | 0.544 | 12 | 7 |
+
+Paired bootstrap against the shipped arm: `both` −17.0 [−30.8, −1.5] and
+sending nothing −15.1 [−28.9, −0.4] are significantly worse.
+`composition` −2.9 [−9.3, +3.3] is not separable on macro-F1 — and is
+refused anyway, because it destroys 40 keepers against 21 to find one
+more cull. macro-F1 is symmetric; a photographer is not.
+
+Three things follow. **The evidence block earns its place** — sending
+nothing costs 15.1 points with the interval clear of zero, which is the
+first evidence that v2.48's design does anything at all. **More evidence
+is not better evidence** — `both` is worse than either half and worse
+than sending nothing, and not by going timid: it still culls 5.5% of
+frames and tracks the shipped arm 69% of the time, but its cull
+precision collapses from 0.58 to 0.17. Twelve numeric fields make a
+confidently wrong judge, not a better-informed one. And **a
+population-level discriminator is not a per-frame signal** — composition
+separates this photographer's culls by −0.82σ, yet handing the judge
+those same numbers makes every individual call worse.
+
+Nothing shipped differently. What changed is that the default is no
+longer a guess, and a test now fails if the shipped arm and the recorded
+winner drift apart. Full result, cost and the two harness mistakes that
+nearly buried it: [docs/EVIDENCE-AB-RESULT.md](docs/EVIDENCE-AB-RESULT.md).
+
 ---
 
 **Original (150 frames):** the headline job is not solved, by the rules
