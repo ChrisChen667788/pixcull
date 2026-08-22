@@ -892,6 +892,104 @@ m3_app = typer.Typer(
 app.add_typer(m3_app, name="m3")
 
 
+@app.command("flag-lift")
+def flag_lift(
+    labels: Path = typer.Option(..., "--labels", exists=True,
+                                help="A blind pass from `pixcull m3 label`."),
+    scores: Path = typer.Option(..., "--scores", exists=True,
+                                help="scores.csv for the same frames."),
+) -> None:
+    """Which detector flags are evidence, and which only look like it.
+
+    Every flag in this product asserts "this frame has a defect worth
+    your attention". Nothing had ever checked whether the frames a given
+    flag fires on are the frames YOU delete.
+
+    Two numbers per flag, and the second is the one that decides:
+
+    * **lift** — cull rate among flagged frames over the base rate.
+      Almost every flag passes this, because flags fire on frames whose
+      score is already low and a low score already sends them to MAYBE.
+    * **marginal** — of the frames the flag ALONE moves off KEEP, how
+      many you culled. On the blind set `shadows_clipped` moved 22
+      frames and 2 were culls: 9.1%, the base rate exactly. Twenty-two
+      second looks, bought nothing.
+
+    Reports intervals, and refuses to judge a flag that fired fewer than
+    20 times — a 0.00x lift on four firings is four frames, not a
+    verdict.
+    """
+    import csv as _csv
+
+    from pixcull.config import PixCullConfig
+    from pixcull.scoring import decision as _dec
+    from pixcull.scoring.flag_lift import MIN_FIRINGS, marginal, measure
+    from pixcull.report.review_sheet import load_strata, load_verdicts
+    from pixcull.scoring.vlm_eval import _flags_of
+
+    truth = load_verdicts(labels)
+    if not truth:
+        console.print("[red]No verdicts in that labels file.[/red]")
+        raise typer.Exit(1)
+    # A stratified pass carries its own inverse-probability weights, and
+    # v2.65 made a file that claims stratification without them a refusal
+    # rather than a silent uniform average.
+    weights = {fn: m["pop"] / m["sampled"]
+               for fn, m in (load_strata(labels) or {}).items()
+               if isinstance(m, dict) and m.get("sampled")}
+
+    rows, seen = [], set()
+    with open(scores, encoding="utf-8-sig", newline="") as fh:
+        for r in _csv.DictReader(fh):
+            fn = r.get("filename", "")
+            if fn not in truth or fn in seen:
+                continue
+            seen.add(fn)
+            rows.append(r)
+    if not rows:
+        console.print("[red]None of the labelled frames are in that "
+                      "scores.csv.[/red]")
+        raise typer.Exit(1)
+
+    cfg = PixCullConfig.load()
+    triples, quads = [], []
+    for r in rows:
+        fn = r["filename"]
+        try:
+            sf = float(r.get("score_final") or 0)
+        except (TypeError, ValueError):
+            sf = 0.0
+        fl = tuple(_flags_of(r))
+        w = weights.get(fn, 1.0)
+        d, _ = _dec.decide(sf, list(fl), cfg, "standard",
+                           scene=str(r.get("scene") or ""),
+                           vlm_authority="off")
+        triples.append((fl, truth[fn], w))
+        quads.append((fl, truth[fn], d.value, w))
+
+    stats = measure(triples)
+    base = next(iter(stats.values())).base_rate if stats else 0.0
+    console.print(f"[dim]{len(rows)} labelled frames · base cull rate "
+                  f"{base:.1%} · flags judged at >= {MIN_FIRINGS} "
+                  f"firings[/dim]")
+    t = Table()
+    for c in ("flag", "fired", "lift", "95% CI", "marginal", "of which culls",
+              "verdict"):
+        t.add_column(c, justify="right" if c != "flag" else "left")
+    for f, st in stats.items():
+        mg = marginal(quads, f, base)
+        lo, hi = st.lift_ci
+        t.add_row(f, str(st.n_raw), f"{st.lift:.2f}x",
+                  f"[{lo:.2f}, {hi:.2f}]",
+                  f"{mg.n_changed}", f"{mg.n_changed_culls}",
+                  st.verdict)
+    console.print(t)
+    console.print(
+        "[dim]`marginal` counts only the frames this flag alone moves off "
+        "KEEP. A flag whose marginal cull rate matches the base rate is "
+        "buying second looks and returning nothing.[/dim]")
+
+
 @app.command("calibrate")
 def calibrate(
     labels: Path = typer.Option(..., "--labels", exists=True,

@@ -146,3 +146,54 @@ v2.68, v2.69, v2.70, v2.73, v2.74 and v2.76 need no API calls and no
 labelling: they are measurements against data already collected. v2.71
 needs the owner's budget go-ahead. v2.72 and v2.75 need the owner to
 label. The unblocked work is deliberately first.
+
+---
+
+## v2.70 — landed, and it changed nothing on purpose
+
+Per-flag lift, on the same 494 blind frames, weighted, with Wilson
+intervals on the raw firing counts:
+
+| flag | fired | lift | 95% CI | verdict |
+|---|---|---|---|---|
+| `no_clear_subject` | 301 | 0.83x | [0.56, 1.22] | inconclusive |
+| `shadows_clipped` | 87 | 1.72x | [1.04, 2.72] | **informative** |
+| `severely_underexposed` | 63 | 2.32x | [1.41, 3.60] | **informative** |
+| `scene_uncertain` | 45 | 0.51x | [0.15, 1.67] | inconclusive |
+| `subject_blur` | 15 | 2.35x | [0.86, 5.12] | unmeasured |
+| `highlights_clipped` | 6 | 3.98x | [1.22, 7.93] | unmeasured |
+| `face_occluded` | 6 | 0.00x | [0.00, 4.29] | unmeasured |
+| `severely_blurry` | 4 | 0.00x | [0.00, 5.39] | unmeasured |
+
+**Nothing was dropped, and that is the finding.** The charter said "a
+flag with no lift should stop being a flag". No flag in the shipped
+attention set has a measured absence of lift: three of the five never
+fired once on 494 frames, and the two that did are inconclusive.
+Dropping any of them would be acting on the shape of the sample.
+
+**v2.68 overstated its own evidence.** Its commit says the flags carry
+"0.9x lift — worse than chance". That was a point estimate with no
+interval; `no_clear_subject`'s spans 1.0. The decision v2.68 took stands
+on its direct A/B (274 keepers destroyed against 4) rather than on that
+number, but the number did not support the sentence built around it.
+
+**Raw lift turned out to be the wrong question.** A flag fires on frames
+whose score is already low, and a low score already sends them to MAYBE:
+52 of `severely_underexposed`'s 63 firings were non-KEEP before the flag
+was consulted. The marginal question — of the frames the flag ALONE
+moves off KEEP, how many did the photographer cull — answers differently:
+
+| flag | fired | already non-KEEP | moved by the flag | of those, culls |
+|---|---|---|---|---|
+| `severely_underexposed` | 63 | 52 | 11 | 2 (18%) |
+| `shadows_clipped` | 87 | 65 | 22 | 2 (9.1% — the base rate) |
+| `subject_blur` | 15 | 14 | 1 | 1 |
+
+`shadows_clipped` would buy 22 second looks and return nothing.
+
+And macro-F1 cannot referee this at all: it scores MAYBE as KEEP, so
+moving a frame between them is invisible. Adding either flag changed it
+by 0.0 — the same identifiability trap as v2.68's `keep_min`.
+
+Shipped: `pixcull/scoring/flag_lift.py`, `pixcull flag-lift`, and this
+record. Not shipped: any change to the decision logic.
