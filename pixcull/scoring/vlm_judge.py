@@ -237,6 +237,18 @@ class VlmVerdict:
                 k: {"stars": v.stars, "rationale": v.rationale}
                 for k, v in self.axes.items()
             },
+            # v2.71 — the model's own words, kept.
+            #
+            # A cache that drops a field the caller reads changes
+            # behaviour on the SECOND call and not the first, which is
+            # the hardest kind of bug to see. `m3_advice` parses its
+            # whole output out of `raw_text`, so a cache hit handed it an
+            # empty string: the advice feature worked exactly once per
+            # photograph and silently reverted to templates forever
+            # after. Found by v2.71's fallback ledger on its first run —
+            # 195 of 197 rows reported `parse_failed` and every earlier
+            # version had reported nothing at all.
+            "raw_text": self.raw_text,
         }
 
 

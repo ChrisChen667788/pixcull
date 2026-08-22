@@ -656,6 +656,14 @@ class MiniMaxM3Judge:
             if key:
                 hit = self._cache.get(key)
                 if hit is not None:
+                    # v2.71 — entries written before raw_text was cached
+                    # carry none, and a caller who parses raw_text would
+                    # read an empty string as "the model said nothing".
+                    # For those callers this is a miss, so the call is
+                    # made once more and the entry heals itself.
+                    if prompt_override and not (hit.get("raw_text") or ""):
+                        hit = None
+                if hit is not None:
                     return _verdict_from_dict(hit, image_path.name,
                                               self.model_name)
 
@@ -804,6 +812,7 @@ def _verdict_from_dict(d: dict, filename: str, model_name: str) -> VlmVerdict:
                                         rationale=(ax or {}).get("rationale", ""))
     v.overall_label = d.get("overall_label", "")
     v.overall_rationale = d.get("overall_rationale", "")
+    v.raw_text = d.get("raw_text", "") or ""
     v.elapsed_s = 0.0        # a cache hit cost no wall-clock
     return v
 

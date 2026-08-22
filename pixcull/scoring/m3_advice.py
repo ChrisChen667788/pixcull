@@ -214,14 +214,30 @@ def advice_from_m3(raw_text: str, *, decision: str,
 def enrich_advice(row: dict[str, Any], final_stars: dict[str, Any],
                   decision: str, fallback: dict[str, Any],
                   judge: Any, *, image_path: Path | None = None,
-                  max_tokens: int = 3000) -> dict[str, Any]:
+                  max_tokens: int = 3000,
+                  on_fallback: Any = None) -> dict[str, Any]:
     """Template advice in, M3 advice out — or the template again.
 
     Never raises. Advice is decoration on a decision that has already
     been made; a failure here must not cost the photographer their cull.
     """
-    if judge is None or image_path is None or not Path(image_path).exists():
+    # v2.71 — `on_fallback` is how the caller learns this happened.
+    #
+    # Every return of `fallback` below is correct behaviour and was also
+    # completely invisible: the caller received template advice and had
+    # no way to distinguish "the model declined" from "the model was
+    # never asked". Seventeen versions of the second hid inside the
+    # shape of the first.
+    def _fb(reason: str):
+        if on_fallback is not None:
+            try:
+                on_fallback(reason)
+            except Exception:  # noqa: BLE001
+                pass          # telemetry must never break the caller
         return fallback
+
+    if judge is None or image_path is None or not Path(image_path).exists():
+        return _fb("no_image")
     try:
         verdict = judge.score(
             Path(image_path),
@@ -233,11 +249,15 @@ def enrich_advice(row: dict[str, Any], final_stars: dict[str, Any],
     except TypeError:
         # A judge without prompt_override cannot write advice; its axis
         # scores answer a different question.
-        return fallback
+        return _fb("request_failed")
     except Exception:  # noqa: BLE001
-        return fallback
-    if getattr(verdict, "error", None):
-        return fallback
+        return _fb("request_failed")
+    err = getattr(verdict, "error", None)
+    if err:
+        text = str(err).lower()
+        return _fb("budget_exhausted" if "budget" in text
+                   else "truncated" if "truncat" in text or "max_tokens" in text
+                   else "request_failed")
     got = advice_from_m3(getattr(verdict, "raw_text", "") or "",
                          decision=decision, fallback=fallback)
-    return got if got is not None else fallback
+    return got if got is not None else _fb("parse_failed")

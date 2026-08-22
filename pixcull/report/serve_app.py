@@ -1570,17 +1570,39 @@ def _m3_advice_pass(rows: list, df) -> int:
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
+    from pixcull.fallback_ledger import LEDGER
+
+    # v2.71 — record what this pass considers its business BEFORE any
+    # eligibility filtering. The gap between this number and `attempted`
+    # is where v2.68.6 lived for seventeen versions: `todo` filtered on
+    # a key the built rows do not carry, so the pass saw 200 candidates
+    # and attempted none, and every observable signal — template advice,
+    # no error, no log line — was identical to a healthy run.
+    candidates = [(i, r) for i, r in enumerate(rows)
+                  if str(r.get("decision", "")) in ("keep", "maybe")
+                  and r.get("advice")]
+    LEDGER.candidates("m3_advice", len(candidates))
+
     try:
         from pixcull.scoring.m3 import api_key_from_env, has_consent
     except Exception:  # noqa: BLE001
+        LEDGER.fell_back("m3_advice", "request_failed")
         return 0
-    if not (api_key_from_env() and has_consent()):
+    if not api_key_from_env():
+        LEDGER.fell_back("m3_advice", "no_api_key")
+        return 0
+    if not has_consent():
+        LEDGER.fell_back("m3_advice", "no_consent")
         return 0
 
-    todo = [(i, r) for i, r in enumerate(rows)
-            if str(r.get("decision", "")) in ("keep", "maybe")
-            and r.get("advice") and _row_image_path(r)]
+    todo = [(i, r) for i, r in candidates if _row_image_path(r)]
     if not todo:
+        if candidates:
+            # Candidates but nothing eligible: every one of them lacks a
+            # readable image path. That is a structural fault, not an
+            # empty shoot, and the ledger says so rather than returning
+            # a quiet zero.
+            LEDGER.fell_back("m3_advice", "no_image")
         return 0
 
     try:
@@ -1589,6 +1611,7 @@ def _m3_advice_pass(rows: list, df) -> int:
         judge = make_minimax_judge(api_key_from_env())
     except Exception as exc:  # noqa: BLE001
         _dbg("m3_advice_init", exc, "")
+        LEDGER.fell_back("m3_advice", "request_failed")
         return 0
 
     by_fn = {}
@@ -1603,10 +1626,15 @@ def _m3_advice_pass(rows: list, df) -> int:
         stars = {k[len("vlm_"):-len("_stars")]: v
                  for k, v in rec.items()
                  if k.startswith("vlm_") and k.endswith("_stars")}
-        return idx, enrich_advice(
+        LEDGER.attempt("m3_advice")
+        out = enrich_advice(
             rec or row, stars, str(row.get("decision", "")),
             row["advice"], judge,
-            image_path=Path(_row_image_path(row)))
+            image_path=Path(_row_image_path(row)),
+            on_fallback=lambda why: LEDGER.fell_back("m3_advice", why))
+        if out is not row["advice"]:
+            LEDGER.ok("m3_advice")
+        return idx, out
 
     n = 0
     with ThreadPoolExecutor(max_workers=8) as pool:
@@ -2080,6 +2108,23 @@ def _build_results_uncached(run_id: str) -> tuple[list[dict], dict] | None:
     # HTTP round-trip inside it would mean 500 sequential calls before
     # the results page renders at all.
     _m3_advice_pass(rows, df)
+
+    # v2.71 — say what the best-effort passes actually did.
+    #
+    # Not a log line for its own sake: this is the check that would have
+    # caught v2.68.6 the day it shipped. A pass that had candidate rows
+    # and attempted none is never a normal state, and it is exactly what
+    # a filter keyed on a field the rows do not carry produces.
+    try:
+        from pixcull.fallback_ledger import LEDGER
+
+        for _line in LEDGER.structural_failures():
+            print(f"[pixcull] FALLBACK FAULT — {_line}", file=sys.stderr)
+        for _st in LEDGER.snapshot().values():
+            if _st.attempted:
+                print(f"[pixcull] {_st.summary()}", file=sys.stderr)
+    except Exception:  # noqa: BLE001
+        pass          # telemetry must never break a run
 
     # P-UX-14 — within-burst exposure-consistency check. For each
     # cluster of ≥ 3 photos, take the median mean_luma + median
@@ -9328,11 +9373,28 @@ class _Handler(BaseHTTPRequestHandler):
         if run is None:
             self.send_error(404, "no such run")
             return
+        # v2.71 — the best-effort passes report here too. A caller
+        # polling status can see that advice fell back on 9% of rows,
+        # or that it never ran at all, without reading a terminal.
+        try:
+            from pixcull.fallback_ledger import LEDGER
+
+            _fb = LEDGER.to_json()
+            _faults = LEDGER.structural_failures()
+        except Exception:  # noqa: BLE001
+            _fb, _faults = None, []
         # Strip path fields that the browser doesn't need
         view = {
             k: v for k, v in run.items()
             if k not in ("input_dir", "output_dir")
         }
+        if _fb is not None:
+            view["fallbacks"] = _fb
+        if _faults:
+            # Named separately from the counts. A rate belongs in a
+            # report; "this pass had work and did none" belongs where
+            # somebody trips over it.
+            view["fallback_faults"] = _faults
         body = json.dumps(view, ensure_ascii=False).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json; charset=utf-8")
