@@ -161,8 +161,8 @@ one, one that asks for a decision before reasons, one that asks for
 reasons before a decision.
 
 Estimate goes to the owner BEFORE the run, with the arithmetic shown —
-v2.67 was quoted ¥31 and cost ¥38.56 because the estimate assumed a
-cache that a key change had invalidated.
+v2.67 came in over its estimate because the estimate assumed a cache
+that a key change had invalidated.
 
 ---
 

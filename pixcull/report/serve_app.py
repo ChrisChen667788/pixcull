@@ -1538,6 +1538,33 @@ def _b(v: object) -> bool:
     return _s(v).lower() not in ("", "false", "0", "0.0", "no")
 
 
+#: v2.72 — the cloud setting this process was started with.
+#:
+#: `--vlm-mode off` is the escape hatch the README offers photographers
+#: whose contracts forbid third-party cloud processing, and it did not
+#: reach the advice pass at all: that pass gated on "is there a key" and
+#: "is there consent", never on "did this run ask to stay local". A
+#: photographer with a key configured from an earlier session, running
+#: `--vlm-mode off`, had every keep/maybe frame uploaded — measured,
+#: 6 of 6 — while the startup banner that warns about uploads stayed
+#: silent, because THAT is tied to vlm_mode.
+#:
+#: A module global rather than a parameter threaded through six call
+#: sites, because the promise has to hold for every path that could
+#: reach out, including ones added later that would forget the argument.
+_CLOUD_MODE: str = "off"
+
+
+def set_cloud_mode(mode: str) -> None:
+    _CLOUD_MODE = (mode or "off").strip().lower()
+    globals()["_CLOUD_MODE"] = _CLOUD_MODE
+
+
+def cloud_allowed() -> bool:
+    """Is this process permitted to send a photograph anywhere."""
+    return _CLOUD_MODE not in ("", "off", "none", "local")
+
+
 def _row_image_path(row: dict) -> str:
     """The source image for a built row.
 
@@ -1582,6 +1609,12 @@ def _m3_advice_pass(rows: list, df) -> int:
                   if str(r.get("decision", "")) in ("keep", "maybe")
                   and r.get("advice")]
     LEDGER.candidates("m3_advice", len(candidates))
+
+    if not cloud_allowed():
+        # Not a fallback to be counted against a rate: the run asked to
+        # stay local and this pass is honouring that. Counting it as a
+        # failure would train the reader to ignore the number.
+        return 0
 
     try:
         from pixcull.scoring.m3 import api_key_from_env, has_consent
@@ -13091,6 +13124,8 @@ def main() -> None:
                  if args.vlm_mode == "minimax" else ""),
               file=sys.stderr)
     server.vlm_mode = args.vlm_mode  # type: ignore[attr-defined]
+    # v2.72 — and the module-level record every cloud path consults.
+    set_cloud_mode(args.vlm_mode)
     server.meta_mode = args.meta_mode  # type: ignore[attr-defined]
 
     # Print URLs the user can paste into a browser. On 0.0.0.0 we also
