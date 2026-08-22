@@ -1887,12 +1887,62 @@ def _build_results_uncached(run_id: str) -> tuple[list[dict], dict] | None:
 
     df = pd.read_csv(scores_path)
 
+    # v2.76 — make the name unique before anything reads it.
+    #
+    # Applied HERE, to the DataFrame, rather than to the built rows,
+    # because both sides then carry the same name and every
+    # `by_fn[...]` lookup between them keeps working. Disambiguating one
+    # side only is precisely the v2.68.6 defect — a rename that leaves a
+    # lookup silently matching nothing.
+    #
+    # A run with no colliding basenames comes out bit-identical.
+    _recs: list[dict] = []
+    _renamed = 0
+    try:
+        from pixcull.photo_id import apply_unique_names
+
+        _recs = df.to_dict("records")
+        _renamed = apply_unique_names(_recs)
+        if _renamed:
+            df = pd.DataFrame(_recs)
+            print(f"[pixcull] identity: {_renamed} filenames disambiguated "
+                  f"by their location — before this they addressed each "
+                  f"other's pixels", file=sys.stderr)
+    except Exception as exc:  # noqa: BLE001
+        _recs, _renamed = [], 0
+        _dbg("photo_id", exc, "")
+
     # V2.0: pull human annotations off disk (latest line wins per fn).
     # V14.1: cached via _MtimeLRUCache so repeat renders / API hits in
     # the same session don't re-parse the same multi-MB file.
     output_dir = Path(run["output_dir"])
     ann_path = output_dir / "annotations.jsonl"
     human_by_fn: dict[str, dict] = _read_human_by_fn_cached(ann_path)
+
+    # v2.76 — annotations written before the rename are keyed by the bare
+    # basename. Re-point the recoverable ones (see
+    # ``migrate_legacy_annotations``); anything genuinely ambiguous is
+    # counted, not guessed at.
+    _ann_dropped = 0
+    if _renamed and human_by_fn:
+        try:
+            from pixcull.photo_id import migrate_legacy_annotations
+
+            _man: dict = {}
+            _mp = output_dir / "manifest.json"
+            if _mp.exists():
+                try:
+                    _man = json.loads(_mp.read_text("utf-8"))
+                except (OSError, json.JSONDecodeError):
+                    _man = {}
+            human_by_fn, _mg, _ann_dropped = migrate_legacy_annotations(
+                human_by_fn, _recs, _man)
+            if _mg or _ann_dropped:
+                print(f"[pixcull] identity: {_mg} annotations re-pointed, "
+                      f"{_ann_dropped} not attributable to a single file",
+                      file=sys.stderr)
+        except Exception as exc:  # noqa: BLE001
+            _dbg("ann_migrate", exc, "")
 
     from pixcull.scoring.rubric import RUBRIC_AXES
     from pixcull.scoring.photo_advice import build_advice
@@ -2909,6 +2959,24 @@ def _reload_run_from_disk(run_id: str) -> dict | None:
     return info
 
 
+def _safe_photo_name(fn: str) -> bool:
+    """Reject any name that could address a file outside the run.
+
+    v2.76 made photo names relative paths, so they legitimately contain
+    "/" now. The implicit guard (taking only the basename) is therefore
+    gone and the check has to be real: no absolute paths, no ``..``
+    segments, no NUL. Upload mode joins this straight onto ``input_dir``.
+    """
+    if not fn or "\x00" in fn:
+        return False
+    norm = fn.replace("\\", "/")
+    if norm.startswith("/"):
+        return False
+    if len(fn) > 1 and fn[1] == ":":  # windows drive letter
+        return False
+    return ".." not in norm.split("/")
+
+
 def _resolve_image_source(run: dict, filename: str) -> Path | None:
     """Find the absolute on-disk path of ``filename`` within a run.
 
@@ -2917,6 +2985,17 @@ def _resolve_image_source(run: dict, filename: str) -> Path | None:
     or fall back to scanning ``source_dir`` for a basename match.
     """
     mode = run.get("mode")
+    # v2.76 — the CSV path map is exact and collision-free; try it before
+    # the manifest, which is a basename-keyed dict and so lossy by
+    # construction (4,616 keys for 5,069 files on the run that exposed
+    # this). Only paths that still exist on disk come back, so a moved
+    # library falls through to the manifest exactly as before.
+    try:
+        _exact = _scores_path_map(Path(run["output_dir"])).get(filename)
+    except (KeyError, OSError):
+        _exact = None
+    if _exact is not None:
+        return _exact
     if mode == "scan":
         # Try the in-memory dict first (set when run started this session)
         manifest = run.get("files_manifest")
@@ -2981,7 +3060,19 @@ def _scores_path_map(output_dir: Path) -> dict[str, Path]:
             return out
         try:
             with scores.open("r", encoding="utf-8", newline="") as fh:
-                for row in _csv.DictReader(fh):
+                rows = list(_csv.DictReader(fh))
+            # v2.76 — disambiguate before indexing. Keyed on the bare
+            # basename this map silently collapsed every duplicate name to
+            # whichever row came last: 5,069 photographs indexed to 4,295
+            # keys, and 774 originals that no URL could address. The CSV's
+            # ``path`` column is authoritative, so this map — not the lossy
+            # manifest — is the primary resolver.
+            try:
+                from pixcull.photo_id import apply_unique_names
+                apply_unique_names(rows)
+            except Exception:  # noqa: BLE001 - fall back to raw names
+                pass
+            for row in rows:
                     fn, raw = row.get("filename"), row.get("path")
                     if fn and raw:
                         p = Path(raw)
@@ -3975,7 +4066,9 @@ class _Handler(BaseHTTPRequestHandler):
         run = _get_run(run_id) or _reload_run_from_disk(run_id)
         if run is None:
             self.send_error(404, "no such run"); return
-        src = _resolve_image_source(run, Path(fn).name)
+        if not _safe_photo_name(fn):  # v2.76 — see _serve_image
+            self.send_error(400, "bad filename"); return
+        src = _resolve_image_source(run, fn)
         if src is None or not src.exists():
             self.send_error(404, f"not found: {fn}"); return
         boxes = _detect_faces_for_src(src)
@@ -10344,7 +10437,17 @@ class _Handler(BaseHTTPRequestHandler):
         # answer is ``input_dir/<filename>``; in scan mode we look it up
         # in the manifest written when the run started, since the
         # originals live in an arbitrary user folder.
-        src = _resolve_image_source(run, Path(fn).name)
+        # v2.76 — pass the full name, not ``Path(fn).name``.
+        #
+        # Stripping to the basename would make the disambiguation
+        # pointless: the URL carries "one/a.jpg" and the resolver would
+        # throw the "one/" away, landing back on the colliding key. That
+        # strip was also doing double duty as the path-traversal guard, so
+        # it is replaced by an explicit one, not merely removed.
+        if not _safe_photo_name(fn):
+            self.send_error(400, "bad filename")
+            return
+        src = _resolve_image_source(run, fn)
         if src is None or not src.exists():
             self.send_error(404, f"not found: {fn}")
             return
@@ -12320,7 +12423,9 @@ class _Handler(BaseHTTPRequestHandler):
         saved: list[dict] = []
         skipped: list[dict] = []
         for fn, lbl in human_by_fn.items():
-            src = _resolve_image_source(run, Path(fn).name)
+            # v2.76 — full name; these keys come from annotations, not
+            # from a URL, so they need no traversal guard.
+            src = _resolve_image_source(run, fn)
             if src is None or not src.exists():
                 skipped.append({"filename": fn, "reason": "source missing"})
                 continue
