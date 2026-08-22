@@ -648,6 +648,22 @@
     // anchor visible at-a-glance in the workspace bar).  Per-decision
     // counts keep their colour-coded look (keep/maybe/cull semantics).
     `<span>共 <b data-stat="total" class="stat-value-large">${summary.n_total}</b> 张</span>`,
+    // v2.75 — photographs this run cannot show you.
+    //
+    // Every map from a photo to its bytes is keyed on the basename, so
+    // two files with the same name collapse into one and the second
+    // gets a card that displays the FIRST one's picture. On a
+    // recursively scanned folder that was 774 of 5,069.
+    //
+    // It sits next to the total because from the grid a run that lost
+    // them looks exactly like a run that did not — and the person who
+    // needs to know is the one about to make decisions on those cards.
+    ...(summary.n_unreachable
+      ? [`<span class="stat-fault" title="${summary.n_colliding_names} `
+         + `个文件名被多个文件共用。这些卡片显示的是同名另一张的画面 — `
+         + `你无法查看,也不该在它上面做判断。">`
+         + `⚠ ${summary.n_unreachable} 张无法显示</span>`]
+      : []),
     `<span class="keep">${_t("decision.keep", "保留")} `
       + `<b data-stat="keep">${summary.n_keep}</b></span>`,
     `<span class="maybe">${_t("decision.maybe", "待定")} `
@@ -2897,6 +2913,27 @@
         if (!c.dataset.segIdx) c.dataset.segIdx = "-1";  // first batch: never recycled (no seg idx)
         imgIo.observe(c);
       });
+      // v2.75 — NOT chunked, and that is a measurement rather than an
+      // omission.
+      //
+      // The first descent through this run blocks for ~1.8s, so
+      // chunking this callback across frames is the obvious fix. It was
+      // written, and it did not help: attributed properly, scrolling
+      // with this observer connected produces ZERO long tasks. The
+      // 1,823ms task starts 816ms after navigation and belongs to the
+      // initial render — the earlier "first descent" numbers were a
+      // probe that began right after navigate() and counted page build
+      // as scroll cost.
+      //
+      // The chunked version also cost more than it saved on the way
+      // there: an obvious-looking "nearest the viewport first" sort
+      // called getBoundingClientRect() on every queued element every
+      // frame, which on ~5,069 grid children took the blocking time
+      // from 550ms to 1,441ms — the exact bug v2.68.2 removed from the
+      // de-materialiser, reintroduced by an optimisation.
+      //
+      // So it is reverted. The initial render is the real target and is
+      // its own version.
       const io = new IntersectionObserver((entries) => {
         if (token.cancelled) return;
         for (const ent of entries) {

@@ -1418,3 +1418,12 @@
    timestamps do not support. */
 .scene-chip.scene-chip-stray { opacity: 0.55; border-style: dashed; }
 .scene-chip.scene-chip-stray.active { opacity: 1; }
+
+/* v2.75 — a count of photographs the run cannot address. Warning
+   colours because this is not a statistic about the shoot; it is a
+   statement that part of the shoot is missing from the screen. */
+.stat-fault {
+  color: #e0a23c;
+  border: 1px solid rgba(224,162,60,0.45);
+  border-radius: 999px; padding: 1px 8px; font-size: 11.5px;
+}

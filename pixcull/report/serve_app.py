@@ -2142,6 +2142,27 @@ def _build_results_uncached(run_id: str) -> tuple[list[dict], dict] | None:
     # the results page renders at all.
     _m3_advice_pass(rows, df)
 
+    # v2.75 — photographs this run cannot show anyone.
+    #
+    # Every map from a photo to its bytes here is keyed on the basename,
+    # and a dict keyed on a name that is not unique keeps the last
+    # writer. On a real 5,069-frame run of a recursively scanned folder:
+    # 738 names used by more than one file, 774 photographs with a card
+    # in the grid that displays a DIFFERENT photograph's thumbnail.
+    #
+    # The identity scheme is not fixed here — that reaches decisions,
+    # annotations, XMP export and the library index. What is fixed is
+    # that the loss is no longer silent.
+    try:
+        from pixcull.scoring.identity_audit import audit_rows
+
+        _ident = audit_rows(rows)
+        if not _ident.ok:
+            print(f"[pixcull] IDENTITY FAULT — {_ident.summary()}",
+                  file=sys.stderr)
+    except Exception:  # noqa: BLE001
+        _ident = None
+
     # v2.71 — say what the best-effort passes actually did.
     #
     # Not a log line for its own sake: this is the check that would have
@@ -2247,6 +2268,20 @@ def _build_results_uncached(run_id: str) -> tuple[list[dict], dict] | None:
         ),
         "vertical": vertical_info,
     }
+    # v2.75 — and how many photographs this run cannot show.
+    #
+    # In the summary rather than a log line because the person who needs
+    # it is the photographer, not whoever started the server. A run that
+    # quietly drops 774 of 5,069 frames looks, from the grid, exactly
+    # like a run that did not.
+    try:
+        from pixcull.scoring.identity_audit import audit_rows as _audit
+
+        _ia = _audit(rows)
+        summary["n_unreachable"] = _ia.n_unreachable
+        summary["n_colliding_names"] = _ia.n_colliding_names
+    except Exception:  # noqa: BLE001
+        pass
     return rows, summary
 
 
@@ -9453,6 +9488,19 @@ class _Handler(BaseHTTPRequestHandler):
         }
         if _fb is not None:
             view["fallbacks"] = _fb
+        try:
+            from pixcull.scoring.identity_audit import audit_rows as _ar
+            _res = _build_results(run_id)
+            if _res:
+                _ia = _ar(_res[0])
+                view["identity"] = {
+                    "rows": _ia.n_rows,
+                    "unique_names": _ia.n_unique_names,
+                    "colliding_names": _ia.n_colliding_names,
+                    "unreachable": _ia.n_unreachable,
+                }
+        except Exception:  # noqa: BLE001
+            pass
         if _faults:
             # Named separately from the counts. A rate belongs in a
             # report; "this pass had work and did none" belongs where
