@@ -135,46 +135,5 @@ def test_reset_cache_clears_state(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_counterfactual_auto_detects_skip_rule(tmp_path):
-    """With auto_detect_rule=True, a clearly-centered photo should
-    cause `best_counterfactual` to skip the 'centered' variant."""
-    from pixcull.scoring.counterfactual import best_counterfactual
-    p = _make_synthetic(tmp_path, 0.5, 0.5)
-    # Track which variants were scored
-    seen_rules: list = []
-    def trace_score(arr):
-        # First call = original; subsequent = variants
-        seen_rules.append(arr.shape)
-        return 0.5  # Flat → no counterfactual returned, but we just
-                   # want to verify the call pattern
-    best_counterfactual(p, trace_score)
-    # Original + 3 variants (centered skipped) = 4 calls
-    assert len(seen_rules) == 4
 
 
-def test_counterfactual_explicit_skip_takes_priority(tmp_path):
-    """When skip_current_rule is explicitly passed, auto-detect is
-    bypassed."""
-    from pixcull.scoring.counterfactual import best_counterfactual
-    p = _make_synthetic(tmp_path, 0.5, 0.5)
-    calls: list = []
-    def trace_score(arr):
-        calls.append(1)
-        return 0.5
-    best_counterfactual(p, trace_score, skip_current_rule="diagonal")
-    # Original + 3 variants (diagonal skipped, not centered) = 4 calls
-    assert len(calls) == 4
-
-
-def test_counterfactual_auto_detect_disabled(tmp_path):
-    """auto_detect_rule=False reverts to v0.13-P0-2 behaviour: score
-    all 4 variants."""
-    from pixcull.scoring.counterfactual import best_counterfactual
-    p = _make_synthetic(tmp_path, 0.5, 0.5)
-    calls: list = []
-    def trace_score(arr):
-        calls.append(1)
-        return 0.5
-    best_counterfactual(p, trace_score, auto_detect_rule=False)
-    # Original + all 4 variants = 5 calls
-    assert len(calls) == 5

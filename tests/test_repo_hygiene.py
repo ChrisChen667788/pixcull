@@ -297,3 +297,53 @@ def test_no_money_amounts(tracked_text):
     assert not hits, (
         "currency amounts in tracked files — say 'paid, annual' or "
         "'billed per image' instead of naming a figure:\n" + "\n".join(hits))
+
+
+def test_a_module_claiming_a_user_facing_surface_has_a_caller():
+    """v2.73 — "advertised but unreachable", caught at the source.
+
+    `counterfactual.py` said in its own docstring that it "surfaces in
+    the Inspector as `+0.08 if rule-of-thirds`". Nothing in
+    `pixcull/report/`, `pixcull/pipeline/` or `cli.py` had ever
+    referenced it. The claim outlived every audit because a docstring is
+    not executable and nothing read it.
+
+    The USER-GUIDE promised the same feature to photographers as one of
+    three transparency layers, for years.
+
+    So: if a scoring module's docstring names a place in the UI, some
+    product code has to import it. A module may be dead, and a module may
+    claim a surface — it may not do both.
+    """
+    import re
+
+    scoring = ROOT / "pixcull/scoring"
+    consumers = [ROOT / "pixcull/report", ROOT / "pixcull/pipeline",
+                 ROOT / "pixcull/cli.py"]
+    haystack = []
+    for c in consumers:
+        if c.is_file():
+            haystack.append(c.read_text(encoding="utf-8"))
+        else:
+            for f in c.rglob("*.py"):
+                haystack.append(f.read_text(encoding="utf-8"))
+    blob = "\n".join(haystack)
+
+    # Words that mean "a person sees this".
+    surface = re.compile(
+        r"surfaces? in the (Inspector|lightbox|report|UI)"
+        r"|renders? in the (Inspector|lightbox|report)"
+        r"|shown in the (Inspector|lightbox|report)", re.I)
+
+    orphans = []
+    for f in sorted(scoring.glob("*.py")):
+        if f.name.startswith("_"):
+            continue
+        head = f.read_text(encoding="utf-8")[:4000]
+        if not surface.search(head):
+            continue
+        if f.stem not in blob:
+            orphans.append(f.name)
+    assert not orphans, (
+        "these modules claim a place in the UI and nothing in report/, "
+        f"pipeline/ or cli.py imports them: {orphans}")

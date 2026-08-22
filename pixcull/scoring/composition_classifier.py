@@ -1,7 +1,15 @@
 """v0.13.3 — Composition rule classifier.
 
 Detects which composition rule a photo most closely follows so the
-v0.13-P0-2 counterfactual chip can SKIP the rule the photo is already
+v2.73 — the counterfactual chip this was built to feed is gone (that
+version measured it: on 100 blind frames the proposed crop's gain did
+not distinguish the photographer's culls from their keeps, and the
+chip appeared on 52% of kept frames against 32% of culled ones —
+backwards from its purpose). What is left is a rule classifier with
+no consumer in the product. Kept rather than deleted because nothing
+has measured IT, and v2.70's rule stands: never act on the absence of
+evidence. Its former job was to let the chip skip the rule a photo
+already
 using ("if rule-of-thirds" on a photo that already follows it is noise).
 
 Two backends

@@ -103,6 +103,12 @@ _PUBLIC = (
     "README.md", "README-PYPI.md", "modelscope/README.md", "SECURITY.md",
     "pyproject.toml",
     "docs/launch-post-en.md",
+    # v2.73 — the user guide was not on this list, and its closing
+    # paragraph promised "所有推理 100% 在你机器上跑,没有云依赖" for
+    # every version since the cloud judge became the default. This
+    # list IS the mechanism; a public file missing from it is a
+    # promise nothing is checking.
+    "docs/USER-GUIDE.md",
     "pixcull/report/templates/pages/upload.html",
     "pixcull/report/templates/results.html",
 )
