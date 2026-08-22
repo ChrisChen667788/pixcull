@@ -3818,14 +3818,44 @@ class _Handler(BaseHTTPRequestHandler):
         def _iso(ts):
             return _dt.fromtimestamp(ts).isoformat(timespec="seconds") if ts else None
 
-        out = [{
-            "index":     s.index,
-            "n":         s.n,
-            "n_keep":    sum(1 for fn in s.filenames if keep_by_fn.get(fn)),
-            "start":     _iso(s.start_ts),
-            "end":       _iso(s.end_ts),
-            "filenames": s.filenames,
-        } for s in scenes]
+        # v2.74 — a chip said `场景 1` … `场景 28`. An index is not a
+        # name; it tells the reader nothing they could not get by
+        # counting. Narrative Select's whole advantage here is that you
+        # recognise the stretch you are looking at.
+        #
+        # What this does NOT do is invent the event. EXIF timestamps and
+        # a scene classifier do not know that the 17:00 stretch is the
+        # ceremony, and guessing would be the most useful-looking and
+        # least honest thing available.
+        from pixcull.scoring.scene_labels import label_stretch
+
+        scene_by_fn = {r.get("filename"): _s(r.get("scene")) for r in rows}
+
+        def _hour(ts):
+            return _dt.fromtimestamp(ts).hour if ts else None
+
+        out = []
+        for s in scenes:
+            lab = label_stretch([scene_by_fn.get(fn, "") for fn in s.filenames],
+                                _hour(s.start_ts), s.n)
+            out.append({
+                "index":     s.index,
+                "n":         s.n,
+                "n_keep":    sum(1 for fn in s.filenames if keep_by_fn.get(fn)),
+                "start":     _iso(s.start_ts),
+                "end":       _iso(s.end_ts),
+                "filenames": s.filenames,
+                "hour_band": lab.hour_band,
+                # "" when nothing dominates — a plurality is not a
+                # description. One real stretch is 10 `fashion` frames of
+                # 29, and naming it 时尚 would describe a third of the
+                # photographs.
+                "scene_key": lab.key,
+                "scene_share": lab.dominant_share,
+                # A stray frame between two sessions keeps its place and
+                # its frames; it just is not announced as a chapter.
+                "is_stray":  lab.is_stray,
+            })
         body = _safe_dumps({
             "schema":    "pixcull.api.v1.scenes.v1",
             "run_id":    run_id,

@@ -1411,3 +1411,10 @@
   border-style: dashed;
 }
 .pill.pill-unknown.active { opacity: 1; }
+
+/* v2.74 — a stretch of one or two frames between two sessions. It keeps
+   its place in the strip and its frames stay reachable; it is dimmed
+   because announcing it as a chapter of the shoot would be a claim the
+   timestamps do not support. */
+.scene-chip.scene-chip-stray { opacity: 0.55; border-style: dashed; }
+.scene-chip.scene-chip-stray.active { opacity: 1; }

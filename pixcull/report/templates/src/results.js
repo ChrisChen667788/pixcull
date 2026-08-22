@@ -1527,9 +1527,26 @@
     let html = `<span class="scene-nav-label">🎬 时序场景 · ${_SCENES.length}</span>`;
     html += _SCENES.map(s => {
       const active = selIdx === s.index;
-      return `<button class="scene-chip${active ? " active" : ""}" type="button" ` +
-        `data-scene="${s.index}" title="${esc(_sceneRangeLabel(s))} · ${s.n} 张 · keep ${s.n_keep}">` +
-        `<span class="scene-chip-t">场景 ${s.index + 1}</span>` +
+      // v2.74 — name the stretch from what is in it.
+      //
+      // `场景 1` … `场景 28` is an index, and an index tells the reader
+      // nothing they could not get by counting. The server supplies an
+      // hour band and — only when one scene really dominates — a scene
+      // key. Where nothing dominates the chip says the time and stops:
+      // a plurality is not a description, and one stretch here is 10
+      // `fashion` frames out of 29, where 时尚 would be wrong about the
+      // other 19.
+      //
+      // The event is never guessed. EXIF and a scene classifier do not
+      // know which stretch was the ceremony.
+      const named = s.scene_key ? _t(s.scene_key, "") : "";
+      const title = [s.hour_band, named].filter(Boolean).join(" · ")
+        || `场景 ${s.index + 1}`;
+      const stray = s.is_stray ? " scene-chip-stray" : "";
+      const strayTip = s.is_stray ? " · 零散帧,不足以成段" : "";
+      return `<button class="scene-chip${active ? " active" : ""}${stray}" type="button" ` +
+        `data-scene="${s.index}" title="${esc(_sceneRangeLabel(s))} · ${s.n} 张 · keep ${s.n_keep}${strayTip}">` +
+        `<span class="scene-chip-t">${esc(title)}</span>` +
         `<span class="scene-chip-r">${esc(_sceneRangeLabel(s))}</span>` +
         `<span class="scene-chip-n">${s.n} 张 · keep ${s.n_keep}</span></button>`;
     }).join("");
