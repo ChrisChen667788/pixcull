@@ -60,6 +60,7 @@ from __future__ import annotations
 import argparse
 import cgi  # noqa: DEP002 — deprecated but present in 3.12; we control runtime
 import io
+import importlib
 import json
 import shutil
 import socket
@@ -922,8 +923,29 @@ class _MtimeLRUCache:
         self._max = maxsize
         self._d: "dict[tuple, object]" = {}
         self._lock = threading.Lock()
+        # v2.77 — one Event per key currently being loaded. See get_or_load.
+        self._inflight: "dict[tuple, threading.Event]" = {}
 
     def get_or_load(self, path: Path, loader):
+        """Load once per key, however many threads ask at the same moment.
+
+        v2.77 — the lock is deliberately NOT held across ``loader()``: a
+        slow load must not block readers of other keys. The cost of that,
+        until now, was that N threads arriving together on a cold key all
+        ran the loader. This is a thumbnail server, so N is however many
+        images the browser fetches in parallel, and the loader for
+        _SCORES_PATH_CACHE parses a 5,069-row CSV and stats every file in
+        it. Measured on the demo run: one caller 141 ms, eighteen callers
+        arriving together 3,001 ms — the GIL turns duplicated work into
+        wall-clock. That is the shape of a first page load.
+
+        So: the first thread to miss becomes the leader and loads; the
+        rest wait on its Event and then read the cache. A follower that
+        finds nothing after the wait (the leader raised, or the entry was
+        already evicted) falls back to loading itself, which is exactly
+        the old behaviour — this narrows a stampede, it does not add a
+        way to fail.
+        """
         try:
             mtime = path.stat().st_mtime_ns
         except OSError:
@@ -936,7 +958,29 @@ class _MtimeLRUCache:
                 v = self._d.pop(key)
                 self._d[key] = v
                 return v
-        v = loader()
+            ev = self._inflight.get(key)
+            leader = ev is None
+            if leader:
+                ev = self._inflight[key] = threading.Event()
+        if not leader:
+            # Bounded: a leader that wedges must not wedge every reader
+            # with it. On timeout we simply do the work ourselves.
+            ev.wait(timeout=60)
+            with self._lock:
+                if key in self._d:
+                    v = self._d.pop(key)
+                    self._d[key] = v
+                    return v
+            return loader()
+        try:
+            v = loader()
+        except BaseException:
+            # Released even when the loader raises, or every follower
+            # waits out the full timeout for nothing.
+            with self._lock:
+                self._inflight.pop(key, None)
+            ev.set()
+            raise
         with self._lock:
             self._d[key] = v
             # Evict any older entries for this same path AND drop oldest
@@ -946,6 +990,12 @@ class _MtimeLRUCache:
                     self._d.pop(k, None)
             while len(self._d) > self._max:
                 self._d.pop(next(iter(self._d)))
+            # Store BEFORE signalling. Waking followers up first would
+            # send every one of them to the cache, find nothing there yet,
+            # and run the loader anyway — the stampede this exists to
+            # prevent, reintroduced by two statements in the wrong order.
+            self._inflight.pop(key, None)
+        ev.set()
         return v
 
 
@@ -2975,6 +3025,35 @@ def _safe_photo_name(fn: str) -> bool:
     if len(fn) > 1 and fn[1] == ":":  # windows drive letter
         return False
     return ".." not in norm.split("/")
+
+
+def _prewarm_heavy_imports() -> None:
+    """Import the slow modules in the background, before anyone asks.
+
+    v2.77 — the first /results request paid 1.6 s for ``import torch``.
+    It arrives through _build_face_clusters_info -> pixcull.pipeline
+    .face_library -> pixcull.pipeline.__init__ -> orchestrator ->
+    duplicate -> torch, so nothing on the results path looks remotely
+    like a machine-learning import; the cost simply appeared in TTFB and
+    nowhere else. Measured on this machine: import torch 1598 ms,
+    import pixcull.pipeline 1621 ms, import serve_app 482 ms.
+
+    This does not make the import cheaper. It moves it into the seconds
+    between the server binding a port and a human clicking a run, which
+    is time nobody is waiting on. A request that does arrive first blocks
+    on Python's import lock exactly as it does today — never worse.
+
+    Deliberately silent on failure: these imports are optional
+    accelerators, and a machine without torch must still serve pages.
+    """
+    def _warm() -> None:
+        for mod in ("pixcull.pipeline.face_library",):
+            try:
+                importlib.import_module(mod)
+            except Exception as exc:  # noqa: BLE001 - optional dependency
+                _dbg("prewarm", exc, mod)
+
+    threading.Thread(target=_warm, name="pixcull-prewarm", daemon=True).start()
 
 
 def _resolve_image_source(run: dict, filename: str) -> Path | None:
@@ -13336,6 +13415,14 @@ def main() -> None:
         print(f"  Meta-judge: {args.meta_mode} (V3.1 — adds ~5-10s/img, billed per img)")
     if not args.no_open and args.host in ("127.0.0.1", "localhost"):
         threading.Timer(0.4, lambda: webbrowser.open(local_url)).start()
+
+    # v2.77 — started only once the socket is listening. An earlier
+    # revision kicked this off before ThreadingHTTPServer bound its port,
+    # and the import lock the prewarm thread holds while pulling in torch
+    # made the main thread's own imports queue behind it: the server took
+    # over 90 s to accept a connection under memory pressure. Pre-warming
+    # must never be able to delay the thing it exists to speed up.
+    _prewarm_heavy_imports()
 
     try:
         server.serve_forever()
