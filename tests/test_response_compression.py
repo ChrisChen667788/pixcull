@@ -41,6 +41,8 @@ class _Recorder:
         self._accepts_gzip = _Handler._accepts_gzip.__get__(self)
         self._GZIP_MIN_BYTES = _Handler._GZIP_MIN_BYTES
         self._GZIP_LEVEL = _Handler._GZIP_LEVEL
+        self._is_loopback_client = _Handler._is_loopback_client.__get__(self)
+        self.client_address = ("192.0.2.10", 4242)   # remote by default
 
     def send_response(self, status):
         self.status = status
@@ -148,3 +150,34 @@ def test_images_do_not_route_through_the_text_sender():
             break
     else:
         pytest.fail("_serve_image not found")
+
+
+def test_a_local_browser_is_not_charged_for_compression():
+    """v2.93 — the close-the-block re-measurement found gzip putting
+    249 ms back on cold TTFB (1134 -> 1383) while saving nothing, because
+    a localhost transfer is already instant. Cold start is the resource
+    v2.77 spent two fixes reclaiming, and most users are a browser on the
+    same machine."""
+    r = _Recorder("gzip")
+    r.client_address = ("127.0.0.1", 51234)
+    r._send_compressible(200, BIG, "text/html; charset=utf-8")
+    assert r.header("Content-Encoding") is None
+    assert r.wfile.getvalue() == BIG
+
+
+@pytest.mark.parametrize("addr", ["192.168.1.40", "10.0.0.7", "203.0.113.9"])
+def test_a_remote_client_still_gets_the_reduction(addr):
+    r = _Recorder("gzip")
+    r.client_address = (addr, 51234)
+    r._send_compressible(200, BIG, "text/html; charset=utf-8")
+    assert r.header("Content-Encoding") == "gzip"
+    assert len(r.wfile.getvalue()) < len(BIG) / 4
+
+
+def test_an_unknown_client_address_is_treated_as_remote():
+    """Failing closed here would silently disable compression for
+    everyone the moment the attribute shape changes."""
+    r = _Recorder("gzip")
+    r.client_address = None
+    r._send_compressible(200, BIG, "text/html; charset=utf-8")
+    assert r.header("Content-Encoding") == "gzip"

@@ -175,3 +175,48 @@ def test_every_exit_of_a_pass_records_its_own_reason(pass_name):
     for reason, why in REQUIRED_REASONS[pass_name].items():
         assert f'LEDGER.fell_back("{pass_name}", "{reason}"' in code, (
             f"{pass_name} can fail with {reason} ({why}) and records nothing")
+
+
+# ------------------------------------------------ v2.93: the false alarm
+
+
+def test_a_pass_the_operator_disabled_is_not_a_structural_failure():
+    """Every `--vlm-mode off` run printed the ledger's loudest warning:
+    "FALLBACK FAULT — 4,396 candidate rows, 0 attempted — the pass had
+    work and did none". The run asked to stay local and the pass obeyed.
+    A warning that fires on the most ordinary configuration is one people
+    learn to scroll past, which costs the ledger everything it is for."""
+    led = FallbackLedger()
+    led.candidates("m3_advice", 4396)
+    led.withheld("m3_advice", 4396, "cloud_disabled")
+    assert led.structural_failures() == []
+    assert led.to_json()["passes"]["m3_advice"]["structural"] is False
+
+
+def test_a_genuinely_silent_pass_still_shouts():
+    """The v2.68.6 shape: work it meant to do, and did none."""
+    led = FallbackLedger()
+    led.candidates("m3_advice", 200)
+    assert led.structural_failures()
+    assert led.to_json()["passes"]["m3_advice"]["structural"] is True
+
+
+def test_excluding_some_does_not_excuse_skipping_the_rest():
+    """The mutation that would make this guard useless: withhold a few
+    and let the remainder vanish."""
+    led = FallbackLedger()
+    led.candidates("p", 200)
+    led.withheld("p", 150, "decision=cull")
+    assert led.structural_failures(), \
+        "50 rows were the pass's business and it did none of them"
+
+
+def test_the_cloud_disabled_exit_records_its_reason():
+    code = _code_only(ROOT / "report" / "serve_app.py")
+    i = code.find("def _m3_advice_pass")
+    body = code[i:i + 4000]
+    j = body.find("cloud_allowed()")
+    assert j > 0
+    assert "cloud_disabled" in body[j:j + 900], (
+        "the cloud-disabled exit leaves candidates recorded with nothing "
+        "attempted, which reads as a structural failure")

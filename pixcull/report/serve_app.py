@@ -1687,6 +1687,17 @@ def _m3_advice_pass(rows: list, df) -> int:
         # Not a fallback to be counted against a rate: the run asked to
         # stay local and this pass is honouring that. Counting it as a
         # failure would train the reader to ignore the number.
+        #
+        # v2.93 — but leaving the candidates recorded with nothing
+        # attempted DID exactly that. `structural` is candidates > 0 and
+        # attempted == 0, so every single `--vlm-mode off` run printed
+        # "FALLBACK FAULT — 4,396 candidate rows, 0 attempted — the pass
+        # had work and did none". It is the loudest signal the ledger has
+        # and it fired on the most ordinary configuration there is.
+        #
+        # The right shape was already built in v2.81: this is `withheld`,
+        # a policy the operator chose, not work that went missing.
+        LEDGER.withheld("m3_advice", len(candidates), "cloud_disabled")
         return 0
 
     try:
@@ -13278,10 +13289,30 @@ class _Handler(BaseHTTPRequestHandler):
         enc = (self.headers.get("Accept-Encoding") or "").lower()
         return "gzip" in enc
 
+    def _is_loopback_client(self) -> bool:
+        """v2.93 — compression is a network trade, and there is no
+        network here.
+
+        Found by the close-the-block re-measurement: gzip put 249 ms back
+        on COLD TTFB (1134 -> 1383) while saving nothing, because a
+        localhost transfer is already instant. Cold start is the exact
+        resource v2.77 spent two fixes reclaiming, and v2.92 quietly
+        handed a fifth of it back to every local user — who are most
+        users, since the default is a browser on the same machine.
+
+        The LAN feature and any remote link still get the 8x reduction.
+        """
+        try:
+            addr = self.client_address[0]
+        except Exception:  # noqa: BLE001
+            return False
+        return addr in ("127.0.0.1", "::1", "localhost")
+
     def _send_compressible(self, status: int, body: bytes,
                            content_type: str) -> None:
         headers = [("Content-Type", content_type)]
-        if len(body) >= self._GZIP_MIN_BYTES and self._accepts_gzip():
+        if (len(body) >= self._GZIP_MIN_BYTES and self._accepts_gzip()
+                and not self._is_loopback_client()):
             import gzip as _gzip
             packed = _gzip.compress(body, self._GZIP_LEVEL)
             # Only if it actually helped. Already-compressed payloads

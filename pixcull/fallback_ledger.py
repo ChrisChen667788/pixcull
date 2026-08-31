@@ -61,8 +61,15 @@ class PassStat:
 
     @property
     def structural(self) -> bool:
-        """Had work, did none. Never a normal state."""
-        return self.candidates > 0 and self.attempted == 0
+        """Had work it was going to do, and did none. Never normal.
+
+        v2.93 — work the operator EXCLUDED does not count. Without this,
+        every `--vlm-mode off` run printed the ledger's loudest warning
+        ("the pass had work and did none") about the most ordinary
+        configuration there is, and a warning that fires on the ordinary
+        case is one people learn to scroll past.
+        """
+        return (self.candidates - self.withheld) > 0 and self.attempted == 0
 
     @property
     def total_fallback(self) -> bool:
