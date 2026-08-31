@@ -42,6 +42,7 @@ MAYBE_THR = 0.45
 class Example:
     axes: dict            # {axis: stars 0..5}
     decision: str         # keep | maybe | cull
+    run_id: str = ""      # v2.83 — which shoot this came from
 
 
 def _f(v) -> float:
@@ -138,21 +139,56 @@ def evaluate(examples: Iterable[Example], *, folds: int = 4) -> dict:
     decisions, compare keep-F1 of generic vs personalised.  This is the
     acceptance metric — personalised should be ≥ generic on the user's
     own taste."""
+    # v2.83, two changes, both about not lying by omission.
+    #
+    # REFUSAL. Too little data used to return `delta: 0.0`, which the CLI
+    # printed in the same table cell as a real result. "We could not
+    # measure" and "we measured and personalisation makes no difference"
+    # are opposite findings and they came out identical.
+    #
+    # GROUPING. Folds were a stride over the example list, so a fold could
+    # be drawn entirely from one shoot — tested on frames beside the ones
+    # it learned from, same light, same day. That measures memory, not
+    # taste. With run ids and at least two runs, a fold is a whole shoot:
+    # learn on some, predict one never seen. Without them the old stride
+    # is used and `grouped: False` says so.
     exs = list(examples)
     if len(exs) < folds * 2:
-        return {"n": len(exs), "folds": 0, "generic_f1": 0.0,
-                "personal_f1": 0.0, "delta": 0.0}
+        return {"n": len(exs), "folds": 0, "grouped": False,
+                "refused": (f"{len(exs)} corrections is too few for "
+                            f"{folds}-fold held-out evaluation; at least "
+                            f"{folds * 2} are needed")}
+
+    groups: dict[str, list[Example]] = {}
+    for e in exs:
+        groups.setdefault(getattr(e, "run_id", "") or "", []).append(e)
+    grouped = len(groups) >= 2 and "" not in groups
+
+    if grouped:
+        splits = [(g, [e for k, v in groups.items() if k != key for e in v])
+                  for key, g in groups.items()]
+        splits = [(t, tr) for t, tr in splits if t and tr]
+    else:
+        splits = [(exs[k::folds],
+                   [e for i, e in enumerate(exs) if i % folds != k])
+                  for k in range(folds)]
+
+    if not splits:
+        return {"n": len(exs), "folds": 0, "grouped": grouped,
+                "refused": "every correction came from a single shoot, so "
+                           "there is no unseen shoot to predict"}
+
     gen, per = [], []
-    for k in range(folds):
-        test = exs[k::folds]
-        train = [e for i, e in enumerate(exs) if i % folds != k]
+    for test, train in splits:
         prof = learn_profile(train)
         gen.append(_keep_f1(test, lambda a: decide(a, profile=None)))
         per.append(_keep_f1(test, lambda a, p=prof: decide(a, profile=p)))
     g = sum(gen) / len(gen)
     pf = sum(per) / len(per)
-    return {"n": len(exs), "folds": folds, "generic_f1": round(g, 3),
-            "personal_f1": round(pf, 3), "delta": round(pf - g, 3)}
+    return {"n": len(exs), "folds": len(splits), "grouped": grouped,
+            "n_runs": len(groups),
+            "generic_f1": round(g, 3), "personal_f1": round(pf, 3),
+            "delta": round(pf - g, 3), "refused": None}
 
 
 # --------------------------------------------------------------------- #
@@ -195,5 +231,8 @@ def gather_examples_from_runs(runs_root) -> list:
             continue
         for f, d in dec.items():
             if f in axmap:
-                out.append(Example(axes=axmap[f], decision=d))
+                # v2.83 — which shoot, so held-out folds can be whole
+                # shoots rather than a stride through one afternoon.
+                out.append(Example(axes=axmap[f], decision=d,
+                                   run_id=str(ann.parent.parent.name)))
     return out

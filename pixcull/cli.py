@@ -2285,10 +2285,26 @@ def personalize_learn(
     table.add_row("keep rate", f"{prof.keep_rate:.0%}")
     table.add_row("threshold shift", f"{prof.keep_threshold_shift:+.3f}")
     table.add_row("most-cared axis", prof.most_cared_axis or "—")
-    table.add_row("held-out keep-F1 · generic", f"{ev['generic_f1']:.3f}")
-    table.add_row("held-out keep-F1 · personal", f"{ev['personal_f1']:.3f}")
-    table.add_row("Δ (personal − generic)", f"{ev['delta']:+.3f}")
+    # v2.83 — an unmeasurable evaluation used to print 0.000 in these
+    # three cells, which reads as "measured, personalisation does
+    # nothing" and is the opposite of what happened.
+    if ev.get("refused"):
+        table.add_row("held-out keep-F1", "[yellow]not measured[/yellow]")
+        table.add_row("why", ev["refused"])
+    else:
+        scope = ("across shoots" if ev.get("grouped")
+                 else "within one shoot — see note below")
+        table.add_row("held-out keep-F1 · generic", f"{ev['generic_f1']:.3f}")
+        table.add_row("held-out keep-F1 · personal", f"{ev['personal_f1']:.3f}")
+        table.add_row("Δ (personal − generic)", f"{ev['delta']:+.3f}")
+        table.add_row("held out", scope)
     console.print(table)
+    if not ev.get("refused") and not ev.get("grouped"):
+        console.print(
+            "[dim]Every correction came from one shoot, so the held-out "
+            "frames sit beside the ones it learned from — same light, "
+            "same day. That figure shows it remembered, not that it "
+            "generalises. Cull a second shoot and re-run.[/dim]")
     if not prof.is_active():
         console.print(
             f"[dim]< {MIN_ANNS_FOR_PERSONALIZATION} corrections — the pipeline "
