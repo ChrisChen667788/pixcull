@@ -166,11 +166,62 @@ def predict(row: Row, thr: RuleThresholds, config,
 
 
 def score(rows: Iterable[Row], thr: RuleThresholds, config,
-          strictness: str = "standard") -> float:
+          strictness: str = "standard", *, three_way: bool = False) -> float:
+    """Macro-F1 of the rule stack against the labels.
+
+    ``three_way`` scores ``maybe`` as its own class instead of folding it
+    into ``keep``.
+
+    v2.89 — the default stays two-way and that is correct FOR ITS
+    QUESTION. It was measured, not assumed: on frames the photographer
+    kept, 58 of 60 maybes were worth another look (97% right); on frames
+    they culled, 13 of 16 were a genuine miss. Scoring a maybe as a keep
+    is what that evidence says, when the question is "how good is the
+    model".
+
+    But it is the wrong metric for a DIFFERENT question, and the module
+    used one metric for both. `keep_min_score` decides which frames
+    become maybe rather than keep. Under the two-way metric those are the
+    same prediction, so the parameter moves rows between two buckets the
+    score cannot tell apart: sweeping it from 6.5 to 10.0 moved 409
+    frames and changed macro-F1 by nothing at four decimal places, while
+    five folds "agreed" on 6.75 — agreement about an arbitrary tie-break.
+
+    Three-way exists so the boundary is visible to the metric that tunes
+    it. It is NOT the headline number and must never be reported as one:
+    it answers "can this parameter be identified", not "is the model
+    good".
+    """
     cm: dict = {}
     for r in rows:
-        _tally(cm, r.truth, predict(r, thr, config, strictness), r.weight)
+        pred = predict(r, thr, config, strictness)
+        if three_way:
+            _tally3(cm, r.truth, pred, r.weight)
+        else:
+            _tally(cm, r.truth, pred, r.weight)
     return _macro(cm)
+
+
+def _tally3(cm: dict, truth: str, pred: str, w: float = 1.0) -> None:
+    """Three-class tally: keep, maybe and cull are distinct predictions.
+
+    Unlike the two-way tally this does NOT drop rows whose truth is
+    `maybe` — under three-way scoring a maybe label is an answer, not a
+    shrug, and dropping it would leave the parameter as invisible as
+    before while looking like it had been fixed.
+    """
+    from pixcull.scoring.vlm_eval import Confusion
+    labels = ("keep", "maybe", "cull")
+    if truth not in labels or pred not in labels:
+        return
+    for label in labels:
+        c = cm.setdefault(label, Confusion(label))
+        if pred == label and truth == label:
+            c.tp += w
+        elif pred == label and truth != label:
+            c.fp += w
+        elif pred != label and truth == label:
+            c.fn += w
 
 
 def outcomes(rows: Iterable[Row], thr: RuleThresholds, config,
@@ -270,7 +321,8 @@ def default_grid(step: float = 0.25,
 
 
 def unidentifiable(rows: Sequence[Row], thr: RuleThresholds, config,
-                   strictness: str = "standard") -> tuple[str, ...]:
+                   strictness: str = "standard", *,
+                   three_way: bool = False) -> tuple[str, ...]:
     """Which of ``thr``'s parameters the data cannot see at all.
 
     Not a formality.  The first run of this module fitted
@@ -289,7 +341,7 @@ def unidentifiable(rows: Sequence[Row], thr: RuleThresholds, config,
 
     So: vary each parameter alone, and if the score never moves, say so.
     """
-    base = score(rows, thr, config, strictness)
+    base = score(rows, thr, config, strictness, three_way=three_way)
     dead: list[str] = []
     sweeps = {
         "keep_min_score": [x / 4 for x in range(0, 41)],
@@ -305,7 +357,8 @@ def unidentifiable(rows: Sequence[Row], thr: RuleThresholds, config,
                 cand = _dc_replace(thr, **{name: v})
             except ValueError:
                 continue        # inverted bands are not evidence either way
-            if abs(score(rows, cand, config, strictness) - base) > 1e-9:
+            if abs(score(rows, cand, config, strictness,
+                         three_way=three_way) - base) > 1e-9:
                 moved = True
                 break
         if not moved:
