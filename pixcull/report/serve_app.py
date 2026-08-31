@@ -441,6 +441,10 @@ _DEMO_ROOT = Path(  # base dir for upload + output trees
 # v0.13.10 — server boot time, surfaced by /healthz uptime_s field.
 _SERVER_BOOT_TIME = time.time()
 _THUMB_SIZE = 420
+# v2.86 — the 2x bucket a Retina grid needs. One bucket, not a range:
+# every cached thumbnail already exists at 420, and a second size keeps
+# the cache twice as large rather than N times.
+_RETINA_THUMB = 840
 _FULL_SIZE = 1600
 
 
@@ -10512,6 +10516,27 @@ class _Handler(BaseHTTPRequestHandler):
                     small_buckets[-1],
                 )
                 size = min(chosen, size)
+            elif size <= _THUMB_SIZE:
+                # v2.86 — a Retina grid needs 2x the CSS width and could
+                # not get it. The /thumb/ route capped at _THUMB_SIZE
+                # whatever ?w= asked for: w=560, w=840 and w=1200 all
+                # returned a 420px image, byte-identical, with no error.
+                # The parameter was advertised and silently ignored above
+                # the cap.
+                #
+                # A photographer on a Retina display was therefore
+                # judging focus from a 420px image upscaled to 556 CSS
+                # pixels — in a tool whose job is deciding whether a
+                # frame is sharp. That is the defect; the 1.5x oversize
+                # at DPR 1 is the cosmetic half of it.
+                #
+                # Capped at _RETINA_THUMB rather than opened up: the grid
+                # route must not become a way to pull full-size originals
+                # a few hundred at a time. Anything larger is CLAMPED to
+                # the cap, not dropped back to 420 — a request for 1200
+                # used to return a 420px image, which is the same silent
+                # ignoring one bucket further along.
+                size = _RETINA_THUMB
             else:
                 buckets = [800, 1200, 1600, 2000, 2400, 3200, 4000]
                 chosen = next(

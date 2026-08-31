@@ -9726,7 +9726,20 @@
 
     // Card renderer (extracted)
     function renderCard(r) {
-      const thumb = `/thumb/${run_id}/${encodeURIComponent(r.filename)}`;
+      // v2.86 — ask for what this screen actually needs.
+      //
+      // The grid displays a thumbnail at ~278 CSS px. On a Retina
+      // display that is 556 device pixels, and the route served 420
+      // whatever ?w= asked for, so a photographer judging focus was
+      // looking at an upscaled image in a tool built to decide whether
+      // frames are sharp. At DPR 1 the same fixed 420 is 1.5x more than
+      // is drawn.
+      //
+      // Two buckets only. Every existing cached thumbnail is a 420, and
+      // a bucket per client width would multiply the cache by the number
+      // of screen sizes rather than by two.
+      const thumb = `/thumb/${run_id}/${encodeURIComponent(r.filename)}`
+        + ((window.devicePixelRatio || 1) > 1.5 ? "?w=840" : "");
       const full = `/full/${run_id}/${encodeURIComponent(r.filename)}`;
       const dim = (k, v) => v == null
         ? `<div class="dim"><span class="k">${k}</span><span class="v">--</span></div>`
