@@ -6,20 +6,48 @@ could not be fixed, defended, or regressed against. This is the measurement.
 
 ## What was measured
 
-4,318 cached model verdicts (`~/.pixcull/cache/m3_verdicts.jsonl`), the real
-output of real runs. No API spend, no human raters, nothing synthesised.
+4,318 cached model calls (`~/.pixcull/cache/m3_verdicts.jsonl`), the real output
+of real runs. No API spend, no human raters, nothing synthesised.
 
-| signal | value | what it means |
-|---|---|---|
-| empty | **9.0%** (389) | produced no rationale at all |
-| median length | **69 characters** | one sentence, against a 3,000-token budget |
-| names something in the picture | 63% | the rest could have been written from the readings alone |
-| connects observation to consequence | 65% | the rest is a list of assertions |
-| **both** | **45.7%** | fewer than half are a critique in both senses |
-| carries template tells | 3.1% | "expression *or* movement", "overall speaking" |
-| distinct subjects named, mean | 1.1 | when it does look, it looks at one thing |
+> **Corrected 2026-08-31 (v2.81).** The first edition of this page reported one
+> figure over all 4,318 rows. That was wrong: the file holds calls from two
+> different prompts. 4,138 are verdict calls, whose `overall_rationale` is a
+> one-line summary by design; 180 are advice calls, whose `reading` is the deep
+> critique. Counting them together dragged the advice rows in as "empty" — they
+> have no `overall_rationale` because they were never asked for one — and buried
+> the finding under a corpus-wide average. The two are separated below, and the
+> conclusion changed completely.
 
-**45.7% is the number this project now has to beat.**
+### Verdict rationale — 4,138 calls, the one-liner
+
+| signal | value |
+|---|---|
+| empty | 5.1% (209) |
+| median length | 69 characters |
+| names something in the picture | 65.8% |
+| connects observation to consequence | 67.8% |
+| **both** | **47.7%** |
+| carries template tells | 3.2% |
+| distinct subjects named, mean | 1.16 |
+
+### Advice reading — 180 calls, the deep critique
+
+| signal | value |
+|---|---|
+| empty | **0%** |
+| median length | **238 characters** |
+| names something in the picture | **98.3%** |
+| connects observation to consequence | **97.8%** |
+| **both** | **96.1%** |
+| carries template tells | 14.4% |
+| distinct subjects named, mean | **4.85** |
+
+**The deep path is already good.** 96.1% against 47.7%, and it never comes back
+empty. Nothing about the advice prompt needs rescuing. What needed finding was
+who gets it — see below.
+
+**47.7% is the figure for the one-liner, and 96.1% is the figure the deep path
+already reaches.** Any change to either has to beat its own number, not the other's.
 
 ## What these signals cannot see
 
@@ -33,6 +61,22 @@ cheaper question than whether critique *is* expert.
 
 Deliberately not a single score. A composite would let a prompt change claim a
 win by moving the cheapest component — length, which padding buys for free.
+
+## Who was getting the shallow one (v2.81)
+
+The deep critique was withheld from every photograph the tool decided to throw
+away: the eligibility filter was `decision in ("keep", "maybe")`. For a culling
+tool that is backwards. "Why are you discarding this frame" is the question the
+product exists to answer, and it was answered by the 47.7% one-liner while the
+96.1% critique went to the keepers, who need it least.
+
+Including culls roughly doubles the API calls, which is the owner's money, so
+v2.81 does not change the default. It makes the policy visible instead: the
+number of frames denied a critique, and the reason, are now recorded in the
+fallback ledger and reported. `PIXCULL_ADVISE_CULL=1` includes them.
+
+An implicit rule that nobody can see is indistinguishable from a bug — that is
+the whole lesson of v2.68.6, v2.75 and v2.76 in this repository.
 
 ## Where the shallowness actually comes from
 

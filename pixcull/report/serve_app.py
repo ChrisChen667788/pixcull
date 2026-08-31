@@ -1655,9 +1655,28 @@ def _m3_advice_pass(rows: list, df) -> int:
     # a key the built rows do not carry, so the pass saw 200 candidates
     # and attempted none, and every observable signal — template advice,
     # no error, no log line — was identical to a healthy run.
+    # v2.81 — "why did you throw this one away" is the question a culling
+    # tool exists to answer, and until now the deep critique was withheld
+    # from exactly the photographs being thrown away. Measured on the
+    # cached corpus: the model path's reading names something in the frame
+    # AND connects it to a consequence 96.1% of the time, against 47.7%
+    # for the one-line verdict rationale that a culled frame falls back to.
+    # The photographer was getting the good critique only for the keepers.
+    #
+    # Including culls roughly doubles the calls, which is the owner's money,
+    # so the default is unchanged and the policy is now VISIBLE instead of
+    # implicit: the number of frames denied a critique is recorded and
+    # reported rather than silently absent.
+    _advise_cull = os.environ.get("PIXCULL_ADVISE_CULL", "") == "1"
+    eligible_decisions = ("keep", "maybe", "cull") if _advise_cull else ("keep", "maybe")
     candidates = [(i, r) for i, r in enumerate(rows)
-                  if str(r.get("decision", "")) in ("keep", "maybe")
+                  if str(r.get("decision", "")) in eligible_decisions
                   and r.get("advice")]
+    withheld = sum(1 for r in rows
+                   if str(r.get("decision", "")) == "cull" and r.get("advice")
+                   and not _advise_cull)
+    if withheld:
+        LEDGER.withheld("m3_advice", withheld, "decision=cull")
     LEDGER.candidates("m3_advice", len(candidates))
 
     if not cloud_allowed():

@@ -28,6 +28,7 @@ bug than the one it exists to catch.
 from __future__ import annotations
 
 import threading
+import dataclasses
 from dataclasses import dataclass, field
 
 #: Reason buckets, so two runs are comparable. `other` keeps the first
@@ -47,6 +48,8 @@ class PassStat:
     succeeded: int = 0
     by_reason: dict[str, int] = field(default_factory=dict)
     examples: dict[str, str] = field(default_factory=dict)
+    withheld: int = 0            # ... that policy excluded before it began
+    withheld_reasons: dict[str, int] = field(default_factory=dict)
 
     @property
     def fell_back(self) -> int:
@@ -100,6 +103,24 @@ class FallbackLedger:
         with self._lock:
             self._get(name).candidates += max(0, int(n))
 
+    def withheld(self, name: str, n: int, reason: str) -> None:
+        """Rows this pass was never going to touch, and why.
+
+        v2.81 — distinct from `fell_back`, which means "tried and could
+        not", and from the candidates/attempted gap, which means "should
+        have tried and did not". This is a POLICY: the pass declined by
+        design. Recording it turns an implicit rule into a number, which
+        is the difference between a decision and an omission — the deep
+        critique was withheld from every culled frame for many versions
+        and nothing anywhere said so.
+        """
+        with self._lock:
+            st = self._get(name)
+            st.withheld += max(0, int(n))
+            if reason:
+                st.withheld_reasons[reason] = (
+                    st.withheld_reasons.get(reason, 0) + max(0, int(n)))
+
     def attempt(self, name: str, n: int = 1) -> None:
         with self._lock:
             self._get(name).attempted += n
@@ -117,11 +138,24 @@ class FallbackLedger:
                 st.examples["other"] = str(reason)[:120]
 
     def snapshot(self) -> dict[str, PassStat]:
+        """A detached copy of every pass.
+
+        v2.81 — copied field-by-field until this version, which meant a
+        field added to PassStat was silently dropped here and read back
+        as its default. `withheld` was added, recorded correctly, and
+        came out of to_json() as 0. Enumerating the dataclass's own
+        fields makes the next addition impossible to forget; a test holds
+        it.
+        """
         with self._lock:
-            return {k: PassStat(
-                name=v.name, candidates=v.candidates, attempted=v.attempted,
-                succeeded=v.succeeded, by_reason=dict(v.by_reason),
-                examples=dict(v.examples)) for k, v in self._passes.items()}
+            out: dict[str, PassStat] = {}
+            for k, v in self._passes.items():
+                kw = {}
+                for f in dataclasses.fields(PassStat):
+                    val = getattr(v, f.name)
+                    kw[f.name] = dict(val) if isinstance(val, dict) else val
+                out[k] = PassStat(**kw)
+            return out
 
     def structural_failures(self) -> list[str]:
         """Passes that had work and did none — the condition that is
@@ -142,6 +176,8 @@ class FallbackLedger:
                     "by_reason": st.by_reason,
                     "examples": st.examples,
                     "structural": st.structural,
+                    "withheld": st.withheld,
+                    "withheld_reasons": st.withheld_reasons,
                 } for st in self.snapshot().values()
             },
         }
