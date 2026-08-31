@@ -781,10 +781,23 @@ class MiniMaxM3Judge:
 # ---------------------------------------------------------------------------
 
 def _fill_verdict(verdict: VlmVerdict, text: str) -> None:
+    """Fill a verdict from the model's reply, and say so when it cannot.
+
+    v2.82 — measured over 4,138 cached verdict calls, 209 (5.1%) came
+    back with no rationale at all AND an empty `error` field. A failure
+    that records no reason is the one shape this repository has learned
+    to distrust: it is reported by every downstream consumer as "the
+    model had nothing to say", which is a judgement, rather than "the
+    model's reply could not be read", which is a defect.
+    """
+    from pixcull.fallback_ledger import LEDGER
+    LEDGER.candidates("m3_verdict", 1)
+    LEDGER.attempt("m3_verdict")
     verdict.raw_text = text
     parsed = parse_vlm_response(text)
     if parsed is None:
         verdict.error = "JSON parse failed"
+        LEDGER.fell_back("m3_verdict", "parse_failed", (text or "")[:120] or "empty reply")
         return
     for axis_name in verdict.axes:
         ax = (parsed.get("axes") or {}).get(axis_name) or {}
@@ -798,6 +811,12 @@ def _fill_verdict(verdict: VlmVerdict, text: str) -> None:
             stars=stars, rationale=str(ax.get("rationale", ""))[:300])
     verdict.overall_label = str(parsed.get("overall_label", "")).lower()
     verdict.overall_rationale = str(parsed.get("overall_rationale", ""))[:300]
+    if verdict.overall_rationale.strip():
+        LEDGER.ok("m3_verdict")
+    else:
+        # Parsed cleanly and still said nothing. Distinct from a parse
+        # failure and, until v2.82, indistinguishable from success.
+        LEDGER.fell_back("m3_verdict", "truncated", "parsed but no rationale")
 
 
 def _verdict_from_dict(d: dict, filename: str, model_name: str) -> VlmVerdict:

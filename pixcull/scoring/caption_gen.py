@@ -212,17 +212,26 @@ def polish_caption(composed: str, *,
     exhausted, returns the composed caption unchanged with
     ``error="budget_exhausted"``.
     """
+    # v2.82 — every exit recorded. Each of the five returns below hands
+    # the caller an unchanged caption, and until now they were mutually
+    # indistinguishable from outside: a run where the key was unset, a
+    # run where the budget was spent, and a run that polished every
+    # caption perfectly all produced captions and no complaint.
+    from pixcull.fallback_ledger import LEDGER
+    LEDGER.candidates("caption_gen", 1)
     try:
         from pixcull.llm_budget import (
             check_budget, estimate_cost, record_call,
         )
     except ImportError:
+        LEDGER.fell_back("caption_gen", "other", "llm_budget module unavailable")
         return {"caption": composed, "cost_yuan": None,
                 "error": "llm_budget module unavailable"}
 
     # Pre-call cost estimate. Typical prompt ~80 tokens + 60 output.
     est = estimate_cost(model, 80, 60)
     if not check_budget(est):
+        LEDGER.fell_back("caption_gen", "budget_exhausted")
         return {"caption": composed, "cost_yuan": 0.0,
                 "error": "budget_exhausted"}
 
@@ -231,8 +240,10 @@ def polish_caption(composed: str, *,
         from openai import OpenAI
         api_key = os.environ.get("DEEPSEEK_API_KEY") or ""
         if not api_key:
+            LEDGER.fell_back("caption_gen", "no_api_key")
             return {"caption": composed, "cost_yuan": None,
                     "error": "DEEPSEEK_API_KEY unset"}
+        LEDGER.attempt("caption_gen")
         client = OpenAI(api_key=api_key,
                           base_url="https://api.deepseek.com")
         resp = client.chat.completions.create(
@@ -251,10 +262,16 @@ def polish_caption(composed: str, *,
         pt = int(getattr(usage, "prompt_tokens", 0) or 0)
         ct = int(getattr(usage, "completion_tokens", 0) or 0)
         info = record_call(model, pt, ct)
+        if text:
+            LEDGER.ok("caption_gen")
+        else:
+            LEDGER.fell_back("caption_gen", "parse_failed", "empty completion")
         return {"caption": text or composed,
                 "cost_yuan": info["cost_yuan"],
                 "error": None}
     except Exception as exc:  # noqa: BLE001
+        LEDGER.fell_back("caption_gen", "request_failed",
+                         f"{type(exc).__name__}: {exc}")
         return {"caption": composed, "cost_yuan": None,
                 "error": f"{type(exc).__name__}: {exc}"}
 

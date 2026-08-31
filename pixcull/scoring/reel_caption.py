@@ -129,16 +129,32 @@ def _build_prompt(cand: dict) -> str:
 
 
 def llm_caption(cand: dict) -> str | None:
-    """Fluent caption via the optional local LLM; None when unavailable."""
+    """Fluent caption via the optional local LLM; None when unavailable.
+
+    v2.82 — every exit is now recorded. Returning None here silently
+    hands the caller back to `template_caption`, and a run in which the
+    LLM never loaded once produced output identical to a healthy run.
+    "The captions came out fine" and "no caption was ever generated"
+    have to be distinguishable from outside.
+    """
+    from pixcull.fallback_ledger import LEDGER
+    LEDGER.candidates("reel_caption", 1)
     llm = _try_llm()
     if llm is None:
+        LEDGER.fell_back("reel_caption", "request_failed")
         return None
+    LEDGER.attempt("reel_caption")
     try:
         out = llm(_build_prompt(cand), max_tokens=48,
                   stop=["\n", "。\n"], temperature=0.4)
         text = out["choices"][0]["text"].strip().strip("。").strip()
-        return text or None
-    except Exception:
+        if not text:
+            LEDGER.fell_back("reel_caption", "parse_failed")
+            return None
+        LEDGER.ok("reel_caption")
+        return text
+    except Exception as exc:  # noqa: BLE001
+        LEDGER.fell_back("reel_caption", "request_failed", str(exc)[:120])
         return None
 
 

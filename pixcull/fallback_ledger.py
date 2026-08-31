@@ -129,13 +129,21 @@ class FallbackLedger:
         with self._lock:
             self._get(name).succeeded += n
 
-    def fell_back(self, name: str, reason: str) -> None:
+    def fell_back(self, name: str, reason: str, detail: str = "") -> None:
+        """One fallback, bucketed, with an optional first example.
+
+        v2.82 — `detail` exists because a bucket alone is not actionable.
+        "request_failed x 200" and "request_failed x 200, first one was
+        'connection refused'" are the same rate and a different afternoon.
+        One example per bucket: enough to start from, not a log.
+        """
         bucket = reason if reason in REASONS else "other"
         with self._lock:
             st = self._get(name)
             st.by_reason[bucket] = st.by_reason.get(bucket, 0) + 1
-            if bucket == "other" and "other" not in st.examples:
-                st.examples["other"] = str(reason)[:120]
+            example = detail or (reason if bucket == "other" else "")
+            if example and bucket not in st.examples:
+                st.examples[bucket] = str(example)[:120]
 
     def snapshot(self) -> dict[str, PassStat]:
         """A detached copy of every pass.

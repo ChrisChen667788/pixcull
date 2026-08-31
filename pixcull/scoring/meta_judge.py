@@ -245,6 +245,15 @@ class DeepseekMetaJudge:
         ``finish_reason='length'`` means the budget was eaten by reasoning
         — bumping max_tokens fixes it.
         """
+        # v2.82 — the meta-judge's failures were invisible from outside.
+        # A verdict carrying only `error` looks, to every consumer, like
+        # a verdict the judge declined to make; a run where the endpoint
+        # was unreachable for every image produced exactly the same
+        # observable output as a run where the judge agreed with the rule
+        # stack on every image.
+        from pixcull.fallback_ledger import LEDGER
+        LEDGER.candidates("meta_judge", 1)
+        LEDGER.attempt("meta_judge")
         if max_tokens is None:
             # V4-Flash output for our 6-axis schema averages ~700 tokens
             # (Chinese rationales × 6 + overall + 2-3 inconsistencies).
@@ -315,6 +324,8 @@ class DeepseekMetaJudge:
         except Exception as exc:  # noqa: BLE001
             verdict.elapsed_s = time.time() - t0
             verdict.error = f"{type(exc).__name__}: {exc}"
+            LEDGER.fell_back("meta_judge", "request_failed",
+                             f"{type(exc).__name__}: {exc}")
             return verdict
         verdict.elapsed_s = time.time() - t0
         verdict.raw_text = text
@@ -322,7 +333,9 @@ class DeepseekMetaJudge:
         parsed = parse_vlm_response(text)
         if parsed is None:
             verdict.error = "JSON parse failed"
+            LEDGER.fell_back("meta_judge", "parse_failed", (text or "")[:120])
             return verdict
+        LEDGER.ok("meta_judge")
 
         for axis_name in verdict.axes.keys():
             ax = (parsed.get("axes") or {}).get(axis_name) or {}
