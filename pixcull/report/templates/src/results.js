@@ -2781,13 +2781,50 @@
       // weight stays roughly proportional to viewport size, not
       // batch size — a 5000-photo wedding renders just as smoothly
       // as a 200-photo session.
-      grid.innerHTML = segments.slice(0, FIRST_BATCH).join("");
+      // v2.85 — append-only when the DOM is already a prefix of the
+      // new list.
+      //
+      // Background hydration ends with one full render(), and on a
+      // 5,069-row run that tore down and rebuilt the first hundred
+      // cards — identical cards, in identical order — to grow the grid
+      // from 800 children to 5,069. Measured: 125 ms of long tasks
+      // starting at ~880 ms, just after the page became usable, and 54
+      // duplicate thumbnail requests out of 107 (one URL fetched three
+      // times). The user's first scroll landed in the middle of it.
+      //
+      // The check is per element and conservative: a card must carry
+      // the filename the new list wants at that position, a placeholder
+      // must carry the index it already had, and anything else — a
+      // scene divider, an unexpected node — falls straight back to the
+      // full rebuild. Getting this wrong shows the wrong photograph, so
+      // it declines rather than guesses.
+      let reusable = 0;
+      const kids = grid.children;
+      if (kids.length && kids.length < segments.length) {
+        let ok = true;
+        for (let i = 0; i < kids.length; i++) {
+          const el = kids[i];
+          if (el.classList.contains("card-placeholder")) {
+            if (el.dataset.idx !== String(i)) { ok = false; break; }
+          } else if (el.dataset.fn) {
+            const want = segRows[i];
+            if (!want || el.dataset.fn !== want.filename) { ok = false; break; }
+          } else {
+            ok = false; break;
+          }
+        }
+        if (ok) reusable = kids.length;
+      }
+
+      if (!reusable) {
+        grid.innerHTML = segments.slice(0, FIRST_BATCH).join("");
+      }
       // Emit placeholder divs for the rest. data-idx points back to
       // the segment array entry; data-fn carries the filename so
       // keyboard nav can still index by filename even before
       // materialization.
       const placeholderFrag = document.createDocumentFragment();
-      for (let i = FIRST_BATCH; i < segments.length; i++) {
+      for (let i = (reusable || FIRST_BATCH); i < segments.length; i++) {
         const ph = document.createElement("div");
         ph.className = "card-placeholder";
         ph.style.height = PLACEHOLDER_HEIGHT + "px";

@@ -64,6 +64,30 @@ hydration rebuilds the grid — 172 requests, 86 unique. All duplicates are
 memory-cache hits and the second wave begins after first-screen ready. Real
 waste, wrong metric.
 
+## Corrected by v2.85 — the warm path was NOT closed
+
+Everything above the line was measured correctly and concluded wrongly.
+
+The viewport thumbnails were being requested **twice**: background
+hydration ends with a full `render()`, which tore out the first hundred
+cards and rebuilt them identically. First-screen ready takes the *later*
+`responseEnd`, so it was reporting the second fetch.
+
+Every experiment in the section above was therefore probing one layer
+below the cause. "Blocking the invisible images does not help" is true
+and irrelevant; "a cached thumbnail is served in 2.5 ms and takes 239 ms
+in the browser" was the duplicate arriving late, not contention.
+
+  first-screen ready, warm    798 ms -> 359 ms
+  image requests             107 -> 55  (54 duplicates -> 2)
+  long tasks after 600 ms    125 ms -> 67 ms
+
+The refutations above still stand as refutations — payload size, gzip,
+over-fetch and lazy loading really are not levers. What does not stand
+is the conclusion drawn from them, which was that nothing was left. A
+set of correct negative results is not a positive result about the
+whole.
+
 ## What is actually left
 
 Of 2170 ms of main-thread work in the load window, our own JavaScript is 82 ms,
