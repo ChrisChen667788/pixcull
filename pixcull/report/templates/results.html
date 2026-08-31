@@ -2321,6 +2321,22 @@
       background-size: 200% 100%;
       border: 1px solid var(--border);
       border-radius: 10px;
+    }
+    /* v2.78 — the shimmer runs ONLY on placeholders actually on screen.
+       It used to run on every placeholder, and a 5,069-photo run has
+       4,969 of them. An infinite background-position animation is not
+       compositable, so every frame recalculated style for all of them:
+       measured 869 ms of style recalc and 2,661 ms of main-thread work,
+       against 126 ms and 1,494 ms with the animation off. Three quarters
+       of a second, every load, for an animation nobody could see — the
+       materialising observer runs 40-200% ahead of the viewport, so a
+       placeholder becomes a real card before it scrolls in and the
+       shimmer is only ever glimpsed during a fast scrub.
+       `pc-ph-onscreen` comes from a rootMargin:0 observer, so the
+       affordance survives exactly where a human can perceive it.
+       content-visibility:auto was measured as the alternative and is
+       worse: style fell to 620 ms but layout rose from 181 to 704 ms. */
+    .card-placeholder.pc-ph-onscreen {
       animation: pcPlaceholderShimmer 1.6s linear infinite;
     }
     @keyframes pcPlaceholderShimmer {
@@ -2328,7 +2344,7 @@
       100% { background-position: -200% 0; }
     }
     @media (prefers-reduced-motion: reduce) {
-      .card-placeholder { animation: none; }
+      .card-placeholder.pc-ph-onscreen { animation: none; }
     }
     .card.cull:hover { opacity: 1; }
 
@@ -10327,8 +10343,35 @@
         threshold: 0,
       });
       _io = io;   // _materialize / _dematerialize close over _io
-      grid.querySelectorAll(".card-placeholder").forEach(el => io.observe(el));
+
+      // v2.78 — a second observer whose only job is the shimmer.
+      //
+      // The materialising observer above runs 40-200% ahead of the
+      // viewport, so by the time a placeholder would be visible it is
+      // already a real card. The shimmer therefore animated ~4,969
+      // elements nobody could see, and background-position is not
+      // compositable, so every frame recalculated style for all of them:
+      // 869 ms of style recalc per load and 2,661 ms of main-thread work,
+      // against 126 ms / 1,494 ms with it off.
+      //
+      // rootMargin 0 fires only for what is genuinely on screen — during
+      // a fast scrub, the handful of placeholders the materialiser has
+      // not caught up with, which is the only moment the shimmer was ever
+      // visible. An IntersectionObserver costs no per-frame JavaScript,
+      // unlike the animation it replaces.
+      const shimmerIo = new IntersectionObserver((entries) => {
+        if (token.cancelled) return;
+        for (const ent of entries) {
+          ent.target.classList.toggle("pc-ph-onscreen", ent.isIntersecting);
+        }
+      }, { rootMargin: "0px", threshold: 0 });
+
+      grid.querySelectorAll(".card-placeholder").forEach(el => {
+        io.observe(el);
+        shimmerIo.observe(el);
+      });
       window._pcCardObserver = io;
+      window._pcShimmerObserver = shimmerIo;
     }
   }
   render();

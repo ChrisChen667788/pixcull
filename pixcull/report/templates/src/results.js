@@ -2949,8 +2949,35 @@
         threshold: 0,
       });
       _io = io;   // _materialize / _dematerialize close over _io
-      grid.querySelectorAll(".card-placeholder").forEach(el => io.observe(el));
+
+      // v2.78 — a second observer whose only job is the shimmer.
+      //
+      // The materialising observer above runs 40-200% ahead of the
+      // viewport, so by the time a placeholder would be visible it is
+      // already a real card. The shimmer therefore animated ~4,969
+      // elements nobody could see, and background-position is not
+      // compositable, so every frame recalculated style for all of them:
+      // 869 ms of style recalc per load and 2,661 ms of main-thread work,
+      // against 126 ms / 1,494 ms with it off.
+      //
+      // rootMargin 0 fires only for what is genuinely on screen — during
+      // a fast scrub, the handful of placeholders the materialiser has
+      // not caught up with, which is the only moment the shimmer was ever
+      // visible. An IntersectionObserver costs no per-frame JavaScript,
+      // unlike the animation it replaces.
+      const shimmerIo = new IntersectionObserver((entries) => {
+        if (token.cancelled) return;
+        for (const ent of entries) {
+          ent.target.classList.toggle("pc-ph-onscreen", ent.isIntersecting);
+        }
+      }, { rootMargin: "0px", threshold: 0 });
+
+      grid.querySelectorAll(".card-placeholder").forEach(el => {
+        io.observe(el);
+        shimmerIo.observe(el);
+      });
       window._pcCardObserver = io;
+      window._pcShimmerObserver = shimmerIo;
     }
   }
   render();
