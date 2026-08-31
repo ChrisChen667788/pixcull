@@ -281,6 +281,62 @@ def _export_xmp(run_dir: Path, target: str) -> tuple[int, int, dict]:
     return written, skipped, dict(per_decision)
 
 
+@app.command(name="proof-sheet")
+def proof_sheet(
+    run_dir: Path = typer.Argument(
+        ..., exists=True, file_okay=False,
+        help="Run output dir (the one containing scores.csv)"),
+    out: Path = typer.Option(..., "--out", "-o",
+                             help="Folder to write the proof sheet into"),
+    title: str = typer.Option("", "--title", help="Shown to the client, and "
+                                                  "used as the watermark"),
+    contact: str = typer.Option("", "--contact",
+                                help="How the client should send picks back"),
+    webhook: str = typer.Option("", "--webhook",
+                                help="Optional URL the gallery POSTs picks to"),
+    only: str = typer.Option("keep", "--only",
+                             help="keep | maybe | cull | all"),
+) -> None:
+    """Export a watermarked proof sheet the client opens with no account.
+
+    v2.87 — writes a folder: downsized watermarked derivatives plus one
+    HTML file. No server, no database, no hosting, no sign-in. The
+    photographer sends the folder however they already send things.
+    """
+    import csv as _csv
+    from pixcull.export.proof_sheet import write_proof_sheet
+    from pixcull.report.serve_app import _scores_path_map
+
+    scores = run_dir / "scores.csv"
+    if not scores.is_file():
+        console.print(f"[red]No scores.csv in {run_dir}[/red]")
+        raise typer.Exit(code=1)
+    with scores.open("r", encoding="utf-8-sig", newline="") as fh:
+        rows = list(_csv.DictReader(fh))
+    try:
+        from pixcull.photo_id import apply_unique_names
+        apply_unique_names(rows)
+    except Exception:  # noqa: BLE001
+        pass
+    index = _scores_path_map(run_dir)
+    res = write_proof_sheet(
+        rows, out, resolve=index.get, title=title or run_dir.parent.name,
+        contact=contact, webhook=webhook,
+        only=("" if only == "all" else only))
+    console.print(f"[green]✓ {res['written']} photographs[/green] → {out}")
+    console.print(f"  open [bold]{out / 'index.html'}[/bold] to check it "
+                  "before sending")
+    if res["missing"]:
+        # Never silent: a proof sheet quietly missing four photographs is
+        # a client conversation nobody wants.
+        console.print(f"[yellow]⚠ {len(res['missing'])} could not be "
+                      f"exported[/yellow] — originals moved or unreadable:")
+        for m in res["missing"][:5]:
+            console.print(f"    {m}")
+        if len(res["missing"]) > 5:
+            console.print(f"    … and {len(res['missing']) - 5} more")
+
+
 @app.command(name="contact-sheet")
 def contact_sheet(
     run_dir: Path = typer.Argument(
