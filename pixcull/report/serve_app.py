@@ -13254,21 +13254,57 @@ class _Handler(BaseHTTPRequestHandler):
         self._send_json(200, body)
 
     # --- utilities ---------------------------------------------------------
-    def _send_html(self, status: int, body: bytes) -> None:
+    # v2.92 — compress text replies when the client asked.
+    #
+    # The review page is 3.13 MB and went out uncompressed even when the
+    # browser sent `Accept-Encoding: gzip`; gzip -6 takes it to 390 KB,
+    # an 8x reduction. On localhost the download is 11 ms either way,
+    # which is why v2.77 correctly refused to ship this as a first-screen
+    # fix. Over the LAN feature that already exists, and over any remote
+    # link, it is the whole story — and v2.86 just multiplied the
+    # thumbnail bytes on a Retina screen tenfold, so this is the bill for
+    # that.
+    #
+    # Level 6 rather than 9: on this payload 9 buys about 3% more
+    # compression for roughly triple the CPU, and cold start is the
+    # resource v2.77 spent two fixes reclaiming.
+    #
+    # Images are never routed through here. They are already compressed,
+    # and gzipping a JPEG spends CPU to make it very slightly larger.
+    _GZIP_MIN_BYTES = 4096
+    _GZIP_LEVEL = 6
+
+    def _accepts_gzip(self) -> bool:
+        enc = (self.headers.get("Accept-Encoding") or "").lower()
+        return "gzip" in enc
+
+    def _send_compressible(self, status: int, body: bytes,
+                           content_type: str) -> None:
+        headers = [("Content-Type", content_type)]
+        if len(body) >= self._GZIP_MIN_BYTES and self._accepts_gzip():
+            import gzip as _gzip
+            packed = _gzip.compress(body, self._GZIP_LEVEL)
+            # Only if it actually helped. Already-compressed payloads
+            # come back bigger, and shipping those would be a slower
+            # response wearing a Content-Encoding header.
+            if len(packed) < len(body):
+                body = packed
+                headers.append(("Content-Encoding", "gzip"))
+                headers.append(("Vary", "Accept-Encoding"))
         self.send_response(status)
-        self.send_header("Content-Type", "text/html; charset=utf-8")
+        for k, v in headers:
+            self.send_header(k, v)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
 
+    def _send_html(self, status: int, body: bytes) -> None:
+        self._send_compressible(status, body, "text/html; charset=utf-8")
+
     def _send_json(self, status: int, body: bytes) -> None:
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
-        self.end_headers()
-        self.wfile.write(body)
+        self._send_compressible(status, body,
+                                "application/json; charset=utf-8")
 
     def _reject_upload(self, status: int, message: str) -> None:
         """Send a JSON error reply for an /analyze failure.
