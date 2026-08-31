@@ -1,0 +1,63 @@
+{
+ "checked_in_order": [
+  {
+   "segment": "platform-native",
+   "why": "ships fastest, changes the baseline for free",
+   "urls": [
+    "https://blog.adobe.com/",
+    "https://helpx.adobe.com/lightroom-classic/help/assisted-culling.html",
+    "https://www.captureone.com/en/explore-features/whats-new/",
+    "https://www.apple.com/newsroom/",
+    "https://www.on1.com/press/",
+    "https://www.dxo.com/news/"
+   ]
+  },
+  {
+   "segment": "intl-culling",
+   "why": "direct rivals",
+   "urls": [
+    "https://aftershoot.com/blog/",
+    "https://narrative.so/changelog",
+    "https://account.imagen-ai.com/changelog/photo/",
+    "https://filterpixel.com/blog",
+    "https://www.evoto.ai/features/ai-culling",
+    "https://cyme.io/en/blog"
+   ]
+  },
+  {
+   "segment": "china",
+   "why": "studio workflow and client selection, a gap PixCull does not address",
+   "urls": [
+    "https://yunxiu.meitu.com/",
+    "https://pixcakeai.com/",
+    "https://www.meitu.com/newsroom/"
+   ]
+  },
+  {
+   "segment": "models",
+   "why": "changes what is possible locally",
+   "urls": [
+    "https://arxiv.org/list/cs.CV/recent",
+    "https://huggingface.co/models?search=Qwen3-VL",
+    "https://huggingface.co/models?search=InternVL",
+    "https://platform.claude.com/docs"
+   ]
+  }
+ ],
+ "search_queries": [
+  "AI photo culling 2026 release",
+  "photographic image quality assessment VLM 2026",
+  "NTIRE image quality assessment winner",
+  "Lightroom assisted culling update",
+  "AI 选片 影楼 2026",
+  "客户选片 小程序 AI 2026",
+  "开源 视觉语言模型 美学评分 2026"
+ ],
+ "never_authoritative": [
+  "a competitor writing about another competitor",
+  "sponsored or advertorial content, including in national newspapers",
+  "listicles and affiliate 'best of' roundups",
+  "a vendor changelog entry cited for a feature it does not name"
+ ],
+ "reverify_after_days": 90
+}
