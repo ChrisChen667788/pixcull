@@ -337,6 +337,59 @@ def proof_sheet(
             console.print(f"    … and {len(res['missing']) - 5} more")
 
 
+@app.command(name="view-folder")
+def view_folder(
+    run_dir: Path = typer.Argument(
+        ..., exists=True, file_okay=False,
+        help="Run output dir (the one containing scores.csv)"),
+    out: Path = typer.Option(..., "--out", "-o",
+                             help="Folder to write, e.g. an iPad drop"),
+    only: str = typer.Option("keep", "--only",
+                             help="keep | maybe | cull | all"),
+    max_width: int = typer.Option(
+        0, "--max-width",
+        help="Downsize to this width (0 = copy the originals)"),
+) -> None:
+    """Export a folder built to be looked at, with the structure intact.
+
+    v2.99 — chapters become folders, bursts become folders inside them,
+    and the best frame of each burst sorts first. When the client says
+    "is there another where her eyes are open", the answer is one folder
+    away instead of back at the computer.
+    """
+    import csv as _csv
+    from pixcull.export.view_folder import write_view_folder
+    from pixcull.report.serve_app import _scores_path_map
+
+    scores = run_dir / "scores.csv"
+    if not scores.is_file():
+        console.print(f"[red]No scores.csv in {run_dir}[/red]")
+        raise typer.Exit(code=1)
+    with scores.open("r", encoding="utf-8-sig", newline="") as fh:
+        rows = list(_csv.DictReader(fh))
+    try:
+        from pixcull.photo_id import apply_unique_names
+        apply_unique_names(rows)
+    except Exception:  # noqa: BLE001
+        pass
+    index = _scores_path_map(run_dir)
+    res = write_view_folder(rows, out, resolve=index.get,
+                            only=("" if only == "all" else only),
+                            max_width=max_width)
+    console.print(
+        f"[green]✓ {res['written']} photographs[/green] → {out}\n"
+        f"  {res['chapters']} 个章节 · {res['bursts']} 组连拍 · "
+        f"{res['singles']} 张单帧")
+    if res["missing"]:
+        console.print(
+            f"[yellow]⚠ {len(res['missing'])} 张导不出来[/yellow] —— "
+            "原图被移动或读不了:")
+        for m in res["missing"][:5]:
+            console.print(f"    {m}")
+        if len(res["missing"]) > 5:
+            console.print(f"    … 还有 {len(res['missing']) - 5} 张")
+
+
 @app.command(name="picks")
 def picks(
     proof_dir: Path = typer.Argument(
