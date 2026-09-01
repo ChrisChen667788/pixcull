@@ -55,6 +55,22 @@ ModelScope, not github links):
    `curl -sIL https://www.modelscope.cn/models/haozi667788/pixcull/resolve/master/README.md`
    (must NOT be a `cdn-lfs` redirect).
 
+**The local ModelScope credentials are STALE** (`~/.modelscope/credentials`,
+last written 2026-07-21).  `api.login()` returns 400, so `make
+modelscope-sync` from this machine can VERIFY assets — that is a plain
+fetch — but cannot upload one.  It reports "hosted 30/32" honestly: 30
+were confirmed already-current without uploading, and the 2 that needed
+a real upload failed.  Rotating that token is the owner's to do and must
+never be pasted into a session.  **CI's token works**, so pushing is the
+way to sync.
+
+**v3.0.3 — the sync workflow now watches `docs/screenshots/**` and
+`docs/diagrams/**` too.**  It used to fire only on `modelscope/README.md`
+and the sync script, so replacing an image changed nothing it watched:
+the model card kept serving the old picture indefinitely, and every
+local check reported the assets as "hosted" — they were, just not the
+current ones.  Found the day 25/26 were replaced with real photographs.
+
 **LFS gotcha (why this matters):** ModelScope's `HubApi.upload_file`
 auto-adds a per-file `<path> filter=lfs` line to `.gitattributes`, which
 turned README.md into an LFS object the model-card viewer renders as a

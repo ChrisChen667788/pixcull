@@ -27,6 +27,16 @@ on:
     paths:
       - 'modelscope/README.md'
       - 'scripts/sync_modelscope_readme.py'
+      # v3.0.3 — the images too.  Without this a re-shot screenshot never
+      # reaches ModelScope: the README text is unchanged, so nothing
+      # triggers, and the model card keeps serving the old picture
+      # indefinitely.  Found when 25/26 were replaced with real
+      # photographs and the card went on showing the synthetic ones.
+      #
+      # The sync only uploads assets whose remote copy differs, so a push
+      # that touches one screenshot re-hosts one screenshot.
+      - 'docs/screenshots/**'
+      - 'docs/diagrams/**'
   workflow_dispatch:  # manual trigger
 
 jobs:
