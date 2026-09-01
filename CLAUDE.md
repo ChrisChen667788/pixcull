@@ -29,7 +29,9 @@ this repo.  Read it before each session.
    tests actually run — which is the point: v2.43.2's three bugs were
    all invisible until the engine was really started.
 3. **Commit trailer:** end every commit message with
-   `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.
+   `Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>`.
+   (Was 4.8; the trailer names whichever model actually wrote the
+   commit, so it changes when the model does.)
 4. **Commit / push only when asked.**  Pushing to GitHub or ModelScope
    is publishing public content — confirm first, then run the audit
    (below) before any push.
@@ -61,7 +63,9 @@ script now strips `README.md`/`*.md`/`docs/` LFS rules and pins
 `README.md text` before each upload.  Never use `--github-links` unless
 you specifically want CDN-linked images instead of ModelScope-hosted.
 
-New screenshots: next free number is **25** (01–24 used; 17 =
+New screenshots: next free number is **27** (01–26 used; 25 =
+client-proof-sheet, 26 = blind-label-sheet — both from the repo's own
+six synthetic samples, not owner photographs; 17 =
 attribution-heatmap, 18 = video-review, 19 = video-grade, 20 =
 scenes-navigator, 21 = verdict-glassbox, 22 = transparency-tools, 23 =
 video-timeline, 24 = review-sheet).
@@ -206,4 +210,46 @@ stack badge → compare) · **P0-1** true VLM best-frame caption
 best frame; template/text-LLM fallback unchanged).  Also pulled forward the
 Playwright **visual-regression smoke** (v2.5-P0-2).  Follow-ups noted in the
 charter: near-dup-by-CLIP collapse, bilingual VLM rewrite, self-hosted VLM
-ONNX export.  **Next: v2.5** (split the single-file frontend; reach).
+ONNX export.
+
+**v2.77 → v2.95 SHIPPED** — see `docs/BLOCK-v2.77-v2.93-CLOSE.md` for the
+block's own closing measurement and `docs/ROADMAP-v2.79-v2.93-charter.md`
+for what each version was for.  Headline: warm first-screen 971 → 316 ms,
+cold 3386 → 1925 ms, idle style recalc 2420 ms/6 s → 30 ms.
+
+The versions that found something worth remembering:
+
+- **v2.77** a cache stampede v2.76 created (18 threads each parsing the
+  same 5,069-row CSV: 141 ms alone, 3,001 ms together) and a 1.6 s
+  `import torch` sitting on the first request.
+- **v2.78** an infinite shimmer animating 4,969 off-screen placeholders —
+  40% of a core held for as long as the tab was open, for an effect the
+  materialising observer made impossible to see.
+- **v2.81** the deep critique was withheld from every CULLED frame, i.e.
+  from the photographs a culling tool exists to explain.
+- **v2.85** hydration rebuilt 100 identical cards, which is what the four
+  refuted hypotheses of v2.84 were all sitting on top of.
+- **v2.86** `/thumb/` capped at 420 px whatever `?w=` asked, so a Retina
+  grid was judging focus from an upscaled image.
+- **v2.88** THERE ARE NO HUMAN LABELS ON THIS MACHINE.  The "608-row
+  correction set" is the model's own output; measured against it,
+  agreement is 100.0%.  `scoring/ground_truth.py` now refuses.
+- **v2.94** the blind labelling tool wrote its results in the one shape
+  that guard rejects.  Fixed both ends.
+- **v2.95** the run summary counted decisions the VLM judge had already
+  overturned: "Keep=6" printed under "6 decision(s) changed", with a CSV
+  full of culls.
+
+**Five versions are OPEN and cannot close without a human** — v2.80
+(advice quality, needs raters who are photographers and not the author),
+v2.83 (personalisation, needs corrections across two shoots), v2.88
+(accuracy baseline), v2.89 (keep/maybe boundary), v2.91 (prompt A/B,
+needs an API budget).  Every harness and refusal guard is built.  Do not
+report any of them as done, and never synthesise the labels — that is
+the exact defect v2.88 exists to prevent.
+
+**Competitive analysis is now on a schedule** — `docs/COMPETITIVE-2026Q3.md`,
+`docs/COMPETITIVE-REFRESH-PROTOCOL.md`, snapshots in `docs/competitive/`,
+and a fortnightly task.  In the 2026-Q3 edition, ten headline claims were
+fact-checked and TEN FAILED.  Treat any first-pass competitive scan as
+vendor marketing with a citation stapled on.
