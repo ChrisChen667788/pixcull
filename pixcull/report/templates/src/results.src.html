@@ -790,6 +790,16 @@
     <svg id="themeToggleIcon"><use href="#icon-moon"/></svg>
     <span id="themeToggleLabel">主题</span>
   </button>
+  <!-- v2.97 — 客户在场模式.  Hides every verdict and score for the
+       minutes a client is looking at the screen beside you.  Measured
+       before it existed: 539 pieces of judgement text on one screen,
+       including "剔除 673" along the top. -->
+  <button class="theme-toggle" id="clientPresentBtn" type="button"
+          aria-pressed="false"
+          title="客户在场模式:隐藏判决与评分,给客户看(⇧C)">
+    <svg class="icon"><use href="#icon-contrast"/></svg>
+    <span>客户在场</span>
+  </button>
   <button class="buckets-toggle" id="bucketsToggleBtn" type="button"
           title="交付桶 — 拖卡片到桶里整理输出">
     <svg class="icon"><use href="#icon-archive"/></svg>
@@ -1253,5 +1263,11 @@
 <script>
 @@INLINE:results.js@@
 </script>
+<!-- The photographer must not forget the mode is on and wonder later
+     where their numbers went. -->
+<div id="clientPresentIndicator" hidden>
+  <span>客户在场模式 · 判决与评分已隐藏</span>
+  <button type="button" id="clientPresentExit">退出</button>
+</div>
 </body>
 </html>

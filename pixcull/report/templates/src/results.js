@@ -4310,7 +4310,7 @@
     // to the badge tooltip when the burst-peak scorer produced one.
     const _peakReason = r.burst_peak_reason ? ` — ${r.burst_peak_reason}` : "";
     const peakBadge = (r.is_burst_peak && _clusterSize >= 2)
-      ? `<span class="badge keep" title="此连拍组的最佳一张(共 ${_clusterSize} 张)${esc(_peakReason)}" `
+      ? `<span class="badge keep peak" title="此连拍组的最佳一张(共 ${_clusterSize} 张)${esc(_peakReason)}" `
         + `style="background:linear-gradient(90deg,#d4a843,#b88a2e);color:#171717">`
         + `<svg class="icon icon--sm"><use href="#icon-trophy"/></svg>`
         + `<span>连拍峰值</span></span>`
@@ -9544,4 +9544,5 @@
   // ==================================================================
 @@MODULE:31-webrtc.js@@
 @@MODULE:32-cloud-badge.js@@
+@@MODULE:33-client-present.js@@
 })();

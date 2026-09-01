@@ -2285,3 +2285,79 @@
       /* Onboarding tip narrower */
       .onboard-tip { width: 92vw; right: 14px; }
     }
+
+    /* ==================================================================
+       v2.97 — 客户在场模式.
+
+       Measured before this existed: 539 pieces of judgement text on one
+       screen. Every card carried "保留" and "综合分 0.95", and the stats
+       bar read "剔除 673". A client sitting beside the photographer read
+       the machine's verdict on their own photographs, with a number
+       attached, and 673 of them labelled for deletion along the top.
+
+       What is hidden is judgement. What stays is everything the
+       photographer needs to keep driving: filenames, dates, scenes,
+       the burst-peak badge (its own `.peak` class since v2.97, because
+       it borrowed `.badge.keep` and would otherwise vanish with the
+       verdicts), and every control.
+
+       `visibility: hidden` rather than `display: none` for the per-card
+       elements, so nothing reflows — the grid a client is looking at
+       must not jump when the mode is toggled mid-conversation.
+
+       The CSS is not the guard. A badge added next year would leak
+       straight through it. tests/test_client_present.py walks the live
+       DOM with the mode on and requires zero judgement text.
+       ================================================================== */
+    html.pc-client .thumb-overlay-score,
+    /* The whole radial, not just .ai-num inside it: the label "综合分"
+       is a bare text node beside the number, so hiding the number alone
+       left "综合分" on all 100 cards — the first pass measured 404 -> 101
+       and the remainder was almost entirely that word. */
+    html.pc-client .score-radial,
+    html.pc-client .ai-num,
+    html.pc-client .row4,
+    html.pc-client .row5,
+    html.pc-client .adaptive-band-chip,
+    html.pc-client .badge.keep:not(.peak),
+    html.pc-client .badge.cull,
+    html.pc-client .badge.maybe,
+    html.pc-client .location-pill-label {
+      visibility: hidden !important;
+    }
+    /* The counts along the top: "保留 4152 · 待定 244 · 剔除 673".
+       Selected by the data-stat attribute their own markup carries, not
+       by a class I assumed existed — the first draft of this rule named
+       .stat-keep, which is not in the page. */
+    html.pc-client .stats > span:has(> b[data-stat="keep"]),
+    html.pc-client .stats > span:has(> b[data-stat="maybe"]),
+    html.pc-client .stats > span:has(> b[data-stat="cull"]),
+    html.pc-client .stats > button:has(b[data-stat="disagree"]),
+    html.pc-client .stats .stat-fault {
+      display: none !important;
+    }
+    /* A client must not be able to read the verdict off the card's
+       colour either. */
+    html.pc-client .card.cull,
+    html.pc-client .card.maybe,
+    html.pc-client .card.needs-review {
+      opacity: 1 !important;
+      filter: none !important;
+      border-color: var(--border) !important;
+    }
+    #clientPresentIndicator {
+      position: fixed; left: 50%; transform: translateX(-50%);
+      bottom: 14px; z-index: 60;
+      padding: 6px 14px; border-radius: 999px;
+      background: var(--panel, #1c1d21); color: var(--fg, #e9e9ea);
+      border: 1px solid var(--border, #2a2c31);
+      font-size: 12px; letter-spacing: .02em;
+      display: flex; gap: 10px; align-items: center;
+      box-shadow: 0 6px 24px rgba(0,0,0,.28);
+    }
+    #clientPresentIndicator button {
+      font: inherit; background: transparent; color: inherit;
+      border: 1px solid var(--border, #2a2c31); border-radius: 6px;
+      padding: 2px 8px; cursor: pointer;
+    }
+    @media print { #clientPresentIndicator { display: none; } }

@@ -6034,6 +6034,82 @@
       /* Onboarding tip narrower */
       .onboard-tip { width: 92vw; right: 14px; }
     }
+
+    /* ==================================================================
+       v2.97 — 客户在场模式.
+
+       Measured before this existed: 539 pieces of judgement text on one
+       screen. Every card carried "保留" and "综合分 0.95", and the stats
+       bar read "剔除 673". A client sitting beside the photographer read
+       the machine's verdict on their own photographs, with a number
+       attached, and 673 of them labelled for deletion along the top.
+
+       What is hidden is judgement. What stays is everything the
+       photographer needs to keep driving: filenames, dates, scenes,
+       the burst-peak badge (its own `.peak` class since v2.97, because
+       it borrowed `.badge.keep` and would otherwise vanish with the
+       verdicts), and every control.
+
+       `visibility: hidden` rather than `display: none` for the per-card
+       elements, so nothing reflows — the grid a client is looking at
+       must not jump when the mode is toggled mid-conversation.
+
+       The CSS is not the guard. A badge added next year would leak
+       straight through it. tests/test_client_present.py walks the live
+       DOM with the mode on and requires zero judgement text.
+       ================================================================== */
+    html.pc-client .thumb-overlay-score,
+    /* The whole radial, not just .ai-num inside it: the label "综合分"
+       is a bare text node beside the number, so hiding the number alone
+       left "综合分" on all 100 cards — the first pass measured 404 -> 101
+       and the remainder was almost entirely that word. */
+    html.pc-client .score-radial,
+    html.pc-client .ai-num,
+    html.pc-client .row4,
+    html.pc-client .row5,
+    html.pc-client .adaptive-band-chip,
+    html.pc-client .badge.keep:not(.peak),
+    html.pc-client .badge.cull,
+    html.pc-client .badge.maybe,
+    html.pc-client .location-pill-label {
+      visibility: hidden !important;
+    }
+    /* The counts along the top: "保留 4152 · 待定 244 · 剔除 673".
+       Selected by the data-stat attribute their own markup carries, not
+       by a class I assumed existed — the first draft of this rule named
+       .stat-keep, which is not in the page. */
+    html.pc-client .stats > span:has(> b[data-stat="keep"]),
+    html.pc-client .stats > span:has(> b[data-stat="maybe"]),
+    html.pc-client .stats > span:has(> b[data-stat="cull"]),
+    html.pc-client .stats > button:has(b[data-stat="disagree"]),
+    html.pc-client .stats .stat-fault {
+      display: none !important;
+    }
+    /* A client must not be able to read the verdict off the card's
+       colour either. */
+    html.pc-client .card.cull,
+    html.pc-client .card.maybe,
+    html.pc-client .card.needs-review {
+      opacity: 1 !important;
+      filter: none !important;
+      border-color: var(--border) !important;
+    }
+    #clientPresentIndicator {
+      position: fixed; left: 50%; transform: translateX(-50%);
+      bottom: 14px; z-index: 60;
+      padding: 6px 14px; border-radius: 999px;
+      background: var(--panel, #1c1d21); color: var(--fg, #e9e9ea);
+      border: 1px solid var(--border, #2a2c31);
+      font-size: 12px; letter-spacing: .02em;
+      display: flex; gap: 10px; align-items: center;
+      box-shadow: 0 6px 24px rgba(0,0,0,.28);
+    }
+    #clientPresentIndicator button {
+      font: inherit; background: transparent; color: inherit;
+      border: 1px solid var(--border, #2a2c31); border-radius: 6px;
+      padding: 2px 8px; cursor: pointer;
+    }
+    @media print { #clientPresentIndicator { display: none; } }
   </style>
 </head>
 <body>
@@ -6805,6 +6881,16 @@
           title="切换深色 / 浅色主题(默认跟随系统)">
     <svg id="themeToggleIcon"><use href="#icon-moon"/></svg>
     <span id="themeToggleLabel">主题</span>
+  </button>
+  <!-- v2.97 — 客户在场模式.  Hides every verdict and score for the
+       minutes a client is looking at the screen beside you.  Measured
+       before it existed: 539 pieces of judgement text on one screen,
+       including "剔除 673" along the top. -->
+  <button class="theme-toggle" id="clientPresentBtn" type="button"
+          aria-pressed="false"
+          title="客户在场模式:隐藏判决与评分,给客户看(⇧C)">
+    <svg class="icon"><use href="#icon-contrast"/></svg>
+    <span>客户在场</span>
   </button>
   <button class="buckets-toggle" id="bucketsToggleBtn" type="button"
           title="交付桶 — 拖卡片到桶里整理输出">
@@ -11866,7 +11952,7 @@
     // to the badge tooltip when the burst-peak scorer produced one.
     const _peakReason = r.burst_peak_reason ? ` — ${r.burst_peak_reason}` : "";
     const peakBadge = (r.is_burst_peak && _clusterSize >= 2)
-      ? `<span class="badge keep" title="此连拍组的最佳一张(共 ${_clusterSize} 张)${esc(_peakReason)}" `
+      ? `<span class="badge keep peak" title="此连拍组的最佳一张(共 ${_clusterSize} 张)${esc(_peakReason)}" `
         + `style="background:linear-gradient(90deg,#d4a843,#b88a2e);color:#171717">`
         + `<svg class="icon icon--sm"><use href="#icon-trophy"/></svg>`
         + `<span>连拍峰值</span></span>`
@@ -19705,7 +19791,104 @@
     });
   });
 })();
+    (function setupClientPresent() {
+      // ==================================================================
+      // v2.97 — 客户在场模式.
+      //
+      // Measured before building this: 539 pieces of judgement text on a
+      // single screen. Every card carries "保留" and "综合分 0.95"; the
+      // stats bar reads "保留 4152 · 待定 244 · 剔除 673".
+      //
+      // A client sitting beside the photographer reads the machine's
+      // verdict on their own wedding photographs, and a number on each
+      // one. It turns choosing pictures into defending them — "why is
+      // that one only 0.62?" — and 673 of their photographs are labelled
+      // 剔除 on a bar at the top of the screen.
+      //
+      // This hides judgement, not information. Filenames, dates, scenes,
+      // the burst-peak badge and every navigation control stay: the
+      // photographer is still driving, and needs to.
+      //
+      // The mode PERSISTS. A reload with the client still in the room
+      // must not put the scores back, and the indicator exists so the
+      // photographer cannot forget it is on and wonder later where their
+      // numbers went.
+      //
+      // The guard for this is NOT the CSS — a badge added next year would
+      // leak. It is tests/test_client_present.py, which walks the live
+      // DOM for judgement text with the mode on and requires zero.
+      // ==================================================================
+      const KEY = "pixcull_client_present";
+      const root = document.documentElement;
+
+      function _apply(on) {
+        root.classList.toggle("pc-client", !!on);
+        const btn = document.getElementById("clientPresentBtn");
+        if (btn) {
+          btn.setAttribute("aria-pressed", on ? "true" : "false");
+          btn.title = on
+            ? "客户在场模式:已隐藏全部判决与评分(⇧C 退出)"
+            : "客户在场模式:隐藏判决与评分,给客户看(⇧C)";
+        }
+        const ind = document.getElementById("clientPresentIndicator");
+        if (ind) ind.hidden = !on;
+      }
+
+      function _toggle() {
+        const next = !root.classList.contains("pc-client");
+        try { localStorage.setItem(KEY, next ? "1" : "0"); } catch (_e) {}
+        _apply(next);
+      }
+
+      let stored = null;
+      try { stored = localStorage.getItem(KEY); } catch (_e) {}
+      // The class goes on <html> immediately, so a restored session never
+      // paints the verdicts for a frame in front of the client.
+      root.classList.toggle("pc-client", stored === "1");
+
+      // The button and the indicator sit AFTER this script in the
+      // document, so they do not exist yet. Binding here silently did
+      // nothing on a reload: the mode came back and the indicator did
+      // not, which is the worse half — the photographer loses the only
+      // sign that their numbers are hidden on purpose.
+      function _wire() {
+        _apply(root.classList.contains("pc-client"));
+        document.getElementById("clientPresentBtn")
+          ?.addEventListener("click", _toggle);
+        document.getElementById("clientPresentExit")
+          ?.addEventListener("click", _toggle);
+      }
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", _wire, {once: true});
+      } else {
+        _wire();
+      }
+
+      document.addEventListener("keydown", (e) => {
+        // Shift+C. Not a bare letter: the cull loop uses single keys and
+        // a stray keystroke in front of a client must not re-expose the
+        // verdicts.
+        if (e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey
+            && (e.key === "C" || e.code === "KeyC")) {
+          const t = e.target;
+          const typing = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA"
+                               || t.isContentEditable);
+          if (typing) return;
+          e.preventDefault();
+          _toggle();
+        }
+      });
+
+      window.PixCullClientPresent = { toggle: _toggle, isOn: () =>
+        root.classList.contains("pc-client") };
+    })();
 })();
 </script>
+<!-- The photographer must not forget the mode is on and wonder later
+     where their numbers went. -->
+<div id="clientPresentIndicator" hidden>
+  <span>客户在场模式 · 判决与评分已隐藏</span>
+  <button type="button" id="clientPresentExit">退出</button>
+</div>
 </body>
 </html>
