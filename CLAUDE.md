@@ -285,6 +285,15 @@ machine loads; back-to-back with only the server files swapped, v2.84
 gives 1410 ms and HEAD 1398 ms.  The harness now flags a wide spread.
 Warm TTFB is stable to ~3% and is safe to quote.
 
+**Next block: `docs/ROADMAP-v3.1-v3.6-charter.md`** — six versions read out
+of the deep competitive research at the level of the individual product
+entry, after the fact-check, not out of its summary.  The research pass had
+written `confidence: verified` on 美图云修, 像素蛋糕 and Capture One; the
+verification pass overturned two of the three, and the worst claim was ours
+(an unsourced "they require cloud upload, we are local" contrast).  Four of
+the six items can legitimately close as *measured and declined*; none may
+close on someone having read the code and formed an opinion.
+
 **Five versions are OPEN and cannot close without a human** — v2.80
 (advice quality, needs raters who are photographers and not the author),
 v2.83 (personalisation, needs corrections across two shoots), v2.88
