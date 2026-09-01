@@ -3029,6 +3029,16 @@
       window._pcCardObserver = io;
       window._pcShimmerObserver = shimmerIo;
     }
+
+    // v3.0 — one post-render hook, so a module that decorates cards does
+    // not need its own MutationObserver on the grid. That is the shape
+    // that froze the page in v2.68: an observer whose own writes queued
+    // more records for itself. Listeners here run once per render and
+    // only touch classList, which the materialising observer (childList
+    // only) cannot see.
+    try {
+      document.dispatchEvent(new CustomEvent("pixcull:rendered"));
+    } catch (_e) { /* no listeners is the normal case */ }
   }
   render();
 
@@ -9545,4 +9555,5 @@
 @@MODULE:31-webrtc.js@@
 @@MODULE:32-cloud-badge.js@@
 @@MODULE:33-client-present.js@@
+@@MODULE:34-client-picks.js@@
 })();

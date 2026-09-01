@@ -151,3 +151,117 @@ def test_an_old_manifest_without_a_run_still_parses(tmp_path):
     man = {"schema": "pixcull.proof_manifest/v1", "n": 2,
            "by_index": {"1": "a.jpg", "2": "b.jpg"}, "labels": {}}
     assert man.get("run_output", "") == ""
+
+
+# ------------------------------------------------------- the on-site path
+
+def _code_only(path: Path) -> str:
+    import ast as _ast
+    text = path.read_text(encoding="utf-8")
+    if path.suffix == ".py":
+        docs = set()
+        for node in _ast.walk(_ast.parse(text)):
+            if isinstance(node, (_ast.Module, _ast.ClassDef,
+                                 _ast.FunctionDef, _ast.AsyncFunctionDef)):
+                d = _ast.get_docstring(node, clean=False)
+                if d:
+                    docs.add(d)
+        body = "\n".join("" if l.lstrip().startswith("#") else l.split("#", 1)[0]
+                         for l in text.splitlines())
+        for d in docs:
+            body = body.replace(d, "")
+        return body
+    return "\n".join("" if l.lstrip().startswith("//") else l.split("//", 1)[0]
+                     for l in text.splitlines())
+
+
+ROOT = Path(__file__).resolve().parents[1] / "pixcull"
+SRV = ROOT / "report" / "serve_app.py"
+MOD = ROOT / "report" / "templates" / "src" / "modules" / "34-client-picks.js"
+JS = ROOT / "report" / "templates" / "src" / "results.js"
+BUILT = ROOT / "report" / "templates" / "results.html"
+
+
+def test_the_endpoint_writes_to_the_pick_file_not_the_annotations():
+    code = _code_only(SRV)
+    i = code.find("def _handle_client_pick")
+    assert i > 0
+    body = code[i:i + 2600]
+    assert "client_picks import record" in body
+    assert "annotations" not in body, \
+        "the on-site handler touches annotations.jsonl"
+
+
+def test_the_endpoint_guards_the_filename():
+    """It joins onto a run's output dir; the v2.76 traversal guard applies."""
+    code = _code_only(SRV)
+    i = code.find("def _handle_client_pick")
+    body = code[i:i + 2600]
+    j = body.find("_safe_photo_name")
+    k = body.find("client_picks import record")
+    assert 0 < j < k, "the filename reaches the writer before it is checked"
+
+
+def test_picks_are_not_folded_into_the_results_cache():
+    """The results cache is keyed on scores.csv and annotations.jsonl
+    mtimes. A third input is a fourth way to serve a stale page, and the
+    picks need none of it — they are fetched separately."""
+    code = _code_only(SRV)
+    i = code.find("def _build_results_uncached")
+    body = code[i:i + 12000]
+    assert "client_picks" not in body
+
+
+def test_the_marker_is_not_a_verdict_colour():
+    """It is a different person answering a different question. Reading
+    as `keep` would be worse than not showing it."""
+    css = (ROOT / "report" / "templates" / "src"
+           / "results.css").read_text(encoding="utf-8")
+    i = css.find(".card.client-picked")
+    assert i > 0
+    block = css[i:i + 600]
+    assert "--c-info" in block, "not using the design system's info token"
+    for verdict in ("--keep", "--cull", "--maybe", "--ok", "--bad"):
+        assert verdict not in block, (
+            f"the client marker uses {verdict}, so one person's answer "
+            "looks like the other's")
+    import re as _re
+    assert not _re.search(r"#[0-9a-fA-F]{3,8}\b", block), (
+        "a raw hex here is what the palette guard exists to catch")
+
+
+def test_a_failed_save_puts_the_marker_back():
+    """A pick that looks recorded and is not is worse than one that
+    visibly failed — the client is watching the screen."""
+    js = _code_only(MOD)
+    # Anchored on the POST, not on the first `catch` in the file. That
+    # one is in _load, and the 400 characters after it happen to contain
+    # _toggle's OPTIMISTIC update — which has both calls in it, so the
+    # first version of this test passed with the rollback deleted.
+    post = js.find("`/client_pick/${")
+    assert post > 0, "the POST is gone"
+    catch = js.find("catch (_e)", post)
+    assert catch > post
+    tail = js[catch:catch + 400]
+    assert "PICKED.delete" in tail and "PICKED.add" in tail, (
+        "a failed save leaves the marker on screen; the client is "
+        "watching and believes it was recorded")
+
+
+def test_the_module_repaints_after_a_render_without_its_own_observer():
+    """The grid re-renders on every filter change and the class is not in
+    the card markup. A MutationObserver on the grid is the shape that
+    froze the page in v2.68, so there is one shared post-render event."""
+    js = _code_only(MOD)
+    assert "pixcull:rendered" in js
+    assert "MutationObserver" not in js
+    main = _code_only(JS)
+    assert 'CustomEvent("pixcull:rendered")' in main, \
+        "the module listens for an event nothing dispatches"
+
+
+def test_the_built_page_carries_both_halves():
+    built = _code_only(BUILT)
+    assert 'CustomEvent("pixcull:rendered")' in built
+    assert "client-picked" in built
+    assert "/client_pick/" in built

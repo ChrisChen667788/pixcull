@@ -2361,3 +2361,20 @@
       padding: 2px 8px; cursor: pointer;
     }
     @media print { #clientPresentIndicator { display: none; } }
+
+    /* v3.0 — 客户选.  A ring and a corner tag, in a colour that is not
+       any verdict colour: this is a different person answering a
+       different question, and it must not read as keep. Deliberately
+       visible in 客户在场模式 — that is when it is used, and "客户选"
+       carries no judgement to hide. */
+    .card.client-picked {
+      outline: 2px solid var(--c-info);
+      outline-offset: -2px;
+    }
+    .card.client-picked::after {
+      content: "客户选";
+      position: absolute; right: 6px; bottom: 6px;
+      background: var(--c-info); color: var(--bg);
+      font-size: 11px; line-height: 1; padding: 4px 7px;
+      border-radius: 999px; pointer-events: none;
+    }

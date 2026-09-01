@@ -5333,6 +5333,7 @@ class _Handler(BaseHTTPRequestHandler):
         ("/results_rows/", "_serve_runs_rows", "tail", ()),
         ("/rubric/", "_serve_rubric", "tail", ()),
         ("/annotation/", "_serve_annotation", "tail", ()),
+        ("/client_picks/", "_serve_client_picks", "tail", ()),
         ("/next_to_label/", "_serve_next_to_label", "tail", ()),
     )
 
@@ -5530,6 +5531,8 @@ class _Handler(BaseHTTPRequestHandler):
             return self._handle_apply_style_guide(mid)
         if path.startswith("/annotation/"):
             return self._handle_save_annotation(path[len("/annotation/"):])
+        if path.startswith("/client_pick/"):
+            return self._handle_client_pick(path[len("/client_pick/"):])
         if path.startswith("/face_clusters/") and path.endswith("/label"):
             # V22.1 — update a per-cluster label for a run.
             mid = path[len("/face_clusters/"):-len("/label")]
@@ -11190,6 +11193,76 @@ class _Handler(BaseHTTPRequestHandler):
                     ).encode("utf-8"))
                     return
         self.send_error(404, f"no rubric for {fn}")
+
+    def _serve_client_picks(self, rel: str) -> None:
+        """GET /client_picks/<run_id> — the filenames the client chose.
+
+        Fetched separately rather than folded into the results payload,
+        so a new pick shows up without any interaction with the results
+        cache. That cache is keyed on scores.csv and annotations.jsonl
+        mtimes; adding a third input is a fourth way to serve a stale
+        page, and this needs none of it.
+        """
+        run_id = rel.strip("/").split("/")[0]
+        run = _get_run(run_id) or _reload_run_from_disk(run_id)
+        if run is None:
+            self.send_error(404, "no such run")
+            return
+        try:
+            from pixcull.client_picks import load, summary
+            out = Path(run["output_dir"])
+            recs = load(out)
+            body = {"picked": sorted(fn for fn, r in recs.items()
+                                     if r.get("picked")),
+                    "summary": summary(out)}
+        except Exception as exc:  # noqa: BLE001
+            _dbg("client_picks", exc, run_id)
+            body = {"picked": [], "summary": {"n_picked": 0}}
+        self._send_json(200, json.dumps(body, ensure_ascii=False).encode("utf-8"))
+
+    def _handle_client_pick(self, rel: str) -> None:
+        """POST /client_pick/<run_id>/<filename> with {picked: bool}.
+
+        v3.0 — the on-site half. The client is sitting beside the
+        photographer pointing at the screen, and what they point at has
+        to be recorded without becoming the photographer's own verdict.
+
+        It writes to client_picks.jsonl, never to annotations.jsonl:
+        that index is latest-wins on the WHOLE record, so one line of the
+        client's opinion would erase the photographer's label from every
+        reader of it.
+        """
+        if "/" not in rel:
+            self._reject_upload(400, "expected run_id/filename")
+            return
+        run_id, fn = rel.split("/", 1)
+        fn = unquote(fn)
+        if not _safe_photo_name(fn):
+            self._reject_upload(400, "bad filename")
+            return
+        run = _get_run(run_id) or _reload_run_from_disk(run_id)
+        if run is None:
+            self._reject_upload(404, "no such run")
+            return
+        try:
+            clen = int(self.headers.get("Content-Length") or 0)
+            params = json.loads(self.rfile.read(clen).decode("utf-8")) if clen else {}
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
+            self._reject_upload(400, "expected JSON body")
+            return
+        picked = bool(params.get("picked", True))
+        try:
+            from pixcull.client_picks import record, picked_filenames
+            record(Path(run["output_dir"]), [fn],
+                   source=str(params.get("source") or "on-site"),
+                   picked=picked)
+            total = len(picked_filenames(Path(run["output_dir"])))
+        except Exception as exc:  # noqa: BLE001
+            self._reject_upload(500, f"{type(exc).__name__}: {exc}")
+            return
+        self._send_json(200, json.dumps(
+            {"ok": True, "filename": fn, "picked": picked, "n_picked": total},
+            ensure_ascii=False).encode("utf-8"))
 
     def _handle_save_annotation(self, rel: str) -> None:
         """POST /annotation/<run_id>/<filename> with body
