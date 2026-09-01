@@ -47,6 +47,7 @@ class ProofItem:
     filename: str          # the run-unique name (see pixcull.photo_id)
     label: str             # what the client sees
     rel: str               # path to the derivative, relative to the sheet
+    index: int = 0         # v2.98 — burned into the picture, 1-based
 
 
 def safe_slug(name: str) -> str:
@@ -90,7 +91,8 @@ def build_items(rows: list[dict], *, only: str = "keep") -> list[ProofItem]:
         seen.add(slug)
         out.append(ProofItem(filename=fn,
                              label=str(r.get("orig_filename") or fn),
-                             rel=f"photos/{slug}.jpg"))
+                             rel=f"photos/{slug}.jpg",
+                             index=len(out) + 1))
     return out
 
 
@@ -110,7 +112,7 @@ def render_gallery(items: list[ProofItem], *, title: str,
 
 def write_proof_sheet(rows: list[dict], dest: Path, *, resolve,
                       title: str = "", contact: str = "", webhook: str = "",
-                      only: str = "keep") -> dict:
+                      only: str = "keep", number: bool = True) -> dict:
     """Write the whole sheet. ``resolve(filename) -> Path | None``.
 
     Returns counts. A frame whose original cannot be found is REPORTED,
@@ -140,6 +142,8 @@ def write_proof_sheet(rows: list[dict], dest: Path, *, resolve,
                     h = round(im.height * PROOF_WIDTH / im.width)
                     im = im.resize((PROOF_WIDTH, h), Image.LANCZOS)
                 _stamp(im, ImageDraw, title or "PROOF")
+                if number:
+                    _burn_index(im, ImageDraw, it.index)
                 im.save(dest / it.rel, "JPEG", quality=82, optimize=True)
             written += 1
         except Exception as exc:  # noqa: BLE001
@@ -150,8 +154,91 @@ def write_proof_sheet(rows: list[dict], dest: Path, *, resolve,
     (dest / "index.html").write_text(
         render_gallery(kept, title=title or dest.name,
                        contact=contact, webhook=webhook), encoding="utf-8")
+
+    # v2.98 — the manifest is the authority on what number means what.
+    #
+    # It must never be recomputed from the run: cull one more frame, or
+    # re-export after a correction, and every number after that point
+    # shifts by one. The client is looking at the pictures they were
+    # sent, which carry the OLD numbers burned into them, and a
+    # recomputed mapping would silently hand back the wrong photographs.
+    #
+    # `digest` fingerprints the exported set so a reply can be checked
+    # against the export it actually came from.
+    manifest = {
+        "schema": "pixcull.proof_manifest/v1",
+        "title": title or dest.name,
+        "digest": _digest(kept),
+        "n": len(kept),
+        "by_index": {str(i.index): i.filename for i in kept},
+        "labels": {str(i.index): i.label for i in kept},
+    }
+    (dest / "picks_manifest.json").write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=1), encoding="utf-8")
     return {"selected": len(items), "written": written,
-            "missing": missing, "dest": str(dest)}
+            "missing": missing, "dest": str(dest),
+            "manifest": str(dest / "picks_manifest.json"),
+            "digest": manifest["digest"]}
+
+
+def _digest(items: list[ProofItem]) -> str:
+    import hashlib
+    h = hashlib.sha256()
+    for i in items:
+        h.update(f"{i.index}\x00{i.filename}\x00".encode())
+    return h.hexdigest()[:12]
+
+
+_SEP = re.compile(r"[\s,，、;;；/|]+")
+_RANGE = re.compile(r"^(\d+)\s*[-~—–至到]\s*(\d+)$")
+_NOISE = re.compile(r"第|张|号|图|片|no\.?|#", re.I)
+
+
+def parse_picks(text: str, *, n: int) -> tuple[list[int], list[str]]:
+    """Turn what the client actually typed into indices.
+
+    Returns (indices, problems). Clients write "3、7、12", "第3张 第7张",
+    "3-7", "3,7,12。" and every mixture. The parser is forgiving about
+    shape and strict about range: a number outside 1..n is REPORTED, not
+    dropped, because a silently ignored "17" on a 12-photo set is a
+    photograph the client asked for and will not get.
+    """
+    problems: list[str] = []
+    out: list[int] = []
+    seen: set[int] = set()
+    cleaned = _NOISE.sub(" ", str(text or ""))
+    for tok in _SEP.split(cleaned):
+        tok = tok.strip().strip(".。()()[]【】")
+        if not tok:
+            continue
+        m = _RANGE.match(tok)
+        if m:
+            a, b = int(m.group(1)), int(m.group(2))
+            if a > b:
+                a, b = b, a
+            span = list(range(a, b + 1))
+            if len(span) > n:
+                problems.append(f"{tok!r} spans more than the {n} sent")
+                continue
+            for v in span:
+                if 1 <= v <= n:
+                    if v not in seen:
+                        seen.add(v)
+                        out.append(v)
+                else:
+                    problems.append(f"{v} is outside 1..{n}")
+            continue
+        if tok.isdigit():
+            v = int(tok)
+            if 1 <= v <= n:
+                if v not in seen:
+                    seen.add(v)
+                    out.append(v)
+            else:
+                problems.append(f"{v} is outside 1..{n}")
+        else:
+            problems.append(f"could not read {tok!r}")
+    return out, problems
 
 
 def _watermark_font(px: int):
@@ -176,6 +263,42 @@ def _watermark_font(px: int):
             continue
     from PIL import ImageFont as _IF
     return _IF.load_default()
+
+
+def _burn_index(im, ImageDraw, n: int) -> None:
+    """Burn the reference number into the picture, top-left.
+
+    v2.98 — the client refers to a photograph by SOMETHING, and over
+    WeChat the only things that survive are the pixels. A filename in a
+    caption is lost the moment the album reorders, the client screenshots
+    a subset, forwards a few to their mother, or two of the sends fail.
+    Position is not an identifier; a number burned into the frame is.
+
+    Sized to the image (about 9% of its height) so it is still readable
+    in a chat thumbnail, on a dark plate so it survives on a bright sky,
+    and top-left because that is where both Chinese and English readers
+    start.
+    """
+    d = ImageDraw.Draw(im, "RGBA")
+    size = max(28, int(im.height * 0.09))
+    font = _watermark_font(size)
+    label = str(n)
+    try:
+        box = d.textbbox((0, 0), label, font=font)
+        tw, th = box[2] - box[0], box[3] - box[1]
+    except Exception:  # noqa: BLE001
+        tw, th = size * len(label), size
+    pad = max(8, size // 4)
+    inset = max(6, size // 5)
+    # Fully opaque, and drawn after the watermark. At alpha 190 the
+    # tiled mark showed through and ran across the digits, which is
+    # exactly the legibility this exists to guarantee. Inset from the
+    # corner so it reads as a badge rather than a crop artifact.
+    d.rectangle([inset, inset,
+                 inset + tw + pad * 2, inset + th + pad * 2],
+                fill=(0, 0, 0, 255))
+    d.text((inset + pad, inset + pad), label, font=font,
+           fill=(255, 255, 255, 255))
 
 
 def _stamp(im, ImageDraw, text: str) -> None:

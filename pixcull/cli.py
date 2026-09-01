@@ -337,6 +337,72 @@ def proof_sheet(
             console.print(f"    … and {len(res['missing']) - 5} more")
 
 
+@app.command(name="picks")
+def picks(
+    proof_dir: Path = typer.Argument(
+        ..., exists=True, file_okay=False,
+        help="The folder `pixcull proof-sheet` wrote"),
+    reply: str = typer.Argument(
+        ..., help="What the client sent back, e.g. \"3、7、12\" or \"第3张 第7张\""),
+    out: Optional[Path] = typer.Option(
+        None, "--out", "-o",
+        help="Write the picked filenames here (default: <proof_dir>/client_picks.json)"),
+) -> None:
+    """Turn the client's reply into filenames.
+
+    v2.98 — the numbers are burned into the pictures the client is
+    looking at, and the mapping comes from the manifest written when
+    those pictures were exported. It is never recomputed from the run:
+    cull one more frame and every number after it shifts, while the
+    client is still holding the old ones.
+    """
+    import json as _json
+    from pixcull.export.proof_sheet import parse_picks
+
+    man_path = proof_dir / "picks_manifest.json"
+    if not man_path.is_file():
+        console.print(
+            f"[red]No picks_manifest.json in {proof_dir}[/red] — that folder "
+            "was not written by `pixcull proof-sheet`, or predates v2.98.")
+        raise typer.Exit(code=1)
+    man = _json.loads(man_path.read_text(encoding="utf-8"))
+    by_index = man.get("by_index") or {}
+    labels = man.get("labels") or {}
+    n = int(man.get("n") or len(by_index))
+
+    idx, problems = parse_picks(reply, n=n)
+    if not idx and not problems:
+        console.print("[yellow]Nothing recognised in that reply.[/yellow]")
+        raise typer.Exit(code=1)
+
+    picked = [(i, by_index.get(str(i), ""), labels.get(str(i), "")) for i in idx]
+    table = Table(title=f"客户选了 {len(picked)} 张 · {man.get('title', '')}")
+    table.add_column("#", justify="right")
+    table.add_column("客户看到的名字")
+    table.add_column("run 内的文件名")
+    for i, fn, lab in picked:
+        table.add_row(str(i), lab or "—", fn or "[red]不在清单里[/red]")
+    console.print(table)
+
+    if problems:
+        # Never silent: a dropped number is a photograph the client asked
+        # for and will not get.
+        console.print("[yellow]这些没能用上[/yellow] —— 回去问一句比猜一次便宜:")
+        for p_ in problems:
+            console.print(f"    {p_}")
+
+    dest = out or (proof_dir / "client_picks.json")
+    dest.write_text(_json.dumps({
+        "schema": "pixcull.client_picks/v1",
+        "proof_digest": man.get("digest"),
+        "reply": reply,
+        "picked": [{"index": i, "filename": fn, "label": lab}
+                   for i, fn, lab in picked],
+        "unresolved": problems,
+    }, ensure_ascii=False, indent=1), encoding="utf-8")
+    console.print(f"[green]✓[/green] {dest}")
+
+
 @app.command(name="contact-sheet")
 def contact_sheet(
     run_dir: Path = typer.Argument(
