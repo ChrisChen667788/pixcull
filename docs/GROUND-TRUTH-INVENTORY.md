@@ -3,9 +3,29 @@
 The roadmap planned to publish an accuracy figure from "the 608-row correction
 set". This is the audit of what that set actually contains.
 
+## Corrected 2026-09-01 — "no human looked" was the wrong way to say it
+
+The first edition of this page said there are no human labels on this
+machine. That is unfair to the work that was done and it misstates the
+problem.
+
+A person did look at all 608 photographs, one at a time, over days. What
+they were shown was the system's verdict, and what they recorded was
+agreement with it. `source: "auto"` is the tell: the label equals the
+decision because the labeller was endorsing rather than judging.
+
+So the labels carry a real human's attention and **no independent
+signal**. That is why measuring against them returns exactly 100.0% —
+not because nobody looked, but because the answer was on screen while
+they looked. It is the harder version of the problem, and the reason
+`pixcull m3 label` exists and shows a bare card.
+
+The inventory below stands; read "human-produced" as "produced
+independently of the system's answer".
+
 ## The finding
 
-**There are no human labels on this machine.**
+**There is no independently-produced ground truth on this machine.**
 
 | file | records | provenance |
 |---|---|---|
