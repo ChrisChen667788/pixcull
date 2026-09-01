@@ -101,6 +101,44 @@ def audit_labels(paths) -> LabelInventory:
     return inv
 
 
+def load_blind_sheet(path) -> list[dict]:
+    """Read what `pixcull m3 label` saved into label records.
+
+    v2.94 — the blind sheet writes one object with a `verdicts` map, not
+    one record per photograph, so `audit_labels` saw a file with no label
+    records in it at all. The provenance guard and the only tool that
+    produces legitimate human labels could not talk to each other.
+
+    `source` is taken from the FILE, never assumed. A sheet saved before
+    v2.94 has no such field and its rows come back "unknown", which is
+    the correct answer: nothing in that file says a person made it, and
+    this module's whole job is to stop that being assumed.
+    """
+    import json as _json
+    from pathlib import Path as _Path
+
+    p = _Path(path)
+    try:
+        doc = _json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, _json.JSONDecodeError):
+        return []
+    if not isinstance(doc, dict):
+        return []
+    verdicts = doc.get("verdicts")
+    if not isinstance(verdicts, dict):
+        return []
+    src = doc.get("source")
+    out = []
+    for fn, label in verdicts.items():
+        rec = {"filename": fn, "overall_label": label,
+               "selection": doc.get("selection"),
+               "reviewed_at": doc.get("reviewed_at")}
+        if src:
+            rec["source"] = src
+        out.append(rec)
+    return out
+
+
 class CircularMeasurement(RuntimeError):
     """Raised when the 'truth' being measured against is model output."""
 

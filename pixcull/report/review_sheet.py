@@ -97,13 +97,31 @@ def _blind_card(i: int, it: dict[str, Any]) -> str:
     no_v = html.escape(str(it.get("no_value") or "cull"))
     yes_t = html.escape(str(it.get("yes") or "留下 · keep"))
     no_t = html.escape(str(it.get("no") or "删掉 · cull"))
+    # v2.94 — the third button is OFF by default and deliberately so.
+    #
+    # Two buttons force a decision. A shrug is the easiest thing to click
+    # and a label set full of them measures nothing, which is why this
+    # card has had two since it was written.
+    #
+    # But v2.89 needs the boundary between keep and maybe to be visible,
+    # and it cannot be: no label set on this machine contains a single
+    # `maybe` truth, so the parameter that creates them has nothing to be
+    # fitted against. That question needs a middle button and no other
+    # question does, so it is opt-in and the file records which kind of
+    # pass it was.
+    mid_v = it.get("mid_value")
+    mid_t = html.escape(str(it.get("mid") or "拿不准 · maybe"))
+    mid_attr = f' data-mid="{html.escape(str(mid_v))}"' if mid_v else ""
+    mid_btn = (f'<button class="mid" onclick="mark({i},2)">{mid_t}</button>'
+               if mid_v else "")
     return f'''<article class="card blind" data-fn="{html.escape(it['fn'])}"
-         data-yes="{yes_v}" data-no="{no_v}">
+         data-yes="{yes_v}" data-no="{no_v}"{mid_attr}>
   <img src="{thumbnail_data_uri(Path(it['path']))}" alt="">
   <div class="meta">
     <div class="hd"><code>#{i + 1}</code></div>
     <div class="judge">
       <button class="ok"  onclick="mark({i},1)">{yes_t}</button>
+      {mid_btn}
       <button class="bad" onclick="mark({i},0)">{no_t}</button>
       <span class="mk" id="mk{i}"></span>
     </div>
@@ -236,12 +254,18 @@ const SELECTION=%(selection)s;
 // produced an UNWEIGHTED figure from an over-sampled tail.
 const STRATA=%(strata)s;
 const R=JSON.parse(localStorage.getItem(KEY)||'{}');
+// v2.94 — R[i] carries 1, 0 or 2. Two was a boolean and three is not,
+// so every reader of R has to say which it means; the mapping lives in
+// _label() and nowhere else.
+function _label(c,v){ return v===2 ? (c.dataset.mid||'maybe')
+                    : (v ? c.dataset.yes : c.dataset.no); }
 function paint(i){
-  const ok=R[i], c=document.querySelectorAll('.card')[i], m=document.getElementById('mk'+i);
-  if(ok===undefined) return;
-  c.classList.remove('done-ok','done-bad'); c.classList.add(ok?'done-ok':'done-bad');
-  m.textContent=(ok?'\\u2713 ':'\\u2717 ')+(ok?c.dataset.yes:c.dataset.no);
-  m.style.color=ok?'var(--ok)':'var(--bad)';
+  const v=R[i], c=document.querySelectorAll('.card')[i], m=document.getElementById('mk'+i);
+  if(v===undefined) return;
+  c.classList.remove('done-ok','done-bad','done-mid');
+  c.classList.add(v===2?'done-mid':(v?'done-ok':'done-bad'));
+  m.textContent=(v===2?'\\u2013 ':(v?'\\u2713 ':'\\u2717 '))+_label(c,v);
+  m.style.color=v===2?'var(--dim,#8b8d92)':(v?'var(--ok)':'var(--bad)');
 }
 function tick(){
   const done=Object.keys(R).length;
@@ -261,9 +285,17 @@ function payload(){
   // picked BECAUSE the systems disagreed cannot: they sample the rule
   // stack only where it is weakest. Without this field the reader has to
   // guess, and the flattering guess is the wrong one.
+  // v2.94 — `source` rides along because the guard that decides whether
+  // these rows may be used as ground truth cannot see how they were
+  // made. Without it, v2.88's provenance check reads a genuine blind
+  // pass as "unknown" and refuses it — the one tool in the project that
+  // produces legitimate human labels, producing them in the one shape
+  // the guard rejects. Never assumed upward: a file without this field
+  // is still refused, which is correct for every other file on the disk.
   const out={reviewed_at:new Date().toISOString(),
+             source:"human",tool:"pixcull m3 label",blind:SELECTION==="blind",
              selection:SELECTION,strata:STRATA,verdicts:{}};
-  cards.forEach((c,i)=>{ if(i in R) out.verdicts[c.dataset.fn]=R[i]?c.dataset.yes:c.dataset.no; });
+  cards.forEach((c,i)=>{ if(i in R) out.verdicts[c.dataset.fn]=_label(c,R[i]); });
   return out;
 }
 // The download is best-effort and the visible copy is the guarantee.
