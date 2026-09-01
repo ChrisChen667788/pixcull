@@ -1,0 +1,354 @@
+{
+ "produced": "2026-09-01",
+ "edition": "2026Q3",
+ "n": 43,
+ "fact_checked": 2,
+ "fact_check_survived": 2,
+ "note": "2026-09-01 refresh: no competitor or model movement dated after 2026-08-31 across all sources.json entries (platform vendors, intl culling, China, models). Two entries added that PRE-DATE the 2026-08-31 edition and were missed by that scan; neither is new movement. Both fact-checked with a refuting pass and survived on date/existence, though hands-on and processing-mode verification is still partial. The 2026-08-31 blanket 'treat first-pass scan output as unverified' caveat still stands.",
+ "entries": [
+  {
+   "name": "9-dimension agentic IQA pattern (NTIRE 2026 VCIP Pi Group)",
+   "flagship_capability": "Per-dimension specialist routing: each photographic quality axis (sharpness, noise, colour, dynamic range, composition, etc.) is assessed by the most accurate sub-model for that dimension, with results aggregated by an agent planner into a unified written rationale. Independent upgradeability: swapping the specialist for one axis does not require retraining the whole system.",
+   "underlying_model": "not disclosed (paper does not name the base models used for each of the nine dimension tools)",
+   "evidence_url": "https://arxiv.org/html/2604.12512v1",
+   "evidence_date": "2026-04",
+   "confidence": "verified"
+  },
+  {
+   "name": "Adobe Bridge CC",
+   "flagship_capability": "Deep integration with Photoshop and Camera Raw via double-click; handles formats that Lightroom does not ingest; no subscription beyond the Creative Cloud plan the photographer already holds.",
+   "underlying_model": "not disclosed — no AI culling model; Quick Actions use Adobe Express AI for edits only",
+   "evidence_url": "https://www.eyeonannapolis.net/2026/08/imagen-culling-vs-bridge-cc-is-adobe-lagging-in-2026/",
+   "evidence_date": "2026-08",
+   "confidence": "verified"
+  },
+  {
+   "name": "Adobe Firefly AI Agent (multi-step Creative Cloud orchestration)",
+   "flagship_capability": "End-to-end creative task completion—search library, select best images, apply consistent develop settings, export to multiple formats—from a single natural-language brief, with no manual intervention at each step; embedded directly inside the Creative Cloud suite photographers already use.",
+   "underlying_model": "not disclosed (Adobe proprietary backend)",
+   "evidence_url": "https://news.adobe.com/news/2026/04/adobe-new-creative-agent",
+   "evidence_date": "2026-04",
+   "confidence": "verified"
+  },
+  {
+   "name": "Adobe Lightroom Assisted Culling",
+   "flagship_capability": "Zero additional app, account, or cost for the majority of professional photographers already on Creative Cloud — AI culling is available inside the catalog the photographer already uses, with Face View isolating each person and scoring Eyes Open and Eye Sharpness at a glance, and automatic stacking surfacing the best frame from near-duplicate groups.",
+   "underlying_model": "Adobe Sensei (proprietary; no further architecture details disclosed); June 2026 update also integrates Topaz Labs Noise-Aware Sharpen model for AI Sharpen",
+   "evidence_url": "https://petapixel.com/2026/06/15/adobe-adds-more-user-control-to-ai-features-inside-lightroom-and-photoshop/",
+   "evidence_date": "2026-06-15",
+   "confidence": "verified"
+  },
+  {
+   "name": "Adobe Lightroom — Assisted Culling (GA, Classic + cloud app)",
+   "flagship_capability": "Face View: per-person breakdown of eye-open probability and eye-sharpness score for every face detected in a frame. Smart Stacking groups near-identical burst frames and promotes the top pick. Covers portrait/headshot work at scale — a 3,000-image shoot can be reduced to selects in 15-20 minutes of cloud processing time.",
+   "underlying_model": "not disclosed — Adobe proprietary cloud AI; previews are uploaded to Adobe servers for inference",
+   "evidence_url": "https://blog.adobe.com/en/publish/2026/06/15/from-culling-to-compositing-new-creative-cloud-innovations-across-every-stage-of-your-workflow",
+   "evidence_date": "2026-06-15",
+   "confidence": "verified"
+  },
+  {
+   "name": "Aftershoot",
+   "flagship_capability": "End-to-end pipeline integration: cull → AI edit → AI retouch → branded client gallery and print sales, all inside one application, with no re-import or export between stages. Dynamic AI Learning in the RAW engine adapts editing profiles from the photographer's own corrections.",
+   "underlying_model": "not disclosed",
+   "evidence_url": "https://www.slrlounge.com/aftershoot-complete-photographer-workflow-platform-from-culling-to-client-galleries/",
+   "evidence_date": "2026-06",
+   "confidence": "verified"
+  },
+  {
+   "name": "Apex Culler",
+   "flagship_capability": "Shot list detection and distraction scanning alongside culling, plus a very large feature count (130+) in a one-time-payment package — potentially appealing as a Windows-native, subscription-free alternative. Could not verify these claims from primary vendor sources.",
+   "underlying_model": "not disclosed",
+   "evidence_url": "https://www.shutternoise.com/articles/ai-photo-culling-compared-2026.html",
+   "evidence_date": "2026-08",
+   "confidence": "unverified"
+  },
+  {
+   "name": "Apple Photos + Apple Intelligence (iOS 27 / macOS 27)",
+   "flagship_capability": "Fully on-device, privacy-preserving selection and editing across the entire personal photo library, requiring no subscription beyond owning an Apple device. Best Take selects the best expression across a facial burst without any cloud upload.",
+   "underlying_model": "Apple's on-device Apple Intelligence models (proprietary, not disclosed); all inference on-device via Apple Neural Engine",
+   "evidence_url": "https://www.apple.com/newsroom/2026/06/apple-intelligence-brings-powerful-ai-capabilities-into-everyday-experiences/",
+   "evidence_date": "2026-06",
+   "confidence": "verified"
+  },
+  {
+   "name": "AtelierJudge (dual-process LLM-as-Judge for creative quality)",
+   "flagship_capability": "Achieves 0.81 Spearman correlation with expert human quality ranking—close to the 0.83 human-to-human agreement ceiling—and 95.5 percent accuracy on objective constraint verification. Provides an evaluation harness for subjective aesthetic tasks at near-human reliability.",
+   "underlying_model": "not disclosed (frontier MLLM used as judge; paper does not name specific model)",
+   "evidence_url": "https://arxiv.org/html/2605.22645",
+   "evidence_date": "2026-05",
+   "confidence": "verified"
+  },
+  {
+   "name": "Canon Digital Photo Professional + Camera Connect",
+   "flagship_capability": "In-camera AI subject recognition for autofocus — tracking accuracy has materially improved across the Alpha line. DPP provides manual star ratings and color labels for post-shoot organization.",
+   "underlying_model": "not disclosed — Canon proprietary DIGIC AI (in-camera inference only)",
+   "evidence_url": "https://www.digitalcameraworld.com/features/oh-my-god-canons-in-camera-ai-is-going-to-change-everything",
+   "evidence_date": "2025",
+   "confidence": "partial"
+  },
+  {
+   "name": "Capture One 16.8 — Assisted Review (Beta)",
+   "flagship_capability": "Single-pass automatic flagging of obvious portrait rejects (closed eyes, out-of-focus eyes, black frames) without leaving the application — works on tethered live ingestion as well as existing catalogs.",
+   "underlying_model": "not disclosed",
+   "evidence_url": "https://www.captureone.com/en/explore-features/whats-new/16-8",
+   "evidence_date": "2026-05-28",
+   "confidence": "verified"
+  },
+  {
+   "name": "Claude Fable 5 and GPT-5.x as photographic critics",
+   "flagship_capability": "Multi-paragraph photographic critique covering compositional choices, subject rendering, lighting quality, background separation, and storytelling intent, drawing on photographic vocabulary encoded from training data across professional photography literature. Frontier models in 2026 agree with human reviewers roughly 85 percent of the time on subjective quality ranking, higher than inter-rater human agreement.",
+   "underlying_model": "not disclosed (Claude Fable 5 and GPT-5.x proprietary backends)",
+   "evidence_url": "https://platform.claude.com/docs/en/about-claude/models/overview",
+   "evidence_date": "2026-08",
+   "confidence": "verified"
+  },
+  {
+   "name": "DxO PhotoLab (v9+)",
+   "flagship_capability": "DeepPRIME XD AI noise reduction — widely cited as the best-in-class noise reduction for high-ISO RAW files, significantly outperforming Lightroom Denoise and Capture One Enhanced Denoise in independent tests through the period covered by search results.",
+   "underlying_model": "not disclosed — DxO proprietary CNN for DeepPRIME and for subject masking",
+   "evidence_url": "https://lifeafterphotoshop.com/dxo-photolab-9-ai-masking-tools-explained-with-examples/",
+   "evidence_date": "2025",
+   "confidence": "partial"
+  },
+  {
+   "name": "Evoto AI",
+   "flagship_capability": "Multi-model culling combined with integrated AI retouching in one product: photographers cull and retouch without switching applications. Adjustable strictness levels give creative control over the automated selection. One million+ user scale implies a broad training dataset for quality assessment.",
+   "underlying_model": "Not disclosed; described as a 'multi-model approach' analysing each scene from multiple angles",
+   "evidence_url": "https://www.evoto.ai/features/ai-culling",
+   "evidence_date": "2026-08",
+   "confidence": "verified"
+  },
+  {
+   "name": "Excire Search 2026",
+   "flagship_capability": "Fully local AI processing combined with semantic image search across the entire Lightroom library — the photographer can search by concept, keyword, or face across thousands of images without sending anything to a cloud, and apply AI culling with configurable scene grouping, focus detection, and automatic flagging within the same plugin session.",
+   "underlying_model": "not disclosed; all inference runs locally on the user's machine",
+   "evidence_url": "https://petapixel.com/2025/09/17/ai-powered-excire-search-2026-aims-to-redefine-lightroom-workflows/",
+   "evidence_date": "2025-09-17",
+   "confidence": "verified"
+  },
+  {
+   "name": "FilterPixel (DeepCull)",
+   "flagship_capability": "Genre-specific AI models via DeepCull: when importing a shoot, the photographer selects a genre and DeepCull loads a model trained specifically on that discipline, understanding genre-specific 'keeper' criteria (peak action timing in sports, emotional moments in weddings, etc.) rather than applying generic technical-quality metrics.",
+   "underlying_model": "not disclosed; trained on 'real-world working photographer output, curated by working photographers' across six genres",
+   "evidence_url": "https://filterpixel.com/blog/introducing-deepcull-memory-based-culling",
+   "evidence_date": "2026-04-04",
+   "confidence": "verified"
+  },
+  {
+   "name": "GRPO + Rubric RL training paradigm for IQA",
+   "flagship_capability": "Teaches a mid-size VLM to produce expert-quality photographic rationale and to self-improve via preference feedback, with per-dimension scoring that is independently verifiable against professional ground truth. The dual-branch answer-plus-reasoning architecture (used by the NTIRE winner) improves both accuracy and interpretability simultaneously.",
+   "underlying_model": "Qwen3-VL-8B-Instruct is the primary base used in NTIRE 2026 winning submissions",
+   "evidence_url": "https://arxiv.org/html/2604.12512v1",
+   "evidence_date": "2026-04",
+   "confidence": "verified"
+  },
+  {
+   "name": "Google Photos — AI selection and stacks",
+   "flagship_capability": "Automatic 'best of' memory creation across an entire lifetime photo library — surfaces moments with minimal user effort. Best Take uses facial-expression analysis to select the single sharpest, most-open-eyed, smiling image from a burst.",
+   "underlying_model": "Google AI (Gemini-family on-device and cloud models); specifics not publicly documented",
+   "evidence_url": "https://www.talkandroid.com/525025-discover-the-next-era-of-google-photos-ai-innovation-privacy-tips-and-everything-you-need-to-know-in-2026/",
+   "evidence_date": "2026",
+   "confidence": "verified"
+  },
+  {
+   "name": "Imagen AI",
+   "flagship_capability": "Fast track (launched June 2026): set preferences once, Imagen performs culling and full AI editing in a single uninterrupted cloud run, returning a project edited in the photographer's style and ready to deliver. This is the closest approach to a sequential agent in the current market, though it is not agentic in the planning sense — it is a fixed pipeline with user-set parameters.",
+   "underlying_model": "not disclosed",
+   "evidence_url": "https://account.imagen-ai.com/changelog/photo/",
+   "evidence_date": "2026-06-17",
+   "confidence": "verified"
+  },
+  {
+   "name": "InternVL3.5",
+   "flagship_capability": "MMMU score of 77.7 (highest open-source result as of August 2026), OCRBench 90.7, RefCOCO visual grounding 92.4, video understanding MVBench 76.5. The Visual Resolution Router halves token cost at inference time, enabling faster batch processing over large photo libraries.",
+   "underlying_model": "InternVL3.5 own backbone with Cascade RL training; vision encoder details not disclosed in the paper",
+   "evidence_url": "https://arxiv.org/html/2508.18265v1",
+   "evidence_date": "2026-08",
+   "confidence": "verified"
+  },
+  {
+   "name": "MCP photography server pattern (Lightroom, Photoshop bridges)",
+   "flagship_capability": "Any frontier model can read a Lightroom catalog, score photos, write pick/reject/star ratings, apply consistent develop presets, and trigger export—via natural-language commands and tool calls—without a dedicated plugin, using the universal MCP connector.",
+   "underlying_model": "not disclosed (MCP is protocol-agnostic; any LLM can serve as the driving model)",
+   "evidence_url": "https://lobehub.com/mcp/automaat-lightroom-mcp",
+   "evidence_date": "2026-04",
+   "confidence": "partial"
+  },
+  {
+   "name": "Molmo2-8B (fully open weights and open training data, pixel-grounding)",
+   "flagship_capability": "State-of-the-art among open-weight, open-data models on image QA, short-video QA, video counting, and human preference evaluation. Pixel-precise pointing/grounding enables 'show me the problem area' explanations—a capability no current photo culling tool provides.",
+   "underlying_model": "Qwen3-8B text backbone with SigLIP 2 vision encoder",
+   "evidence_url": "https://allenai.org/blog/molmo2",
+   "evidence_date": "2026-01",
+   "confidence": "partial"
+  },
+  {
+   "name": "Narrative Select",
+   "flagship_capability": "Scenes View: images are grouped and ranked chronologically by scene so the photographer culls in story order, not by filename. Close-ups Panel simultaneously shows every face in a frame at 1:1 to check expression and eye-open status without manual zooming.",
+   "underlying_model": "not disclosed",
+   "evidence_url": "https://narrative.so/changelog",
+   "evidence_date": "2026-08-25",
+   "confidence": "verified"
+  },
+  {
+   "name": "Nikon NX Studio + NX Tether",
+   "flagship_capability": "Free, deep-integration tethering for Nikon cameras — NX Tether provides reliable wireless or USB tethered capture with direct handoff to Lightroom or Capture One, which matters for studio workflows where cable-free tethering has historically been unreliable.",
+   "underlying_model": "not disclosed — no AI culling model confirmed in NX Studio or NX Tether",
+   "evidence_url": "https://markus-hagner-photography.com/new-software-updates-for-nikon-nx-studio-nx-tether-and-camera-control-pro-2/",
+   "evidence_date": "2026-05",
+   "confidence": "partial"
+  },
+  {
+   "name": "ON1 Photo RAW 2026",
+   "flagship_capability": "Integrated AI culling inside a full-featured RAW editor — the culling-to-editing handoff requires no export or third-party tool, and the 2026 generative Resize AI model is described as state-of-the-art for upsampling to print resolution.",
+   "underlying_model": "not disclosed — ON1 proprietary models",
+   "evidence_url": "https://www.on1.com/press/on1-announces-photo-raw-2026-with-advanced-ai-tools-masking-layers-and-new-creative-filters/",
+   "evidence_date": "2025-10",
+   "confidence": "partial"
+  },
+  {
+   "name": "Optyx",
+   "flagship_capability": "Speed-focused burst grouping with simultaneous face scoring: groups similar frames from a burst, evaluates each face for expression and blink, and surfaces the best frame without manual 1:1 inspection.",
+   "underlying_model": "not disclosed",
+   "evidence_url": "https://shotkit.com/optyx-ai-photo-selection-tool/",
+   "evidence_date": "2026-01",
+   "confidence": "partial"
+  },
+  {
+   "name": "Peakto 2.6 (by CYME)",
+   "flagship_capability": "Global cross-library AI deduplication and culling: the only product surveyed that analyses the photographer's entire photo ecosystem — every catalog, drive, and NAS at once — to surface duplicates and strongest images library-wide, not just within the current import session.",
+   "underlying_model": "not disclosed",
+   "evidence_url": "https://cyme.io/en/blog/peakto-introduces-powerful-ai-driven-culling-and-deduplication/",
+   "evidence_date": "2026-01-14",
+   "confidence": "verified"
+  },
+  {
+   "name": "Personalised DPO / PIGReward for per-photographer taste learning",
+   "flagship_capability": "Adapts critique and aesthetic scoring to an individual photographer's style from minimal interaction, with explicit taste profiles that persist across sessions and degrade gracefully when no user data exists (falls back to the population prior).",
+   "underlying_model": "not disclosed (varies by paper; typically a CLIP-based or VLM reward model backbone)",
+   "evidence_url": "https://arxiv.org/html/2604.07427v1",
+   "evidence_date": "2026-04",
+   "confidence": "partial"
+  },
+  {
+   "name": "Phi-4-reasoning-vision-15B (efficient local reasoning VLM)",
+   "flagship_capability": "Multi-step visual reasoning with chain-of-thought output—strong on document understanding, structured data extraction from images, and UI grounding—at a model size that fits on entry-level Apple Silicon Macs (16 GB unified memory).",
+   "underlying_model": "not disclosed (Microsoft proprietary backbone; MoE architecture)",
+   "evidence_url": "https://www.microsoft.com/en-us/research/blog/phi-4-reasoning-vision-and-the-lessons-of-training-a-multimodal-reasoning-model/",
+   "evidence_date": "2026-03",
+   "confidence": "partial"
+  },
+  {
+   "name": "Photo Mechanic 6 / Photo Mechanic Plus",
+   "flagship_capability": "Fastest manual browsing of any tool in the market for photographers who want to remain fully in control of every decision. Robust metadata/IPTC batch editing, GPS tagging, custom web galleries, and archiving workflows. Strong in news and sports workflows where caption metadata is as important as image selection.",
+   "underlying_model": "none (no AI)",
+   "evidence_url": "https://filterpixel.com/blog/photo-mechanic-ai-alternative",
+   "evidence_date": "2026-05",
+   "confidence": "verified"
+  },
+  {
+   "name": "Qwen3-VL 8B + GRPO/LoRA (Professional IQA fine-tune)",
+   "flagship_capability": "Expert-level written rationale for photographic quality differences—sharpness, texture, noise, visual authenticity—verified against professional annotator ground truth via an LLM-as-Judge protocol; dual-branch architecture separates the answer prediction path from the reasoning path, materially improving both accuracy and interpretability.",
+   "underlying_model": "Qwen3-VL-8B-Instruct with LoRA (NTIRE 2026 winner); Qwen3 backbone",
+   "evidence_url": "https://arxiv.org/html/2604.12512v1",
+   "evidence_date": "2026-04",
+   "confidence": "verified"
+  },
+  {
+   "name": "Skylum Luminar Neo (2026 release)",
+   "flagship_capability": "Creative AI editing — sky replacement, portrait enhancement, relighting, atmosphere simulation, and generative object removal — executed in a simpler interface than Lightroom, targeted at photographers who want creative output without a steep learning curve.",
+   "underlying_model": "not disclosed — Skylum proprietary models",
+   "evidence_url": "https://expertphotography.com/luminar-neo-review",
+   "evidence_date": "2026",
+   "confidence": "partial"
+  },
+  {
+   "name": "Sony — in-camera AI + Creators App",
+   "flagship_capability": "Human-pose-based real-time subject tracking in-camera — the most advanced autofocus AI across the mirrorless market as of late 2025, enabling a higher proportion of technically sharp frames in difficult action scenarios.",
+   "underlying_model": "not disclosed — Sony proprietary AI unit integrated in-camera",
+   "evidence_url": "https://scene.sonyanz.com/sne-hub/explore-all/poweredbyai",
+   "evidence_date": "2025",
+   "confidence": "partial"
+  },
+  {
+   "name": "像素本 (Xiangsuben)",
+   "flagship_capability": "Local AI toolkit with no usage limits: unlike cloud-billing competitors, all culling and retouching in the AI laboratory runs locally on the studio's own machine. Client selection is handled via the cloud platform (with copyright protection), while the computationally heavy AI work stays on-premise. This hybrid model is rare among Chinese competitors.",
+   "underlying_model": "Not disclosed",
+   "evidence_url": "https://help.xiangsuben.com/",
+   "evidence_date": "2026-06",
+   "confidence": "partial"
+  },
+  {
+   "name": "像素蛋糕 PixCake 一体化 3.0",
+   "flagship_capability": "Full 5-in-1 studio pipeline with built-in client-facing selection (客户选片) via QR-code WeChat mini-program. Customers scan a code, review watermarked proofs, mark their selections, and pay; the selection result automatically syncs back to the retoucher's desktop. This closes the loop that PixCull leaves entirely open.",
+   "underlying_model": "Not disclosed; proprietary Sugar Engine 2.0 for GPU-accelerated retouching",
+   "evidence_url": "https://cn.chinadaily.com.cn/a/202607/23/WS6a61d58ea310d709c2fbf584.html",
+   "evidence_date": "2026-07",
+   "confidence": "verified"
+  },
+  {
+   "name": "咻图AI",
+   "flagship_capability": "Scale throughput: 15,000 images per day post large-model upgrade, at studio-grade quality consistency. The claim is that a large studio can process a full day's shoot backlog in a fraction of the time compared to manual retouching, enabling same-day delivery.",
+   "underlying_model": "Not disclosed; described as 'large model' upgrade, specific model not named",
+   "evidence_url": "https://ai-bot.cn/sites/6575.html",
+   "evidence_date": "2026-01",
+   "confidence": "partial"
+  },
+  {
+   "name": "海草云 魔镜修图 (Haicaoyun Mojing)",
+   "flagship_capability": "Low hardware barrier with flat unlimited-image pricing: the lightweight inference architecture makes AI retouching accessible to small studios that lack GPU workstations. The flat-rate model means there is no per-image cost pressure — studios can process every shot without financial disincentive.",
+   "underlying_model": "Not disclosed; described as proprietary lightweight inference architecture",
+   "evidence_url": "https://gitcode.csdn.net/6a2a88a110ee7a33f27b427f.html",
+   "evidence_date": "2026-01",
+   "confidence": "partial"
+  },
+  {
+   "name": "百度网盘 AI修图 (Baidu Netdisk AI Photo)",
+   "flagship_capability": "Tight integration with China's dominant cloud-storage platform: studios already storing images in Baidu Netdisk get culling, retouching, and client-selection in the same product without a separate upload. The customer selection portal (scan code → select → pay → download) is available within the same ecosystem, and studio staff collaborate on the same cloud storage without a separate sync step.",
+   "underlying_model": "Not disclosed (Baidu proprietary CV models)",
+   "evidence_url": "https://pan.baidu.com/union/openAbility/openCapabilityDetails?type=aiphoto",
+   "evidence_date": "2026-01",
+   "confidence": "partial"
+  },
+  {
+   "name": "绚篇 (Xuanpian)",
+   "flagship_capability": "Real-time shoot-and-select: the photographer can send images to the client during the shoot session itself (即拍即传), allowing the client to select and pay before the photographer even returns home. This compresses the selection cycle from days to the length of the shoot.",
+   "underlying_model": "Not disclosed",
+   "evidence_url": "https://www.xuanpian.com/",
+   "evidence_date": "2026-08",
+   "confidence": "verified"
+  },
+  {
+   "name": "美图云修 (Meitu Yunxiu) v8.0",
+   "flagship_capability": "iPad 'mobile studio': the iPad version connects directly to a camera over USB-C so photos flow into AI retouching in real time during the shoot, collapsing the traditional shoot-transport-cull-retouch chain. The self-developed 骨相磨皮 (bone-structure skin smoothing) algorithm is cited as a differentiator in retouching quality.",
+   "underlying_model": "Not disclosed (proprietary Meitu AI models)",
+   "evidence_url": "https://news.mydrivers.com/1/1138/1138837.htm",
+   "evidence_date": "2026-07",
+   "confidence": "verified"
+  },
+  {
+   "name": "醒图专业版 (Xingtu Pro) by ByteDance",
+   "flagship_capability": "One subscription unlocks mobile SVIP and desktop Pro simultaneously — ByteDance's ecosystem lock-in. The AI 'aesthetic profile' builds a per-user style model from correction history, enabling one-click application of a personalised look across a batch. ByteDance's content distribution channels (Douyin/TikTok) give Xingtu an unusually direct marketing reach to photographer communities.",
+   "underlying_model": "Not disclosed (ByteDance proprietary models)",
+   "evidence_url": "https://www.sohu.com/a/1008326325_121956424",
+   "evidence_date": "2026-04",
+   "confidence": "verified"
+  },
+  {
+   "name": "ArtiMuse / 书生·妙析 (Shanghai AI Lab + China Academy of Art)",
+   "flagship_capability": "Fine-grained image aesthetics assessment: a single MLLM that emits BOTH an 8-dimension attribute breakdown plus holistic score AND expert-level written critique, trained on ArtiMuse-10K (10k images, 5 categories/15 subcategories, expert-annotated on 8 attributes). Explicitly tuned for Eastern aesthetics (ink painting, calligraphy). Directly addresses the 'scores-but-no-prose OR prose-but-no-scores' split that the v2.79 charter item is fighting. NOT a culling tool; a candidate rationale/scoring model.",
+   "underlying_model": "MLLM-based (base backbone / parameter count not stated in the arXiv abstract fetched; checkpoints published on Hugging Face — Thunderbolt215215/ArtiMuse — but the model card could not be fetched this run to confirm base model and licence)",
+   "evidence_url": "https://arxiv.org/abs/2507.14533",
+   "evidence_date": "2025-07-19",
+   "confidence": "partial"
+  },
+  {
+   "name": "像素蛋糕 PixCake — 像素助手 (retouching agent, PC 9.0)",
+   "flagship_capability": "Natural-language 'retouching agent': the operator drives tethered capture, AI culling (AI挑图), retouch and export by conversational instruction rather than menu operations. Vendor claims a 300-image manual selection that takes ~30 min drops to ~3 min. Marketed as 'the industry's first professional retouching agent'. This is a step past Imagen Fast Track, which the 2026-08-31 edition called the market's closest thing to a sequential agent 'though not agentic in the planning sense'.",
+   "underlying_model": "Not disclosed; runs on PixCake Sugar Engine 2.0 stack. Processing mode (local vs cloud) for the agent not confirmed.",
+   "evidence_url": "https://www.ithome.com/0/935/310.htm",
+   "evidence_date": "2026-04-07",
+   "confidence": "partial"
+  }
+ ]
+}

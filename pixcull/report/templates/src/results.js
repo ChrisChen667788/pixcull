@@ -817,6 +817,10 @@
   // activeStyles is a Set of style mode names; empty = no filter.
   const filterState = {
     decision: "all",
+    // v3.0.2 — show only what the CLIENT chose. Its own dimension, not a
+    // value of `decision`: the client answered a different question and
+    // a photograph can be a cull the client wants anyway.
+    clientPicksOnly: false,
     scenes: new Set(),
     styles: new Set(),
     // V22.1 — set of face cluster ids active in the filter. Empty
@@ -2234,6 +2238,12 @@
     // V27 peak-only OR v2.4-P1-1 折叠成堆 both reduce each burst cluster
     // (size ≥ 2) to just its is_burst_peak hero; singletons pass through.
     // 折叠成堆 additionally renders a ⧉N stack badge on the survivor.
+    // v3.0.2 — before the burst collapse, deliberately. A client can
+    // pick a frame that is not its burst's peak, and folding first would
+    // silently drop the photograph they asked for.
+    if (filterState.clientPicksOnly && window.PixCullClientPicks) {
+      filtered = filtered.filter(r => window.PixCullClientPicks.has(r.filename));
+    }
     if (filterState.burstPeakOnly || filterState.collapseBursts) {
       filtered = filtered.filter(r => {
         const size = _BURST_CLUSTER_SIZES.get(r.cluster_id) || 0;

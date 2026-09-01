@@ -6127,6 +6127,17 @@
       font-size: 11px; line-height: 1; padding: 4px 7px;
       border-radius: 999px; pointer-events: none;
     }
+
+    /* v3.0.2 — the 客户选 filter chip. Same info colour as the marker,
+       so the count and the rings on the grid read as one thing. */
+    .client-pick-chip {
+      cursor: pointer; border: 1px solid var(--c-info-border);
+      background: transparent; color: var(--fg); font: inherit;
+      padding: 2px 10px; border-radius: var(--radius-pill);
+    }
+    .client-pick-chip.on {
+      background: var(--c-info-tint); border-color: var(--c-info);
+    }
   </style>
 </head>
 <body>
@@ -8205,6 +8216,10 @@
   // activeStyles is a Set of style mode names; empty = no filter.
   const filterState = {
     decision: "all",
+    // v3.0.2 — show only what the CLIENT chose. Its own dimension, not a
+    // value of `decision`: the client answered a different question and
+    // a photograph can be a cull the client wants anyway.
+    clientPicksOnly: false,
     scenes: new Set(),
     styles: new Set(),
     // V22.1 — set of face cluster ids active in the filter. Empty
@@ -9731,6 +9746,12 @@
     // V27 peak-only OR v2.4-P1-1 折叠成堆 both reduce each burst cluster
     // (size ≥ 2) to just its is_burst_peak hero; singletons pass through.
     // 折叠成堆 additionally renders a ⧉N stack badge on the survivor.
+    // v3.0.2 — before the burst collapse, deliberately. A client can
+    // pick a frame that is not its burst's peak, and folding first would
+    // silently drop the photograph they asked for.
+    if (filterState.clientPicksOnly && window.PixCullClientPicks) {
+      filtered = filtered.filter(r => window.PixCullClientPicks.has(r.filename));
+    }
     if (filterState.burstPeakOnly || filterState.collapseBursts) {
       filtered = filtered.filter(r => {
         const size = _BURST_CLUSTER_SIZES.get(r.cluster_id) || 0;
@@ -19938,10 +19959,31 @@
         document.querySelectorAll(".card[data-fn]").forEach((el) => {
           el.classList.toggle("client-picked", PICKED.has(el.dataset.fn));
         });
-        const chip = document.getElementById("clientPickCount");
+        // v3.0.2 — the toggle is BUILT here rather than looked up.
+        // The first version called getElementById on an id that was
+        // never added to the page, so the count silently did not exist:
+        // guarded by `if (chip)`, it never threw and never appeared.
+        let chip = document.getElementById("clientPickChip");
+        if (!chip && PICKED.size) {
+          const stats = document.querySelector(".stats");
+          if (stats) {
+            chip = document.createElement("button");
+            chip.id = "clientPickChip";
+            chip.type = "button";
+            chip.className = "stat-aux client-pick-chip";
+            chip.title = "只看客户选的(再点一次取消)";
+            chip.addEventListener("click", () => {
+              filterState.clientPicksOnly = !filterState.clientPicksOnly;
+              chip.classList.toggle("on", filterState.clientPicksOnly);
+              if (typeof render === "function") render();
+            });
+            stats.appendChild(chip);
+          }
+        }
         if (chip) {
-          chip.textContent = String(PICKED.size);
-          chip.parentElement.hidden = PICKED.size === 0;
+          chip.hidden = PICKED.size === 0;
+          chip.textContent = `客户选 ${PICKED.size}`;
+          chip.classList.toggle("on", !!filterState.clientPicksOnly);
         }
       }
 

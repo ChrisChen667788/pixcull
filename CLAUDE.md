@@ -64,11 +64,31 @@ script now strips `README.md`/`*.md`/`docs/` LFS rules and pins
 you specifically want CDN-linked images instead of ModelScope-hosted.
 
 New screenshots: next free number is **27** (01–26 used; 25 =
-client-proof-sheet, 26 = blind-label-sheet — both from the repo's own
-six synthetic samples, not owner photographs; 17 =
+client-proof-sheet, 26 = blind-label-sheet — **re-shot 2026-09-02 from
+the owner's own Canon set**, replacing the synthetic-sample versions
+they first shipped with; 17 =
 attribution-heatmap, 18 = video-review, 19 = video-grade, 20 =
 scenes-navigator, 21 = verdict-glassbox, 22 = transparency-tools, 23 =
 video-timeline, 24 = review-sheet).
+
+**25 / 26 are shot from `100CANON/3J0A8133`–`8332`** (the same
+owner-authorised 200 that 01–24 use), re-run 2026-09-02 into
+`realdemo01`.  Screened by eye across four contact sheets plus a
+1600 px zoom on the aerials: architecture interiors, coast, tidal
+flats, sunsets — **no portraits and no resolvable faces**.  The
+mudflat aerials do contain distant shellfish gatherers, roughly 40 px
+tall in a 5472 px frame, back-turned and hatted; nothing facial
+survives even at full resolution, and at the 278 px grid thumbnail they
+are two or three pixels.  **GPS was stripped from every working copy
+before the run** (all 20 sampled originals carried it; `gps_lat` is
+empty on all 200 rows), and the originals were copied to a neutral
+`/tmp` path first so no drive name can appear on screen.
+
+**`24-transcript-edit.png` is STILL synthetic** — ffmpeg test pattern
+plus macOS TTS, and the README says so at the image.  Replacing it needs
+footage with speech in it; the owner's `winter-sled.mp4` working copy is
+no longer on this machine and the Canon clips on the card are ambient
+only.  Declared, not quietly left.
 
 **24 is shot from the owner's own reviewed frames** (owner-authorised
 2026-08-16, "用我刚标注的这组真实照片截图…有人像人脸的那几张就不要了").

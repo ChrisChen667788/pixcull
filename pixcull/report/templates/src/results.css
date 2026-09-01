@@ -2378,3 +2378,14 @@
       font-size: 11px; line-height: 1; padding: 4px 7px;
       border-radius: 999px; pointer-events: none;
     }
+
+    /* v3.0.2 — the 客户选 filter chip. Same info colour as the marker,
+       so the count and the rings on the grid read as one thing. */
+    .client-pick-chip {
+      cursor: pointer; border: 1px solid var(--c-info-border);
+      background: transparent; color: var(--fg); font: inherit;
+      padding: 2px 10px; border-radius: var(--radius-pill);
+    }
+    .client-pick-chip.on {
+      background: var(--c-info-tint); border-color: var(--c-info);
+    }

@@ -27,10 +27,31 @@
         document.querySelectorAll(".card[data-fn]").forEach((el) => {
           el.classList.toggle("client-picked", PICKED.has(el.dataset.fn));
         });
-        const chip = document.getElementById("clientPickCount");
+        // v3.0.2 — the toggle is BUILT here rather than looked up.
+        // The first version called getElementById on an id that was
+        // never added to the page, so the count silently did not exist:
+        // guarded by `if (chip)`, it never threw and never appeared.
+        let chip = document.getElementById("clientPickChip");
+        if (!chip && PICKED.size) {
+          const stats = document.querySelector(".stats");
+          if (stats) {
+            chip = document.createElement("button");
+            chip.id = "clientPickChip";
+            chip.type = "button";
+            chip.className = "stat-aux client-pick-chip";
+            chip.title = "只看客户选的(再点一次取消)";
+            chip.addEventListener("click", () => {
+              filterState.clientPicksOnly = !filterState.clientPicksOnly;
+              chip.classList.toggle("on", filterState.clientPicksOnly);
+              if (typeof render === "function") render();
+            });
+            stats.appendChild(chip);
+          }
+        }
         if (chip) {
-          chip.textContent = String(PICKED.size);
-          chip.parentElement.hidden = PICKED.size === 0;
+          chip.hidden = PICKED.size === 0;
+          chip.textContent = `客户选 ${PICKED.size}`;
+          chip.classList.toggle("on", !!filterState.clientPicksOnly);
         }
       }
 

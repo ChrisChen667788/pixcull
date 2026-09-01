@@ -265,3 +265,44 @@ def test_the_built_page_carries_both_halves():
     assert 'CustomEvent("pixcull:rendered")' in built
     assert "client-picked" in built
     assert "/client_pick/" in built
+
+
+# ------------------------------------------------- v3.0.2: the filter
+
+def test_the_count_chip_is_built_not_looked_up():
+    """The first version called getElementById on an id that was never
+    added to the page. Guarded by `if (chip)` it never threw and never
+    appeared — a feature that silently did not exist."""
+    js = _code_only(MOD)
+    assert "createElement" in js
+    i = js.find("clientPickChip")
+    assert i > 0
+    block = js[max(0, i - 400):i + 900]
+    assert "document.createElement" in block, \
+        "the chip is looked up but never created"
+
+
+def test_the_filter_is_its_own_dimension_not_a_decision_value():
+    """A photograph can be a cull the client wants anyway. Folding this
+    into `decision` would make the two answers mutually exclusive."""
+    js = _code_only(JS)
+    i = js.find("const filterState = {")
+    block = js[i:i + 900]
+    assert "clientPicksOnly" in block
+    assert 'decision: "all"' in block
+
+
+def test_the_client_filter_runs_before_the_burst_collapse():
+    """A client can pick a frame that is not its burst's peak. Folding
+    first would silently drop the photograph they asked for."""
+    js = _code_only(JS)
+    pick = js.find("filterState.clientPicksOnly")
+    collapse = js.find("filterState.burstPeakOnly || filterState.collapseBursts")
+    assert 0 < pick < collapse, (
+        "the burst collapse runs first, so a picked non-peak frame "
+        "disappears from the client's own list")
+
+
+def test_the_filter_survives_in_the_built_page():
+    built = _code_only(BUILT)
+    assert "clientPicksOnly" in built and "clientPickChip" in built

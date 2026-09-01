@@ -315,7 +315,80 @@ This section is mandatory. These are claimed advantages that are weaker in pract
 **Sections to prioritise each cycle:**
 1. Platform-native tools (Adobe, Capture One, Apple): these ship on a rapid cycle and can change the competitive baseline without a separate product launch.
 2. China market: the largest gap (client-selection workflow) is concentrated here; any new entrant or feature in this segment directly affects the v2.83 roadmap decision.
-3. Open-weight models: NTIRE and similar competitions run annually; new winning systems should be evaluated for integration into v2.79's rationale layer."
+3. Open-weight models: NTIRE and similar competitions run annually; new winning systems should be evaluated for integration into v2.79's rationale layer.
+
+---
+
+## 2026-09-01 — refresh: nothing moved
+
+Poll of every source in `docs/competitive/sources.json`, in order (platform
+vendors → international culling → China → models). **No product or model shipped a
+change dated after 2026-08-31.** Specifically re-checked and unchanged since the
+2026-08-31 edition:
+
+- **Adobe Lightroom / Photoshop** — no release after the June 2026 update. Adobe
+  MAX "2026" was November 2025; nothing since. Source: [PetaPixel, 2026-06-15](https://petapixel.com/2026/06/15/adobe-adds-more-user-control-to-ai-features-inside-lightroom-and-photoshop/)
+- **Capture One** — still 16.8.0 (2026-05-28). No 16.9. Source: [captureone.com whats-new](https://www.captureone.com/en/explore-features/whats-new/16-8)
+- **ON1 Photo RAW 2026.3** — "workflow and performance improvements"; no new
+  culling capability. Source: [on1.com blog](https://www.on1.com/blog/on1-photo-raw-2026-3-update-faster-performance-workflow-improvements-ai-enhancements/)
+- **Narrative Select** — latest changelog entries still date to June 2026 (People
+  Filter beta, AI First Pass rating no-people frames, Sony/Fujifilm camera
+  support). Nothing after the v2.5.0 (2026-08-25) theme update already noted.
+  Source: [narrative.so/changelog](https://narrative.so/changelog)
+- **Aftershoot / Imagen AI / FilterPixel / Evoto** — no changelog entry after the
+  June 2026 items already in this edition.
+- **Qwen3-VL / InternVL** — no release after the October 2025 Qwen3-VL size
+  variants and the August 2025 InternVL3.5 paper. Source: [github.com/QwenLM/Qwen3-VL](https://github.com/qwenlm/Qwen3-VL)
+- **Meitu Yunxiu / PixCake** — no announcement after Meitu Yunxiu v8.0 (P&I
+  Shanghai, July 2026).
+
+Per protocol, this is the expected result two weeks (here, one day) after an
+edition. Nothing is appended to the field tables.
+
+### Two entries the 2026-08-31 scan missed (both pre-date this edition — not news)
+
+Logged so the next diff does not "discover" them again. Added to
+`snapshot-2026-09-01.json` (n 41 → 43). Both were run through a refuting pass;
+both survive on date and existence, with hands-on / processing-mode still partial.
+
+1. **ArtiMuse / 书生·妙析** (Shanghai AI Lab + China Academy of Art). Open-weight
+   fine-grained image-aesthetics model: one MLLM emits an 8-dimension attribute
+   breakdown **and** a holistic score **and** expert-level written critique —
+   exactly the "scores-but-no-prose vs prose-but-no-scores" split the v2.79
+   charter item exists to close. Trained on ArtiMuse-10K (10,000 expert-annotated
+   images); tuned for Eastern aesthetics. Checkpoints are on Hugging Face
+   (`Thunderbolt215215/ArtiMuse`); the model card could not be fetched this run,
+   so base model, parameter count and licence are **unverified**. arXiv paper
+   submitted 2025-07-19 (rev 2025-08-11), checkpoints ~2025-09-03, CVPR 2026
+   accepted. **Confidence: partial.** Source: [arXiv 2507.14533](https://arxiv.org/abs/2507.14533)
+
+2. **像素蛋糕 PixCake — 像素助手** (retouching agent, PC 9.0, spring-2026 launch
+   event ~2026-04-07). Natural-language agent that drives tethered capture → AI
+   culling (AI挑图) → retouch → export by conversation rather than menu
+   operations; vendor claims a ~30-minute manual 300-image selection drops to ~3
+   minutes. Covered by multiple tech outlets (IT之家, 中关村在线, 新浪, 界面) as a
+   launch reprint — not one advertorial, but not independent hands-on either.
+   Processing mode (local vs cloud) unconfirmed. This is a step past Imagen Fast
+   Track, which this edition called the market's closest thing to a sequential
+   agent "though not agentic in the planning sense." **Confidence: partial.**
+   Source: [IT之家, 2026-04-07](https://www.ithome.com/0/935/310.htm)
+
+### One correction owed to our own analysis
+
+Flagged here because "correcting our own document outranks reporting someone
+else's news." This edition's METHOD section and the v2.79→v2.93 roadmap rest on
+"the 608-row correction set in `~/pixcull_label_run`" as ground truth for a future
+published accuracy baseline (§4.6, §6 v2.80/v2.84). Repo work since (v2.88,
+`scoring/ground_truth.py`) established that set is **the model's own output** —
+self-agreement is 100% by construction, and it cannot serve as ground truth for
+any accuracy claim. No false figure was published, but any competitive "we have a
+number now" statement built on that set would be unsound. This is a note for a
+human; the charter is not edited by this automation.
+
+<!-- The block below this line is workflow telemetry that was concatenated into
+     this file at publish time (present since commit 9ac2e1e). It is not part of
+     the edition and should be stripped when the file is next touched by hand. -->
+"
   },
   "workflowProgress": [
     {
