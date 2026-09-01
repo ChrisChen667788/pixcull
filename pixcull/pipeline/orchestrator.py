@@ -832,7 +832,23 @@ def run_pipeline(
     csv_path = output / "scores.csv"
     df_export.to_csv(csv_path, index=False)
 
-    counts = Counter(decisions)
+    # v2.95 — count the file that was just written, not a list built
+    # earlier in the run.
+    #
+    # `decisions` is appended per row while scoring. The VLM judge, when
+    # its authority is `primary`, then rewrites df["decision"] in place —
+    # and the CSV is exported from df. Two sources, one stale.
+    #
+    # Observed on a six-frame run: the console printed "VLM authority
+    # primary — 6 decision(s) changed by the judge" and then "Done.
+    # Keep=6 Maybe=0 Cull=0", while every row in scores.csv said cull.
+    # The photographer reads that the whole shoot was kept, opens the
+    # results, and finds nothing was — with the line that explains it
+    # printed immediately above and contradicted.
+    #
+    # df_export is the exact frame written to disk, so the two cannot
+    # disagree again.
+    counts = Counter(str(v) for v in df_export["decision"])
     console.print(
         f"[green]✓ Done. "
         f"Keep=[bold]{counts.get('keep', 0)}[/] "
