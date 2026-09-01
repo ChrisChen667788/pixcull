@@ -322,7 +322,8 @@ def proof_sheet(
     res = write_proof_sheet(
         rows, out, resolve=index.get, title=title or run_dir.parent.name,
         contact=contact, webhook=webhook,
-        only=("" if only == "all" else only))
+        only=("" if only == "all" else only),
+        run_output=str(run_dir.resolve()))
     console.print(f"[green]✓ {res['written']} photographs[/green] → {out}")
     console.print(f"  open [bold]{out / 'index.html'}[/bold] to check it "
                   "before sending")
@@ -345,7 +346,7 @@ def view_folder(
     out: Path = typer.Option(..., "--out", "-o",
                              help="Folder to write, e.g. an iPad drop"),
     only: str = typer.Option("keep", "--only",
-                             help="keep | maybe | cull | all"),
+                             help="keep | maybe | cull | all | client"),
     max_width: int = typer.Option(
         0, "--max-width",
         help="Downsize to this width (0 = copy the originals)"),
@@ -373,6 +374,18 @@ def view_folder(
     except Exception:  # noqa: BLE001
         pass
     index = _scores_path_map(run_dir)
+    if only == "client":
+        # v3.0 — what the CLIENT asked for, which is a different question
+        # from what the photographer kept and routinely a different set.
+        from pixcull.client_picks import picked_filenames
+        picks = picked_filenames(run_dir)
+        if not picks:
+            console.print(
+                f"[yellow]No client picks recorded for {run_dir}[/yellow] — "
+                "run `pixcull picks` with their reply first.")
+            raise typer.Exit(code=1)
+        rows = [r for r in rows if str(r.get("filename")) in picks]
+        only = ""
     res = write_view_folder(rows, out, resolve=index.get,
                             only=("" if only == "all" else only),
                             max_width=max_width)
@@ -443,6 +456,24 @@ def picks(
         console.print("[yellow]这些没能用上[/yellow] —— 回去问一句比猜一次便宜:")
         for p_ in problems:
             console.print(f"    {p_}")
+
+    # v3.0 — the picks go back to the run they came from, in their own
+    # file. Never into annotations.jsonl: that index is latest-wins on
+    # the WHOLE record, so one line of the client's opinion would erase
+    # the photographer's own verdict from every reader of it.
+    run_output = man.get("run_output")
+    if run_output and Path(run_output).is_dir():
+        from pixcull.client_picks import record as _rec
+        n = _rec(run_output, [fn for _i, fn, _l in picked if fn],
+                 source="wechat-reply", note=reply[:200])
+        console.print(f"[green]✓[/green] {n} 条写入 "
+                      f"{Path(run_output) / 'client_picks.jsonl'}")
+    elif run_output:
+        console.print(f"[yellow]⚠ run 目录不在了[/yellow] ({run_output}) — "
+                      "只写了本地 JSON")
+    else:
+        console.print("[dim]这份清单没记录来源 run(v3.0 之前导出的),"
+                      "只写本地 JSON[/dim]")
 
     dest = out or (proof_dir / "client_picks.json")
     dest.write_text(_json.dumps({

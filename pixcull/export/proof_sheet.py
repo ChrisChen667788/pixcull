@@ -112,7 +112,8 @@ def render_gallery(items: list[ProofItem], *, title: str,
 
 def write_proof_sheet(rows: list[dict], dest: Path, *, resolve,
                       title: str = "", contact: str = "", webhook: str = "",
-                      only: str = "keep", number: bool = True) -> dict:
+                      only: str = "keep", number: bool = True,
+                      run_output: str = "") -> dict:
     """Write the whole sheet. ``resolve(filename) -> Path | None``.
 
     Returns counts. A frame whose original cannot be found is REPORTED,
@@ -170,6 +171,10 @@ def write_proof_sheet(rows: list[dict], dest: Path, *, resolve,
         "title": title or dest.name,
         "digest": _digest(kept),
         "n": len(kept),
+        # v3.0 — where the picks go when the client replies. Recorded at
+        # export time because the reply arrives days later, in WeChat,
+        # with nothing but numbers in it.
+        "run_output": str(run_output or ""),
         "by_index": {str(i.index): i.filename for i in kept},
         "labels": {str(i.index): i.label for i in kept},
     }
