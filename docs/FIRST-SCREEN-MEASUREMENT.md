@@ -103,6 +103,21 @@ the delay is client-side scheduling rather than server contention.
 target.** Shipping a change whose saving sits inside the noise band would be
 worse than shipping nothing, because it would be cited later as a win.
 
+## Cold TTFB is only comparable within one invocation
+
+The server builds a 3 MB page while Chromium starts up on the same machine.
+Measured on this host: **680 ms** by plain HTTP with no browser running, **~1400 ms**
+through the harness, on an identical build.
+
+A v2.84 reading of 1134 ms and a v2.95 reading of 1432 ms were recorded weeks
+apart, looked like a regression, and were two machine loads — re-measured back to
+back with only the server files swapped, v2.84 gives 1410 ms and HEAD gives
+1398 ms. The harness now flags a wide spread for exactly this reason. To compare
+two builds, swap and re-run in one sitting; never quote a cold figure from a
+previous session.
+
+Warm TTFB does not have this problem — it varies by about 3%.
+
 ## A caveat about this measurement
 
 `firstImgStart` was 313 ms in one session and 808 ms in another on the same

@@ -240,6 +240,15 @@ The versions that found something worth remembering:
   overturned: "Keep=6" printed under "6 decision(s) changed", with a CSV
   full of culls.
 
+**Measurement caveat that cost a false alarm:** cold TTFB from
+`scripts/measure_first_screen.py` is only comparable WITHIN one
+invocation — the server builds a 3 MB page while Chromium starts beside
+it (680 ms by plain HTTP, ~1400 ms through the harness, same build).
+Two readings weeks apart looked like a 26% regression and were two
+machine loads; back-to-back with only the server files swapped, v2.84
+gives 1410 ms and HEAD 1398 ms.  The harness now flags a wide spread.
+Warm TTFB is stable to ~3% and is safe to quote.
+
 **Five versions are OPEN and cannot close without a human** — v2.80
 (advice quality, needs raters who are photographers and not the author),
 v2.83 (personalisation, needs corrections across two shoots), v2.88

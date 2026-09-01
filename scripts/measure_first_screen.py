@@ -14,6 +14,22 @@ COLD MEANS COLD. Each cold sample restarts the server. Anything else
 measures the in-process results cache, which is how "1.8 seconds" was
 believed for several versions while the first open actually took 3.4.
 
+COLD TTFB IS ONLY COMPARABLE WITHIN ONE INVOCATION. The server builds a
+3 MB page while Chromium starts up beside it on the same machine, and
+cold TTFB is where that contention lands. Measured on this host: 680 ms
+by plain HTTP with no browser running, ~1400 ms through the harness, on
+an identical build.
+
+A v2.84 reading of 1134 ms and a v2.95 reading of 1432 ms were recorded
+weeks apart, looked like a 26% regression, and were two machine loads.
+Re-measured back to back with only the server files swapped: v2.84 gives
+1410 ms, HEAD gives 1398 ms. Nothing had changed.
+
+The harness therefore prints the spread and flags a wide one, so a
+number that cannot support a comparison is not quoted as if it could.
+To compare two builds, swap the files and re-run in the same sitting —
+never quote a figure from a previous session.
+
 THE PORT IS READ BACK, NEVER ASSUMED. `_pick_port` silently falls back
 when the requested port cannot be bound, and a SIGKILLed predecessor
 leaves the socket in TIME_WAIT long enough for that to happen. Polling
@@ -162,8 +178,23 @@ def main() -> int:
                     "min": min(r[k] for r in rows),
                     "max": max(r[k] for r in rows)} for k in rows[0]}
 
-    print(json.dumps({"run": a.run_id, "cold_n": a.cold, "warm_n": a.warm,
-                      "cold": agg(cold), "warm": agg(warm)}, ensure_ascii=False))
+    out = {"run": a.run_id, "cold_n": a.cold, "warm_n": a.warm,
+           "cold": agg(cold), "warm": agg(warm)}
+
+    # Flag a spread wide enough that the median cannot carry a comparison.
+    # A number quoted without this is how two machine loads became a
+    # reported 26% regression that did not exist.
+    for state in ("cold", "warm"):
+        st = out[state].get("ttfb")
+        if not st or not st["med"]:
+            continue
+        spread = (st["max"] - st["min"]) / st["med"]
+        if spread > 0.25:
+            out[state]["ttfb_unstable"] = (
+                f"samples span {spread:.0%} of the median "
+                f"({st['min']}-{st['max']} ms) — this figure cannot support "
+                f"a comparison against another session")
+    print(json.dumps(out, ensure_ascii=False))
     return 0
 
 
