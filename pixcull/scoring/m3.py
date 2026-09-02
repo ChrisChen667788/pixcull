@@ -232,6 +232,30 @@ def _content_hash(path: Path, extra: str = "") -> str:
     return h.hexdigest()
 
 
+def cache_extra(*, model: str, scene: str | None, vertical: str | None,
+                evidence_arm: str, evidence_len: int,
+                prompt_override: str | None, temperature: float = 0.0) -> str:
+    """The prompt-affecting discriminator folded into the cache key.
+
+    Pulled out of :meth:`MinimaxM3Judge.score` so the one invariant that
+    protects thousands of already-paid-for entries is assertable without
+    a network call: **at temperature 0.0 this string must not change.**
+
+    v3.2 appends temperature instead of folding it in for exactly that
+    reason.  Temperature was missing from the key altogether, which made
+    self-consistency measurement silently impossible — N samples of one
+    frame all hashed to the single deterministic slot, so the check would
+    have reported perfect agreement on every image and the number would
+    have looked like a finding.
+    """
+    return (
+        f"{model}|{PROMPT_VERSION}|{scene}|{vertical}|"
+        f"{evidence_arm}|{evidence_len}|"
+        f"{hashlib.sha256((prompt_override or '').encode()).hexdigest()[:12]}"
+        + (f"|T{temperature!r}" if temperature else "")
+    )
+
+
 class VerdictCache:
     """Append-only JSONL cache of verdicts, keyed by content hash.
 
@@ -482,7 +506,8 @@ class MiniMaxM3Judge:
         the rate limiter, which is what jitter would otherwise buy us."""
         return min(2.0 ** attempt, 60.0)
 
-    def _complete(self, messages: list[dict], max_tokens: int) -> Any:
+    def _complete(self, messages: list[dict], max_tokens: int,
+                  temperature: float = 0.0) -> Any:
         """One chat completion, with rate limiting, retry and budget.
 
         Retries on rate-limit and transient server errors.  Does NOT
@@ -511,7 +536,7 @@ class MiniMaxM3Judge:
                     model=self._model,
                     messages=messages,
                     max_tokens=max_tokens,
-                    temperature=0.0,
+                    temperature=temperature,
                     timeout=self._timeout,
                 )
             except (RateLimitError, APITimeoutError, APIConnectionError) as exc:
@@ -608,6 +633,10 @@ class MiniMaxM3Judge:
         # the other arms exist to find out whether the block helps or
         # crowds out what the judge could see for itself.
         evidence_arm: str = "technical",
+        # v3.2 — sampling temperature, and part of the cache key when it
+        # is non-zero.  Default 0.0 keeps the deterministic path exactly
+        # as it was, key included: see the note at the key construction.
+        temperature: float = 0.0,
     ) -> VlmVerdict:
         """Judge one photo, with local measurements supplied as evidence.
 
@@ -640,17 +669,11 @@ class MiniMaxM3Judge:
             try:
                 key = _content_hash(
                     image_path,
-                    f"{self._model}|{PROMPT_VERSION}|{scene}|{vertical}|"
-                    # v2.66 — the ARM, not just the block's length. Two
-                    # arms can produce blocks of equal length and mean
-                    # entirely different things; keying on length alone
-                    # would serve one arm's verdict to another and make
-                    # the A/B compare a cache against itself.
-                    f"{evidence_arm}|{len(evidence)}|"
-                    # v2.51 — scoring and advice ask different questions
-                    # of the same bytes. Without this the second caller
-                    # would be served the first one's answer.
-                    f"{hashlib.sha256((prompt_override or '').encode()).hexdigest()[:12]}")
+                    cache_extra(model=self._model, scene=scene,
+                                vertical=vertical, evidence_arm=evidence_arm,
+                                evidence_len=len(evidence),
+                                prompt_override=prompt_override,
+                                temperature=temperature))
             except OSError:
                 key = ""
             if key:
@@ -683,7 +706,7 @@ class MiniMaxM3Judge:
                      "image_url": {"url": self._image_data_uri(image_path)}},
                 ],
             }]
-            resp = self._complete(messages, max_tokens)
+            resp = self._complete(messages, max_tokens, temperature)
             self._charge(resp)
             text = resp.choices[0].message.content or ""
             finish = getattr(resp.choices[0], "finish_reason", "")
