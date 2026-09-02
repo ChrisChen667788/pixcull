@@ -359,6 +359,51 @@ def decision_to_xmp(decision: str) -> tuple[int, str]:
     }.get(decision, (0, ""))
 
 
+#: v3.7 — the keyword a smart collection is built on. Public contract.
+UNCERTAIN_KEYWORD = "PixCull:uncertain"
+
+#: Where the doubt came from. `measured` outranks `self-reported`; only
+#: one is ever emitted.
+UNCERTAIN_MEASURED = "PixCull:uncertain:measured"
+UNCERTAIN_SELF_REPORTED = "PixCull:uncertain:self-reported"
+
+#: Below this share of agreeing draws the frame is uncertain by
+#: measurement. Anything short of unanimous is doubt worth exporting —
+#: two draws out of three is the model changing its mind about a
+#: photograph, which is precisely what the photographer wants to see.
+MEASURED_AGREEMENT_GATE = 1.0
+
+#: Below this self-reported confidence the frame is uncertain by the
+#: model's own account. Matches `consistency.CONFIDENCE_GATE`.
+SELF_REPORTED_GATE = 0.7
+
+
+def _uncertainty_keywords(row: dict) -> list[str]:
+    """Uncertainty keywords for one row, measured signal preferred.
+
+    Returns [] when there is no uncertainty signal at all. A frame the
+    meta pass never judged is not "certain" — it is unexamined, and
+    tagging it either way would put a claim in the catalogue that the
+    run never made.
+    """
+    agree = row.get("measured_agreement")
+    if isinstance(agree, (int, float)) and not isinstance(agree, bool):
+        # A measurement exists. It decides, and the self-reported number
+        # does not get a second vote.
+        if agree < MEASURED_AGREEMENT_GATE:
+            return [UNCERTAIN_KEYWORD, UNCERTAIN_MEASURED]
+        return []
+    inc = row.get("meta_inconsistencies")
+    if (isinstance(inc, str) and inc.strip()) or \
+            (isinstance(inc, (list, tuple)) and len(inc)):
+        return [UNCERTAIN_KEYWORD, UNCERTAIN_SELF_REPORTED]
+    conf = row.get("meta_confidence")
+    if isinstance(conf, (int, float)) and not isinstance(conf, bool):
+        if conf < SELF_REPORTED_GATE:
+            return [UNCERTAIN_KEYWORD, UNCERTAIN_SELF_REPORTED]
+    return []
+
+
 # V29 — build IPTC fields from a row + advice. Centralized here so
 # the /export endpoint, the CLI ``pixcull export``, and any future
 # bulk tooling all emit identical metadata.
@@ -421,6 +466,34 @@ def build_iptc_fields_from_row(
         keywords.append("PixCull:judged-by:"
                         + (_judge.split(":", 1)[0] if ":" in _judge
                            else "cloud"))
+
+    # v3.7 — the doubt travels with the verdict.
+    #
+    # `decision_to_xmp` has always sent keep/maybe/cull to Lightroom as
+    # stars and a colour label. How sure the tool was never went with it,
+    # so a catalogue could sort by the verdict and had no way to ask
+    # "which of these was the tool unsure about" — the question a
+    # photographer actually asks of a machine's cull.
+    #
+    # Capture One's design is the one worth copying: their "Can't tell"
+    # is a TAG, and tags are Smart Album criteria. A keyword is the same
+    # object in Lightroom. So this is a filterable thing in the catalogue
+    # the photographer already lives in, not a badge in a window they
+    # have to open separately.
+    #
+    # TWO keywords, deliberately. `PixCull:uncertain` is the stable one
+    # to build a smart collection on. The second says where the doubt
+    # came from, because they are not the same claim: `measured` is N
+    # sampled draws disagreeing (v3.6), `self-reported` is the model's
+    # own confidence about itself, which nothing has yet shown to predict
+    # anything. Collapsing them into one tag would launder the weaker
+    # signal into the stronger one's authority.
+    #
+    # THIS IS A PUBLIC CONTRACT. These strings end up in a third-party
+    # catalogue and in smart collections the photographer built by hand.
+    # Renaming one later is a migration, not a refactor.
+    _unc = _uncertainty_keywords(row)
+    keywords.extend(_unc)
 
     # Per-face person keywords. ``face_clusters`` is a list of int
     # cluster ids; ``face_labels`` is the user-supplied {cluster_id:
