@@ -100,3 +100,34 @@ def test_aspects_are_read_only_for_frames_that_already_grouped():
     src = inspect.getsource(serve_app._cached_near_dup_groups)
     body = src[src.index("if aspect_guard_enabled() and groups:"):]
     assert "for g in groups:" in body and "for fn in g:" in body
+
+
+def test_a_portrait_frame_stored_landscape_reports_a_portrait_ratio():
+    """The bug that nearly shipped. Most cameras store a portrait frame
+    landscape with an orientation tag; raw `im.size` then reports 3:2 for
+    a photograph the photographer sees as 2:3. Against a true landscape
+    frame that is a 125% difference, so the guard would have split every
+    portrait frame away from its own duplicates and called it a reframe.
+    """
+    import tempfile
+    from pathlib import Path
+
+    from PIL import Image
+
+    from pixcull.scoring.near_dup import aspect_of
+
+    d = Path(tempfile.mkdtemp())
+    img = Image.new("RGB", (600, 400), "white")
+
+    flat = d / "flat.jpg"
+    img.save(flat)
+    assert abs(aspect_of(flat) - 1.5) < 1e-6
+
+    turned = d / "turned.jpg"
+    exif = img.getexif()
+    exif[0x0112] = 6                     # rotate 90° CW on display
+    img.save(turned, exif=exif)
+    got = aspect_of(turned)
+    assert got is not None and abs(got - (400 / 600)) < 1e-6, (
+        f"orientation ignored: got {got}, expected {400/600}"
+    )

@@ -211,10 +211,27 @@ def aspect_guard_enabled() -> bool:
     return os.environ.get(ASPECT_ENV, "0") == "1"
 
 
-def aspect_of(path) -> float | None:
-    """Width / height from the image header, or None.
+#: EXIF orientation values that mean the frame is stored rotated a
+#: quarter turn, so its stored width is its displayed height.
+_QUARTER_TURN = frozenset({5, 6, 7, 8})
 
-    Reads the header only — PIL does not decode pixels for `.size` — so
+
+def aspect_of(path) -> float | None:
+    """Displayed width / height from the image header, or None.
+
+    ORIENTATION MATTERS HERE AND ALMOST BROKE THIS. A portrait frame from
+    most cameras is stored landscape with an EXIF orientation tag, so raw
+    `im.size` reports 3:2 for a photograph the photographer sees as 2:3.
+    Compared against a true landscape frame that is a 125% difference —
+    the guard would have split every portrait frame away from its own
+    duplicates and called it a reframe.
+
+    The orientation tag is read and the dimensions swapped, rather than
+    running `ImageOps.exif_transpose`: that decodes the pixels, and this
+    function wants a ratio, not an image. Registered in the repo-wide
+    orientation guard with that reason.
+
+    Header only — PIL does not decode for `.size` or `.getexif()` — so
     this is cheap enough to run over the members of a group. None on any
     failure: a frame whose dimensions cannot be read must not be split
     away from its group on a guess.
@@ -223,6 +240,12 @@ def aspect_of(path) -> float | None:
         from PIL import Image
         with Image.open(path) as im:
             w, h = im.size
+            try:
+                orientation = int(im.getexif().get(0x0112) or 1)
+            except Exception:  # noqa: BLE001
+                orientation = 1
+        if orientation in _QUARTER_TURN:
+            w, h = h, w
         return (float(w) / float(h)) if h else None
     except Exception:  # noqa: BLE001
         return None

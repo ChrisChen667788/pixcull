@@ -4329,7 +4329,7 @@ class _Handler(BaseHTTPRequestHandler):
 
         frames = []
         for r in shown:
-            fn = Path(str(r.get("filename") or "")).name
+            fn = Path(_s(r.get("filename"))).name
             src = _resolve_image_source(run, fn)
             face_i = None
             if src is not None and src.exists():
@@ -4341,7 +4341,7 @@ class _Handler(BaseHTTPRequestHandler):
             frames.append({
                 "filename": fn,
                 "is_peak": bool(r.get("is_burst_peak")),
-                "decision": str(r.get("decision") or ""),
+                "decision": _s(r.get("decision")),
                 "score_final": r.get("score_final"),
                 # None, not a URL to nothing: a frame where no face was
                 # found is a real answer and the strip should show the

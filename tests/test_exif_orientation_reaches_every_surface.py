@@ -32,6 +32,13 @@ _SKIP_PARTS = {"dist", ".venv", "venv", "node_modules", "__pycache__"}
 # either a bug or an exception someone has to write down here.
 _ALLOWED_WITHOUT: dict[str, str] = {
     "pixcull/io/loader.py": "this is the module that applies it",
+    # v3.14 — `aspect_of` wants a RATIO, not an image. It reads the
+    # orientation tag (0x0112) and swaps width and height itself;
+    # `exif_transpose` would decode the pixels to answer a question about
+    # two integers. It honours orientation — a portrait frame stored
+    # landscape reports 2:3, not 3:2 — which is what this guard is for.
+    "pixcull/scoring/near_dup.py":
+        "reads the orientation tag to swap w/h; never renders pixels",
     # These open the file to READ metadata, never to show pixels.
     # Transposing would cost a decode and change nothing they return —
     # and `exif.py` in particular is where the orientation tag itself is
