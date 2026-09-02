@@ -433,6 +433,27 @@ _CULL_REASONS: tuple[str, ...] = (
     "other",            # 其他    — catch-all for everything else
 )
 
+def burst_strip_plan(members: list[dict], cap: int) -> tuple[list, int]:
+    """v3.12 — which frames of a burst reach the face strip, and how many did not.
+
+    Peak first, then capture order.  Same ordering the viewable folder
+    uses, and for the same reason: the frame the tool chose is the claim
+    under review, so it goes where the eye lands first.  Capture order
+    for the rest, because a burst is a sequence and shuffling it by score
+    destroys the one thing the eye reads it with.
+
+    Returns the dropped count rather than truncating quietly.  A strip
+    that silently showed 12 frames of 40 would read as "this is the
+    burst", which is a different and false statement.
+    """
+    def _key(r):
+        return (0 if r.get("is_burst_peak") else 1,
+                str(r.get("shot_at") or r.get("filename") or ""))
+    ordered = sorted(members, key=_key)
+    cap = max(1, int(cap))
+    return ordered[:cap], max(0, len(ordered) - cap)
+
+
 def _annotation_source(raw: object) -> str:
     """v3.9 — a label's provenance, restricted to values we defined."""
     from pixcull.scoring.pairwise import KNOWN_SOURCES
@@ -3543,6 +3564,13 @@ class _Handler(BaseHTTPRequestHandler):
             if rest.startswith("faces/"):
                 fn = rest[len("faces/"):]
                 return self._serve_api_v1_faces(run_id, fn)
+            # v3.12 — the same subject's face across one burst, in one
+            # payload, so the eyes-open comparison a human makes in a
+            # second does not need forty lightbox openings.
+            if rest.startswith("burst_faces/"):
+                cid = rest[len("burst_faces/"):]
+                qs = urlparse(self.path).query
+                return self._serve_api_v1_burst_faces(run_id, cid, qs)
             # P2.4 — active-learning queue (batch). Accepts ?n=N.
             # urlparse already stripped the query string from ``path``
             # in the caller; read it back off ``self.path`` so we
@@ -4164,6 +4192,95 @@ class _Handler(BaseHTTPRequestHandler):
             "filename": fn,
             "n_faces":  len(faces),
             "faces":    faces,
+        }).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+        return True
+
+    #: v3.12 — how many frames of a burst get a face crop.
+    #:
+    #: A 40-frame sports burst is 40 detector runs and 40 crops for a
+    #: comparison the eye finishes in about two seconds. The cap is not
+    #: a performance tweak, it is what keeps the strip a strip.
+    BURST_FACE_CAP = 12
+
+    def _serve_api_v1_burst_faces(self, run_id: str, cluster_id: str,
+                                  qs: str = "") -> bool:
+        """GET /api/v1/runs/<run_id>/burst_faces/<cluster_id>[?w=N]
+
+        v3.12 — the burst peak is picked on blink, smile and brow
+        blendshapes and then asserted in a sentence: "最锐 +1.6σ". The
+        photographer who wants to check it has to open each frame of the
+        cluster in turn. Narrative's Close-Ups Panel and Lightroom's Face
+        View both do the obvious thing instead, and it is the one
+        comparison a person makes faster than any model.
+
+        WHAT THIS DOES NOT CLAIM. The crop is the LARGEST face in each
+        frame, not a tracked identity. In a two-person burst the largest
+        face can change frame to frame, so the payload says `match:
+        "largest"` rather than letting the caller assume it followed one
+        person. Identity tracking is the face library's job and this is
+        not it.
+        """
+        run = _get_run(run_id) or _reload_run_from_disk(run_id)
+        if run is None:
+            self.send_error(404, "no such run"); return True
+        from urllib.parse import parse_qs as _pq
+        try:
+            width = int((_pq(qs or "").get("w") or ["256"])[0])
+        except (TypeError, ValueError):
+            width = 256
+        width = max(64, min(512, width))
+
+        result = _build_results(run_id)
+        if result is None:
+            self.send_error(404, "no results yet"); return True
+        rows, _meta = result
+        members = [r for r in rows
+                   if str(r.get("cluster_id")) == str(cluster_id)]
+        if len(members) < 2:
+            self.send_error(404, "not a burst"); return True
+
+        shown, dropped = burst_strip_plan(members, self.BURST_FACE_CAP)
+
+        frames = []
+        for r in shown:
+            fn = Path(str(r.get("filename") or "")).name
+            src = _resolve_image_source(run, fn)
+            face_i = None
+            if src is not None and src.exists():
+                boxes = _detect_faces_for_src(src)
+                if boxes:
+                    # Largest by box area.
+                    face_i = max(range(len(boxes)),
+                                 key=lambda i: (boxes[i][2] * boxes[i][3]))
+            frames.append({
+                "filename": fn,
+                "is_peak": bool(r.get("is_burst_peak")),
+                "decision": str(r.get("decision") or ""),
+                "score_final": r.get("score_final"),
+                # None, not a URL to nothing: a frame where no face was
+                # found is a real answer and the strip should show the
+                # gap rather than a broken image.
+                "crop": (f"/face_crop/{quote(run_id)}/{quote(fn)}/{face_i}"
+                         f"?w={width}") if face_i is not None else None,
+            })
+
+        body = _safe_dumps({
+            "schema":     "pixcull.api.v1.burst_faces.v1",
+            "run_id":     run_id,
+            "cluster_id": str(cluster_id),
+            "match":      "largest",
+            "n_frames":   len(members),
+            "n_shown":    len(shown),
+            # Named, not silent. A strip that quietly showed 12 of 40
+            # would read as "this is the burst".
+            "n_dropped":  dropped,
+            "frames":     frames,
         }).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json; charset=utf-8")
