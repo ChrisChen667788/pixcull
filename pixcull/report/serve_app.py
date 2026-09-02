@@ -1732,9 +1732,16 @@ def _m3_advice_pass(rows: list, df) -> int:
         return 0
 
     by_fn = {}
+    clusters: dict = {}
     try:
-        for rec in df.to_dict("records"):
+        records = df.to_dict("records")
+        for rec in records:
             by_fn[str(rec.get("filename", ""))] = rec
+        # v3.3 — the burst context has to be built from the whole frame.
+        # A single row cannot know it has six near-identical siblings,
+        # which is exactly the fact the critique on a burst loser needs.
+        from pixcull.scoring.burst_context import index_clusters
+        clusters = index_clusters(records)
     except Exception:  # noqa: BLE001
         pass
 
@@ -1744,11 +1751,17 @@ def _m3_advice_pass(rows: list, df) -> int:
                  for k, v in rec.items()
                  if k.startswith("vlm_") and k.endswith("_stars")}
         LEDGER.attempt("m3_advice")
+        try:
+            from pixcull.scoring.burst_context import burst_note
+            note = burst_note(rec or row, clusters)
+        except Exception:  # noqa: BLE001
+            note = ""
         out = enrich_advice(
             rec or row, stars, str(row.get("decision", "")),
             row["advice"], judge,
             image_path=Path(_row_image_path(row)),
-            on_fallback=lambda why: LEDGER.fell_back("m3_advice", why))
+            on_fallback=lambda why: LEDGER.fell_back("m3_advice", why),
+            burst=note)
         if out is not row["advice"]:
             LEDGER.ok("m3_advice")
         return idx, out

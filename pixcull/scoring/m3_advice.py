@@ -49,7 +49,7 @@ PROMPT = """\
 {evidence}
 
 判定:{decision}(六轴评分:{stars})
-
+{burst}
 请只输出 JSON,不要任何其他文字:
 
 {{
@@ -83,13 +83,26 @@ PROMPT = """\
 
 
 def build_prompt(row: dict[str, Any], final_stars: dict[str, Any],
-                 decision: str) -> str:
+                 decision: str, *, burst: str = "") -> str:
+    """The advice prompt for one photo.
+
+    ``burst`` is v3.3: the note from :mod:`pixcull.scoring.burst_context`
+    saying this frame is one of N near-identical exposures and, when it
+    lost, what the winner won on. Without it the model writing "why is
+    this being discarded" does not know the frame lost a comparison, and
+    has to invent some other fault.
+
+    Defaulted to "" so a caller that has no cluster information — the
+    doctor, an ad-hoc script, a single loose file — produces exactly the
+    pre-v3.3 prompt rather than a prompt with a hole in it.
+    """
     from pixcull.scoring.m3 import build_evidence_block
     evidence = build_evidence_block(row) or "(本机检测器没有可用读数)"
     stars = " ".join(
         f"{a}={final_stars.get(a)}" for a in _AXES
         if final_stars.get(a) is not None) or "无"
-    return PROMPT.format(evidence=evidence, decision=decision, stars=stars)
+    return PROMPT.format(evidence=evidence, decision=decision, stars=stars,
+                         burst=(burst + "\n") if burst else "")
 
 
 def _strings(v: Any, limit: int) -> list[str]:
@@ -215,7 +228,8 @@ def enrich_advice(row: dict[str, Any], final_stars: dict[str, Any],
                   decision: str, fallback: dict[str, Any],
                   judge: Any, *, image_path: Path | None = None,
                   max_tokens: int = 3000,
-                  on_fallback: Any = None) -> dict[str, Any]:
+                  on_fallback: Any = None,
+                  burst: str = "") -> dict[str, Any]:
     """Template advice in, M3 advice out — or the template again.
 
     Never raises. Advice is decoration on a decision that has already
@@ -244,7 +258,8 @@ def enrich_advice(row: dict[str, Any], final_stars: dict[str, Any],
             scene=str(row.get("scene") or ""),
             max_tokens=max_tokens,
             row=row,
-            prompt_override=build_prompt(row, final_stars, decision),
+            prompt_override=build_prompt(row, final_stars, decision,
+                                         burst=burst),
         )
     except TypeError:
         # A judge without prompt_override cannot write advice; its axis
