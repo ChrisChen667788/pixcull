@@ -235,7 +235,7 @@ def _content_hash(path: Path, extra: str = "") -> str:
 def cache_extra(*, model: str, scene: str | None, vertical: str | None,
                 evidence_arm: str, evidence_len: int,
                 prompt_override: str | None, temperature: float = 0.0,
-                sample: int = 0) -> str:
+                sample: int = 0, refs: str = "") -> str:
     """The prompt-affecting discriminator folded into the cache key.
 
     Pulled out of :meth:`MinimaxM3Judge.score` so the one invariant that
@@ -266,7 +266,21 @@ def cache_extra(*, model: str, scene: str | None, vertical: str | None,
         # already made.  Appended and only when non-zero, for the same
         # reason as temperature.
         + (f"|S{sample}" if sample else "")
+        # v3.11 — which reference frames were attached.
+        #
+        # Without this, turning grounding on reads back the ungrounded
+        # answer from cache and the A/B compares an arm against itself —
+        # the mirror of the v3.2 bug, and the one v2.66 actually shipped.
+        + (f"|R{refs}" if refs else "")
     )
+
+
+def _refs_key(reference_images: list | None) -> str:
+    """A short stable digest of which reference frames were attached."""
+    if not reference_images:
+        return ""
+    joined = "|".join(str(Path(r).name) for r in reference_images)
+    return hashlib.sha256(joined.encode("utf-8")).hexdigest()[:10]
 
 
 class VerdictCache:
@@ -653,6 +667,9 @@ class MiniMaxM3Judge:
         # v3.6 — which draw of a consistency pass this is.  0 is "not a
         # sampled pass" and changes nothing.
         sample: int = 0,
+        # v3.11 — reference frames the photographer judged themselves,
+        # attached AFTER the frame under judgement.  Empty by default.
+        reference_images: list | None = None,
     ) -> VlmVerdict:
         """Judge one photo, with local measurements supplied as evidence.
 
@@ -690,7 +707,8 @@ class MiniMaxM3Judge:
                                 evidence_len=len(evidence),
                                 prompt_override=prompt_override,
                                 temperature=temperature,
-                                sample=sample))
+                                sample=sample,
+                                refs=_refs_key(reference_images)))
             except OSError:
                 key = ""
             if key:
@@ -715,14 +733,28 @@ class MiniMaxM3Judge:
                                  "midnight")
                 verdict.elapsed_s = time.time() - t0
                 return verdict
-            messages = [{
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": prompt},
-                    {"type": "image_url",
-                     "image_url": {"url": self._image_data_uri(image_path)}},
-                ],
-            }]
+            content = [
+                {"type": "text", "text": prompt},
+                {"type": "image_url",
+                 "image_url": {"url": self._image_data_uri(image_path)}},
+            ]
+            # v3.11 — reference frames, always AFTER the one being judged.
+            #
+            # Order is the whole contract: the prompt says "只评第一张",
+            # and a reference image arriving first would make that
+            # sentence point at the wrong photograph.  A reference that
+            # cannot be read is skipped rather than failing the call —
+            # grounding is an improvement to a judgement, not a
+            # precondition for one.
+            for ref in (reference_images or []):
+                try:
+                    content.append({
+                        "type": "image_url",
+                        "image_url": {"url": self._image_data_uri(Path(ref))},
+                    })
+                except Exception:  # noqa: BLE001
+                    continue
+            messages = [{"role": "user", "content": content}]
             resp = self._complete(messages, max_tokens, temperature)
             self._charge(resp)
             text = resp.choices[0].message.content or ""
