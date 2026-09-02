@@ -433,6 +433,50 @@ _CULL_REASONS: tuple[str, ...] = (
     "other",            # 其他    — catch-all for everything else
 )
 
+def scene_shortlist(filenames: list, row_by_fn: dict, n: int) -> dict:
+    """v3.13 — the best n frames of one scene, and whether any is good.
+
+    The scenes endpoint returned `filenames` as a flat unsorted list, so
+    "show me this stretch's best five" — the interaction Narrative's
+    Scenes View is built around — was something a client had to
+    reimplement by joining scenes to rows itself.
+
+    THE HONEST HALF. Ranking inside a scene rewards exactly what the
+    global ranking rewards, so a stretch of uniformly weak frames still
+    produces five "best" ones, and a caller that renders them as a
+    shortlist has invented five recommendations out of a bad ten
+    minutes. So the payload carries each candidate's own decision and
+    score, and `none_is_keep` says outright when the whole shortlist sits
+    below the keep line. A UI that ignores that flag is making a claim
+    this function refused to make.
+
+    Frames with no score sort last rather than being dropped: a frame the
+    pipeline could not score is part of the scene, and silently removing
+    it would make the scene look smaller than it was.
+    """
+    n = max(1, int(n))
+    def _score(fn):
+        v = (row_by_fn.get(fn) or {}).get("score_final")
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return float("-inf")
+    ranked = sorted(filenames, key=lambda fn: (-_score(fn), str(fn)))
+    top = []
+    for fn in ranked[:n]:
+        row = row_by_fn.get(fn) or {}
+        sc = _score(fn)
+        top.append({
+            "filename": fn,
+            "score_final": None if sc == float("-inf") else sc,
+            "decision": str(row.get("decision") or ""),
+        })
+    return {
+        "top": top,
+        "none_is_keep": not any(c["decision"] == "keep" for c in top),
+    }
+
+
 def burst_strip_plan(members: list[dict], cap: int) -> tuple[list, int]:
     """v3.12 — which frames of a burst reach the face strip, and how many did not.
 
@@ -4095,6 +4139,13 @@ class _Handler(BaseHTTPRequestHandler):
             min_gap = float(qp.get("min_gap", ["120"])[0])
         except (TypeError, ValueError):
             min_gap = 120.0
+        # v3.13 — how many candidates per scene. 0 keeps the pre-v3.13
+        # payload exactly, so an existing client sees no change.
+        try:
+            top_n = int(qp.get("top_n", ["0"])[0])
+        except (TypeError, ValueError):
+            top_n = 0
+        top_n = max(0, min(20, top_n))
         from pixcull.scoring.scenes import segment_scenes
         items = [{"filename": r.get("filename"), "timestamp": r.get("datetime")}
                  for r in rows if r.get("filename")]
@@ -4119,6 +4170,7 @@ class _Handler(BaseHTTPRequestHandler):
         from pixcull.scoring.scene_labels import label_stretch
 
         scene_by_fn = {r.get("filename"): _s(r.get("scene")) for r in rows}
+        row_by_fn = {r.get("filename"): r for r in rows}
 
         def _hour(ts):
             return _dt.fromtimestamp(ts).hour if ts else None
@@ -4145,6 +4197,8 @@ class _Handler(BaseHTTPRequestHandler):
                 # its frames; it just is not announced as a chapter.
                 "is_stray":  lab.is_stray,
             })
+            if top_n:
+                out[-1].update(scene_shortlist(s.filenames, row_by_fn, top_n))
         body = _safe_dumps({
             "schema":    "pixcull.api.v1.scenes.v1",
             "run_id":    run_id,
