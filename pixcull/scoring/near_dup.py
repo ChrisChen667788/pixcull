@@ -173,3 +173,98 @@ def pick_cross_shoot_heroes(
             "duplicates": [m for m in g if m != hero],
         })
     return out
+
+
+# ---------------------------------------------------------------------------
+# v3.14 — a tighter crop is not a duplicate
+# ---------------------------------------------------------------------------
+#
+# `group_near_dups` collapses on CLIP cosine alone. CLIP is largely
+# invariant to framing — that is what makes it good at "same subject" and
+# what makes it unable to tell the same frame twice from a deliberate
+# reframe of it. A 16:9 crop of a 3:2 original is a decision the
+# photographer made, and collapsing it into the original hides one of the
+# two things they wanted to compare.
+#
+# THIS IS PIXCULL'S OWN HYPOTHESIS. The fact-check on the competitive
+# research confirmed only Aftershoot's headline claim of tighter
+# duplicate detection; the mechanism behind it was not confirmed and this
+# is not a reimplementation of it. Off unless PIXCULL_ASPECT_GUARD=1
+# until the measurement below has run.
+#
+# MEASURE: on a set containing known intentional crop variants, how many
+# survive grouping with the guard on versus off.
+
+#: Relative difference in aspect ratio above which two frames are treated
+#: as differently framed rather than as the same frame twice.
+#:
+#: 6% is chosen to sit well below any real reframe and well above noise.
+#: 3:2 (1.500) against 16:9 (1.778) is 18.5%; 3:2 against 4:3 (1.333) is
+#: 11%. A few pixels of lens-correction crop is under 1%.
+ASPECT_TOL = 0.06
+
+ASPECT_ENV = "PIXCULL_ASPECT_GUARD"
+
+
+def aspect_guard_enabled() -> bool:
+    import os
+    return os.environ.get(ASPECT_ENV, "0") == "1"
+
+
+def aspect_of(path) -> float | None:
+    """Width / height from the image header, or None.
+
+    Reads the header only — PIL does not decode pixels for `.size` — so
+    this is cheap enough to run over the members of a group. None on any
+    failure: a frame whose dimensions cannot be read must not be split
+    away from its group on a guess.
+    """
+    try:
+        from PIL import Image
+        with Image.open(path) as im:
+            w, h = im.size
+        return (float(w) / float(h)) if h else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def split_by_aspect(groups, aspect_by_fn: dict, *,
+                    tol: float = ASPECT_TOL) -> list[list[str]]:
+    """Split each group into runs of similar aspect ratio.
+
+    Members whose aspect is unknown stay with the FIRST subgroup rather
+    than forming an "unknown" one of their own: an unreadable header is
+    missing information, not evidence of a different framing, and
+    inventing a group out of it would be worse than the collapse this
+    guards against.
+
+    Subgroups of one are dropped, matching `group_near_dups` — a group of
+    one is not a duplicate group. So a pair that splits cleanly into two
+    differently-framed singletons disappears from the near-dup list
+    entirely, which is the correct outcome: they were never duplicates.
+    """
+    out: list[list[str]] = []
+    for group in groups:
+        buckets: list[tuple[float, list[str]]] = []
+        unknown: list[str] = []
+        for fn in group:
+            a = aspect_by_fn.get(fn)
+            if a is None or a <= 0:
+                unknown.append(fn)
+                continue
+            for ref, members in buckets:
+                if abs(a - ref) / ref <= tol:
+                    members.append(fn)
+                    break
+            else:
+                buckets.append((a, [fn]))
+        if unknown:
+            if buckets:
+                buckets[0][1].extend(unknown)
+            else:
+                buckets.append((0.0, unknown))
+        for _, members in buckets:
+            if len(members) >= 2:
+                out.append(members)
+    out.sort(key=len, reverse=True)
+    return out

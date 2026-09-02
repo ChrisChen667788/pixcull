@@ -2007,7 +2007,7 @@ _NEARDUP_CACHE_MAX = 8          # a few thresholds across a couple of runs
 
 
 def _cached_near_dup_groups(cache_path: Path, cache: dict,
-                            threshold: float) -> list:
+                            threshold: float, run: dict | None = None) -> list:
     """Group near-duplicates, reusing the last result when nothing moved.
 
     Falls through to an uncached grouping if the vector file can't be
@@ -2017,8 +2017,13 @@ def _cached_near_dup_groups(cache_path: Path, cache: dict,
 
     names = [str(f) for f in cache["filenames"]]
     try:
+        from pixcull.scoring.near_dup import aspect_guard_enabled
+        # v3.14 — the guard is part of the key. Without it, toggling it
+        # returns the groups computed under the other setting, which is
+        # the shape of every cache bug in this file's history.
         key = (str(cache_path), cache_path.stat().st_mtime_ns,
-               round(float(threshold), 6), len(names))
+               round(float(threshold), 6), len(names),
+               aspect_guard_enabled())
     except OSError:
         return group_near_dups(names, cache["vectors"], threshold=threshold)
 
@@ -2029,6 +2034,27 @@ def _cached_near_dup_groups(cache_path: Path, cache: dict,
 
     # Computed outside the lock: this is the multi-second path.
     groups = group_near_dups(names, cache["vectors"], threshold=threshold)
+    # v3.14 — a deliberate reframe is not a duplicate. CLIP is largely
+    # invariant to framing, which is what makes it good at "same subject"
+    # and unable to tell the same frame twice from a 16:9 crop of it.
+    #
+    # Aspects are read only for frames that ALREADY grouped, so this is a
+    # few dozen header reads on a 5,000-frame run rather than 5,000.
+    try:
+        from pixcull.scoring.near_dup import (
+            aspect_guard_enabled, aspect_of, split_by_aspect,
+        )
+        if aspect_guard_enabled() and groups:
+            asp: dict = {}
+            for g in groups:
+                for fn in g:
+                    if fn in asp:
+                        continue
+                    src = _resolve_image_source(run, fn) if run else None
+                    asp[fn] = aspect_of(src) if src is not None else None
+            groups = split_by_aspect(groups, asp)
+    except Exception:  # noqa: BLE001
+        pass          # grouping must not fail on its own refinement
     with _NEARDUP_CACHE_LOCK:
         # Drop superseded entries for this same vector file first, so a
         # re-scored run can't pin several generations of its groups.
@@ -4096,7 +4122,7 @@ class _Handler(BaseHTTPRequestHandler):
         # pure function of (vectors, threshold), so cache it on the
         # vector file's mtime plus the threshold; pick_heroes below still
         # runs fresh because it depends on the (separately cached) rows.
-        groups = _cached_near_dup_groups(cache_path, cache, thr)
+        groups = _cached_near_dup_groups(cache_path, cache, thr, run)
         scores = {r.get("filename"): r.get("score_final") for r in rows
                   if isinstance(r.get("score_final"), (int, float))}
         body = _safe_dumps({
