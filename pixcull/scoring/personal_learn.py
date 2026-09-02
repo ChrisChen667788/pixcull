@@ -43,6 +43,12 @@ class Example:
     axes: dict            # {axis: stars 0..5}
     decision: str         # keep | maybe | cull
     run_id: str = ""      # v2.83 — which shoot this came from
+    # v3.8 — which KIND of shoot.  Without it every correction pools into
+    # one profile, so a photographer who shoots weddings and wildlife gets
+    # the average of two tastes that disagree by design: wedding
+    # corrections forgive soft technical for emotion, wildlife
+    # corrections do the opposite, and the mean forgives neither.
+    vertical: str = ""
 
 
 def _f(v) -> float:
@@ -192,6 +198,129 @@ def evaluate(examples: Iterable[Example], *, folds: int = 4) -> dict:
 
 
 # --------------------------------------------------------------------- #
+# v3.8 — one taste per kind of shoot
+# --------------------------------------------------------------------- #
+
+#: Corrections needed before a vertical gets its own profile.
+#:
+#: The whole risk of this version is that splitting a small correction
+#: set by shoot type produces several profiles each fitted to noise, and
+#: every one of them looks exactly like a profile. 30 is not a magic
+#: number — it is the point below which the pooled profile is the safer
+#: answer, and the guard matters more than the threshold.
+MIN_PER_VERTICAL = 30
+
+#: The key the pooled profile lives under. Always present.
+POOLED = "_pooled"
+
+
+def split_by_vertical(examples: Iterable[Example]) -> dict[str, list]:
+    """Group corrections by shoot type, dropping the unlabelled ones.
+
+    Examples with no vertical are NOT pooled into a shared "" bucket:
+    an unlabelled correction is a correction whose shoot type nobody
+    recorded, and treating "unknown" as its own taste would fit a
+    profile to a coincidence.
+    """
+    out: dict[str, list] = {}
+    for e in examples:
+        v = (getattr(e, "vertical", "") or "").strip()
+        if v:
+            out.setdefault(v, []).append(e)
+    return out
+
+
+def learn_profiles(examples: Iterable[Example]) -> dict:
+    """Pooled profile always; a per-vertical one only where earned.
+
+    Returns ``{POOLED: profile, "<vertical>": profile, ...}``. A vertical
+    below :data:`MIN_PER_VERTICAL` gets no entry at all rather than a
+    thin one — an absent key makes the caller fall back, a thin profile
+    makes it confident.
+    """
+    exs = list(examples)
+    out = {POOLED: learn_profile(exs)}
+    for vert, rows in split_by_vertical(exs).items():
+        if len(rows) >= MIN_PER_VERTICAL:
+            out[vert] = learn_profile(rows)
+    return out
+
+
+def profile_for(profiles: dict, vertical: str | None):
+    """The profile to decide with, falling back to pooled."""
+    v = (vertical or "").strip()
+    if v and v in profiles:
+        return profiles[v]
+    return profiles.get(POOLED)
+
+
+def evaluate_by_vertical(examples: Iterable[Example], *,
+                         folds: int = 4) -> dict:
+    """Does a per-vertical profile beat the pooled one on held-out data?
+
+    Same acceptance shape as :func:`evaluate`, including its refusal: a
+    result that cannot be measured says so instead of returning a delta
+    of 0.0, because "we could not measure" and "we measured and it makes
+    no difference" are opposite findings that used to print identically.
+
+    The refusal here is stricter. Splitting by vertical means each arm
+    trains on a fraction of an already-small set, so this declines unless
+    at least two verticals clear :data:`MIN_PER_VERTICAL` — with one
+    vertical there is nothing to compare, and the pooled profile IS the
+    per-vertical profile.
+    """
+    exs = list(examples)
+    by_v = split_by_vertical(exs)
+    eligible = {v: r for v, r in by_v.items() if len(r) >= MIN_PER_VERTICAL}
+    if len(eligible) < 2:
+        return {
+            "n": len(exs),
+            "verticals_seen": {v: len(r) for v, r in sorted(by_v.items())},
+            "verticals_eligible": sorted(eligible),
+            "refused": (
+                f"need at least two verticals with {MIN_PER_VERTICAL}+ "
+                f"corrections each to compare a per-vertical profile "
+                f"against the pooled one; got "
+                f"{len(eligible)} ({sorted(eligible)})"
+            ),
+        }
+
+    pooled_f1, per_f1 = [], []
+    for vert, rows in eligible.items():
+        if len(rows) < folds * 2:
+            continue
+        for k in range(folds):
+            test = rows[k::folds]
+            train_v = [e for i, e in enumerate(rows) if i % folds != k]
+            if not test or not train_v:
+                continue
+            # The pooled arm trains on everything EXCEPT this fold —
+            # including the other verticals. That is the comparison that
+            # matters: is the other verticals' data helping or diluting.
+            train_all = [e for e in exs if e not in test]
+            pooled_f1.append(_keep_f1(
+                test, lambda a, p=learn_profile(train_all): decide(a, profile=p)))
+            per_f1.append(_keep_f1(
+                test, lambda a, p=learn_profile(train_v): decide(a, profile=p)))
+
+    if not pooled_f1:
+        return {"n": len(exs),
+                "verticals_eligible": sorted(eligible),
+                "refused": "no vertical had enough corrections to fold"}
+    pooled = sum(pooled_f1) / len(pooled_f1)
+    per = sum(per_f1) / len(per_f1)
+    return {
+        "n": len(exs),
+        "verticals_eligible": sorted(eligible),
+        "folds": len(pooled_f1),
+        "pooled_f1": round(pooled, 3),
+        "per_vertical_f1": round(per, 3),
+        "delta": round(per - pooled, 3),
+        "refused": None,
+    }
+
+
+# --------------------------------------------------------------------- #
 # Gather from the user's local runs
 # --------------------------------------------------------------------- #
 def gather_examples_from_runs(runs_root) -> list:
@@ -207,6 +336,7 @@ def gather_examples_from_runs(runs_root) -> list:
         if not scores.exists():
             continue
         axmap: dict[str, dict] = {}
+        vmap: dict[str, str] = {}
         try:
             with open(scores, newline="", encoding="utf-8") as fh:
                 for row in csv.DictReader(fh):
@@ -214,6 +344,10 @@ def gather_examples_from_runs(runs_root) -> list:
                     if fnk:
                         axmap[fnk] = {a: _f(row.get(f"rubric_{a}_stars"))
                                       for a in AXES}
+                        # v3.8 — the shoot type was already sitting in
+                        # this row and was simply not carried across.
+                        vmap[fnk] = str(row.get("vertical")
+                                        or row.get("scene") or "").strip()
         except OSError:
             continue
         dec: dict[str, str] = {}
@@ -234,5 +368,6 @@ def gather_examples_from_runs(runs_root) -> list:
                 # v2.83 — which shoot, so held-out folds can be whole
                 # shoots rather than a stride through one afternoon.
                 out.append(Example(axes=axmap[f], decision=d,
-                                   run_id=str(ann.parent.parent.name)))
+                                   run_id=str(ann.parent.parent.name),
+                                   vertical=vmap.get(f, "")))
     return out
