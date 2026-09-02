@@ -54,7 +54,7 @@ def test_empty_critiques_count_in_the_denominator():
     """9% of the cached corpus is empty. Reporting rates over only the
     non-empty texts would hide a pass that stopped producing output —
     the failure most worth catching, and the one that looks best."""
-    s = summarise([DEEP, None, None, None])
+    s = summarise([DEEP, None, None, None], field="reading")
     assert s["n"] == 4 and s["empty"] == 3
     assert s["sees_the_picture_rate"] == pytest.approx(0.25)
 
@@ -78,7 +78,58 @@ def test_a_longer_text_is_not_automatically_deeper():
 def test_summarise_reports_both_rather_than_either():
     """A corpus where half the texts see the picture and the other half
     argue is not a corpus of critiques — it is two piles of halves."""
-    s = summarise(["新娘的手搭在栏杆上。", "因为动态范围压缩,判定下调。"])
+    s = summarise(["新娘的手搭在栏杆上。", "因为动态范围压缩,判定下调。"], field="reading")
     assert s["sees_the_picture_rate"] == pytest.approx(0.5)
     assert s["argues_rate"] == pytest.approx(0.5)
     assert s["both_rate"] == pytest.approx(0.0)
+
+
+# --------------------------------------------------------------------
+# v3.1 — a corpus figure has to say which field it measured.
+#
+# v2.81 published a depth baseline that averaged two different call
+# types together: verdict calls carry a one-line `overall_rationale` by
+# design, advice calls carry the multi-sentence `reading`. The averaged
+# figure was wrong in a way nobody could see from the number, because
+# the number did not say what it was over. These pin the guard.
+# --------------------------------------------------------------------
+
+def test_summarise_refuses_to_produce_an_unlabelled_figure():
+    import pytest
+    with pytest.raises(TypeError):
+        summarise(["新娘的手搭在栏杆上,所以视线被带向左侧。"])  # type: ignore[call-arg]
+
+
+def test_summarise_refuses_a_blank_field_name():
+    import pytest
+    for bad in ("", "   "):
+        with pytest.raises(ValueError):
+            summarise(["新娘的手搭在栏杆上。"], field=bad)
+
+
+def test_summarise_carries_the_field_into_the_result():
+    s = summarise(["新娘的手搭在栏杆上,所以视线被带向左侧。"],
+                  field="advice.reading")
+    assert s["field"] == "advice.reading"
+
+
+def test_baseline_doc_names_the_field_of_every_figure_it_reports():
+    """The published baseline must not contain a table nobody can attribute.
+
+    Not a style check: the v2.81 defect was exactly a table of rates with
+    no field named above it.
+    """
+    from pathlib import Path
+    doc = Path(__file__).resolve().parent.parent / "docs" / "ADVICE-DEPTH-BASELINE.md"
+    text = doc.read_text(encoding="utf-8")
+    # Every "median length" row belongs to a section that names its field.
+    sections = text.split("\n### ")[1:]
+    assert sections, "baseline doc has no per-field sections"
+    for sec in sections:
+        if "median length" not in sec:
+            continue
+        head = sec.split("\n", 1)[0]
+        assert ("rationale" in head or "reading" in head
+                or "alternative" in head), (
+            f"section {head!r} reports a median with no field named in its heading"
+        )

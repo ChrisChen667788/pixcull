@@ -37,15 +37,29 @@ WHAT THESE MEASURE, AND WHAT THEY DO NOT
                      specific failure the advice prompt already forbids
                      in words and which shipped anyway.
 
-  length             Characters. Blunt, but the cached corpus has a
-                     median of 71 — one sentence — against a 3,000-token
-                     budget, which says the constraint was never the
-                     budget.
+  length             Characters. Blunt, but it is the signal that first
+                     showed the two call types have to be counted apart:
+                     the verdict one-liner sits near 69 characters and
+                     the advice `reading` near 234, so a figure quoted
+                     without naming its field says almost nothing.
 
-A baseline over the 3,929 cached rationales is in
-`docs/ADVICE-DEPTH-BASELINE.md`. The point of the baseline is that any
-future change to a prompt or a model has something to beat, and a
-regression has something to trip over.
+WHICH FIELD — THIS IS NOT A DETAIL
+
+The cache holds two different calls. Verdict calls carry
+`overall_rationale`, a one-line summary *by design*. Advice calls carry
+`reading`, the 2-4 sentence critique. v2.81 had to correct a published
+baseline that had averaged the two together, and the only reason that
+was possible is that a corpus figure used to be a bare dict of rates
+with nothing in it saying what had been measured.
+
+So :func:`summarise` now requires a ``field`` and returns it. An
+unlabelled corpus figure cannot be produced from this module, which is
+the same class of guard as the rest of the project's refusal rules: the
+number is allowed to be bad, it is not allowed to be anonymous.
+
+The baseline is in `docs/ADVICE-DEPTH-BASELINE.md` and is reproducible
+with `scripts/measure_advice_depth.py` — it was hand-assembled once and
+the numbers drifted as the cache grew, which is its own small lesson.
 """
 from __future__ import annotations
 
@@ -119,17 +133,30 @@ def measure(text: str | None) -> Depth:
     )
 
 
-def summarise(texts: list[str | None]) -> dict:
-    """Corpus-level figures. Rates, not a score.
+def summarise(texts: list[str | None], *, field: str) -> dict:
+    """Corpus-level figures for ONE named field. Rates, not a score.
 
     ``n`` counts every text handed in, including empty ones: reporting
     rates over only the non-empty texts would hide a pass that stopped
     producing output, which is the failure most worth catching.
+
+    ``field`` is required and is returned in the result. The cache holds
+    two call types whose text fields mean different things, and a figure
+    computed across both is meaningless — that mistake was published once
+    (v2.81) and corrected by hand. A keyword with no default is the
+    cheapest way to make the anonymous version unrepresentable.
     """
+    if not isinstance(field, str) or not field.strip():
+        raise ValueError(
+            "summarise() needs the name of the field it is measuring; "
+            "an unlabelled corpus figure is how the v2.81 conflation "
+            "got published"
+        )
     ms = [measure(t) for t in texts]
     n = len(ms) or 1
     lens = sorted(m.length for m in ms)
     return {
+        "field": field,
         "n": len(ms),
         "empty": sum(1 for m in ms if m.length == 0),
         "median_length": lens[len(lens) // 2] if lens else 0,
