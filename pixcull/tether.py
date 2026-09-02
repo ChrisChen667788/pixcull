@@ -93,6 +93,11 @@ class TetherSession:
         self.started_at = time.time()
         self.n_analyzed = 0
         self.n_failed = 0
+        # v3.15 — counted, not silent. A session that wrote no sidecars
+        # because the destination was locked must not look identical to
+        # one that was never asked to write any.
+        self.n_sidecars = 0
+        self.n_sidecar_failed = 0
         self.last_filename: str | None = None
         self.last_decision: str | None = None
         self.last_at: float | None = None
@@ -152,6 +157,56 @@ class TetherSession:
             print(f"[tether] analyze failed {path.name}: "
                   f"{type(exc).__name__}: {exc}", file=sys.stderr)
             return None
+
+    #: v3.15 — write an XMP sidecar next to each frame as it lands.
+    #:
+    #: Off by default.  The tether destination is a folder Lightroom or
+    #: Capture One is actively importing from, and dropping files into it
+    #: mid-import is a real collision risk with the host's own sidecar
+    #: handling.  The photographer opts in when they know their host is
+    #: happy with it.
+    SIDECAR_ENV = "PIXCULL_TETHER_XMP"
+
+    def _sidecar_enabled(self) -> bool:
+        import os
+        return os.environ.get(self.SIDECAR_ENV, "0") == "1"
+
+    def _write_sidecar(self, path: Path, result: dict) -> None:
+        """Put the verdict where the host application can see it.
+
+        This is the gap the whole tether path had.  `decision_to_xmp` has
+        mapped keep/maybe/cull to 5/3/1 stars and Green/Yellow/Red since
+        V29, and its own docstring says Capture One renders those as
+        coloured borders in the browser — and `tether.py` has never once
+        called it.  So a live tether session produced verdicts that
+        existed only inside PixCull's own window, while the photographer
+        was looking at the host application the whole time.
+
+        Never raises.  A sidecar is an improvement to a shot that has
+        already been analysed; a locked file or a read-only card must not
+        cost the photographer the analysis.  Failures are counted so a
+        session that wrote nothing does not look like a session that was
+        never asked to.
+        """
+        if not self._sidecar_enabled():
+            return
+        try:
+            from pixcull.io.xmp import (
+                build_iptc_fields_from_row, decision_to_xmp, write_xmp,
+            )
+            stars, label = decision_to_xmp(str(result.get("decision") or ""))
+            fields = build_iptc_fields_from_row(result)
+            write_xmp(path, stars, label,
+                      keywords=fields.get("keywords") or [])
+            self.n_sidecars += 1
+        except Exception as exc:  # noqa: BLE001
+            self.n_sidecar_failed += 1
+            if self.n_sidecar_failed == 1:
+                # Once, not per frame: a locked destination would
+                # otherwise print a line per shutter release.
+                print(f"[tether] sidecar write failed ({type(exc).__name__}: "
+                      f"{exc}); further failures counted, not printed",
+                      file=sys.stderr)
 
     def _append_row(self, result: dict) -> None:
         """Append one analyzed row to scores.csv. The header is
@@ -281,6 +336,7 @@ class TetherSession:
                         self.n_failed += 1
                         continue
                     self._append_row(result)
+                    self._write_sidecar(p, result)
                     self.n_analyzed += 1
                     self.last_filename = result["filename"]
                     self.last_decision = result["decision"]
@@ -321,6 +377,11 @@ class TetherSession:
             "started_at":   self.started_at,
             "elapsed_s":    time.time() - self.started_at,
             "n_analyzed":   self.n_analyzed,
+            # v3.15 — both, always. The failure count is the half that
+            # tells a photographer their host is holding the folder.
+            "n_sidecars":        self.n_sidecars,
+            "n_sidecar_failed":  self.n_sidecar_failed,
+            "sidecars_enabled":  self._sidecar_enabled(),
             "n_failed":     self.n_failed,
             "last":         {
                 "filename": self.last_filename,
