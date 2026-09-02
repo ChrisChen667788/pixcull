@@ -1,5 +1,23 @@
 # PixCull v3.1 → v3.6 charter — three competitors, read after the fact-check
 
+> **SUPERSEDED 2026-09-02 by `ROADMAP-v3.1-v3.27-charter.md`, and §v3.1 below is
+> wrong.** This document read the research at the level of one workflow step. Asked
+> the broader question — what do these products do inside the culling engine — the
+> same 46 entries yielded 24 proposals, of which 21 survived an adversarial pass.
+>
+> The specific error: §v3.1 argued PixCull gives the photographer no uncertainty
+> signal, so an unsure `maybe` and a borderline `maybe` "look identical". The report
+> UI already ships a meta-confidence badge on the card (`results.js:2427-2433`), an
+> `uncertain` sort by |P(keep)−0.5| (`:1855-1862`), and a one-click 决议模式 that
+> combines them (`:2058-2072`). The real gap is narrower: that confidence is
+> self-reported by the model, unvalidated, and never written to XMP — now v3.6 and
+> v3.7 of the superseding charter.
+>
+> §v3.2 through §v3.6 were **not** produced by the core-capability pass and are not
+> duplicated by it; they are carried into the superseding charter's Block H as
+> v3.23-v3.27, so one document holds the whole live plan. This file is kept for the
+> record of what was proposed and where the reasoning went wrong.
+
 Written 2026-09-02, after v3.0.3. Continues `ROADMAP-v2.79-v2.93-charter.md`,
 which is closed (`BLOCK-v2.77-v2.93-CLOSE.md`).
 

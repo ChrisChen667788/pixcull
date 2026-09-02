@@ -285,7 +285,22 @@ machine loads; back-to-back with only the server files swapped, v2.84
 gives 1410 ms and HEAD 1398 ms.  The harness now flags a wide spread.
 Warm TTFB is stable to ~3% and is safe to quote.
 
-**Next block: `docs/ROADMAP-v3.1-v3.6-charter.md`** — six versions read out
+**Next block: `docs/ROADMAP-v3.1-v3.27-charter.md`** — twenty-seven versions read
+out of the same 46-entry competitive research at the level of PixCull's own core
+(decision, rubric, judge, critique, personalisation, sequence, ingestion,
+compute, packaging).  24 proposals went through an adversarial refute pass; 21
+survived, 3 were killed — one because the "gap" was already built three ways in
+`results.js`, one on an unfounded Lightroom-SDK mechanism, one because this
+repo's own benchmark table says raising the worker cap regresses.  **Two items
+are instruments, not features, and everything else depends on them:** v3.1 (the
+advice-depth baseline has been measured over `rationale`, a one-sentence field,
+not `reading`, the 2-4 sentence critique) and v3.2 (temperature is not in the M3
+cache key, so any self-consistency measurement would read the same cached answer
+N times and report 100% agreement).  The earlier
+`docs/ROADMAP-v3.1-v3.6-charter.md` is superseded and its §v3.1 is wrong; the
+correction is at the top of that file.
+
+**Superseded: `docs/ROADMAP-v3.1-v3.6-charter.md`** — six versions read out
 of the deep competitive research at the level of the individual product
 entry, after the fact-check, not out of its summary.  The research pass had
 written `confidence: verified` on 美图云修, 像素蛋糕 and Capture One; the
