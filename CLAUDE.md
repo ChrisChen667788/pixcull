@@ -285,6 +285,47 @@ machine loads; back-to-back with only the server files swapped, v2.84
 gives 1410 ms and HEAD 1398 ms.  The harness now flags a wide spread.
 Warm TTFB is stable to ~3% and is safe to quote.
 
+**v3.1 → v3.15 SHIPPED** — the first fifteen of that charter.  Full gate
+exits 0; every version mutation-tested.
+
+Three of the fifteen had to be RE-DERIVED because the charter's premise was
+wrong, which is what the charter itself says to do:
+
+- **v3.1** the depth harness was NOT measuring the wrong field —
+  `ADVICE-DEPTH-BASELINE.md` separated `rationale` from `reading` back in
+  v2.81.  Only `advice_depth.py`'s docstring was stale.  The real defect was
+  that `summarise()` returned rates with nothing saying what they were over,
+  which is the exact shape of the v2.81 conflation.  It now requires a
+  `field`.
+- **v3.9** the compare modal DOES have a "prefer this side" gesture
+  (results.js:7538, since v0.7).  The real defect was worse: it wrote N-1
+  near-identical siblings into `annotations.jsonl` as plain human culls, so
+  every use of it flattened the keep-minus-cull gap `axis_weights` is built
+  from.  Compare labels now carry `source`, and `personal_learn` drops them.
+- **v3.10** a `.lrcat` is SQLite, not the "reverse-engineered binary" the
+  old deferral note claimed.
+
+Two of the fifteen were prerequisites, not features: **v3.2** (temperature
+was not in the M3 cache key) and **v3.6**'s draw index (N draws at one
+temperature still collided).  Without both, any self-consistency measurement
+reports 100% agreement on every image forever.
+
+**Six versions ship a mechanism and NO number.**  v3.3, v3.4, v3.5, v3.6,
+v3.11 need API budget; v3.8 and v3.9 need corrections and **there is no
+`annotations.jsonl` anywhere on this machine** — the fitted profile at
+`~/.pixcull/personal_profile.json` records 70 blind annotations but the
+examples behind it are gone, and a profile cannot be re-fitted from its own
+output.  Do not report any of these as measured.
+
+**New env switches, all default-off and all deliberately so:**
+`PIXCULL_AXIS_GROUPS` (3x VLM spend), `PIXCULL_CONSISTENCY_DRAWS` (N draws),
+`PIXCULL_CRITIQUE_EXEMPLARS=0` (off-switch; on by default),
+`PIXCULL_ASPECT_GUARD` (changes near-dup grouping),
+`PIXCULL_TETHER_XMP` (writes into a folder the host is importing from).
+
+**Editing `templates/src/results.js` requires `python scripts/build_results_html.py`**
+or `test_results_build.py::test_artifact_matches_sources` fails.
+
 **Next block: `docs/ROADMAP-v3.1-v3.27-charter.md`** — twenty-seven versions read
 out of the same 46-entry competitive research at the level of PixCull's own core
 (decision, rubric, judge, critique, personalisation, sequence, ingestion,
