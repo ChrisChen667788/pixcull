@@ -27,6 +27,7 @@ advice, not an empty pane.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -49,7 +50,7 @@ PROMPT = """\
 {evidence}
 
 判定:{decision}(六轴评分:{stars})
-{burst}
+{burst}{exemplars}
 请只输出 JSON,不要任何其他文字:
 
 {{
@@ -83,7 +84,8 @@ PROMPT = """\
 
 
 def build_prompt(row: dict[str, Any], final_stars: dict[str, Any],
-                 decision: str, *, burst: str = "") -> str:
+                 decision: str, *, burst: str = "",
+                 vertical: str | None = None) -> str:
     """The advice prompt for one photo.
 
     ``burst`` is v3.3: the note from :mod:`pixcull.scoring.burst_context`
@@ -101,8 +103,22 @@ def build_prompt(row: dict[str, Any], final_stars: dict[str, Any],
     stars = " ".join(
         f"{a}={final_stars.get(a)}" for a in _AXES
         if final_stars.get(a) is not None) or "无"
+    # v3.4 — worked critiques, off with PIXCULL_CRITIQUE_EXEMPLARS=0.
+    #
+    # The switch is not decoration: injecting them changes every advice
+    # prompt, which correctly invalidates the cached advice entries, and
+    # the A/B this version needs measuring has to be able to run the
+    # other arm.
+    ex = ""
+    if os.environ.get("PIXCULL_CRITIQUE_EXEMPLARS", "1") != "0":
+        try:
+            from pixcull.scoring.critique_exemplars import prompt_section
+            ex = prompt_section(vertical)
+        except Exception:  # noqa: BLE001
+            ex = ""          # advice must never fail on its own decoration
     return PROMPT.format(evidence=evidence, decision=decision, stars=stars,
-                         burst=(burst + "\n") if burst else "")
+                         burst=(burst + "\n") if burst else "",
+                         exemplars=(ex + "\n") if ex else "")
 
 
 def _strings(v: Any, limit: int) -> list[str]:
@@ -229,7 +245,8 @@ def enrich_advice(row: dict[str, Any], final_stars: dict[str, Any],
                   judge: Any, *, image_path: Path | None = None,
                   max_tokens: int = 3000,
                   on_fallback: Any = None,
-                  burst: str = "") -> dict[str, Any]:
+                  burst: str = "",
+                  vertical: str | None = None) -> dict[str, Any]:
     """Template advice in, M3 advice out — or the template again.
 
     Never raises. Advice is decoration on a decision that has already
@@ -259,7 +276,8 @@ def enrich_advice(row: dict[str, Any], final_stars: dict[str, Any],
             max_tokens=max_tokens,
             row=row,
             prompt_override=build_prompt(row, final_stars, decision,
-                                         burst=burst),
+                                         burst=burst,
+                                         vertical=vertical),
         )
     except TypeError:
         # A judge without prompt_override cannot write advice; its axis

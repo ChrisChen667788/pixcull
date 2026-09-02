@@ -87,4 +87,8 @@ def test_the_advice_pass_actually_builds_and_passes_the_note():
         __import__("pixcull.report.serve_app", fromlist=["x"]))
     assert "from pixcull.scoring.burst_context import index_clusters" in src
     assert "burst_note(rec or row, clusters)" in src
-    assert "burst=note)" in src
+    # Not "burst=note)" — the closing paren belongs to whatever argument
+    # happens to be last, and v3.4 added one after it. Asserting on
+    # punctuation makes a passing test fail for a reason that is not the
+    # behaviour it exists to protect.
+    assert "burst=note" in src

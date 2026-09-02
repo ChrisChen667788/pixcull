@@ -1761,7 +1761,9 @@ def _m3_advice_pass(rows: list, df) -> int:
             row["advice"], judge,
             image_path=Path(_row_image_path(row)),
             on_fallback=lambda why: LEDGER.fell_back("m3_advice", why),
-            burst=note)
+            burst=note,
+            vertical=str((rec or row).get("vertical")
+                         or (rec or row).get("scene") or ""))
         if out is not row["advice"]:
             LEDGER.ok("m3_advice")
         return idx, out

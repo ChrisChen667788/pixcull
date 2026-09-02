@@ -734,7 +734,17 @@ class MiniMaxM3Judge:
             return verdict
         _fill_verdict(verdict, text)
         if key and self._cache is not None and verdict.error is None:
-            self._cache.put(key, verdict.to_dict())
+            # v3.4 — record which shoot type this call was for.
+            #
+            # The cache value carried filename, label, rationale, axes and
+            # raw_text, but not scene or vertical.  Those live only in the
+            # cache KEY, which is a hash, so 180 cached critiques could not
+            # be segmented by shoot type after the fact — which is exactly
+            # what a per-vertical exemplar bank needs.  Additive: entries
+            # written before this simply lack the fields.
+            self._cache.put(key, {**verdict.to_dict(),
+                                  "scene": scene or "",
+                                  "vertical": vertical or ""})
         return verdict
 
     def score_video(

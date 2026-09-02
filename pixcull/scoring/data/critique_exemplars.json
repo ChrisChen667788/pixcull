@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "selection": {
+    "ranked_by": [
+      "n_subjects",
+      "n_connectives",
+      "length"
+    ],
+    "excluded": "any text carrying an advice_depth hedge",
+    "length_window": [
+      150,
+      400
+    ],
+    "candidates": 153
+  },
+  "exemplars": {
+    "_default": [
+      {
+        "reading": "这张照片抓的是一位戴黑帽插红花的老人坐在祠堂廊下穿针引线的瞬间,左上方吊着一只红灯笼,正下方是石阶,纵向三段构图(灯笼—人物—石阶)把视线串得很顺。左侧自然光打在老人侧脸和手上,针尖的微动和专注神情是这张片的看点;但右半边廊柱后整片压死,阴影几乎吃掉柱后的木椅与墙面,这是测量里 shadows_clipped=10.78% 在画面里具体落下的地方——算法判它死黑,人眼看也确实是一块没层次的死区,而不是有意压暗。面部没被检出是因为大侧脸加帽檐遮挡,不是糊,主体清晰度 650 也印证了这点,所以这不是技术失误,而是取景时机把右侧空间让给了空。",
+        "provenance": "cache-selected",
+        "note": "this tool's own output, ranked by advice_depth signals; a demonstration of form, not of expertise"
+      },
+      {
+        "reading": "一位身着传统黑衣、戴着绣花头巾与红边帽的老人正从门洞里迈出,一只手仍扶着门板,姿态像是被拍摄叫住停下的那一瞬。整张照片的视觉重量其实压在建筑上——斑驳的红柱、石灰剥落的白墙、瓦顶飞檐,而老人只占画面下部三分之一不到,主体被门框吃掉一多半;人脸检测器返回 0 颗脸与平均亮度 76 都印证了这一点——他确实小、确实在画面里没什么亮度优势。加之阴天平光,本来该说话的肌理(刀痕木门、残漆、苔藓石阶)被压成一片均匀灰调,正中央的 27 蓝牌和黄色铭牌反而成了视线停留点,抢了人物。叙事潜力在(服饰、地方性、门槛的瞬间),但没被光和裁切撑住。",
+        "provenance": "cache-selected",
+        "note": "this tool's own output, ranked by advice_depth signals; a demonstration of form, not of expertise"
+      },
+      {
+        "reading": "这张拍的是龍溪宫的山门立面——砖石墙、贴门神联的木板门、弧形石阶、半月形门额和顶上的马头墙,中心对称、地地道道的'门面纪录'。阴天平光把墙面照得很匀但抹掉了砖缝的立体感,天空直接过曝成白板,把屋脊的飞檐轮廓吞掉一半。整张没有人、没有动作,这一'无人'既不是留白也不是张力,而是单纯的缺席,所以 moment 被压到 2.0;另外测量说检出人脸 1,我在画面里没看到任何脸,大概率是门匾浮雕或右侧石碑纹路被误检,这种'测量告诉你有、画面告诉你没有'的冲突本身就是这张照片最值得提的事——说明它是纯记录的视角,而不是有意识的环境人像。",
+        "provenance": "cache-selected",
+        "note": "this tool's own output, ranked by advice_depth signals; a demonstration of form, not of expertise"
+      }
+    ]
+  }
+}
