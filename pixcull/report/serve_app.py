@@ -433,6 +433,13 @@ _CULL_REASONS: tuple[str, ...] = (
     "other",            # 其他    — catch-all for everything else
 )
 
+def _annotation_source(raw: object) -> str:
+    """v3.9 — a label's provenance, restricted to values we defined."""
+    from pixcull.scoring.pairwise import KNOWN_SOURCES
+    val = str(raw or "").strip()
+    return val if val in KNOWN_SOURCES else "human"
+
+
 _DEFAULT_PORT = 8770
 _FALLBACK_PORTS = (8770, 8771, 8772, 9322, 7799)
 _DEMO_ROOT = Path(  # base dir for upload + output trees
@@ -5548,6 +5555,8 @@ class _Handler(BaseHTTPRequestHandler):
             return self._handle_save_annotation(path[len("/annotation/"):])
         if path.startswith("/client_pick/"):
             return self._handle_client_pick(path[len("/client_pick/"):])
+        if path.startswith("/pairwise/"):
+            return self._handle_pairwise(path[len("/pairwise/"):])
         if path.startswith("/face_clusters/") and path.endswith("/label"):
             # V22.1 — update a per-cluster label for a run.
             mid = path[len("/face_clusters/"):-len("/label")]
@@ -11235,6 +11244,55 @@ class _Handler(BaseHTTPRequestHandler):
             body = {"picked": [], "summary": {"n_picked": 0}}
         self._send_json(200, json.dumps(body, ensure_ascii=False).encode("utf-8"))
 
+    def _handle_pairwise(self, run_id: str) -> None:
+        """POST /pairwise/<run_id> with {winner, losers[], cluster?}.
+
+        v3.9 — the compare modal has always had an explicit "this one is
+        best" gesture and has always thrown the comparison away, keeping
+        only N pointwise labels.  "I preferred this frame to that one,
+        and they were nearly identical" is a much stronger statement
+        than "this is good and those are bad", and it is the format
+        preference learning actually consumes.
+
+        Written to its own file for the same reason client picks are:
+        `annotations.jsonl` is latest-wins on the whole record, so a
+        different kind of statement living in it overwrites rather than
+        accompanies.
+        """
+        run = _get_run(run_id) or _reload_run_from_disk(run_id)
+        if run is None:
+            self._reject_upload(404, "no such run")
+            return
+        try:
+            clen = int(self.headers.get("Content-Length") or 0)
+            params = json.loads(
+                self.rfile.read(clen).decode("utf-8")) if clen else {}
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
+            self._reject_upload(400, "expected JSON body")
+            return
+        winner = str(params.get("winner") or "")
+        losers = [str(x) for x in (params.get("losers") or [])]
+        if not _safe_photo_name(winner) or not all(
+                _safe_photo_name(x) for x in losers):
+            self._reject_upload(400, "bad filename")
+            return
+        if not losers:
+            # Preferred over nothing is not a preference.  Refused rather
+            # than stored, so the count of comparisons stays a count of
+            # real comparisons.
+            self._reject_upload(400, "a preference needs at least one loser")
+            return
+        try:
+            from pixcull.scoring.pairwise import record, summary
+            record(Path(run["output_dir"]), winner=winner, losers=losers,
+                   cluster=str(params.get("cluster") or ""),
+                   context=str(params.get("context") or "burst"))
+            got = summary(Path(run["output_dir"]))
+        except Exception as exc:  # noqa: BLE001
+            self._reject_upload(500, f"{type(exc).__name__}: {exc}")
+            return
+        self._send_json(200, json.dumps({"ok": True, **got}))
+
     def _handle_client_pick(self, rel: str) -> None:
         """POST /client_pick/<run_id>/<filename> with {picked: bool}.
 
@@ -11356,7 +11414,18 @@ class _Handler(BaseHTTPRequestHandler):
             "overall_label": overall_label_clean,
             "overall_rationale": str(params.get("overall_rationale", ""))[:1000],
             "cull_reason": cull_reason_clean,
-            "source": "human",
+            # v3.9 — where this label came from.
+            #
+            # Hard-coded "human" until now, which made a burst sibling
+            # rejected in the compare modal indistinguishable from a
+            # photograph a person looked at and disliked.  They are not
+            # the same claim, and `personal_learn` makes an inclusion
+            # decision from the difference.
+            #
+            # Restricted to a known set rather than passed through: a
+            # client must not be able to invent a provenance string that
+            # a downstream consumer will trust.
+            "source": _annotation_source(params.get("source")),
             "timestamp": time.time(),
         }
         # v0.12-P0-3 — capture the model's decision BEFORE this human

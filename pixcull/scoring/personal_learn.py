@@ -359,6 +359,19 @@ def gather_examples_from_runs(runs_root) -> list:
                     continue
                 f = r.get("filename")
                 d = r.get("overall_label") or r.get("decision")
+                # v3.9 — a burst sibling rejected in the compare modal is
+                # NOT a photograph the photographer disliked.  It is one
+                # that lost to a near-identical frame, so its axis stars
+                # are nearly the winner's.  Averaged into the cull bucket
+                # it flattens the very keep-minus-cull gap `axis_weights`
+                # is built from, and every use of the compare gesture made
+                # the profile slightly worse with nothing saying so.
+                #
+                # The preference is not discarded — it is kept in its
+                # correct form, as a pair, in `pairwise_prefs.jsonl`.
+                if r.get("source") == "compare_rejected":
+                    dec.pop(f, None)
+                    continue
                 if f and d in DECISIONS:
                     dec[f] = d            # latest line wins
         except OSError:

@@ -16178,6 +16178,25 @@
           prev_decision: m.decision,
           prev_human_labeled: m.rubric_human_labeled,
         })));
+        // v3.9 — record the COMPARISON, not only the N labels it
+        // implies. "I preferred this frame to those, and they were
+        // nearly identical" is a much stronger statement than "this one
+        // is good and those are bad", and it is the shape preference
+        // learning consumes. Its own file: annotations.jsonl is
+        // latest-wins on the whole record.
+        try {
+          await fetch(`/pairwise/${run_id}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              winner: pickFn,
+              losers: members.filter(m => m.filename !== pickFn)
+                             .map(m => m.filename),
+              cluster: clusterKey,
+              context: "burst",
+            }),
+          });
+        } catch (_e) { /* the labels below still land */ }
         for (const m of members) {
           const lbl = (m.filename === pickFn) ? "keep" : "cull";
           try {
@@ -16188,6 +16207,12 @@
                 axes: {},
                 overall_label: lbl,
                 overall_rationale: `cluster compare: ${lbl === 'keep' ? 'picked as best' : 'rejected sibling'}`,
+                // v3.9 — a sibling rejected here is not a photograph the
+                // photographer disliked; it lost to a near-identical
+                // frame. Marked so the taste profile can exclude it
+                // instead of averaging near-identical rows into both
+                // its keep and its cull bucket.
+                source: (lbl === "keep") ? "compare_winner" : "compare_rejected",
               }),
             });
             const local = rows.find(x => x.filename === m.filename);
