@@ -73,3 +73,26 @@ def test_score_passes_temperature_through_to_the_api():
     assert "self._complete(messages, max_tokens, temperature)" in src
     sig = inspect.signature(MiniMaxM3Judge._complete)
     assert "temperature" in sig.parameters
+
+
+# -- v3.6 — the same bug, one level in -------------------------------
+
+def test_n_draws_at_one_temperature_get_n_slots():
+    """v3.2 put temperature in the key. Three draws of one frame at the
+    SAME temperature still collided, so draw 1 wrote the cache and draws
+    2 and 3 read it back — perfect agreement, measured on one call.
+    """
+    keys = {cache_extra(**BASE, temperature=0.7, sample=i)
+            for i in (1, 2, 3)}
+    assert len(keys) == 3
+
+
+def test_the_draw_number_does_not_move_the_deterministic_key():
+    assert cache_extra(**BASE, sample=0) == cache_extra(**BASE)
+
+
+def test_a_redrawn_sample_is_still_cacheable():
+    """An interrupted consistency run must not re-pay for draws it made."""
+    a = cache_extra(**BASE, temperature=0.7, sample=2)
+    b = cache_extra(**BASE, temperature=0.7, sample=2)
+    assert a == b

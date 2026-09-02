@@ -234,7 +234,8 @@ def _content_hash(path: Path, extra: str = "") -> str:
 
 def cache_extra(*, model: str, scene: str | None, vertical: str | None,
                 evidence_arm: str, evidence_len: int,
-                prompt_override: str | None, temperature: float = 0.0) -> str:
+                prompt_override: str | None, temperature: float = 0.0,
+                sample: int = 0) -> str:
     """The prompt-affecting discriminator folded into the cache key.
 
     Pulled out of :meth:`MinimaxM3Judge.score` so the one invariant that
@@ -253,6 +254,18 @@ def cache_extra(*, model: str, scene: str | None, vertical: str | None,
         f"{evidence_arm}|{evidence_len}|"
         f"{hashlib.sha256((prompt_override or '').encode()).hexdigest()[:12]}"
         + (f"|T{temperature!r}" if temperature else "")
+        # v3.6 — which draw this is.
+        #
+        # Temperature alone is not enough.  Three samples of one frame at
+        # the same temperature hash to the same slot, so sample 1 writes
+        # the cache and samples 2 and 3 read it back: perfect agreement,
+        # measured on one call.  That is the v3.2 bug again, one level in.
+        #
+        # Numbering the draws also makes a sampled pass resumable — an
+        # interrupted consistency run does not re-pay for the draws it
+        # already made.  Appended and only when non-zero, for the same
+        # reason as temperature.
+        + (f"|S{sample}" if sample else "")
     )
 
 
@@ -637,6 +650,9 @@ class MiniMaxM3Judge:
         # is non-zero.  Default 0.0 keeps the deterministic path exactly
         # as it was, key included: see the note at the key construction.
         temperature: float = 0.0,
+        # v3.6 — which draw of a consistency pass this is.  0 is "not a
+        # sampled pass" and changes nothing.
+        sample: int = 0,
     ) -> VlmVerdict:
         """Judge one photo, with local measurements supplied as evidence.
 
@@ -673,7 +689,8 @@ class MiniMaxM3Judge:
                                 vertical=vertical, evidence_arm=evidence_arm,
                                 evidence_len=len(evidence),
                                 prompt_override=prompt_override,
-                                temperature=temperature))
+                                temperature=temperature,
+                                sample=sample))
             except OSError:
                 key = ""
             if key:
