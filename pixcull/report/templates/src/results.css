@@ -2389,3 +2389,25 @@
     .client-pick-chip.on {
       background: var(--c-info-tint); border-color: var(--c-info);
     }
+
+/* v3.21 — session health.
+   One chip, only when there is something to say. A clean run renders
+   nothing at all, which is the correct amount of attention for "nothing
+   went wrong". Colours come from the tokens: a degraded pass is
+   informational, a structural fault is not. */
+.pill.session-health { cursor: pointer; border-color: var(--c-info); color: var(--c-info); }
+.pill.session-health.fault { border-color: var(--cull); color: var(--cull); }
+.session-health-panel {
+  margin: 16px 0; padding: 14px 16px;
+  border: 1px solid var(--border); border-radius: 10px;
+  background: var(--surface); font-size: 12px;
+}
+.session-health-panel h3 { margin: 0 0 8px; font-size: 13px; }
+.session-health-panel table { width: 100%; border-collapse: collapse; }
+.session-health-panel th, .session-health-panel td {
+  text-align: left; padding: 4px 8px 4px 0;
+  border-bottom: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+}
+.session-health-panel .health-faults { margin: 0 0 10px; padding-left: 18px; color: var(--cull); }
+.session-health-panel .health-note { margin: 10px 0 0; opacity: .75; }
