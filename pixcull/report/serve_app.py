@@ -9976,6 +9976,20 @@ class _Handler(BaseHTTPRequestHandler):
             # report; "this pass had work and did none" belongs where
             # somebody trips over it.
             view["fallback_faults"] = _faults
+        # v3.31 — what the FILE says, recomputed from scores.csv.
+        #
+        # Not for the server's benefit. The page already has a summary it
+        # computed in memory; this is the other side of the comparison,
+        # read straight off the deliverable the photographer actually
+        # keeps. v2.95 shipped a console line saying Keep=6 over a CSV
+        # where every row said cull, and nothing anywhere could have
+        # noticed.
+        try:
+            from pixcull.report.summary_audit import decision_counts
+            view["decision_counts_on_disk"] = decision_counts(
+                Path(run["output_dir"]))
+        except Exception:  # noqa: BLE001
+            pass
         body = json.dumps(view, ensure_ascii=False).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json; charset=utf-8")

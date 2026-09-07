@@ -20143,6 +20143,29 @@
 
   function pct(x) { return Math.round((x || 0) * 100); }
 
+  // v3.31 — the numbers on screen against the numbers in the file.
+  //
+  // `summary` was computed in memory while scores.csv was written from a
+  // dataframe a later pass could rewrite. v2.95 is what that looks like:
+  // a console line saying Keep=6 over a CSV where every row said cull.
+  // This compares the two sides and reports a disagreement as a FAULT,
+  // not a rate — one is simply wrong, and it is the screen.
+  function summaryFaults(onDisk) {
+    if (!onDisk || typeof summary === "undefined" || !summary) return [];
+    const pairs = [["n_keep", "keep"], ["n_maybe", "maybe"],
+                   ["n_cull", "cull"]];
+    const out = [];
+    pairs.forEach(function (p) {
+      const shown = summary[p[0]];
+      const inFile = onDisk[p[1]] || 0;
+      if (typeof shown === "number" && shown !== inFile) {
+        out.push(_t("health.mismatch", "屏幕上是 {a},文件里是 {b}({c})")
+          .replace("{a}", shown).replace("{b}", inFile).replace("{c}", p[0]));
+      }
+    });
+    return out;
+  }
+
   function summarise(fb, faults) {
     // Returns {level, headline, lines} or null when there is nothing to
     // report. Null is the common case and it must stay cheap.
@@ -20248,7 +20271,9 @@
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (view) {
         if (!view) return;
-        render(summarise(view.fallbacks, view.fallback_faults));
+        const faults = (view.fallback_faults || [])
+          .concat(summaryFaults(view.decision_counts_on_disk));
+        render(summarise(view.fallbacks, faults));
       })
       .catch(function () { /* health telemetry must never break the report */ });
   }
