@@ -615,9 +615,9 @@ _DESIGN_TOKENS_CSS = r"""
     --c-danger:         #e0604e;
     --c-danger-tint:    rgba(224,96,78,0.14);
     --c-danger-border:  rgba(224,96,78,0.40);
-    --c-info:           #6fa7bd;
-    --c-info-tint:      rgba(111,167,189,0.14);
-    --c-info-border:    rgba(111,167,189,0.40);
+    --c-info:           #72a4b2;
+    --c-info-tint:      rgba(114,164,178,0.14);
+    --c-info-border:    rgba(114,164,178,0.40);
     --c-neutral:        #9b9b9b;
     --c-neutral-tint:   rgba(155,155,155,0.10);
     --c-neutral-border: rgba(155,155,155,0.30);

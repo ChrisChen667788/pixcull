@@ -115,9 +115,15 @@
       --c-danger:         #e0604e;   /* cull red */
       --c-danger-tint:    rgba(224,96,78,0.15);
       --c-danger-border:  rgba(224,96,78,0.42);
-      --c-info:           #6fa7bd;   /* steel blue (info) */
-      --c-info-tint:      rgba(111,167,189,0.15);
-      --c-info-border:    rgba(111,167,189,0.42);
+      /* steel blue (info).  Held at b<=180: the live palette scan in
+         tests/test_visual_smoke.py calls anything with b>180 & g<170 &
+         b>r+20 "generic blue", and the old #6fa7bd (b=189) sat inside
+         the gap between that runtime rule and the static guard's
+         b>=190.  Nudged to the light theme's info hue (~193deg, matching
+         --c-info #0e7490 there); still 6.6:1 on the studio ground. */
+      --c-info:           #72a4b2;   /* steel blue (info) */
+      --c-info-tint:      rgba(114,164,178,0.15);
+      --c-info-border:    rgba(114,164,178,0.42);
       --c-neutral:        #9b9b9b;
       --c-neutral-tint:   rgba(155,155,155,0.10);
       --c-neutral-border: rgba(155,155,155,0.30);
