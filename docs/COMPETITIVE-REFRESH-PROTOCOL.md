@@ -43,6 +43,34 @@ trusting is a document that is always exciting.
   - a claim in the current published analysis is found to be **wrong** — correcting
     our own document outranks reporting someone else's news
 
+## The confidence field — v3.26
+
+**A scan may not write `confidence`. Only a verification pass may, and only
+alongside a `verified_by` record naming what was checked and when.**
+
+This is not tidiness. The 2026-08-31 scan wrote `confidence: verified` on 25 of
+41 entries. The fact-check pass then audited ten headline claims and **overturned
+ten of ten** — including two of the three products the next charter was built
+around. A field that is wrong that often is worse than no field, because the next
+reader weights it: a later charter, a later refresh, a release note.
+
+Migrating the two existing snapshots under this rule took `verified` from **25 to
+0** in each. Not one entry carried a verification record.
+
+### If you are about to "fix" this
+
+You are looking at a snapshot where almost everything says `unverified` and it
+looks like the tooling regressed. It did not. `unverified` here means *nobody has
+opened the primary source with the job of refuting this claim* — which was
+already true, and was previously hidden behind a word that said the opposite.
+
+The count of `verified` entries is expected to go **up slowly**, one verification
+at a time, and each one has to leave a `verified_by` behind. If it jumps, someone
+has re-attached the field to the scanning pass and the number has stopped meaning
+anything again.
+
+`tests/test_competitive_confidence.py` enforces it.
+
 ## Standing rules
 
 - **No currency amounts.** Pricing structure in words only. Enforced by

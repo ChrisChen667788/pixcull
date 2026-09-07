@@ -12,7 +12,8 @@
    "underlying_model": "not disclosed (paper does not name the base models used for each of the nine dimension tools)",
    "evidence_url": "https://arxiv.org/html/2604.12512v1",
    "evidence_date": "2026-04",
-   "confidence": "verified"
+   "confidence": "unverified",
+   "downgraded_by": "v3.26 — written by the scanning pass with no verification record behind it. The 2026-09 fact-check overturned 10 of 10 audited headline claims, so a scan-written \"verified\" predicts nothing."
   },
   {
    "name": "Adobe Bridge CC",
@@ -20,7 +21,8 @@
    "underlying_model": "not disclosed — no AI culling model; Quick Actions use Adobe Express AI for edits only",
    "evidence_url": "https://www.eyeonannapolis.net/2026/08/imagen-culling-vs-bridge-cc-is-adobe-lagging-in-2026/",
    "evidence_date": "2026-08",
-   "confidence": "verified"
+   "confidence": "unverified",
+   "downgraded_by": "v3.26 — written by the scanning pass with no verification record behind it. The 2026-09 fact-check overturned 10 of 10 audited headline claims, so a scan-written \"verified\" predicts nothing."
   },
   {
    "name": "Adobe Firefly AI Agent (multi-step Creative Cloud orchestration)",
@@ -28,7 +30,8 @@
    "underlying_model": "not disclosed (Adobe proprietary backend)",
    "evidence_url": "https://news.adobe.com/news/2026/04/adobe-new-creative-agent",
    "evidence_date": "2026-04",
-   "confidence": "verified"
+   "confidence": "unverified",
+   "downgraded_by": "v3.26 — written by the scanning pass with no verification record behind it. The 2026-09 fact-check overturned 10 of 10 audited headline claims, so a scan-written \"verified\" predicts nothing."
   },
   {
    "name": "Adobe Lightroom Assisted Culling",
@@ -36,7 +39,8 @@
    "underlying_model": "Adobe Sensei (proprietary; no further architecture details disclosed); June 2026 update also integrates Topaz Labs Noise-Aware Sharpen model for AI Sharpen",
    "evidence_url": "https://petapixel.com/2026/06/15/adobe-adds-more-user-control-to-ai-features-inside-lightroom-and-photoshop/",
    "evidence_date": "2026-06-15",
-   "confidence": "verified"
+   "confidence": "unverified",
+   "downgraded_by": "v3.26 — written by the scanning pass with no verification record behind it. The 2026-09 fact-check overturned 10 of 10 audited headline claims, so a scan-written \"verified\" predicts nothing."
   },
   {
    "name": "Adobe Lightroom — Assisted Culling (GA, Classic + cloud app)",
@@ -44,7 +48,8 @@
    "underlying_model": "not disclosed — Adobe proprietary cloud AI; previews are uploaded to Adobe servers for inference",
    "evidence_url": "https://blog.adobe.com/en/publish/2026/06/15/from-culling-to-compositing-new-creative-cloud-innovations-across-every-stage-of-your-workflow",
    "evidence_date": "2026-06-15",
-   "confidence": "verified"
+   "confidence": "unverified",
+   "downgraded_by": "v3.26 — written by the scanning pass with no verification record behind it. The 2026-09 fact-check overturned 10 of 10 audited headline claims, so a scan-written \"verified\" predicts nothing."
   },
   {
    "name": "Aftershoot",
@@ -52,7 +57,8 @@
    "underlying_model": "not disclosed",
    "evidence_url": "https://www.slrlounge.com/aftershoot-complete-photographer-workflow-platform-from-culling-to-client-galleries/",
    "evidence_date": "2026-06",
-   "confidence": "verified"
+   "confidence": "unverified",
+   "downgraded_by": "v3.26 — written by the scanning pass with no verification record behind it. The 2026-09 fact-check overturned 10 of 10 audited headline claims, so a scan-written \"verified\" predicts nothing."
   },
   {
    "name": "Apex Culler",
@@ -68,7 +74,8 @@
    "underlying_model": "Apple's on-device Apple Intelligence models (proprietary, not disclosed); all inference on-device via Apple Neural Engine",
    "evidence_url": "https://www.apple.com/newsroom/2026/06/apple-intelligence-brings-powerful-ai-capabilities-into-everyday-experiences/",
    "evidence_date": "2026-06",
-   "confidence": "verified"
+   "confidence": "unverified",
+   "downgraded_by": "v3.26 — written by the scanning pass with no verification record behind it. The 2026-09 fact-check overturned 10 of 10 audited headline claims, so a scan-written \"verified\" predicts nothing."
   },
   {
    "name": "AtelierJudge (dual-process LLM-as-Judge for creative quality)",
@@ -76,7 +83,8 @@
    "underlying_model": "not disclosed (frontier MLLM used as judge; paper does not name specific model)",
    "evidence_url": "https://arxiv.org/html/2605.22645",
    "evidence_date": "2026-05",
-   "confidence": "verified"
+   "confidence": "unverified",
+   "downgraded_by": "v3.26 — written by the scanning pass with no verification record behind it. The 2026-09 fact-check overturned 10 of 10 audited headline claims, so a scan-written \"verified\" predicts nothing."
   },
   {
    "name": "Canon Digital Photo Professional + Camera Connect",
@@ -92,7 +100,8 @@
    "underlying_model": "not disclosed",
    "evidence_url": "https://www.captureone.com/en/explore-features/whats-new/16-8",
    "evidence_date": "2026-05-28",
-   "confidence": "verified"
+   "confidence": "unverified",
+   "downgraded_by": "v3.26 — written by the scanning pass with no verification record behind it. The 2026-09 fact-check overturned 10 of 10 audited headline claims, so a scan-written \"verified\" predicts nothing."
   },
   {
    "name": "Claude Fable 5 and GPT-5.x as photographic critics",
@@ -100,7 +109,8 @@
    "underlying_model": "not disclosed (Claude Fable 5 and GPT-5.x proprietary backends)",
    "evidence_url": "https://platform.claude.com/docs/en/about-claude/models/overview",
    "evidence_date": "2026-08",
-   "confidence": "verified"
+   "confidence": "unverified",
+   "downgraded_by": "v3.26 — written by the scanning pass with no verification record behind it. The 2026-09 fact-check overturned 10 of 10 audited headline claims, so a scan-written \"verified\" predicts nothing."
   },
   {
    "name": "DxO PhotoLab (v9+)",
@@ -116,7 +126,8 @@
    "underlying_model": "Not disclosed; described as a 'multi-model approach' analysing each scene from multiple angles",
    "evidence_url": "https://www.evoto.ai/features/ai-culling",
    "evidence_date": "2026-08",
-   "confidence": "verified"
+   "confidence": "unverified",
+   "downgraded_by": "v3.26 — written by the scanning pass with no verification record behind it. The 2026-09 fact-check overturned 10 of 10 audited headline claims, so a scan-written \"verified\" predicts nothing."
   },
   {
    "name": "Excire Search 2026",
@@ -124,7 +135,8 @@
    "underlying_model": "not disclosed; all inference runs locally on the user's machine",
    "evidence_url": "https://petapixel.com/2025/09/17/ai-powered-excire-search-2026-aims-to-redefine-lightroom-workflows/",
    "evidence_date": "2025-09-17",
-   "confidence": "verified"
+   "confidence": "unverified",
+   "downgraded_by": "v3.26 — written by the scanning pass with no verification record behind it. The 2026-09 fact-check overturned 10 of 10 audited headline claims, so a scan-written \"verified\" predicts nothing."
   },
   {
    "name": "FilterPixel (DeepCull)",
@@ -132,7 +144,8 @@
    "underlying_model": "not disclosed; trained on 'real-world working photographer output, curated by working photographers' across six genres",
    "evidence_url": "https://filterpixel.com/blog/introducing-deepcull-memory-based-culling",
    "evidence_date": "2026-04-04",
-   "confidence": "verified"
+   "confidence": "unverified",
+   "downgraded_by": "v3.26 — written by the scanning pass with no verification record behind it. The 2026-09 fact-check overturned 10 of 10 audited headline claims, so a scan-written \"verified\" predicts nothing."
   },
   {
    "name": "GRPO + Rubric RL training paradigm for IQA",
@@ -140,7 +153,8 @@
    "underlying_model": "Qwen3-VL-8B-Instruct is the primary base used in NTIRE 2026 winning submissions",
    "evidence_url": "https://arxiv.org/html/2604.12512v1",
    "evidence_date": "2026-04",
-   "confidence": "verified"
+   "confidence": "unverified",
+   "downgraded_by": "v3.26 — written by the scanning pass with no verification record behind it. The 2026-09 fact-check overturned 10 of 10 audited headline claims, so a scan-written \"verified\" predicts nothing."
   },
   {
    "name": "Google Photos — AI selection and stacks",
@@ -148,7 +162,8 @@
    "underlying_model": "Google AI (Gemini-family on-device and cloud models); specifics not publicly documented",
    "evidence_url": "https://www.talkandroid.com/525025-discover-the-next-era-of-google-photos-ai-innovation-privacy-tips-and-everything-you-need-to-know-in-2026/",
    "evidence_date": "2026",
-   "confidence": "verified"
+   "confidence": "unverified",
+   "downgraded_by": "v3.26 — written by the scanning pass with no verification record behind it. The 2026-09 fact-check overturned 10 of 10 audited headline claims, so a scan-written \"verified\" predicts nothing."
   },
   {
    "name": "Imagen AI",
@@ -156,7 +171,8 @@
    "underlying_model": "not disclosed",
    "evidence_url": "https://account.imagen-ai.com/changelog/photo/",
    "evidence_date": "2026-06-17",
-   "confidence": "verified"
+   "confidence": "unverified",
+   "downgraded_by": "v3.26 — written by the scanning pass with no verification record behind it. The 2026-09 fact-check overturned 10 of 10 audited headline claims, so a scan-written \"verified\" predicts nothing."
   },
   {
    "name": "InternVL3.5",
@@ -164,7 +180,8 @@
    "underlying_model": "InternVL3.5 own backbone with Cascade RL training; vision encoder details not disclosed in the paper",
    "evidence_url": "https://arxiv.org/html/2508.18265v1",
    "evidence_date": "2026-08",
-   "confidence": "verified"
+   "confidence": "unverified",
+   "downgraded_by": "v3.26 — written by the scanning pass with no verification record behind it. The 2026-09 fact-check overturned 10 of 10 audited headline claims, so a scan-written \"verified\" predicts nothing."
   },
   {
    "name": "MCP photography server pattern (Lightroom, Photoshop bridges)",
@@ -188,7 +205,8 @@
    "underlying_model": "not disclosed",
    "evidence_url": "https://narrative.so/changelog",
    "evidence_date": "2026-08-25",
-   "confidence": "verified"
+   "confidence": "unverified",
+   "downgraded_by": "v3.26 — written by the scanning pass with no verification record behind it. The 2026-09 fact-check overturned 10 of 10 audited headline claims, so a scan-written \"verified\" predicts nothing."
   },
   {
    "name": "Nikon NX Studio + NX Tether",
@@ -220,7 +238,8 @@
    "underlying_model": "not disclosed",
    "evidence_url": "https://cyme.io/en/blog/peakto-introduces-powerful-ai-driven-culling-and-deduplication/",
    "evidence_date": "2026-01-14",
-   "confidence": "verified"
+   "confidence": "unverified",
+   "downgraded_by": "v3.26 — written by the scanning pass with no verification record behind it. The 2026-09 fact-check overturned 10 of 10 audited headline claims, so a scan-written \"verified\" predicts nothing."
   },
   {
    "name": "Personalised DPO / PIGReward for per-photographer taste learning",
@@ -244,7 +263,8 @@
    "underlying_model": "none (no AI)",
    "evidence_url": "https://filterpixel.com/blog/photo-mechanic-ai-alternative",
    "evidence_date": "2026-05",
-   "confidence": "verified"
+   "confidence": "unverified",
+   "downgraded_by": "v3.26 — written by the scanning pass with no verification record behind it. The 2026-09 fact-check overturned 10 of 10 audited headline claims, so a scan-written \"verified\" predicts nothing."
   },
   {
    "name": "Qwen3-VL 8B + GRPO/LoRA (Professional IQA fine-tune)",
@@ -252,7 +272,8 @@
    "underlying_model": "Qwen3-VL-8B-Instruct with LoRA (NTIRE 2026 winner); Qwen3 backbone",
    "evidence_url": "https://arxiv.org/html/2604.12512v1",
    "evidence_date": "2026-04",
-   "confidence": "verified"
+   "confidence": "unverified",
+   "downgraded_by": "v3.26 — written by the scanning pass with no verification record behind it. The 2026-09 fact-check overturned 10 of 10 audited headline claims, so a scan-written \"verified\" predicts nothing."
   },
   {
    "name": "Skylum Luminar Neo (2026 release)",
@@ -284,7 +305,8 @@
    "underlying_model": "Not disclosed; proprietary Sugar Engine 2.0 for GPU-accelerated retouching",
    "evidence_url": "https://cn.chinadaily.com.cn/a/202607/23/WS6a61d58ea310d709c2fbf584.html",
    "evidence_date": "2026-07",
-   "confidence": "verified"
+   "confidence": "unverified",
+   "downgraded_by": "v3.26 — written by the scanning pass with no verification record behind it. The 2026-09 fact-check overturned 10 of 10 audited headline claims, so a scan-written \"verified\" predicts nothing."
   },
   {
    "name": "咻图AI",
@@ -316,7 +338,8 @@
    "underlying_model": "Not disclosed",
    "evidence_url": "https://www.xuanpian.com/",
    "evidence_date": "2026-08",
-   "confidence": "verified"
+   "confidence": "unverified",
+   "downgraded_by": "v3.26 — written by the scanning pass with no verification record behind it. The 2026-09 fact-check overturned 10 of 10 audited headline claims, so a scan-written \"verified\" predicts nothing."
   },
   {
    "name": "美图云修 (Meitu Yunxiu) v8.0",
@@ -324,7 +347,8 @@
    "underlying_model": "Not disclosed (proprietary Meitu AI models)",
    "evidence_url": "https://news.mydrivers.com/1/1138/1138837.htm",
    "evidence_date": "2026-07",
-   "confidence": "verified"
+   "confidence": "unverified",
+   "downgraded_by": "v3.26 — written by the scanning pass with no verification record behind it. The 2026-09 fact-check overturned 10 of 10 audited headline claims, so a scan-written \"verified\" predicts nothing."
   },
   {
    "name": "醒图专业版 (Xingtu Pro) by ByteDance",
@@ -332,7 +356,8 @@
    "underlying_model": "Not disclosed (ByteDance proprietary models)",
    "evidence_url": "https://www.sohu.com/a/1008326325_121956424",
    "evidence_date": "2026-04",
-   "confidence": "verified"
+   "confidence": "unverified",
+   "downgraded_by": "v3.26 — written by the scanning pass with no verification record behind it. The 2026-09 fact-check overturned 10 of 10 audited headline claims, so a scan-written \"verified\" predicts nothing."
   },
   {
    "name": "ArtiMuse / 书生·妙析 (Shanghai AI Lab + China Academy of Art)",
@@ -350,5 +375,6 @@
    "evidence_date": "2026-04-07",
    "confidence": "partial"
   }
- ]
+ ],
+ "confidence_contract": "v3.26 — `confidence` is written ONLY by a verification pass and only alongside a `verified_by` record naming what was checked and when. Anything a scan produced defaults to `unverified`. A refresh where most entries read `unverified` is not a worse report, it is an honest one."
 }
