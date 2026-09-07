@@ -326,6 +326,13 @@ output.  Do not report any of these as measured.
 **Editing `templates/src/results.js` requires `python scripts/build_results_html.py`**
 or `test_results_build.py::test_artifact_matches_sources` fails.
 
+**BLOCK CLOSED — `docs/BLOCK-v3.1-v3.27-CLOSE.md`.**  12 of 27 closed on a
+measurement actually run, 4 on an invariant, **11 ship a mechanism and no
+number** with the reason stated per version.  Do not report any of those 11
+as measured.  Owner-blocked by category: API budget (v3.3-v3.6, v3.11,
+v3.17, v3.18), no corrections on this machine (v3.8, v3.9), needs a
+photographer (v3.12), needs a real `.lrcat` (v3.10).
+
 **v3.16 → v3.27 SHIPPED** — the charter is complete (27/27).  Full gate
 exits 0.
 
