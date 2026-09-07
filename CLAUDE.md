@@ -326,6 +326,29 @@ output.  Do not report any of these as measured.
 **Editing `templates/src/results.js` requires `python scripts/build_results_html.py`**
 or `test_results_build.py::test_artifact_matches_sources` fails.
 
+**v3.28 → v3.35 SHIPPED** — the charter read out of what the last block
+found by accident.  Two sweeps found real defects: **v3.28** the embedded-IPTC
+writer was doing all three things v3.23 fixed, but INSIDE the photograph and
+with `-overwrite_original`; **v3.29** cloud sync wrote the peer's record
+verbatim, so another photographer's corrections were learned as this one's
+taste.  **v3.30** found the live tether path was thin because
+`_analyze_one_file` returns a hand-written seven-key dict from P2.2 — every
+metric added since was computed and discarded on that line.  Inventories:
+`docs/WRITER-INVENTORY.md`, `docs/LABEL-PRODUCER-INVENTORY.md`.
+
+**Brand redesigned** — `docs/BRAND.md`.  The mark is "the frame you marked":
+crop brackets, a lit frame, the rest of the take dimmed behind.  Edit
+`scripts/brand/gen_brand_svg.py`, never the SVG outputs — `_logo_group()` is
+the single definition and every asset draws from it.  One accent `#e8a33c`,
+for the brackets and the film-edge rule and nothing else.
+
+**House writing style** — `docs/WRITING.md`, enforced by
+`tests/test_readme_style.py`.  The READMEs keep **five** releases; older ones
+go to `CHANGELOG.md` (and `modelscope/CHANGELOG.md`).  No `**vX.Y** — **bolded
+headline.**` template, at most two bold runs per entry, no stock marketing
+phrases.  The content was never the problem — the form was, and the numbers
+are in the style note.
+
 **BLOCK CLOSED — `docs/BLOCK-v3.1-v3.27-CLOSE.md`.**  12 of 27 closed on a
 measurement actually run, 4 on an invariant, **11 ship a mechanism and no
 number** with the reason stated per version.  Do not report any of those 11
