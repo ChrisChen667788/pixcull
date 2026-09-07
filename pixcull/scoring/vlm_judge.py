@@ -324,21 +324,32 @@ class MlxQwen3VlJudge:
         max_tokens: int = 800,    # Chinese rationale ×6 axes is long
         style_section: str = "",
         vertical: str | None = None,
+        # v3.18 — burst siblings, sent alongside the frame under
+        # judgement.  Empty by default; see `burst_peers`.
+        peers: list | None = None,
     ) -> VlmVerdict:
         from mlx_vlm import generate
         from mlx_vlm.prompt_utils import apply_chat_template
 
+        from pixcull.scoring.burst_multi import peer_prompt_note
+
         prompt = build_prompt(scene, style_section=style_section,
                               vertical=vertical)
+        peers = [Path(p) for p in (peers or [])]
+        note = peer_prompt_note(len(peers))
+        if note:
+            prompt = prompt + "\n\n" + note
         # Qwen3-VL chat template wants the image referenced in the
         # user turn; mlx-vlm's apply_chat_template handles the special
-        # tokens. We pass the image path as a list since some templates
-        # support multi-image.
+        # tokens. The comment here used to say multi-image "some
+        # templates support" and pass 1 anyway — v3.18 makes it real, so
+        # the model that could say "this one, because the eyes are open
+        # here and not there" is actually shown both.
         formatted = apply_chat_template(
             self.processor,
             self.config,
             prompt,
-            num_images=1,
+            num_images=1 + len(peers),
         )
 
         verdict = VlmVerdict(
@@ -351,11 +362,20 @@ class MlxQwen3VlJudge:
             # Resize before sending — full DSLR res destroys throughput
             # and adds nothing to perception quality at this task.
             small_path = self._prep_image(image_path)
+            # Peers AFTER the frame under judgement, and prepared the
+            # same way. The note says "第一张是要评的那张"; a peer arriving
+            # first would make that sentence point elsewhere.
+            peer_paths = []
+            for q in peers:
+                try:
+                    peer_paths.append(str(self._prep_image(Path(q))))
+                except Exception:  # noqa: BLE001
+                    continue      # a peer is context, not a precondition
             output = generate(
                 self.model,
                 self.processor,
                 formatted,
-                image=[str(small_path)],
+                image=[str(small_path)] + peer_paths,
                 max_tokens=max_tokens,
                 verbose=False,
                 temperature=0.0,  # deterministic — same image always same verdict
