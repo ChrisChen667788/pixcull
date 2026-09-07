@@ -254,6 +254,42 @@ def profile_for(profiles: dict, vertical: str | None):
     return profiles.get(POOLED)
 
 
+def readiness(examples: Iterable[Example]) -> dict:
+    """v3.33 — how far off a per-vertical comparison is, in corrections.
+
+    `evaluate_by_vertical` refuses until two verticals clear
+    :data:`MIN_PER_VERTICAL`, which is correct and unhelpful on its own:
+    "refused" does not tell a photographer whether they are twelve
+    corrections away or two hundred.
+
+    Answering that is most of what makes the ask cheap. Nobody labels for
+    an afternoon against an unknown target.
+    """
+    by_v = split_by_vertical(examples)
+    eligible = sorted(v for v, r in by_v.items() if len(r) >= MIN_PER_VERTICAL)
+    need = {}
+    for v, rows in sorted(by_v.items()):
+        short = MIN_PER_VERTICAL - len(rows)
+        if short > 0:
+            need[v] = short
+    # The cheapest route to two eligible verticals: finish the two that
+    # are closest, not every vertical that exists.
+    remaining = sorted(need.values())[:max(0, 2 - len(eligible))]
+    return {
+        "verticals": {v: len(r) for v, r in sorted(by_v.items())},
+        "eligible": eligible,
+        "min_per_vertical": MIN_PER_VERTICAL,
+        "short_by": need,
+        "corrections_to_unblock": sum(remaining),
+        "ready": len(eligible) >= 2,
+        # Unlabelled corrections are counted separately. They are not
+        # short of anything — nobody recorded which shoot they came from,
+        # and labelling more of the same will not help.
+        "unlabelled": sum(1 for e in examples
+                          if not (getattr(e, "vertical", "") or "").strip()),
+    }
+
+
 def evaluate_by_vertical(examples: Iterable[Example], *,
                          folds: int = 4) -> dict:
     """Does a per-vertical profile beat the pooled one on held-out data?

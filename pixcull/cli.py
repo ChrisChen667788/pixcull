@@ -219,6 +219,59 @@ def export(
                       f"[dim](source image not reachable)[/dim]")
 
 
+@app.command(name="import-catalog")
+def import_catalog(
+    catalog: Path = typer.Argument(
+        ..., exists=True, dir_okay=False,
+        help="A Lightroom Classic .lrcat file. Opened read-only."),
+    dry_run: bool = typer.Option(
+        True, "--dry-run/--write",
+        help="Default is a dry run: report what would be imported and "
+             "change nothing."),
+) -> None:
+    """v3.35 — read picks and ratings out of a Lightroom catalogue.
+
+    The reader has never seen a real catalogue.  Every test builds its own
+    SQLite fixture in the shape it expects, which proves the reader is
+    self-consistent and proves nothing about Adobe's schema — so this
+    command exists to make the one thing only the owner can do into one
+    line, and to make the refusal legible when the schema differs.
+
+    Nothing here can activate personalisation.  Imported labels carry
+    `lr_catalog` provenance, which is deliberately absent from
+    `PersonalProfile.TRUSTED`: a Lightroom flag can mean "the best frame",
+    "the one the client bought" or "what I flagged before lunch", and the
+    acts look identical.
+    """
+    from collections import Counter
+
+    from pixcull.io.lrcat import PROVENANCE, UnsupportedCatalog, read_labels
+
+    try:
+        labels = read_labels(catalog)
+    except UnsupportedCatalog as exc:
+        console.print(f"[yellow]this catalogue is not the shape the reader "
+                      f"knows[/yellow]\n{exc}")
+        console.print("[dim]That is a result, not a failure — the schema it "
+                      "expected is named above.[/dim]")
+        raise typer.Exit(code=2)
+
+    counts = Counter(l.decision for l in labels)
+    console.print(f"[green]✓[/] {len(labels)} judged frames "
+                  f"({counts.get('keep', 0)} keep · "
+                  f"{counts.get('cull', 0)} cull), provenance "
+                  f"[cyan]{PROVENANCE}[/cyan]")
+    console.print("[dim]Frames the photographer never flagged or rated are "
+                  "not imported: an untouched frame is not a judgement.[/dim]")
+    if dry_run:
+        console.print("[dim]--dry-run (default). Nothing was written. "
+                      "Re-run with --write once the numbers look right.[/dim]")
+        return
+    console.print("[yellow]--write is not implemented yet.[/yellow] The "
+                  "reader has to be confirmed against a real catalogue "
+                  "before anything imports from one.")
+
+
 def _write_session_provenance(run_dir: Path, out_dir: Path) -> Path | None:
     """v3.22 — record HOW this export was produced, beside it.
 
