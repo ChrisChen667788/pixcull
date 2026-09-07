@@ -498,6 +498,39 @@ def burst_strip_plan(members: list[dict], cap: int) -> tuple[list, int]:
     return ordered[:cap], max(0, len(ordered) - cap)
 
 
+#: v3.29 — the only keys a synced annotation may carry.
+#:
+#: The sync path used to write the peer's record verbatim, minus one
+#: field. So a record from another machine could carry arbitrary keys, a
+#: `source` of its own choosing, and nothing saying it had come from
+#: somewhere else — after which `personal_learn` read it as one of this
+#: photographer's own corrections.
+_SYNCED_ANNOTATION_KEYS = frozenset({
+    "filename", "axes", "overall_label", "overall_rationale",
+    "cull_reason", "source", "timestamp",
+})
+
+
+def sanitise_synced_annotation(rec: dict) -> dict:
+    """One annotation arriving from sync, made safe to append.
+
+    Three things happen, and each of them was missing:
+
+    * unknown keys are dropped. A remote record is untrusted input and
+      `annotations.jsonl` is read by six different consumers.
+    * `source` goes through the same allowlist a local POST does, so a
+      peer cannot invent a provenance that a downstream reader trusts.
+    * `synced` is stamped. Without it a correction another photographer
+      made on their machine is indistinguishable from one made here, and
+      `personal_learn` learns a taste profile from both.
+    """
+    out = {k: v for k, v in rec.items()
+           if k in _SYNCED_ANNOTATION_KEYS}
+    out["source"] = _annotation_source(rec.get("source"))
+    out["synced"] = True
+    return out
+
+
 def _annotation_source(raw: object) -> str:
     """v3.9 — a label's provenance, restricted to values we defined."""
     from pixcull.scoring.pairwise import KNOWN_SOURCES
@@ -12084,9 +12117,8 @@ class _Handler(BaseHTTPRequestHandler):
             ann_path = run_dir / "output" / "annotations.jsonl"
             ann_path.parent.mkdir(parents=True, exist_ok=True)
             with open(ann_path, "a", encoding="utf-8") as f:
-                # Strip the sync-only field before writing
-                clean = {k: v for k, v in rec.items() if k != "__run_id"}
-                f.write(json.dumps(clean, ensure_ascii=False) + "\n")
+                f.write(json.dumps(sanitise_synced_annotation(rec),
+                                   ensure_ascii=False) + "\n")
             merged += 1
         result["merged"] = merged
         result["skipped_unknown_run"] = skipped_unknown_run

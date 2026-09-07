@@ -372,6 +372,16 @@ def gather_examples_from_runs(runs_root) -> list:
                 if r.get("source") == "compare_rejected":
                     dec.pop(f, None)
                     continue
+                # v3.29 — a correction another photographer made on their
+                # own machine is a real human correction. It is not THIS
+                # photographer's taste, and this file exists to learn one
+                # person's taste. Multi-shooter sync was pouring a second
+                # shooter's judgement into the same profile with nothing
+                # marking it, which is v3.9's defect with a different
+                # producer.
+                if r.get("synced"):
+                    dec.pop(f, None)
+                    continue
                 if f and d in DECISIONS:
                     dec[f] = d            # latest line wins
         except OSError:
