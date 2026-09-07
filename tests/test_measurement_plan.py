@@ -16,10 +16,25 @@ def _est(calls, pt, ct):
     return calls * (pt + ct) / 1_000_000
 
 
-def test_the_seven_waiting_measurements_are_all_here():
+def test_every_measurement_waiting_on_a_budget_is_here():
+    """v2.91 was the one that got away.
+
+    It has waited since the v2.77-v2.95 block on the same single thing —
+    a spend ceiling — and kept its own harness because this planner did
+    not exist yet. An owner who set a ceiling and ran "the block" would
+    still have had one measurement sitting outside it, waiting on a
+    decision they had already made.
+    """
     versions = {m.version for m in WAITING}
     assert versions == {"v3.3", "v3.4", "v3.5", "v3.6", "v3.11",
-                        "v3.17", "v3.18"}
+                        "v3.17", "v3.18", "v2.91"}
+
+
+def test_the_prompt_ab_arm_still_says_which_harness_runs_it():
+    """This planner relaxes the arms-differ-only-in-the-prompt rule on
+    purpose. A prompt A/B still needs it."""
+    v291 = next(m for m in WAITING if m.version == "v2.91")
+    assert "prompt_ab" in v291.note
 
 
 def test_every_measurement_declares_exactly_one_dimension():

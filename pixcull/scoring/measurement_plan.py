@@ -76,6 +76,23 @@ WAITING: tuple[Measurement, ...] = (
     Measurement("v3.18", "multi-image burst calls", "images",
                 prompt_tokens=1800,
                 note="burst-winner agreement, single vs multi"),
+    # v3.36 — v2.91 belongs here too, and was missed.
+    #
+    # It has waited since the v2.77-v2.95 block on the same one thing:
+    # a spend ceiling. It kept its own harness (`prompt_ab.plan`) because
+    # it is a pure prompt A/B and this planner did not exist yet, and the
+    # v3.1-v3.27 close listed it separately — so an owner who set a
+    # ceiling and ran "the block" would still have had one measurement
+    # sitting outside it, waiting on a decision they had already made.
+    #
+    # The estimate is carried here; the RUN still goes through
+    # `prompt_ab.plan`, which enforces the arms-differ-only-in-the-prompt
+    # rule this planner deliberately relaxes.
+    Measurement("v2.91", "advice prompt A/B", "prompt",
+                prompt_tokens=2600, completion_tokens=1200,
+                note="blind preference between two advice prompts; runs "
+                     "through prompt_ab.plan, which refuses when the arms "
+                     "differ in anything but the prompt"),
 )
 
 
