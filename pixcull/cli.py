@@ -187,6 +187,9 @@ def export(
         dest = out or (run_dir / "ratings.csv")
         n = _export_ratings_csv(scores, dest)
         console.print(f"[green]✓[/] {n} rows → {dest}")
+        prov = _write_session_provenance(run_dir, dest.parent)
+        if prov is not None:
+            console.print(f"[dim]  + {prov.name} — 这批判定是怎么来的[/dim]")
         return
 
     target = target.strip().lower()
@@ -207,9 +210,45 @@ def export(
              "embedded": "embedded in the originals"}[target]
     console.print(f"[green]✓[/] {written} sidecars → {where}"
                   + (f"  [dim]({breakdown})[/dim]" if breakdown else ""))
+    prov = _write_session_provenance(
+        run_dir, (run_dir / "xmp") if target == "collected" else run_dir)
+    if prov is not None:
+        console.print(f"[dim]  + {prov.name} — 这批判定是怎么来的[/dim]")
     if skipped:
         console.print(f"[yellow]{skipped} skipped[/] "
                       f"[dim](source image not reachable)[/dim]")
+
+
+def _write_session_provenance(run_dir: Path, out_dir: Path) -> Path | None:
+    """v3.22 — record HOW this export was produced, beside it.
+
+    Never raises: a provenance file is an addition to a delivery that has
+    already been made, and failing the export over it would be the tail
+    wagging the dog.
+    """
+    import csv as _csv
+
+    from pixcull.export.provenance import build, write
+    try:
+        scores = run_dir / "scores.csv"
+        with scores.open(encoding="utf-8", newline="") as fh:
+            rows = list(_csv.DictReader(fh))
+        ledger = None
+        try:
+            from pixcull.fallback_ledger import LEDGER
+            ledger = LEDGER.to_json()
+        except Exception:  # noqa: BLE001
+            ledger = None
+        profile = None
+        try:
+            from pixcull.scoring.personalized import load_profile
+            profile = load_profile(
+                Path.home() / ".pixcull" / "personal_profile.json")
+        except Exception:  # noqa: BLE001
+            profile = None
+        return write(out_dir, build(rows, ledger=ledger, profile=profile))
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def _export_ratings_csv(scores_csv: Path, dest: Path) -> int:
