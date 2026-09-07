@@ -5553,6 +5553,7 @@ class _Handler(BaseHTTPRequestHandler):
         ("/rubric/", "_serve_rubric", "tail", ()),
         ("/annotation/", "_serve_annotation", "tail", ()),
         ("/client_picks/", "_serve_client_picks", "tail", ()),
+        ("/reconcile/", "_serve_reconcile", "tail", ()),
         ("/next_to_label/", "_serve_next_to_label", "tail", ()),
     )
 
@@ -11414,6 +11415,37 @@ class _Handler(BaseHTTPRequestHandler):
                     ).encode("utf-8"))
                     return
         self.send_error(404, f"no rubric for {fn}")
+
+    def _serve_reconcile(self, rel: str) -> None:
+        """GET /reconcile/<run_id> — only the frames that still need a call.
+
+        v3.27 — the return leg.  v3.0 kept client picks in their own file
+        and never merged them into the photographer's record, which was
+        right; it also left the loop open.  Picks come back and the
+        photographer compares 400 rows by hand to find the fifteen where
+        they and the client disagree.
+
+        Agreement is dropped, not paginated.  A frame they both wanted is
+        done and a frame neither wanted is done.
+        """
+        run_id = rel.strip("/")
+        run = _get_run(run_id) or _reload_run_from_disk(run_id)
+        if run is None:
+            self.send_error(404, "no such run")
+            return
+        try:
+            from pixcull.client_picks import picked_filenames
+            from pixcull.reconcile import LABELS_ZH, reconcile
+            result = _build_results(run_id)
+            rows = result[0] if result else []
+            got = reconcile(rows, picked_filenames(Path(run["output_dir"])))
+            got["labels"] = LABELS_ZH
+            got["schema"] = "pixcull.reconcile/v1"
+        except Exception as exc:  # noqa: BLE001
+            _dbg("reconcile", exc, run_id)
+            self.send_error(500, f"{type(exc).__name__}")
+            return
+        self._send_json(200, _safe_dumps(got))
 
     def _serve_client_picks(self, rel: str) -> None:
         """GET /client_picks/<run_id> — the filenames the client chose.
