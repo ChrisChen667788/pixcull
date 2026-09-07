@@ -25,7 +25,8 @@ in-place — round-tripping arbitrary XMP would require a real parser.
 from __future__ import annotations
 
 from pathlib import Path
-from xml.sax.saxutils import escape
+import re
+from xml.sax.saxutils import escape, unescape
 
 # UUID required by the XMP spec to mark the start/end of a packet — must be
 # this exact byte sequence for Adobe tools to recognize the file as XMP.
@@ -36,10 +37,37 @@ _XPACKET_UUID = "W5M0MpCehiHzreSzNTczkc9d"
 _VALID_LABELS = frozenset({"", "Red", "Yellow", "Green", "Blue", "Purple"})
 
 
+#: v3.23 — keywords PixCull owns. Everything else in a sidecar belongs
+#: to the photographer.
+PIXCULL_KEYWORD_PREFIX = "PixCull:"
+
+
+def read_xmp_keywords(image_path: Path) -> list[str]:
+    """Keywords already in the sidecar, in file order.
+
+    Returns [] when there is no sidecar or no `dc:subject` block. Used to
+    make PixCull's write additive instead of destructive.
+    """
+    sidecar = Path(image_path).with_suffix(".xmp")
+    if not sidecar.exists():
+        return []
+    try:
+        text = sidecar.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+    block = re.search(r"<dc:subject>(.*?)</dc:subject>", text, re.S)
+    if not block:
+        return []
+    return [unescape(x.strip()) for x in
+            re.findall(r"<rdf:li[^>]*>(.*?)</rdf:li>", block.group(1), re.S)
+            if x.strip()]
+
+
 def write_xmp(image_path: Path, rating: int, color_label: str = "",
                  keywords: list[str] | None = None,
                  description: str = "",
-                 headline: str = "") -> Path:
+                 headline: str = "",
+                 preserve_existing: bool = True) -> Path:
     """Write Lightroom-compatible XMP sidecar next to ``image_path``.
 
     Args:
@@ -63,6 +91,39 @@ def write_xmp(image_path: Path, rating: int, color_label: str = "",
     Returns:
         Path to the written .xmp file.
     """
+    # v3.23 — a rating the photographer set by hand is a judgement.
+    # PixCull's is a proposal.
+    #
+    # Until now this function built a fresh sidecar and wrote it over
+    # whatever was there, so a photographer who had already starred,
+    # colour-labelled and keyworded a shoot in Lightroom lost all of it
+    # the first time they pointed PixCull at the folder. Silently. That
+    # is the worst thing in this whole block and nothing in the repo
+    # asserted against it.
+    #
+    # Capture One's Assisted Review is the design being followed: its
+    # tags are ADDITIVE, alongside the photographer's own stars. So
+    # PixCull's verdict travels in the keywords — `PixCull:keep` and the
+    # rest already exist — and an existing rating or label is left alone.
+    #
+    # `preserve_existing=False` restores the old behaviour for a caller
+    # that genuinely wants PixCull's rating to win.
+    if preserve_existing:
+        prior = read_xmp(Path(image_path))
+        prior_kw = read_xmp_keywords(Path(image_path))
+        if prior.get("rating"):
+            rating = int(prior["rating"])
+        if prior.get("color_label"):
+            color_label = str(prior["color_label"])
+        if prior_kw:
+            # PixCull's OWN keywords are replaced, not accumulated: a
+            # second run must not leave `PixCull:keep` beside
+            # `PixCull:cull` for the reader to arbitrate.
+            theirs = [k for k in prior_kw
+                      if not k.startswith(PIXCULL_KEYWORD_PREFIX)]
+            mine = list(keywords or [])
+            keywords = theirs + [k for k in mine if k not in theirs]
+
     if color_label not in _VALID_LABELS:
         raise ValueError(
             f"color_label must be one of {sorted(_VALID_LABELS)}, "
