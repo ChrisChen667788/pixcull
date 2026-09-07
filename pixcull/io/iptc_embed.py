@@ -36,6 +36,46 @@ _EXIFTOOL_HINT = (
 )
 
 
+#: v3.28 — keywords PixCull owns inside a photograph. Everything else in
+#: the file belongs to whoever put it there.
+PIXCULL_KEYWORD_PREFIX = "PixCull:"
+
+
+def read_embedded(image_path) -> dict:
+    """Rating, label and keywords already inside the file.
+
+    Returns {} when exiftool is unavailable or the read fails.  {} means
+    "we could not tell", and every caller treats that as "assume nothing
+    is there" — which is the WRONG side to be wrong on, so the write path
+    only clears anything when `preserve_existing` is explicitly False.
+    """
+    import json as _json
+    exiftool = _exiftool_path()
+    if exiftool is None:
+        return {}
+    try:
+        res = subprocess.run(
+            [exiftool, "-q", "-j", "-XMP:Rating", "-XMP:Label",
+             "-IPTC:Keywords", "-XMP-dc:Subject", str(image_path)],
+            capture_output=True, timeout=30, check=False, text=True)
+        rows = _json.loads(res.stdout or "[]")
+    except Exception:  # noqa: BLE001
+        return {}
+    if not rows:
+        return {}
+    row = rows[0]
+    kw = row.get("Keywords") or row.get("Subject") or []
+    if isinstance(kw, str):
+        kw = [kw]
+    try:
+        rating = int(row.get("Rating") or 0)
+    except (TypeError, ValueError):
+        rating = 0
+    return {"rating": rating,
+            "color_label": str(row.get("Label") or "").strip(),
+            "keywords": [str(k) for k in kw]}
+
+
 def _exiftool_path() -> str | None:
     """Resolve the exiftool binary or None when it's not on PATH.
 
@@ -66,6 +106,75 @@ def install_hint() -> str:
     return _EXIFTOOL_HINT
 
 
+def build_args(exiftool: str, image_path, *, rating=None, color_label="",
+               keywords=None, description="", headline="",
+               overwrite_original: bool = True,
+               preserve_existing: bool = True, prior=None) -> list[str]:
+    """The exiftool command line, as a pure function.
+
+    Extracted so the v3.28 rules can be asserted without exiftool
+    installed — which it is not on every machine, and a rule about
+    somebody's photographs should not go untested because a binary is
+    missing.  `prior` is injected for the same reason.
+    """
+    prior = prior if prior is not None else (
+        read_embedded(image_path) if preserve_existing else {})
+    args = [exiftool, "-q"]
+    if overwrite_original:
+        args.append("-overwrite_original")
+
+    # v3.28 — this path writes INTO the photograph, so the v3.23 rule
+    # applies with more force here than it did to a sidecar.
+    #
+    # What it used to do: overwrite XMP:Rating and XMP:Label
+    # unconditionally, and clear IPTC:Keywords and XMP-dc:Subject
+    # entirely before appending PixCull's.  A photographer who had
+    # keyworded and rated their originals in Lightroom or Capture One
+    # lost all of it — inside the file, with `-overwrite_original`, so
+    # not even exiftool's `_original` backup existed to recover from.
+    #
+    # Same treatment as the sidecar: their rating and label win, their
+    # keywords stay, and only PixCull's own are replaced.
+    if rating is not None and not prior.get("rating"):
+        args.append(f"-XMP:Rating={max(0, min(5, int(rating)))}")
+    if color_label and not prior.get("color_label"):
+        args.append(f"-XMP:Label={color_label}")
+
+    if keywords:
+        if preserve_existing:
+            # Remove ONLY our own previous keywords, by value, so a
+            # re-export does not leave PixCull:keep beside PixCull:cull
+            # and does not touch anything the photographer added.
+            for k in prior.get("keywords", []):
+                if str(k).startswith(PIXCULL_KEYWORD_PREFIX):
+                    args.append(f"-IPTC:Keywords-={k}")
+                    args.append(f"-XMP-dc:Subject-={k}")
+        else:
+            args.append("-IPTC:Keywords=")
+            args.append("-XMP-dc:Subject=")
+        existing = set(prior.get("keywords", []))
+        for k in keywords:
+            k_clean = str(k).strip()
+            if not k_clean or (preserve_existing and k_clean in existing
+                               and not k_clean.startswith(
+                                   PIXCULL_KEYWORD_PREFIX)):
+                continue
+            # exiftool's ``+=`` syntax appends without replacing the
+            # whole tag (one item per arg).
+            args.append(f"-IPTC:Keywords+={k_clean}")
+            args.append(f"-XMP-dc:Subject+={k_clean}")
+
+    if description:
+        args.append(f"-IPTC:Caption-Abstract={description}")
+        args.append(f"-XMP-dc:Description={description}")
+    if headline:
+        args.append(f"-IPTC:Headline={headline}")
+        args.append(f"-XMP:Headline={headline}")
+
+    args.append(str(image_path))
+    return args
+
+
 def write_iptc_to_file(
     image_path: Path,
     *,
@@ -75,6 +184,7 @@ def write_iptc_to_file(
     description: str = "",
     headline: str = "",
     overwrite_original: bool = True,
+    preserve_existing: bool = True,
 ) -> bool:
     """Embed IPTC fields directly into the image file via exiftool.
 
@@ -108,37 +218,11 @@ def write_iptc_to_file(
     if not image_path.exists():
         return False
 
-    args = [exiftool, "-q"]
-    if overwrite_original:
-        args.append("-overwrite_original")
-
-    if rating is not None:
-        args.append(f"-XMP:Rating={max(0, min(5, int(rating)))}")
-    if color_label:
-        args.append(f"-XMP:Label={color_label}")
-
-    if keywords:
-        # Clear existing values first so we don't accumulate stale
-        # PixCull keywords across re-exports.
-        args.append("-IPTC:Keywords=")
-        args.append("-XMP-dc:Subject=")
-        for k in keywords:
-            k_clean = str(k).strip()
-            if not k_clean:
-                continue
-            # exiftool's ``+=`` syntax appends without replacing the
-            # whole tag (one item per arg).
-            args.append(f"-IPTC:Keywords+={k_clean}")
-            args.append(f"-XMP-dc:Subject+={k_clean}")
-
-    if description:
-        args.append(f"-IPTC:Caption-Abstract={description}")
-        args.append(f"-XMP-dc:Description={description}")
-    if headline:
-        args.append(f"-IPTC:Headline={headline}")
-        args.append(f"-XMP:Headline={headline}")
-
-    args.append(str(image_path))
+    args = build_args(
+        exiftool, image_path, rating=rating, color_label=color_label,
+        keywords=keywords, description=description, headline=headline,
+        overwrite_original=overwrite_original,
+        preserve_existing=preserve_existing)
 
     try:
         res = subprocess.run(
