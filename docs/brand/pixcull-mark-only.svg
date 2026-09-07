@@ -3,22 +3,31 @@
      width="1024" height="1024" role="img"
      aria-label="PixCull">
   <defs>
-    <linearGradient id="brandGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#c4b9a9"/><stop offset="55%" stop-color="#988b78"/><stop offset="100%" stop-color="#6a6052"/></linearGradient>
-    <radialGradient id="cosmicBg" cx="30%" cy="35%" r="80%"><stop offset="0%"  stop-color="#33291a"/><stop offset="55%" stop-color="#1e1a14"/><stop offset="100%" stop-color="#110e0b"/></radialGradient>
+    <linearGradient id="brandGrad" x1="0" y1="0" x2="0.6" y2="1"><stop offset="0%" stop-color="#f2ead9"/><stop offset="55%" stop-color="#dfcfae"/><stop offset="100%" stop-color="#c2a878"/></linearGradient>
+    <radialGradient id="cosmicBg" cx="30%" cy="35%" r="80%"><stop offset="0%"  stop-color="#1e2024"/><stop offset="55%" stop-color="#17181a"/><stop offset="100%" stop-color="#101113"/></radialGradient>
   </defs>
   <rect width="1024" height="1024" fill="url(#cosmicBg)"/>
   <ellipse cx="512" cy="512" rx="360" ry="360"
            fill="url(#brandGrad)" opacity="0.18"/>
   
 <g transform="translate(176.00,176.00) scale(28)">
-  <!-- the crowd: 4 small muted circles -->
-  <circle cx="4"  cy="5"  r="1.6" fill="#ffffff" opacity="0.32"/>
-  <circle cx="20" cy="6"  r="1.4" fill="#ffffff" opacity="0.28"/>
-  <circle cx="3"  cy="19" r="1.8" fill="#ffffff" opacity="0.30"/>
-  <circle cx="21" cy="20" r="1.3" fill="#ffffff" opacity="0.28"/>
-  <!-- the picked one — large gradient + soft outer ring -->
-  <circle cx="12" cy="12" r="7"  fill="url(#brandGrad)"/>
-  <circle cx="12" cy="12" r="7.5" fill="none"
-          stroke="url(#brandGrad)" stroke-width="0.6" opacity="0.5"/>
+  <!-- the rest of the take, kept inside the bracket box: a stack that
+       pokes out past the crop marks reads as untidy, not as depth -->
+  <rect x="7.4" y="6.6" width="12" height="8" rx="0.6"
+        fill="none" stroke="#43464d" stroke-width="0.28"/>
+  <rect x="6.7" y="7.3" width="12" height="8" rx="0.6"
+        fill="none" stroke="#5b5f68" stroke-width="0.28"/>
+  <!-- the frame that was chosen -->
+  <rect x="6" y="8" width="12" height="8" rx="0.6"
+        fill="url(#brandGrad)"/>
+  <!-- crop brackets, outside the frame edge so the mark never covers
+       the picture; centred on 12,12 so it sits level in a round avatar -->
+  <g fill="none" stroke="#e8a33c" stroke-width="0.66"
+     stroke-linecap="square">
+    <path d="M4 9.8 V6.4 H7.4"/>
+    <path d="M20 9.8 V6.4 H16.6"/>
+    <path d="M4 14.2 V17.6 H7.4"/>
+    <path d="M20 14.2 V17.6 H16.6"/>
+  </g>
 </g>
 </svg>

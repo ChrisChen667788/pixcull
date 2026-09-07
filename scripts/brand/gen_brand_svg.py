@@ -44,18 +44,18 @@ from typing import Tuple
 
 
 def _gradient_defs(palette: dict, gradient_id: str = "brandGrad") -> str:
-    """Emit a <linearGradient> from palette wordmark stops.  Two-stop
-    when no mid, three-stop with mid."""
-    start = palette.get("wordmarkStart", "#c4b9a9")
-    end   = palette.get("wordmarkEnd",   "#6a6052")
-    mid   = palette.get("wordmarkMid")
-    stops = [f'<stop offset="0%" stop-color="{start}"/>']
-    if mid:
-        stops.append(f'<stop offset="55%" stop-color="{mid}"/>')
-    stops.append(f'<stop offset="100%" stop-color="{end}"/>')
+    """The chosen frame's fill: warm paper under a lamp.
+
+    The old ramp ended at #6a6052, a mud brown that dragged every asset
+    it touched. This one stays in the light half so the marked frame
+    reads as lit rather than as another dark shape on a dark ground.
+    """
     return (
-        f'<linearGradient id="{gradient_id}" x1="0" y1="0" x2="1" y2="1">'
-        + "".join(stops) + "</linearGradient>"
+        f'<linearGradient id="{gradient_id}" x1="0" y1="0" x2="0.6" y2="1">'
+        f'<stop offset="0%" stop-color="{palette["wordmarkStart"]}"/>'
+        f'<stop offset="55%" stop-color="{palette["wordmarkMid"]}"/>'
+        f'<stop offset="100%" stop-color="{palette["wordmarkEnd"]}"/>'
+        f'</linearGradient>'
     )
 
 
@@ -78,29 +78,53 @@ def _cosmic_bg_defs(palette: dict, w: int, h: int,
 
 
 def _logo_group(cx: float, cy: float, scale: float,
-                gradient_id: str = "brandGrad") -> str:
-    """The v0.9-P0-3 "spotlight on one in a crowd" logo, drawn at
-    (cx, cy) with the given uniform scale (1.0 = the 24×24 native size).
+                gradient_id: str = "brandGrad", palette: dict | None = None
+                ) -> str:
+    """The mark: the frame you marked, drawn at (cx, cy).
 
-    Four small muted circles surround a large gradient-filled circle
-    — the visual narrative of culling.
+    Replaces the v0.9 "spotlight on one in a crowd" — a glowing orb among
+    small circles, which was the house style of every generated logo and
+    said nothing about photographs.
+
+    A photo editor culling a take marks the frames they want on a contact
+    sheet, and the mark is a corner bracket: the same shape as a
+    viewfinder and as a crop mark. Behind the marked frame sit the rest
+    of the take, dimmed, because culling is choosing one out of many that
+    look alike.
+
+    Native box is 0..24, same as before, so every call site keeps its
+    scale arithmetic. Legibility at 16px drove the composition: the
+    brackets carry the silhouette, and the stack is two offset edges
+    rather than drawn frames, because a contact-sheet grid turns to mush
+    at favicon size.
     """
-    # Native viewBox is 0..24; we transform so cx,cy is the centre.
-    s = scale
-    # 12 12 is the centre of the original viewBox
-    tx = cx - 12 * s
-    ty = cy - 12 * s
+    pal = palette or {}
+    accent = pal.get("accent", "#e8a33c")
+    near = pal.get("stackNear", "#5b5f68")
+    far = pal.get("stackFar", "#43464d")
+    s_ = scale
+    tx = cx - 12 * s_
+    ty = cy - 12 * s_
     return f'''
-<g transform="translate({tx:.2f},{ty:.2f}) scale({s})">
-  <!-- the crowd: 4 small muted circles -->
-  <circle cx="4"  cy="5"  r="1.6" fill="#ffffff" opacity="0.32"/>
-  <circle cx="20" cy="6"  r="1.4" fill="#ffffff" opacity="0.28"/>
-  <circle cx="3"  cy="19" r="1.8" fill="#ffffff" opacity="0.30"/>
-  <circle cx="21" cy="20" r="1.3" fill="#ffffff" opacity="0.28"/>
-  <!-- the picked one — large gradient + soft outer ring -->
-  <circle cx="12" cy="12" r="7"  fill="url(#{gradient_id})"/>
-  <circle cx="12" cy="12" r="7.5" fill="none"
-          stroke="url(#{gradient_id})" stroke-width="0.6" opacity="0.5"/>
+<g transform="translate({tx:.2f},{ty:.2f}) scale({s_})">
+  <!-- the rest of the take, kept inside the bracket box: a stack that
+       pokes out past the crop marks reads as untidy, not as depth -->
+  <rect x="7.4" y="6.6" width="12" height="8" rx="0.6"
+        fill="none" stroke="{far}" stroke-width="0.28"/>
+  <rect x="6.7" y="7.3" width="12" height="8" rx="0.6"
+        fill="none" stroke="{near}" stroke-width="0.28"/>
+  <!-- the frame that was chosen -->
+  <rect x="6" y="8" width="12" height="8" rx="0.6"
+        fill="url(#{gradient_id})"/>
+  <!-- crop brackets, outside the frame edge so the mark never covers
+       the picture; centred on 12,12 so it sits level in a round avatar -->
+  <g fill="none" stroke="{accent}" stroke-width="0.66"
+     stroke-linecap="square">
+    <path d="M4 9.8 V6.4 H7.4"/>
+    <path d="M20 9.8 V6.4 H16.6"/>
+    <path d="M4 14.2 V17.6 H7.4"/>
+    <path d="M20 14.2 V17.6 H16.6"/>
+  </g>
 </g>'''
 
 
@@ -120,50 +144,71 @@ _SANS_STACK = (
 
 
 def _horizontal_lockup(brand: dict) -> str:
-    """16:9 — GitHub README hero / Notion / Slack header."""
-    w, h = 1280, 720
-    palette  = brand.get("palette", {})
-    name     = brand.get("projectName", "Project")
+    """The README banner.
+
+    Was 1280x720 — a 16:9 slide with the wordmark on the right and 200px
+    of nothing between the tagline and the footer. At `width="100%"` in a
+    README that is most of a screen before a reader has seen a sentence
+    of the project.
+
+    Now a banner: 1280x420, one horizontal rhythm, the mark and the type
+    on the same optical centre line. No radial glow behind the logo —
+    that blob is the tell of a generated asset and it was doing nothing
+    a considered background could not do better.
+    """
+    w, h = 1280, 420
+    palette = brand.get("palette", {})
+    name = brand.get("projectName", "PixCull")
     subtitle = brand.get("subtitle", "")
-    tagline  = brand.get("tagline", "")
-    footer   = brand.get("footerLine", "")
-    # Split wordmark into 2 halves for the gradient-on-second-half pattern
-    # we ship in the workspace bar (matches results.html .wordmark span).
+    tagline = brand.get("tagline", "")
+    footer = brand.get("footerLine", "")
     half = max(1, len(name) // 2)
     name_a, name_b = name[:half], name[half:]
+    accent = palette.get("accent", "#e8a33c")
+    body = palette.get("textBody", "#d6d3cd")
+    muted = palette.get("textMuted", "#8b8f97")
     return f'''<?xml version="1.0" encoding="utf-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}"
      width="{w}" height="{h}" role="img"
      aria-label="{_esc(name)} — {_esc(subtitle)}">
   <defs>
     {_gradient_defs(palette)}
-    {_cosmic_bg_defs(palette, w, h)}
+    <linearGradient id="ground" x1="0" y1="0" x2="0.35" y2="1">
+      <stop offset="0%"   stop-color="{palette.get("bgCosmic", "#1e2024")}"/>
+      <stop offset="100%" stop-color="{palette.get("bgDeep", "#101113")}"/>
+    </linearGradient>
   </defs>
-  <!-- Cosmic background -->
-  <rect width="{w}" height="{h}" fill="url(#cosmicBg)"/>
-  <!-- Soft glow blob centred behind the logo to lift it off the bg -->
-  <ellipse cx="320" cy="360" rx="280" ry="200"
-           fill="url(#brandGrad)" opacity="0.18"/>
-  <!-- Logo: ~280px wide, centred on the left third -->
-  {_logo_group(cx=320, cy=360, scale=11.5)}
-  <!-- Wordmark + subtitle + tagline column, right two-thirds -->
-  <text x="600" y="330" font-family="{_SERIF_STACK}"
-        font-size="120" font-weight="700" letter-spacing="-2"
-        fill="#ffffff">
+  <rect width="{w}" height="{h}" fill="url(#ground)"/>
+
+  <!-- Film-edge rule along the bottom. One accent, the same one the
+       crop brackets use, so the colour keeps meaning "chosen". -->
+  <rect x="0" y="{h - 5}" width="{w}" height="5" fill="{accent}"
+        opacity="0.85"/>
+
+  {_logo_group(cx=196, cy=196, scale=7.2, palette=palette)}
+
+  <!-- A hairline between the mark and the type: the two halves are one
+       lockup, not a logo that happens to sit near some words. -->
+  <rect x="330" y="104" width="2" height="184" fill="{muted}"
+        opacity="0.30"/>
+
+  <text x="382" y="196" font-family="{_SERIF_STACK}"
+        font-size="96" font-weight="700" letter-spacing="-2"
+        fill="{palette.get("wordmarkStart", "#f2ead9")}">
     {_esc(name_a)}<tspan fill="url(#brandGrad)">{_esc(name_b)}</tspan>
   </text>
-  <text x="600" y="380" font-family="{_SANS_STACK}"
-        font-size="22" font-weight="600" letter-spacing="3"
-        fill="#c4b9a9">
+  <text x="386" y="238" font-family="{_SANS_STACK}"
+        font-size="19" font-weight="600" letter-spacing="3.4"
+        fill="{accent}">
     {_esc(subtitle)}
   </text>
-  <text x="600" y="440" font-family="{_SANS_STACK}"
-        font-size="24" font-weight="400" fill="#e8e0d4" opacity="0.92">
+  <text x="386" y="278" font-family="{_SANS_STACK}"
+        font-size="22" font-weight="400" fill="{body}">
     {_esc(tagline)}
   </text>
-  <text x="600" y="640" font-family="{_SANS_STACK}"
-        font-size="14" font-weight="500" fill="#8a7d6a"
-        letter-spacing="1.5">
+  <text x="{w - 44}" y="{h - 34}" text-anchor="end"
+        font-family="{_SANS_STACK}" font-size="13" font-weight="500"
+        fill="{muted}" letter-spacing="1.4">
     {_esc(footer)}
   </text>
 </svg>
@@ -193,7 +238,7 @@ def _vertical_poster(brand: dict) -> str:
   <ellipse cx="360" cy="500" rx="320" ry="320"
            fill="url(#brandGrad)" opacity="0.20"/>
   <!-- Logo centred upper third -->
-  {_logo_group(cx=360, cy=500, scale=18)}
+  {_logo_group(cx=360, cy=500, scale=18, palette=palette)}
   <!-- Wordmark centred lower third (giant) -->
   <text x="360" y="940" font-family="{_SERIF_STACK}"
         font-size="120" font-weight="700" text-anchor="middle"
@@ -235,7 +280,7 @@ def _mark_only(brand: dict) -> str:
   <rect width="{w}" height="{h}" fill="url(#cosmicBg)"/>
   <ellipse cx="512" cy="512" rx="360" ry="360"
            fill="url(#brandGrad)" opacity="0.18"/>
-  {_logo_group(cx=512, cy=512, scale=28)}
+  {_logo_group(cx=512, cy=512, scale=28, palette=palette)}
 </svg>
 '''
 
