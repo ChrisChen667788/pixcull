@@ -168,7 +168,12 @@ def _analyze_path(path_str: str) -> dict | None:
     object identity for our use)."""
     from pixcull.pipeline.worker import analyze_one  # noqa: WPS433
     try:
-        return analyze_one(Path(path_str))
+        # v3.16 — content-keyed cache in front of the detectors. Both the
+        # pool path and the serial fallback below go through it; the
+        # single most-repeated defect in this repository is a capability
+        # added to one path and not the other.
+        from pixcull.pipeline.detector_cache import analyze_one_cached
+        return analyze_one_cached(Path(path_str), analyze_one)
     except Exception as exc:  # noqa: BLE001
         # Match the serial worker's exception-tolerance: skip the bad
         # frame, keep the pool alive. The orchestrator currently
@@ -208,6 +213,7 @@ def parallel_analyze(
         # would dominate the wall clock.
         from pixcull.pipeline.worker import analyze_one  # local
         out: list[dict] = []
+        # Serial fallback goes through the same wrapper as the pool.
         for i, ps in enumerate(path_strs, start=1):
             r = _analyze_one_safe(ps, analyze_one)
             if r is not None:
@@ -251,7 +257,11 @@ def _analyze_one_safe(path_str: str, analyze_one) -> dict | None:
     fallback branch. Kept inline to avoid the forkserver dep when
     workers == 1."""
     try:
-        return analyze_one(Path(path_str))
+        # v3.16 — the same cache the pool path uses. This repository's
+        # most-repeated defect is a capability wired into one path and
+        # not its twin, and this file holds both paths.
+        from pixcull.pipeline.detector_cache import analyze_one_cached
+        return analyze_one_cached(Path(path_str), analyze_one)
     except Exception as exc:  # noqa: BLE001
         print(f"[serial] {path_str}: {type(exc).__name__}: {exc}",
               file=sys.stderr)
