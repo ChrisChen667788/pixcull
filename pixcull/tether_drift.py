@@ -33,6 +33,12 @@ from pathlib import Path
 TETHER_COLUMNS = (
     "filename", "path", "scene", "decision", "score_final", "flags",
     "reason", "mtime", "sharpness", "is_burst_peak",
+    # v3.30 — five of the seventeen gaps v3.24 named, carried. Chosen for
+    # what changes the NEXT frame: blown highlights and a tilted horizon
+    # are fixable immediately, a blink means reshoot before the subject
+    # moves. The other twelve stay decided-and-not-done.
+    "highlight_clip_pct", "shadow_clip_pct", "horizon_tilt_deg",
+    "face_count", "face_max_blink",
 )
 
 #: A snapshot of a real finished run's columns. Refreshed by re-running

@@ -56,6 +56,18 @@ from typing import Callable
 # end-to-end ~5 sec) and CPU (idle poll = effectively free).
 _POLL_INTERVAL_S = 1.0
 
+#: v3.30 — metrics carried from `analyze_one` into the live row.
+#:
+#: Five of the seventeen gaps v3.24 named, chosen for what changes the
+#: NEXT frame: blown highlights and a tilted horizon are correctable
+#: immediately, a blink means reshoot before the subject moves. The other
+#: twelve stay decided-and-not-done in TETHER-DIVERGENCE.md, because a
+#: table is not something anyone reads between shutter releases.
+_LIVE_METRICS = (
+    "highlight_clip_pct", "shadow_clip_pct", "horizon_tilt_deg",
+    "face_count", "face_max_blink",
+)
+
 # Track active tether sessions globally so the HTTP API can list /
 # stop them. Each entry: {session_id: TetherSession}.
 _ACTIVE_SESSIONS: dict[str, "TetherSession"] = {}
@@ -144,7 +156,7 @@ class TetherSession:
                 dims["final"], flags, config,
                 scene=scene, vertical=self.vertical,
             )
-            return {
+            out = {
                 "filename":    path.name,
                 "path":        str(path),
                 "scene":       scene,
@@ -153,6 +165,22 @@ class TetherSession:
                 "score_final": float(dims["final"]),
                 "reason":      "; ".join(reasons),
             }
+            # v3.30 — carry the five live-relevant metrics.
+            #
+            # `analyze_one` already computed every one of these. This
+            # function returned a hand-written seven-key subset written
+            # in P2.2, and every metric added to the pipeline since has
+            # been discarded on this line. That is why the live path is
+            # thin: not because the numbers are expensive, but because
+            # nobody widened a dict literal.
+            #
+            # Copied rather than splatted: a live row is read by a
+            # photographer glancing at a screen, and `**row` would put
+            # 70 columns behind that glance.
+            for key in _LIVE_METRICS:
+                if key in row:
+                    out[key] = row[key]
+            return out
         except Exception as exc:  # noqa: BLE001
             print(f"[tether] analyze failed {path.name}: "
                   f"{type(exc).__name__}: {exc}", file=sys.stderr)
@@ -222,9 +250,19 @@ class TetherSession:
         scores_path = self._output_dir() / "scores.csv"
         is_new = not scores_path.exists()
         # v0.10-P1-2 — header now carries the streaming-burst fields.
+        # v3.30 — five more, chosen from the seventeen v3.24 named.
+        #
+        # Not the whole list. The disposition file says a table is not
+        # glanceable during a shoot, and it is right. These five are the
+        # ones that change what the photographer does in the next thirty
+        # seconds: blown highlights and a tilted horizon are fixable on
+        # the very next frame, and a blink means reshoot the setup before
+        # the subject moves. The other twelve stay decided-and-not-done.
         cols = ["filename", "path", "scene", "decision",
                 "score_final", "flags", "reason",
-                "mtime", "sharpness", "is_burst_peak"]
+                "mtime", "sharpness", "is_burst_peak",
+                "highlight_clip_pct", "shadow_clip_pct",
+                "horizon_tilt_deg", "face_count", "face_max_blink"]
         # Persist as a single-line CSV row (flags joined w/ "|")
         flat = dict(result)
         flat["flags"] = "|".join(result.get("flags") or [])

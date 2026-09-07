@@ -1,38 +1,50 @@
-# The live path and the finished path — v3.24
+# The live path and the finished path — v3.24, updated by v3.30
 
 `tether.py` dates from P2.2.  Everything the last forty versions added to
 the finished pipeline went into the finished path and stopped there.
 
-The live path writes **10** columns.  The finished path
+The live path writes **15** columns.  The finished path
 writes **73**.
 
-It is not obvious the live path should carry all of them — a photographer
-watching frames land during a shoot does not want a four-sentence critique
-between shutter releases.  What was not obvious is that **nobody had
-decided**.  This page is the decision, and `tests/test_tether_drift.py`
-fails when a new pipeline column arrives without one.
+v3.24 ruled on every difference.  v3.30 then carried five of the gaps and
+found out why they were gaps: `_analyze_one_file` returned a hand-written
+seven-key dict written in P2.2, and every metric added to the pipeline
+since had been discarded on that one line.  The numbers were computed and
+thrown away.
+
+`tests/test_tether_drift.py` fails when a new pipeline column arrives
+without a disposition.
 
 | disposition | columns |
 |---|---|
 | deliberate | 43 |
 | impossible | 5 |
-| gap | 17 |
+| gap | 12 |
 
-## The gaps — things that should be live and are not
+## Carried by v3.30
 
-Named, not counted: "17 things are missing" is a number, and
-"blown highlights are fixable next frame" is work.
+Chosen for what changes the NEXT frame, not for closing the list.
 
-| column | why it belongs in a live view |
+- `highlight_clip_pct`
+- `shadow_clip_pct`
+- `horizon_tilt_deg`
+- `face_count`
+- `face_max_blink`
+
+Two of the five — `horizon_tilt_deg` and `face_max_blink` — are
+conditional upstream: a frame with no horizon and no face has neither.
+They are written when present and left ABSENT when not, because a 0 there
+would say "level" and "eyes open" about a photograph nobody measured.
+Neither could be verified end to end on this machine, which has no frame
+with a face in it; the wiring is tested with a synthetic row.
+
+## Still gaps
+
+| column | why it would belong in a live view |
 |---|---|
 | `wedding_moment` | moment classification is per-frame and would be useful live |
 | `wedding_moment_confidence` | moment classification is per-frame and would be useful live |
 | `mean_luma` | exposure is what a tether session is watching |
-| `highlight_clip_pct` | blown highlights are fixable NEXT frame |
-| `shadow_clip_pct` | same |
-| `face_count` | eyes-open is the live question and it is absent |
-| `horizon_tilt_deg` | a tilt is correctable while still on set |
-| `face_max_blink` | same — this is THE tether-time signal |
 | `face_min_ear` | same |
 | `face_max_smile` | same |
 | `face_max_brow_down` | same |
@@ -43,16 +55,7 @@ Named, not counted: "17 things are missing" is a number, and
 | `score_aesthetic` | same |
 | `score_moment` | same |
 
-The shape of the list is itself the finding.  Almost every gap is either
-**exposure** or **the face** — the two things a tethered photographer is
-actually watching for, and the two the live path is silent about.  It
-reports a verdict and withholds the one number that would let them fix the
-next frame.
-
 ## Impossible during a shoot
-
-Not work.  These need the whole shoot, and during a shoot there is no
-whole shoot yet.
 
 - `face_clusters` — identity clustering is a whole-shoot pass
 - `gps_cluster_id` — location clustering is a whole-shoot pass
@@ -61,8 +64,6 @@ whole shoot yet.
 - `burst_peak_reason` — same
 
 ## Deliberately absent
-
-Handled as families where they come in families.
 
 - `rubric_*` — six axes and their pass flags is a table, not a glance
 - `model_*` — the learned head's per-axis stars, same reason
@@ -86,6 +87,4 @@ Handled as families where they come in families.
 
 `pixcull/data/finished_run_columns.txt` is a snapshot of a real run's CSV
 header.  Re-run the pipeline, copy the header, and the gate will tell you
-which new columns need a ruling.  That is the whole mechanism: the cost of
-adding a column includes one sentence about whether the live path needs it,
-paid at the only moment anyone knows the answer.
+which new columns need a ruling.
