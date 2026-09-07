@@ -235,7 +235,8 @@ def _content_hash(path: Path, extra: str = "") -> str:
 def cache_extra(*, model: str, scene: str | None, vertical: str | None,
                 evidence_arm: str, evidence_len: int,
                 prompt_override: str | None, temperature: float = 0.0,
-                sample: int = 0, refs: str = "") -> str:
+                sample: int = 0, refs: str = "",
+                long_edge: int | None = None) -> str:
     """The prompt-affecting discriminator folded into the cache key.
 
     Pulled out of :meth:`MinimaxM3Judge.score` so the one invariant that
@@ -272,6 +273,14 @@ def cache_extra(*, model: str, scene: str | None, vertical: str | None,
         # answer from cache and the A/B compares an arm against itself —
         # the mirror of the v3.2 bug, and the one v2.66 actually shipped.
         + (f"|R{refs}" if refs else "")
+        # v3.17 — the resolution the frame was sent at.
+        #
+        # Third time in this block: an arm that changes what the model
+        # SEES and not the cache key reads back the other arm's answer
+        # and the A/B compares itself against itself.  Appended, only
+        # when it differs from the run default, so the ordinary key does
+        # not move.
+        + (f"|L{long_edge}" if long_edge else "")
     )
 
 
@@ -599,7 +608,8 @@ class MiniMaxM3Judge:
 
     # -- encoding -------------------------------------------------------
 
-    def _image_data_uri(self, image_path: Path) -> str:
+    def _image_data_uri(self, image_path: Path,
+                        long_edge: int | None = None) -> str:
         """Load → resize → JPEG → data URI, guaranteed under the 10 MB cap.
 
         Quality is stepped down rather than failing, because a 10 MB cap
@@ -608,7 +618,11 @@ class MiniMaxM3Judge:
         it at q60.
         """
         from pixcull.io.loader import load_image
-        img = load_image(image_path, max_side=self.resize_long_edge)
+        # v3.17 — per-call override. `resize_long_edge` was a
+        # constructor argument only, so nothing could route a single
+        # frame differently from the rest of its run.
+        img = load_image(image_path,
+                         max_side=int(long_edge or self.resize_long_edge))
         if img is None:
             raise ValueError(f"failed to decode image: {image_path}")
         if img.mode not in ("RGB", "L"):
@@ -670,6 +684,8 @@ class MiniMaxM3Judge:
         # v3.11 — reference frames the photographer judged themselves,
         # attached AFTER the frame under judgement.  Empty by default.
         reference_images: list | None = None,
+        # v3.17 — long edge for THIS frame.  None = the run's setting.
+        resize_long_edge: int | None = None,
     ) -> VlmVerdict:
         """Judge one photo, with local measurements supplied as evidence.
 
@@ -708,7 +724,8 @@ class MiniMaxM3Judge:
                                 prompt_override=prompt_override,
                                 temperature=temperature,
                                 sample=sample,
-                                refs=_refs_key(reference_images)))
+                                refs=_refs_key(reference_images),
+                                long_edge=resize_long_edge))
             except OSError:
                 key = ""
             if key:
@@ -736,7 +753,8 @@ class MiniMaxM3Judge:
             content = [
                 {"type": "text", "text": prompt},
                 {"type": "image_url",
-                 "image_url": {"url": self._image_data_uri(image_path)}},
+                 "image_url": {"url": self._image_data_uri(
+                     image_path, resize_long_edge)}},
             ]
             # v3.11 — reference frames, always AFTER the one being judged.
             #
