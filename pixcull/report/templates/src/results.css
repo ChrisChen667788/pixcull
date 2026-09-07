@@ -2400,7 +2400,7 @@
 .session-health-panel {
   margin: 16px 0; padding: 14px 16px;
   border: 1px solid var(--border); border-radius: 10px;
-  background: var(--surface); font-size: 12px;
+  background: var(--bg-card); font-size: 12px;
 }
 .session-health-panel h3 { margin: 0 0 8px; font-size: 13px; }
 .session-health-panel table { width: 100%; border-collapse: collapse; }
