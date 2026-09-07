@@ -9898,7 +9898,13 @@ class _Handler(BaseHTTPRequestHandler):
         self._send_json(200, body)
 
     def _serve_status(self, run_id: str) -> None:
-        run = _get_run(run_id)
+        # v3.21 — reload from disk like every other run-scoped endpoint.
+        #
+        # This one only looked in the in-process registry, so a report
+        # opened for a run the server had not scanned in THIS process
+        # 404'd — which is the normal case after a restart, and the case
+        # the session-health chip needs it in.
+        run = _get_run(run_id) or _reload_run_from_disk(run_id)
         if run is None:
             self.send_error(404, "no such run")
             return

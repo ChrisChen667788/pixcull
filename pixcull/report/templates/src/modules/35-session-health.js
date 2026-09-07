@@ -21,8 +21,14 @@
   // "this pass had work to do and did none of it" is not a percentage,
   // it is a thing that is broken.
 
-  const RUN_ID = (window.PIXCULL_RUN_ID
-                  || (window.run_id !== undefined ? window.run_id : ""));
+  // The page injects `run_id` as a const in this script's own scope —
+  // every other module references it bare. Reading `window.run_id`
+  // instead got `undefined`, so this module fetched nothing and the chip
+  // could never appear. Read at CALL time, not at splice time.
+  function _runId() {
+    try { return typeof run_id === "string" ? run_id : ""; }
+    catch (_e) { return ""; }
+  }
 
   function pct(x) { return Math.round((x || 0) * 100); }
 
@@ -122,8 +128,12 @@
   }
 
   function load() {
-    if (!RUN_ID) return;
-    fetch("/api/run/" + encodeURIComponent(RUN_ID))
+    const rid = _runId();
+    if (!rid) return;
+    // `/status/<run_id>` is the route that serves the ledger. There is no
+    // `/api/run/<id>`; the first version of this module fetched it, got a
+    // 404, swallowed it in the catch, and rendered nothing on every run.
+    fetch("/status/" + encodeURIComponent(rid))
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (view) {
         if (!view) return;
