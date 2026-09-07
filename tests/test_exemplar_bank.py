@@ -130,13 +130,20 @@ def test_no_exemplars_produces_no_note():
 
 def test_reference_frames_are_attached_after_the_frame_under_judgement():
     """The prompt says "只评第一张". A reference arriving first makes that
-    sentence point at the wrong photograph."""
+    sentence point at the wrong photograph.
+
+    The invariant is an ORDER, so it is asserted as one: the first time
+    the frame under judgement is encoded must come before the loop that
+    encodes the references. An earlier version of this test matched the
+    full call text and broke when v3.17 added an argument to it — a
+    passing test failing for a reason that was not the behaviour.
+    """
     import inspect
     from pixcull.scoring import m3
     src = inspect.getsource(m3.MiniMaxM3Judge.score)
-    first = src.index('"url": self._image_data_uri(image_path)')
-    later = src.index("for ref in (reference_images or []):")
-    assert first < later
+    subject = src.index("_image_data_uri(")
+    refs_loop = src.index("for ref in (reference_images or []):")
+    assert subject < refs_loop
 
 
 def test_attaching_references_changes_the_cache_slot():
