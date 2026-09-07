@@ -326,6 +326,46 @@ output.  Do not report any of these as measured.
 **Editing `templates/src/results.js` requires `python scripts/build_results_html.py`**
 or `test_results_build.py::test_artifact_matches_sources` fails.
 
+**v3.16 → v3.27 SHIPPED** — the charter is complete (27/27).  Full gate
+exits 0.
+
+**Two real data-loss/corruption defects were found by doing the work, not by
+looking for them:**
+- **v3.23** `write_xmp` built a fresh sidecar over whatever was there.  A
+  photographer who had already starred, colour-labelled and keyworded a shoot
+  in Lightroom lost all of it the first time they ran PixCull.  Writes are now
+  additive (`preserve_existing=True`); an existing rating or label wins, their
+  keywords are kept, and only PixCull's own `PixCull:*` keywords are replaced.
+- **v3.9/v3.16 class:** the detector cache nearly shipped storing vectors as
+  JSON lists.  `orchestrator.py` filters on `hasattr(emb, "shape")`, so every
+  warm-run photo would have dropped out of semantic search silently.
+
+**v3.16's first measurement was fake and is written down** (cold and warm in
+ONE process = model warm-up; zero cache entries had been written because
+`put` was failing on numpy).  Real numbers and the 1,549 MB/s hash rate are in
+`docs/DETECTOR-CACHE-MEASUREMENT.md`.
+
+**More charter premises were wrong and re-derived:** v3.17
+(`resize_long_edge` is a CONSTRUCTOR arg, not per-call), v3.25 (the unsourced
+comparison table was in README.md too, not just the model card — 11 rows).
+
+**New env switches (all default-off except the cache):**
+`PIXCULL_DETECTOR_CACHE=0` to disable (on by default; bump `DETECTOR_VERSION`
+whenever a detector's output changes or the change appears to do nothing),
+`PIXCULL_RESOLUTION_ROUTER`, `PIXCULL_BURST_MULTI_IMAGE`, `PIXCULL_TETHER_XMP`.
+
+**New gates that fail on drift, not on style:** `test_tether_drift` (a new
+pipeline column with no live-path disposition), `test_comparative_claims_are_sourced`
+(a bare absolute about a competitor), `test_competitive_confidence`
+(`verified` with no `verified_by`).
+
+**`pixcull/mcp_server.py`** is a read-only MCP server over stdio, no SDK.
+`tool()` refuses a handler not declared read-only — keep it that way.
+
+**Known pre-existing red:** `test_visual_smoke::test_grid_and_lightbox_have_no_legacy_palette`
+(`resolve-maybes-btn`, confirmed identical at fee978d).  It hides because the
+local gate convention ignores that file.
+
 **Next block: `docs/ROADMAP-v3.1-v3.27-charter.md`** — twenty-seven versions read
 out of the same 46-entry competitive research at the level of PixCull's own core
 (decision, rubric, judge, critique, personalisation, sequence, ingestion,
