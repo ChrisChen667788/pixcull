@@ -388,6 +388,9 @@ def run_pipeline(
     strictness: str = "standard",
     rescorer_mode: str | None = None,
     rescorer_path: str | None = None,
+    # v3.19 — a contracted delivery count.  None = decide by threshold,
+    # which is every run before this one.
+    keep_n: int | None = None,
     progress_cb: Callable[[int, int, str], None] | None = None,
     vlm_mode: str = "off",
     # v2.50 — cloud judging ships on. Authority only means anything
@@ -821,6 +824,30 @@ def run_pipeline(
     # silently skipped runs with no cache — which is every fresh run.
     # Now the cache is a by-product of culling, at zero extra inference.
     _write_clip_cache(df, output)
+
+    # v3.19 — a contracted count, applied to the decisions and to
+    # nothing else.
+    #
+    # Runs on df BEFORE the export copy so scores.csv, the report and the
+    # XMP sidecars all agree.  It never rewrites score_final: a
+    # target-count keep is a different claim from a threshold keep, and
+    # the two columns it adds are how a reader can tell which they are
+    # looking at.
+    if keep_n is not None:
+        from pixcull.scoring.target_count import apply as _apply_target
+        _recs = df.to_dict("records")
+        _plan = _apply_target(_recs, int(keep_n))
+        df["decision"] = [r.get("decision") for r in _recs]
+        from pixcull.scoring.target_count import PRIOR_COL, SOURCE_COL
+        df[SOURCE_COL] = [r.get(SOURCE_COL) for r in _recs]
+        df[PRIOR_COL] = [r.get(PRIOR_COL) for r in _recs]
+        _extra = (f" (+{_plan['ties_at_boundary']} tied at the boundary)"
+                  if _plan["ties_at_boundary"] else "")
+        _short = (f" — {_plan['short_by']} short of the target"
+                  if _plan["short_by"] else "")
+        console.print(
+            f"[cyan]目标张数[/cyan] {keep_n}: 保留 {len(_plan['keep'])}"
+            f"{_extra}{_short},改判 {_plan['changed']} 张")
 
     # Export CSV (drop embeddings to keep file small)
     # (auto-index runs after the CSV lands — _run_path_map reads it)

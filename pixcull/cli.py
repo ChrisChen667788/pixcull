@@ -38,6 +38,15 @@ def run(
         None, "--scene", help="Force scene (portrait/wildlife/event/stilllife/landscape/street)"
     ),
     strictness: str = typer.Option("standard", "--strictness", help="strict | standard | lenient"),
+    keep_n: Optional[int] = typer.Option(
+        None, "--keep-n",
+        help="v3.19 — deliver exactly N selects. Ranks the shoot and keeps "
+             "the top N regardless of where the threshold fell; frames tied "
+             "at the boundary are all kept, so the result can exceed N. "
+             "score_final is never rewritten, and the two "
+             "target_count_* columns record every decision this changed. "
+             "A target-count keep is not the same claim as a threshold keep.",
+    ),
     rescorer_mode: Optional[str] = typer.Option(
         None, "--rescorer-mode",
         help="V1.2 learned-head mode: off | shadow | adjudicate. "
@@ -130,6 +139,7 @@ def run(
         strictness=strictness,
         rescorer_mode=rescorer_mode,
         rescorer_path=rescorer_path,
+        keep_n=keep_n,
         vlm_mode=vlm_mode,
         meta_mode=meta_mode or "off",
     )
