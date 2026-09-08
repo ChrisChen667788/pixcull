@@ -229,6 +229,18 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     if total < baseline:
+        # v3.46 — but not when we scanned nothing. `_scan` returns [] for
+        # a path that does not exist, so a renamed target reads as "zero
+        # violations, huge progress" and rewrites the baseline to 0 —
+        # after which every real run is red for a reason that has nothing
+        # to do with the code. Seen within minutes of first wiring this
+        # up: a mutation test pointed the scanner at a moved filename and
+        # the baseline went to 0 on disk.
+        if not all_violations and total == 0:
+            print("[design-lint] refusing to lower the baseline — no "
+                  "target file was readable, which is a configuration "
+                  "error, not migration progress", file=sys.stderr)
+            return 2
         # Migration progress! Lower the baseline so we don't regress.
         BASELINE_PATH.write_text(
             json.dumps({"max_violations": total}, indent=2),

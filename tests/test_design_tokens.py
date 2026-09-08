@@ -17,8 +17,11 @@ from pathlib import Path
 import pytest
 
 
+ROOT = Path(__file__).resolve().parent.parent
+
+
 def _load(rel_path: str):
-    p = Path(__file__).resolve().parent.parent / "scripts" / rel_path
+    p = ROOT / "scripts" / rel_path
     spec = importlib.util.spec_from_file_location(rel_path, p)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
@@ -306,3 +309,63 @@ def test_lint_handles_pure_css_file(tmp_path):
     p.write_text(":root { --x: #aabbcc; }\n", encoding="utf-8")
     found = [h for _, h in lint._scan(p)]
     assert "#aabbcc" in found
+
+
+# ---------------------------------------------------------------------------
+# v3.46 — the gate itself, run against the real tree.
+#
+# Every lint test above builds a synthetic results.html in tmp_path, so
+# all twelve of them passed while the thing the lint exists to guard
+# drifted. The script was in no workflow and no test called it on the
+# product. Run for real it had been failing — 144 against a baseline of
+# 128 — and nobody could have known.
+# ---------------------------------------------------------------------------
+
+def test_the_visual_debt_ratchet_actually_runs_on_the_product():
+    """A gate that is never invoked is a document.
+
+    This is the invocation. It fails when inline hex grows past the
+    committed baseline, which is the whole point of the script and was
+    the one thing nothing did.
+    """
+    import subprocess
+    import sys
+    proc = subprocess.run(
+        [sys.executable, "scripts/lint_design_tokens.py"],
+        cwd=ROOT, capture_output=True, text=True)
+    assert proc.returncode == 0, (
+        "design-token ratchet failed — new inline hex has landed in "
+        "pixcull/report/templates/results.html:\n" + proc.stderr)
+
+
+def test_the_ratchet_is_pointed_at_the_shipped_page():
+    """If the target moves, the gate silently guards an empty file —
+    `_scan` returns [] for a path that does not exist, which reads as
+    zero violations, which reads as success."""
+    src = (ROOT / "scripts" / "lint_design_tokens.py").read_text("utf-8")
+    body = "\n".join(l.split("#", 1)[0] for l in src.splitlines())
+    assert "results.html" in body
+    assert (ROOT / "pixcull" / "report" / "templates" / "results.html").is_file()
+
+
+def test_the_baseline_is_a_number_somebody_wrote_down():
+    import json
+    data = json.loads(
+        (ROOT / "design-system" / ".lint_baseline.json").read_text("utf-8"))
+    assert isinstance(data.get("max_violations"), int)
+    assert data["max_violations"] >= 0
+
+
+def test_the_three_palettes_that_disagree_are_on_the_open_items_page():
+    """Why the number is what it is.
+
+    `design-system/tokens.json` still names its brand ramp indigo /
+    violet / pink and holds values from a mid-flight version of the warm
+    palette; the shipped page uses a third set; `pixcull-brand.json` a
+    fourth. Every use of the shipped colour therefore counts as "not in
+    the design-system tokens", which is most of the debt. That is a
+    decision about which palette is canonical, so it is an owner ask and
+    it has to be written where the owner reads."""
+    page = (ROOT / "docs" / "OPEN-ITEMS.md").read_text("utf-8")
+    assert "tokens.json" in page and "#d5b584" in page, (
+        "the palette divergence is not recorded on the open-items page")

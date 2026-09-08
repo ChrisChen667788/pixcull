@@ -111,6 +111,36 @@ because it will apply again: before recording something as blocked, try it.
 
 ---
 
+### 5. Which palette is canonical — unblocks the design-token ratchet
+
+Found 2026-09-09, auditing what the design-system track actually shipped.
+Three files hold a brand ramp and no two agree:
+
+| where | brand ramp | what it is |
+|---|---|---|
+| `design-system/tokens.json` | `#c4b9a9` `#988b78` `#6a6052`, still **named** `indigo` / `violet` / `pink`, alongside untouched `indigo-b` `#5841C7` etc. | Phase A's source of truth, holding values from a mid-flight version of the warm palette |
+| `pixcull/report/templates/results.html` | `#d5b584` `#eaca98` `#93743f` | what a photographer actually sees |
+| `scripts/brand/pixcull-brand.json` | `#f2ead9` `#dfcfae` `#c2a878` | the brand kit, what the README banner is drawn from |
+
+The design system was never told about the redesign that came after it.
+Phase A shipped a token file and a "no new visual debt" ratchet; the
+visual redesign shipped separately; nobody reconnected them.
+
+This is most of the ratchet's number. `scripts/lint_design_tokens.py`
+counts a hex as debt when it is *not one of the design-system tokens*, so
+every use of the shipped `#d5b584` counts — correctly, by its own rule,
+because that colour is not in the design system.
+
+**The ask is one decision:** which of the three is canonical. Then
+`design-system/tokens.json` is regenerated from it, `build_design_tokens.py`
+re-emits the CSS / Swift / Python outputs, and the ratchet's number drops
+on its own — it lowers its own baseline whenever violations fall.
+
+Not engineering judgement: renaming `indigo` to something true and picking
+between three golds is a brand call. Flagged rather than guessed at.
+
+---
+
 ## Known red, pre-existing and now fixed
 
 `test_visual_smoke::test_grid_and_lightbox_have_no_legacy_palette` had flagged
