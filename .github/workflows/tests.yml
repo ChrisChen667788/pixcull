@@ -217,9 +217,26 @@ jobs:
           # required for the assertions we check).
           # -m "not slow" leaves out the one journey that runs the real
           # pipeline; it needs weights and lives in the realmodel lane.
-          pytest -q -m "not slow" \
+          set -o pipefail
+          # -rs so every skip prints its reason; the audit step below
+          # reads them. Without it the audit has nothing to check and
+          # says so rather than passing quietly.
+          pytest -q -rs -m "not slow" \
             --ignore=tests/test_v1_1_scripts.py \
-            --ignore=tests/test_v1_2_rescorer_integration.py
+            --ignore=tests/test_v1_2_rescorer_integration.py \
+            | tee /tmp/hermetic-report.txt
+
+      # v3.51 — a skip has to be a decision, once.
+      #
+      # Five versions in a row were lost to a test that exists, is
+      # committed, is counted in the suite total, and does not run here:
+      # ffmpeg (v2.45, re-found v3.48), exiftool (v3.41), the browser
+      # lane (v3.42), the design-token ratchet (v3.46), the packaged
+      # rescorer (v3.49). Each was found by tripping over it. This makes
+      # the census routine: every reason this run printed has to have a
+      # disposition in tests/ci_skip_dispositions.tsv.
+      - name: Audit the skips
+        run: python scripts/audit_ci_skips.py /tmp/hermetic-report.txt
 
       # v2.41 — the journey, separately, so a red run says WHICH failed.
       # DESIGN-AUDIT-2031Q1: this repo's most common defect is a live

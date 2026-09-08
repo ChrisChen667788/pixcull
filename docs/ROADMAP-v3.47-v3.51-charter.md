@@ -197,6 +197,28 @@ CI run rather than from grepping the source, because what skips on a
 laptop and what skips on a runner are different lists — which is the
 whole reason this block exists.
 
+**Done: thirteen rows, four dispositions.** `scripts/audit_ci_skips.py`
+reads the `SKIPPED` lines a run printed and fails on a reason with no
+row. The hermetic step gained `-rs` so there are reasons to read, and the
+audit runs after it.
+
+Two details that decide whether this works.
+
+It refuses to pass quietly on an empty report. A run invoked without
+`-rs` produces no skip lines, which is indistinguishable from a clean
+run — and silently treating "I saw nothing" as "there was nothing" is the
+mechanism behind all five instances above. It says which one to expect.
+
+Three rows say `gap`, and each names what closes it: `zeroconf` for
+sync discovery, `pixcull[shots]` for the shot-boundary claim, and
+scikit-image for the public-domain face. Those are the next three
+one-line fixes and they are now written down rather than remembered.
+
+Deliberately **not** given a row: `MediaPipe / model weights
+unavailable`. v3.50 installs the face extra, so it should not appear
+again — and if it does, the audit fails and somebody has to say why,
+which is exactly the behaviour being bought.
+
 ---
 
 ## Deliberately declined

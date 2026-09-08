@@ -1,0 +1,30 @@
+# v3.51 — every skip reason a CI run prints, and what somebody decided
+# about it. Enforced by scripts/audit_ci_skips.py, which reads the
+# SKIPPED lines an actual run produced rather than grepping the source:
+# what skips on a laptop and what skips on a runner are different lists,
+# and five versions in a row were lost in that gap.
+#
+# Keyed on the reason PATTERN, not the test id, so renaming a test does
+# not rewrite the ledger.
+#
+# disposition ∈ covered-elsewhere | deliberate | owner-blocked | gap
+#   covered-elsewhere  another lane runs it; the note names which
+#   deliberate         it should not run here, and the note says why
+#   owner-blocked      needs a person; the note names the ask
+#   gap                it should run and does not; the note names what
+#                      closes it
+#
+# pattern	disposition	note
+could not import 'playwright.sync_api'	covered-elsewhere	The browser job installs playwright and chromium and runs these four files by name; see tests/test_browser_lane_runs.py, which fails if it stops.
+chromium unavailable	covered-elsewhere	Same lane. Launch failure rather than a missing import; the browser job proves a browser launched before it is allowed to go green.
+weights not cached locally	covered-elsewhere	The weekly real-model lane downloads CLIP and BLIP; the hermetic run is not allowed to depend on a download.
+captioning VLM not cached locally	covered-elsewhere	Same weekly real-model lane; the BLIP captioner is a download the hermetic run must not depend on.
+home dir 'runner' is not a personal username	deliberate	The check is that the maintainer's own username has not been pasted into a doc. On a build account there is no personal username to leak — the machine that can leak the name is the machine that checks for it.
+sentry_sdk installed	deliberate	Inverted check: it simulates the dependency being absent, and cannot when it is present.
+golden-set portrait not present	deliberate	A real client frame. It will never be committed; the public-domain equivalent runs in test_serve_faces.py.
+smoke fixture missing	deliberate	Guards against a half-deleted fixture tree rather than describing an environment.
+not defined in	deliberate	A theme token that a given theme legitimately does not define.
+zeroconf not installed	gap	Multi-machine sync discovery has no CI coverage. Closed by adding the sync extra to the hermetic install, the same one-line shape as v3.50's face extra.
+scikit-image unavailable	gap	The public-domain astronaut face. v3.50 installs scikit-image, so this should stop appearing; if it persists the install did not take.
+shot detection extra not installed	gap	README claim 17 says a reel candidate never spans a hard cut. Closed by adding pixcull[shots] to the hermetic install.
+not compiled into this ffmpeg	deliberate	A codec the runner's ffmpeg build lacks. The test asserts the fallback, which is the part that matters.
