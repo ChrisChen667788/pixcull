@@ -134,3 +134,32 @@ def test_a_claim_the_reader_cannot_reach_says_so_in_the_readme():
             missing.append(f"row {row[0]}: the claim does not say it is "
                            f"source only")
     assert not missing, missing
+
+
+def test_the_caveat_reaches_the_modelscope_card_too():
+    """v3.52 — two front doors, and only one of them got corrected.
+
+    v3.47 added the source-only caveat to README.md in both languages
+    and left `modelscope/README.md` — a separate, condensed card that a
+    different set of readers sees — still describing the iOS companion
+    as though `pip install` hands it to you. Fixing the main path and
+    forgetting its twin is this repository's other recurring defect, and
+    a claim gate that only reads one of the two cards invites it.
+    """
+    card = ROOT / "modelscope" / "README.md"
+    if not card.is_file():
+        pytest.skip("no ModelScope card in this checkout")
+    text = card.read_text(encoding="utf-8")
+    if "iOS" not in text:
+        return
+    # Find the numbered line that makes the claim, and the line under it.
+    lines = text.splitlines()
+    idx = [i for i, l in enumerate(lines)
+           if re.match(r"^\d+\. \*\*iOS", l.strip())]
+    assert idx, "the card lists no iOS item — update this check deliberately"
+    for i in idx:
+        block = " ".join(lines[i:i + 3])
+        assert re.search(r"源码|自己在 Xcode|编译|App Store", block), (
+            "the ModelScope card describes the iOS companion without "
+            "saying it is source you build yourself, while README.md "
+            f"does: {block[:90]}")
