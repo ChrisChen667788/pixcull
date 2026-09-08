@@ -78,6 +78,36 @@ was built on had already evaded ordinary attention.
 repository's signature defect and not the same thing as false. The inventory
 needs a third column: reachable from the shipped default, or only behind a flag.
 
+**Done: `docs/README-CLAIMS.md`, nineteen rows for eighteen claims.** Seventeen
+hold. The code column was the easy half; the reachability column is what found
+the one that does not.
+
+**The rescorer is not in the published package.** `RescorerConfig.model_path`
+defaults to `models/rescorer_v1.joblib` — relative to the working directory —
+and the eight artifacts under `models/` (1.8 MB) are tracked in git and absent
+from the wheel. Measured on the built artifact, from `/tmp`:
+
+```
+default rescorer path : models/rescorer_v1.joblib
+resolves from cwd /tmp: False
+joblibs inside pkg    : []
+```
+
+Anyone who installed from PyPI has been running rule-only. It is not silent —
+`load_rescorer` prints `— running rule-only` to stderr — but claim 1 states the
+learned head as something you get, and claim 15's queue leans on it for its top
+two priorities. → v3.44.
+
+Four claims are true only behind an extra or a flag, and in every one of those
+four the README already says so (`pixcull[face]`, `pixcull[shots]`,
+`pixcull[asr]`, `PIXCULL_VERTICAL_AXIS_PRIOR`). One is source-only and did not
+say so: the iOS companion is a Swift package you build in Xcode, not something
+`pip install` gives you. The inventory says it now.
+
+`tests/test_readme_claims_inventory.py` fails when a claim is added without a
+row, when a row names a file that is not in the repository, and when the
+measured failure above is quietly dropped from the document.
+
 ### v3.39 — the deferral comments, revisited once
 Eight in the code. `orchestrator.py`'s "V0.3 will add … incremental runs"
 waited until v3.16; `serve_app.py`'s "LR's catalog schema is undocumented,
