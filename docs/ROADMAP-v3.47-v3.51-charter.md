@@ -35,6 +35,32 @@ that checks for it.
 
 The rest are this block.
 
+## What the block came to
+
+Measured on the hermetic CI job, same command, before and after:
+
+| | skipped tests in CI |
+|---|---|
+| before (v3.46, `86d40bb`) | **59** |
+| after (v3.51, `85784d1`) | **15** |
+
+Forty-four tests that had never run on a runner now run there. The
+fifteen that remain each match a row in `tests/ci_skip_dispositions.tsv`,
+and the audit step says so in the log rather than leaving it to be
+counted by hand: `[skip-audit] OK — 15 skip(s), every reason
+dispositioned`.
+
+Three of the five versions turned something red on the way, which was the
+point:
+
+* the fixture v3.47 committed had never actually been committed — a bare
+  `output/` in `.gitignore` with a per-name exception for the *previous*
+  fixture;
+* mediapipe needed libEGL, and then libGLESv2, and a headless image
+  carries neither;
+* and the thirty-nine video tests, running on Linux for the first time in
+  their lives, passed.
+
 ---
 
 ### v3.47 — the leftovers, and the one test fixture that lived on one laptop

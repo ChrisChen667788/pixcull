@@ -141,6 +141,26 @@ between three golds is a brand call. Flagged rather than guessed at.
 
 ---
 
+## Three gaps the skip ledger now names
+
+v3.51 turned the CI skip census into `tests/ci_skip_dispositions.tsv`,
+where a row marked `gap` has to say what closes it. Three do, and each is
+the same one-line shape as the fix that closed the face extra:
+
+1. **`zeroconf not installed`** — multi-machine sync discovery, three
+   tests, no CI coverage. Closed by adding the `sync` extra to the
+   hermetic install.
+2. **`shot detection extra not installed`** — README claim 17 says a reel
+   candidate never spans a hard cut. Closed by adding `pixcull[shots]`.
+3. **`scikit-image unavailable`** — the public-domain astronaut face.
+   v3.50 installs it, so this should already be gone; if the reason
+   reappears the install did not take.
+
+These are engineering, not owner asks. They are here so the next block
+starts from a list rather than from another accident.
+
+---
+
 ## Known red, pre-existing and now fixed
 
 `test_visual_smoke::test_grid_and_lightbox_have_no_legacy_palette` had flagged
