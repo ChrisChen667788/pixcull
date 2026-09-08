@@ -133,13 +133,26 @@ def test_analyze_on_solid_color_sees_no_face():
     assert "face_occluded" not in r.flags
 
 
+#: v3.50 — this one will not be closed, and the message should say so.
+#: 3J0A1701.JPG is a frame from a real shoot: a photograph of a person
+#: who did not agree to appear in an open-source test suite. "fixture
+#: unavailable" reads like a file somebody forgot to add, and somebody
+#: would eventually add one. The equivalent assertion on a
+#: public-domain face runs everywhere — see test_serve_faces.py's
+#: astronaut fixture — and this stays as the golden-set extra for
+#: whoever holds the originals.
+_PORTRAIT_SKIP = ("golden-set portrait not present: it is a real client "
+                  "frame and is deliberately not committed. The "
+                  "public-domain equivalent runs in test_serve_faces.py")
+
+
 @pytest.mark.skipif(not _mediapipe_available(), reason="MediaPipe / model weights unavailable")
 def test_analyze_on_portrait_detects_open_eyes():
     """3J0A1701.JPG is a golden-set keep portrait — detector should find one
     face with eyes clearly open and emit no cull flags."""
     img_path = Path(__file__).parent / "fixtures" / "images" / "portrait" / "3J0A1701.JPG"
     if not img_path.exists():
-        pytest.skip("portrait fixture unavailable")
+        pytest.skip(_PORTRAIT_SKIP)
 
     from pixcull.io.loader import load_image
     img = load_image(img_path)
@@ -162,7 +175,7 @@ def test_meaningful_face_gate_suppresses_tiny_detections():
     # Create a 2000×2000 canvas with a tiny 32×32 portrait pasted in a corner.
     img_path = Path(__file__).parent / "fixtures" / "images" / "portrait" / "3J0A1701.JPG"
     if not img_path.exists():
-        pytest.skip("portrait fixture unavailable")
+        pytest.skip(_PORTRAIT_SKIP)
 
     base = Image.open(img_path).convert("RGB")
     tiny = base.resize((40, 40))
@@ -175,3 +188,33 @@ def test_meaningful_face_gate_suppresses_tiny_detections():
     assert "closed_eyes" not in r.flags
     assert "motion_blur_on_face" not in r.flags
     assert "face_occluded" not in r.flags
+
+
+def test_ci_installs_the_face_extra_so_these_cannot_skip_forever():
+    """v3.50 — mediapipe is what makes this file run instead of skip.
+
+    Claim 4 of eighteen in the README is InsightFace embeddings into
+    DBSCAN into a cross-run face library, and every part of it stands on
+    a detector that needs mediapipe. Four tests — three here, one in
+    test_serve_faces.py — skipped on every push, so the identity feature
+    was exercised nowhere automatic. The .tflite / .task weights are in
+    the wheel already; only the runtime was missing.
+
+    Read from the parsed workflow with shell comments stripped, because
+    a guard in this repo has been satisfied by its own prose seven times.
+    """
+    import yaml
+
+    ci = yaml.safe_load(
+        (Path(__file__).resolve().parent.parent
+         / ".github" / "workflows" / "tests.yml").read_text(encoding="utf-8"))
+    steps = ci["jobs"]["pytest"]["steps"]
+    install = next(i for i, s in enumerate(steps) if s.get("name") == "Install")
+    hermetic = next(i for i, s in enumerate(steps)
+                    if s.get("name") == "Run hermetic tests")
+    body = "\n".join(l.split("#", 1)[0]
+                     for l in str(steps[install].get("run", "")).splitlines())
+    assert ".[face]" in body, (
+        "the hermetic job does not install the face extra — every test "
+        "in this file skips and the tick stays green")
+    assert install < hermetic

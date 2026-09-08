@@ -162,6 +162,16 @@ jobs:
                       --extra-index-url https://pypi.org/simple \
                       "torch==2.4.1" "torchvision==0.19.1"
           pip install -e ".[dev]"
+          # v3.50 — the face extra. Claim 4 of eighteen in the README is
+          # InsightFace embeddings into DBSCAN into a cross-run face
+          # library, and all of it stands on a detector that needs
+          # mediapipe. Four tests skipped on every push for want of it,
+          # so the identity feature was exercised nowhere automatic. The
+          # .tflite / .task weights it loads are already in the wheel;
+          # only the runtime was missing. scikit-image comes along for
+          # the public-domain astronaut face the serve-side test uses.
+          pip install -e ".[face]"
+          pip install scikit-image
 
       # v3.41 — exiftool is what makes the embedded-IPTC test run
       # instead of skip.

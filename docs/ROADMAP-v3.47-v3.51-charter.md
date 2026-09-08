@@ -163,6 +163,19 @@ with the reason, which is more than "unavailable".
 real constraint — two of these skip on that separately, and that half
 stays a documented gap rather than a synthesised face.
 
+**Done: the extra goes in the hermetic install.** Four tests run now.
+The weights were never the problem — v3.38 measured them into the wheel.
+
+The two portrait skips are the interesting half. `3J0A1701.JPG` is a
+frame from a real shoot: a photograph of a person who did not agree to
+appear in an open-source test suite, and it will never be committed. The
+message said "portrait fixture unavailable", which reads like a file
+somebody forgot to add — and somebody would eventually have added one.
+It now says what it is and points at the public-domain equivalent, the
+astronaut face in `test_serve_faces.py`, which runs everywhere. A skip
+that will never be closed should read differently from one that is
+waiting.
+
 ### v3.51 — a skip has to be a decision, once
 
 The three versions above are instances. This one is the rule, and it is
