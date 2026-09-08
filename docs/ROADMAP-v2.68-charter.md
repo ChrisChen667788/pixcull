@@ -1,5 +1,14 @@
 # PixCull v2.68 → v2.77 charter — the rule stack is now the weak half
 
+> **`counterfactual.py` no longer exists.** v2.73 measured it and deleted it:
+> on 100 blind frames the proposed crop's gain did not distinguish the
+> photographer's culls from their keeps, and the chip appeared on 52% of kept
+> frames against 32% of culled ones — backwards from its purpose.
+> `composition_classifier.py`, which fed it, was kept and says so in its own
+> docstring: no consumer in the product, and nothing has measured IT.
+> This charter is left as written; the note is here so a reader does not go
+> looking for a module that was removed on purpose.
+
 Written 2026-08-21, the day after the evidence A/B (v2.67) closed the
 last open question about the judge.
 
@@ -73,6 +82,9 @@ Inspector as `+0.08 if rule-of-thirds`".  Nothing in `pixcull/report/`,
 `pixcull/pipeline/` or `cli.py` references it; it is reachable only from
 its own tests and from `composition_classifier`, which is equally
 unreachable. Two modules, a false claim, and no user-facing path.
+
+_Resolved in v2.73: `counterfactual.py` was measured, failed, and was
+deleted. `composition_classifier.py` was kept — see the top of this file._
 
 The decision is genuinely open, and v2.67 makes it harder rather than
 easier: composition metrics handed to the judge made every per-frame

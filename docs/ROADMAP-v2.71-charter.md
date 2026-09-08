@@ -1,5 +1,14 @@
 # PixCull v2.71 → v2.80 charter — reconciled
 
+> **`counterfactual.py` no longer exists.** v2.73 measured it and deleted it:
+> on 100 blind frames the proposed crop's gain did not distinguish the
+> photographer's culls from their keeps, and the chip appeared on 52% of kept
+> frames against 32% of culled ones — backwards from its purpose.
+> `composition_classifier.py`, which fed it, was kept and says so in its own
+> docstring: no consumer in the product, and nothing has measured IT.
+> This charter is left as written; the note is here so a reader does not go
+> looking for a module that was removed on purpose.
+
 Written 2026-08-21, after v2.70. Replaces the forward half of
 `ROADMAP-v2.68-charter.md`, whose numbering drifted: the filter-
 localisation work the owner asked for mid-block took v2.69, and the

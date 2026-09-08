@@ -97,6 +97,31 @@ never built — and say so in the charter. **Ships as either answer.**
 **Wrong, not late:** if the module was deleted, whatever depended on it may
 still be claimed somewhere, which makes this a v3.38 row as well.
 
+**Answered: deleted, on purpose, after measuring.** Commit `3a7b6e3` — "v2.73:
+counterfactual measured, then deleted — and the user guide was promising it".
+On 100 blind frames the proposed crop's gain did not separate the
+photographer's culls from their keeps, and the chip showed on 52% of kept
+frames against 32% of culled ones, backwards from what it was for. So the v2.71
+charter's own instruction ("ship one of two things, not neither") was carried
+out correctly, and nothing is owed here except a signpost: three charters still
+send a reader looking for the file, and none of them said where it went. Each
+now carries the outcome at the top, and the two whose mention sits far below the
+fold carry it inline as well.
+
+`composition_classifier.py`, which fed it, survives and declares its own state
+in its docstring: no consumer in the product, kept because nothing has measured
+IT and v2.70's rule stands. That docstring had been truncated mid-sentence at
+some point; it is repaired. Not a v3.38 row after all — nothing in the README
+or the user guide claims the deleted module; v2.73 removed the guide's promise
+in the same commit that removed the code.
+
+`tests/test_docs_resolve_missing_modules.py` keeps the next one from going
+unanswered: a doc that names a `pixcull` module the repository no longer
+contains has to say what happened to it, within reading distance of the
+mention. The word list is not proof — "delete" appears in v2.71 as a
+*proposal* — so those three files are pinned by name to the actual outcome and
+the general rule catches the ones nobody remembers.
+
 ### v3.41 — the effect test v3.28 could not run
 v3.28 fixed the embedded-IPTC writer, which was destroying hand-set ratings and
 keywords **inside the photograph**, with `-overwrite_original` so exiftool kept

@@ -1,5 +1,14 @@
 # PixCull v2.57 → v2.62 charter — make the culling actually work
 
+> **`counterfactual.py` no longer exists.** v2.73 measured it and deleted it:
+> on 100 blind frames the proposed crop's gain did not distinguish the
+> photographer's culls from their keeps, and the chip appeared on 52% of kept
+> frames against 32% of culled ones — backwards from its purpose.
+> `composition_classifier.py`, which fed it, was kept and says so in its own
+> docstring: no consumer in the product, and nothing has measured IT.
+> This charter is left as written; the note is here so a reader does not go
+> looking for a module that was removed on purpose.
+
 Written 2026-08-19, after the first measurement in this project's
 history that cannot be circular.
 
@@ -208,7 +217,8 @@ What would have to be true, in order:
    The detectors already compute subject mask, thirds offset, lead room
    and zone clipping — enough to ask "is there a keeper inside this
    frame". `counterfactual.py` already answers a related question for
-   advice; it has never been evaluated.
+   advice; it has never been evaluated. (It was evaluated in
+   v2.73, and deleted — see the note at the top of this file.)
 3. **It cannot be measured with what we have.** The 394-frame blind
    pass is keep/cull. Testing this needs a pass where the photographer
    marks *recoverable* separately, on frames they would otherwise cull.
