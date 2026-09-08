@@ -119,8 +119,13 @@ def _check_eval(check_key: str, row: dict[str, Any]) -> bool | None:
             return None
         return not _flag(row, "closed_eyes")
     if check_key == "subject_pose_natural":
-        # No detector for this; treat as passing unless the user has
-        # added a manual rationale flag (future work). For now skip.
+        # No detector for this, so the answer is unknown.
+        #
+        # v3.39 — the comment used to say "treat as passing", which the
+        # line below has never done and must not: a checklist item
+        # nobody can measure reported as passed is a claim about the
+        # photograph. None means unknown and renders as unknown. Still
+        # deferred, deliberately, until something can actually see pose.
         return None
     if check_key == "not_random_passersby":
         # No detector; skip.

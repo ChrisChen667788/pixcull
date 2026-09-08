@@ -88,6 +88,36 @@ reason, or wrong. The stale ones are edited, not left as archaeology.
 **Wrong, not late:** deleting a deferral comment because it is old loses the
 reason somebody wrote it. Superseded ones say what superseded them.
 
+**Six, not eight, and the census itself was the first thing wrong.** Two of
+the eight were not deferrals: `sync.py`'s "not yet downloaded" describes an
+iCloud state, and `verticals.py`'s `primary_axes` note was rewritten by v3.37
+the week before. Re-running the scan found one the list had missed —
+`verticals.py`'s "V17.3 will let users override per-vertical from the admin
+panel".
+
+| site | disposition |
+|---|---|
+| `orchestrator.py` "display-only for now" | **wrong now.** It stopped being true when the meta judge shipped: `build_packet` reads every `model_<axis>_stars` into the packet as `rubric_model`, so they are evidence in a judgement the photographer sorts their queue by. They still do not overwrite `decision`. |
+| `rubric_decompose.py` "treat as passing … for now skip" | **wrong as written.** The line below returns `None`, and always has. A checklist item nobody can measure reported as *passed* is a claim about the photograph. Still deferred — nothing can see pose — but the comment now says what the code does. |
+| `style_guide.py` "analyze_one doesn't emit those today" | **worse than it reads.** Nothing emits `img_width`/`img_height` anywhere, so this is not "skips on some rows", it is "has never fired once" — and the same is true of `face_center`. Two of the module's three rule types, including the one its own schema example leads with, are unreachable, and a missing field returns None rather than a violation, so a studio's aspect rule reads as satisfied. → v3.43. |
+| `serve_app.py` "scoring still uses the RAW for now" | **undecided, not pending.** Scoring the developed preview means judging the photographer's own correction back at them; scoring the RAW means a frame they already rescued in Lr can come back flagged dark. Nobody has measured either. The comment no longer promises a change. |
+| `serve_app.py` "V22.2+ will add cross-run inheritance" | **done.** V22.2 shipped it in `pixcull/pipeline/face_library.py`, wired from `_build_face_clusters_info` and written back by `add_to_library`. |
+| `serve_app.py` "LR's catalog schema is … reverse-engineered binary" | **wrong, superseded.** A `.lrcat` is SQLite; v3.10 opens it with the standard library in `pixcull/io/lrcat.py`. |
+| `verticals.py` "V17.3 will let users override per-vertical" | **done.** `/verticals/tune/<key>` writes `policy_override.json` through `policy_tuner`, and `decide()` reads it. It arrived as tune-from-samples rather than type-the-number. |
+| `serve_app.py` `todo` in the fallback ledger | **not a promise.** `todo` is a filter key. |
+
+The dispositions live in `pixcull/data/deferrals.tsv` rather than only in this
+charter, because the point is that the next reader should not have to redo the
+audit. `tests/test_deferrals_are_dispositioned.py` fails when a promise-shaped
+comment is not in the inventory, and also when a dispositioned comment is
+*edited* — the key is a hash of the comment text, so touching a deferral is
+the moment to re-state what it is waiting for.
+
+Found while writing that file: `pixcull/data/` had no pattern in the packaging
+allowlist, so `tether_drift.py` shipped in every wheel and the
+`finished_run_columns.txt` it opens did not. Same shape as the v2.44 hotword
+lexicon, found the same way.
+
 ### v3.40 — a charter that discusses a module nobody can find
 `ROADMAP-v2.71-charter.md` names `counterfactual.py` and quotes its docstring,
 and evaluates `best_variant()` against 493 blind frames. Neither exists in the

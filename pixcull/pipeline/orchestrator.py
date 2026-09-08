@@ -725,10 +725,16 @@ def run_pipeline(
             rs.axes[axis.name].checklist_pass for rs in rubric_scores
         ]
 
-    # V2.1: per-axis model predictions (`model_<axis>_stars`). Display-only
-    # for now — UI shows them next to the auto-decomposed stars so the
-    # photographer can compare. Falls through silently when no models
-    # are trained.
+    # V2.1: per-axis model predictions (`model_<axis>_stars`). The UI
+    # shows them next to the auto-decomposed stars so the photographer
+    # can compare. Falls through silently when no models are trained.
+    #
+    # v3.39 — this used to say "display-only for now". That stopped
+    # being true when the meta judge shipped: `meta_judge.build_packet`
+    # reads every `model_<axis>_stars` into the packet as `rubric_model`,
+    # so they are evidence in a judgement whose label and confidence the
+    # photographer sorts their queue by. They still do not overwrite
+    # `decision`, which is what "display-only" was trying to say.
     if axis_models:
         for axis in RUBRIC_AXES:
             df[f"model_{axis.name}_stars"] = None

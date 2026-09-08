@@ -2404,7 +2404,15 @@ def _build_results_uncached(run_id: str) -> tuple[list[dict], dict] | None:
             # If yes, the lightbox shows a "已应用 Lr 调色" badge so
             # the user knows the displayed preview reflects their
             # edit (load_image_for_display picks up crs:* settings
-            # automatically; scoring still uses the RAW for now).
+            # automatically; scoring reads the RAW).
+            #
+            # v3.39 — this used to say "for now", which promised a
+            # change nobody has decided on. Scoring the developed
+            # preview would mean judging the photographer's own
+            # correction and handing it back to them as a verdict;
+            # scoring the RAW means a frame they have already rescued
+            # in Lr can still come back flagged dark. Neither has been
+            # measured. Undecided, not pending.
             "has_develop_settings": _row_has_develop_settings(r),
             # V3.x rationales for the modal's 4-way comparison
             "vlm_overall_rationale": _s(r.get("vlm_overall_rationale", "")),
@@ -10023,7 +10031,13 @@ class _Handler(BaseHTTPRequestHandler):
         # V22.1 — assemble per-cluster summary + per-run labels for the
         # UI filter pill row. Labels live in <output_dir>/face_labels.json
         # so they survive server restarts (V22.0's clusters are
-        # run-scoped; V22.2+ will add cross-run inheritance).
+        # run-scoped).
+        #
+        # v3.39 — this used to say "V22.2+ will add cross-run
+        # inheritance". V22.2 added it: `pixcull/pipeline/face_library.py`,
+        # wired from `_build_face_clusters_info` below via
+        # `load_run_centroids` + `suggest_labels`, and written back by
+        # `add_to_library` when the photographer names a cluster.
         face_clusters_info = _build_face_clusters_info(run_id, rows)
         # V23 — GPS location clusters + per-cluster "best" picker.
         locations_info = _build_locations_info(rows, run_id)
@@ -11139,10 +11153,13 @@ class _Handler(BaseHTTPRequestHandler):
     #     server-side annotations only)
     #   * style distance map (v0.7-P2-1 + v0.8-P1-1) — v1, v2, blend
     #
-    # The "Lr Catalog import template" (.lrcat-ready SQLite) is a
-    # bigger lift (LR's catalog schema is undocumented, reverse-
-    # engineered binary) → deferred to v0.9 / v1.0.  V1 here gives
-    # pros a clean JSON pipe into their own Lr-import scripts.
+    # The "Lr Catalog import template" was deferred here on a premise
+    # that was simply wrong: a .lrcat is not a reverse-engineered
+    # binary, it is a SQLite database you can open with the standard
+    # library. v3.10 does exactly that in `pixcull/io/lrcat.py`
+    # (read-only, and its labels are deliberately kept out of
+    # `PersonalProfile.TRUSTED`). Superseded; the JSON pipe below is
+    # still the right output for pros with their own import scripts.
     # ============================================================
     def _collect_structured_rows(self, run: dict) -> list[dict]:
         """Merge scores.csv + annotations.jsonl + style_distances.json

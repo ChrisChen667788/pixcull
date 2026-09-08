@@ -173,10 +173,16 @@ def _check_aspect_ratio(row: dict, rule: dict) -> str | None:
     target_specs = rule.get("require_aspect") or []
     if not target_specs:
         return None
-    # Row doesn't carry width/height directly; pull from path stat
-    # is too expensive. Instead, the rule fires only when row carries
-    # ``img_width`` / ``img_height`` (analyze_one doesn't emit those
-    # today; V32 candidate). For now, skip when missing.
+    # v3.39 — read this one carefully. Nothing in the pipeline emits
+    # ``img_width`` / ``img_height``: grep the package and the only
+    # hits are the two readers, here and in `_check_face_center`. So
+    # this is not "skips on some rows", it is "has never fired once",
+    # and the same is true of face_center. Two of the module's three
+    # rule types, including the one its own schema example leads with,
+    # are unreachable — and because a missing field returns None rather
+    # than a violation, a studio's aspect rule reads as satisfied.
+    # v3.43 emits the two fields; this comment stays as the record of
+    # how long it took to notice.
     w = row.get("img_width")
     h = row.get("img_height")
     if not w or not h:

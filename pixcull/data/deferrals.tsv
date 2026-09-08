@@ -1,0 +1,20 @@
+# v3.39 — every comment in `pixcull/` that promises or postpones work,
+# with what actually happened to it. Enforced by
+# tests/test_deferrals_are_dispositioned.py: a promise-shaped comment
+# that is not in this file fails the suite, and so does an entry whose
+# comment has been edited (the hash is of the comment text), because
+# editing a deferral is the moment to re-state what it is waiting for.
+#
+# disposition ∈ done | wrong | undecided | open | not-a-promise
+#   done          it shipped; the comment is kept for the history
+#   wrong         the premise was false; superseded
+#   undecided     a real fork nobody has chosen, with the tradeoff named
+#   open          still waiting, and the reason is still good
+#   not-a-promise the matcher hit an identifier, not a promise
+#
+# file	hash	phrase	disposition	what happened
+pixcull/pipeline/orchestrator.py	eef06ff7	for now	done	Said "display-only for now". Stopped being true when the meta judge shipped: build_packet reads every model_<axis>_stars into the packet as rubric_model. Comment rewritten in v3.39; the phrase survives only as a quote of what it used to say.
+pixcull/report/serve_app.py	ed82dae7	todo	not-a-promise	`todo` is the name of a filter key in the fallback ledger, not a marker. The comment is the v2.68.6 post-mortem.
+pixcull/report/serve_app.py	d04fb6db	for now	undecided	Scoring reads the RAW, not the Lr-developed preview. Scoring the preview means judging the photographer's own correction back at them; scoring the RAW means a frame they already rescued can still come back flagged dark. Neither has been measured, so this is a fork nobody has chosen — not a queue item.
+pixcull/report/serve_app.py	fb637df3	v22.2+ will	done	V22.2 shipped cross-run face-label inheritance in pixcull/pipeline/face_library.py, wired from _build_face_clusters_info via load_run_centroids + suggest_labels and written back by add_to_library.
+pixcull/verticals.py	727af52f	v17.3 will	done	V17.3 shipped per-vertical policy override: /verticals/tune/<key> writes policy_override.json through policy_tuner, and decide() reads it. It arrived as tune-from-samples rather than type-the-number, which is the same capability.

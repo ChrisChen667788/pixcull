@@ -61,6 +61,12 @@ MUST_HAVE_DATA = (
     # it is cheaper than shipping a feature that silently does nothing.
     "pixcull/scoring/data/asr_hotwords_zh.txt",
     "pixcull/scoring/templates/scene_templates.yaml",
+    # v3.39 — pixcull/tether_drift.py reads finished_run_columns.txt from
+    # beside itself, and the allowlist had no pattern for pixcull/data.
+    # The module shipped; the file it opens did not. Same shape as the
+    # .txt lexicon above, found the same way: by looking.
+    "pixcull/data/finished_run_columns.txt",
+    "pixcull/data/deferrals.tsv",
 )
 
 
