@@ -40,11 +40,8 @@ def resolve(path: Path | str | None) -> Path | None:
     return packaged if packaged.is_file() else p
 
 
-def resolve_dir(model_dir: Path | str | None) -> Path:
-    """Same rule for a directory of per-axis models."""
-    if model_dir is None:
-        return PACKAGED_MODELS
-    d = Path(model_dir)
-    if d.is_absolute() or d.is_dir():
-        return d
-    return PACKAGED_MODELS if PACKAGED_MODELS.is_dir() else d
+# v3.44.1 — there is deliberately no directory-level version of this.
+# The first cut had one, and it asked whether `models/` existed rather
+# than whether the file did. In a checkout that directory exists and is
+# empty, so it shadowed all six packaged per-axis models and a real run
+# produced no `model_<axis>_stars`. Resolve one file at a time.

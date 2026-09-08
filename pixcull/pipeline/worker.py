@@ -116,6 +116,25 @@ def analyze_one(path: Path) -> Optional[dict]:
         metrics.update(r.metrics)
         flags.extend(r.flags)
 
+    # v3.43 — the analysed frame's dimensions.
+    #
+    # `style_guide.py` has read `img_width` / `img_height` since P2.3 and
+    # nothing has ever written them, so two of its three rule types —
+    # `require_aspect` and `face_center`, including the one its own
+    # schema example leads with — returned None on every row. A missing
+    # field there reads as "no violation", so a studio's aspect rule
+    # came back satisfied on frames that broke it. Found in v3.39.
+    #
+    # These are the dimensions of the image the detectors actually saw:
+    # EXIF-transposed and thumbnailed to `load_image`'s max_side, which
+    # is the coordinate space `face_bboxes` are in, so face_center's
+    # offset is measured against the right frame. The proportional
+    # thumbnail preserves aspect (6000x4000 -> 2048x1365 is 1.5004,
+    # inside the rule's own ±2%). One caveat worth knowing: for RAW the
+    # loader prefers the embedded JPEG preview, and a camera that crops
+    # its preview would report the preview's aspect, not the sensor's.
+    metrics["img_width"], metrics["img_height"] = img.size
+
     # V22 — face embedding for cross-photo clustering. V22.0.1 prefers
     # InsightFace ArcFace (much stronger face-identity signal than
     # CLIP), falling back to CLIP if InsightFace isn't installed.
@@ -135,6 +154,23 @@ def analyze_one(path: Path) -> Optional[dict]:
         # across the multiprocess boundary (numpy arrays pickle fine
         # but lists are cheaper + safer for the spawn wire).
         face_embeddings = [e.tolist() for e in embs]
+
+    # v3.43 — how far the largest face sits from the frame's vertical
+    # centre, as a fraction of frame width.
+    #
+    # `style_guide._check_face_center` was written to read `face_bboxes`
+    # off the row. The clustering pass drops that key from every row
+    # before the DataFrame is built (it is bulky and its only consumer
+    # was clustering), so the rule has never had anything to read even
+    # once `img_width` existed. Derived here, where both the boxes and
+    # the frame width are in hand, as one float that survives to
+    # scores.csv.
+    if face_bboxes and img.size[0]:
+        _w = float(img.size[0])
+        _largest = max(face_bboxes,
+                       key=lambda bb: (bb[2] - bb[0]) * (bb[3] - bb[1]))
+        _cx = (_largest[0] + _largest[2]) / 2.0
+        metrics["face_max_center_offset"] = abs(_cx - _w / 2.0) / _w
 
     # V23 — EXIF GPS for the location-cluster post-pass. Returns
     # ``None`` cleanly when the camera had no GPS or the photo is

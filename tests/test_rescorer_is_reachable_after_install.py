@@ -56,7 +56,7 @@ def test_it_actually_loads_from_there(tmp_path, monkeypatch):
     assert sorted(axes) == sorted(a.name for a in RUBRIC_AXES)
 
 
-def test_a_local_models_dir_still_wins(tmp_path, monkeypatch):
+def test_a_locally_trained_model_still_wins(tmp_path, monkeypatch):
     """A head the photographer trained beats the one we shipped. If this
     inverts, `pixcull train` becomes a no-op and says nothing."""
     monkeypatch.chdir(tmp_path)
@@ -64,7 +64,41 @@ def test_a_local_models_dir_still_wins(tmp_path, monkeypatch):
     local.mkdir()
     (local / "rescorer_v1.joblib").write_bytes(b"not really a model")
     assert model_assets.resolve(DEFAULT) == Path(DEFAULT)
-    assert model_assets.resolve_dir("models") == Path("models")
+
+
+def test_an_empty_models_dir_does_not_shadow_the_packaged_ones(tmp_path,
+                                                               monkeypatch):
+    """v3.44.1, and the reason there is no directory-level resolver.
+
+    The first cut asked whether `models/` existed. In a checkout it does
+    — it holds a .gitkeep now that the artifacts live in the package —
+    so an empty directory shadowed all six per-axis models and a real
+    run came back with no `model_<axis>_stars` columns at all. A unit
+    test did not catch that; running the pipeline and diffing the CSV
+    header did.
+    """
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "models").mkdir()
+    (tmp_path / "models" / ".gitkeep").write_text("")
+    axes = load_axis_rescorers("models")
+    if not axes:
+        pytest.skip("joblib/sklearn unavailable or version-drifted in this env")
+    assert sorted(axes) == sorted(a.name for a in RUBRIC_AXES)
+
+
+def test_one_locally_trained_axis_mixes_with_five_packaged(tmp_path,
+                                                           monkeypatch):
+    """Per-file resolution, stated as behaviour: retraining one axis
+    must not silently drop the other five."""
+    monkeypatch.chdir(tmp_path)
+    local = tmp_path / "models"
+    local.mkdir()
+    (local / "rescorer_axis_light.joblib").write_bytes(b"corrupt on purpose")
+    axes = load_axis_rescorers("models")
+    if not axes:
+        pytest.skip("joblib/sklearn unavailable or version-drifted in this env")
+    assert "light" not in axes, "the local file was preferred, then failed"
+    assert len(axes) == len(RUBRIC_AXES) - 1
 
 
 def test_an_absolute_path_is_never_second_guessed(tmp_path):

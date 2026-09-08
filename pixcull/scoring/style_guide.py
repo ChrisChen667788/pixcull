@@ -181,8 +181,13 @@ def _check_aspect_ratio(row: dict, rule: dict) -> str | None:
     # rule types, including the one its own schema example leads with,
     # are unreachable — and because a missing field returns None rather
     # than a violation, a studio's aspect rule reads as satisfied.
-    # v3.43 emits the two fields; this comment stays as the record of
-    # how long it took to notice.
+    # v3.43 emits both fields from `analyze_one`. face_center needed a
+    # second fix on top: it read `face_bboxes` off the row, and the
+    # clustering pass drops that key from every row before the DataFrame
+    # is built, so it had nothing to read even once the width existed.
+    # The worker derives `face_max_center_offset` instead, where the
+    # boxes and the frame width are both in hand. This comment stays as
+    # the record of how long it took to notice.
     w = row.get("img_width")
     h = row.get("img_height")
     if not w or not h:
@@ -257,6 +262,23 @@ def _check_face_center(row: dict, rule: dict) -> str | None:
     of frame center (0.15 = 15% of frame width). Skipped when no
     face bboxes are present on the row.
     """
+    max_off = float(rule.get("max_horizontal_offset") or 0.15)
+
+    # v3.43 — prefer the value the pipeline derives. `face_bboxes` is
+    # dropped from every row by the clustering pass, so on a row read
+    # back from scores.csv the bbox path below finds nothing; it stays
+    # for callers holding a live row that still carries the boxes.
+    derived = row.get("face_max_center_offset")
+    if derived not in (None, ""):
+        try:
+            offset_frac = float(derived)
+        except (TypeError, ValueError):
+            return None
+        if offset_frac > max_off:
+            return (f"face off-center by {offset_frac:.0%} "
+                    f"(rule allows ≤{max_off:.0%})")
+        return None
+
     bboxes = row.get("face_bboxes") or []
     if not bboxes:
         return None
@@ -274,7 +296,6 @@ def _check_face_center(row: dict, rule: dict) -> str | None:
     cx_face = (largest[0] + largest[2]) / 2.0
     cx_frame = float(w) / 2.0
     offset_frac = abs(cx_face - cx_frame) / float(w)
-    max_off = float(rule.get("max_horizontal_offset") or 0.15)
     if offset_frac > max_off:
         return (f"face off-center by {offset_frac:.0%} "
                 f"(rule allows ≤{max_off:.0%})")

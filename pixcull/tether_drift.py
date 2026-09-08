@@ -103,6 +103,14 @@ DISPOSITIONS: dict[str, tuple[str, str]] = {
     "composition_score": ("deliberate", "same"),
     "gps_lat": ("deliberate", "the photographer knows where they are"),
     "gps_lon": ("deliberate", "same"),
+    # v3.43 — the analysed frame's dimensions, added so the style guide's
+    # aspect and face-centre rules can fire at all.
+    "img_width": ("deliberate",
+                  "the style-guide pass that reads these does not run in "
+                  "the live path, and the frame's own size is not a "
+                  "judgement"),
+    "img_height": ("deliberate", "same"),
+    "reasons": ("deliberate", "the plural of `reason`, already live"),
 }
 
 #: Prefixes handled as a family rather than one line each.

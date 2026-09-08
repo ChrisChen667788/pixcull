@@ -148,6 +148,27 @@ allowlist, so `tether_drift.py` shipped in every wheel and the
 `finished_run_columns.txt` it opens did not. Same shape as the v2.44 hotword
 lexicon, found the same way.
 
+**v3.43 — the two style-guide rules that had never fired.** `img_width` /
+`img_height` now come out of `analyze_one`, so `require_aspect` works. It took a
+second fix to make `face_center` work: it read `face_bboxes` off the row, and
+the clustering pass drops that key from every row before the DataFrame is built,
+so it had nothing to read even once the width existed. The worker derives
+`face_max_center_offset` instead, where the boxes and the frame width are both
+in hand.
+
+Refreshing `finished_run_columns.txt` for the two new columns meant running the
+real pipeline, and that run caught a regression v3.44 had just shipped: the
+first cut of the model resolver asked whether `models/` *existed* rather than
+whether the file did, and in a checkout that directory exists holding only a
+`.gitkeep` — so it shadowed all six packaged per-axis models and the run came
+back with no `model_<axis>_stars` columns at all. Resolution is per file now.
+No unit test found that; diffing a real CSV header did.
+
+The snapshot itself is worth a note: it lags. It is a copy of one run's header,
+so a column added to the pipeline is invisible to the gate until somebody
+refreshes it. It now carries the union — this run's 84 columns plus
+`face_region_lap_var`, which only appears when a frame has a face.
+
 ### v3.40 — a charter that discusses a module nobody can find
 `ROADMAP-v2.71-charter.md` names `counterfactual.py` and quotes its docstring,
 and evaluates `best_variant()` against 493 blind frames. Neither exists in the

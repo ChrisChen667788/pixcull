@@ -138,12 +138,16 @@ def load_axis_rescorers(model_dir: Path | str) -> dict[str, AxisModel]:
     the joblib bumps mtime, which invalidates the cache transparently.
     """
     out: dict[str, AxisModel] = {}
-    from pixcull.model_assets import resolve_dir as _resolve_dir
-    md = _resolve_dir(model_dir)   # v3.44 — packaged copy when unset
-    if not md.exists():
-        return out
+    # v3.44.1 — resolve per FILE, not per directory. The first cut asked
+    # whether `models/` existed; in a checkout it does (it holds only a
+    # .gitkeep now that the artifacts moved into the package), so an
+    # empty directory shadowed all six packaged models and a real run
+    # came back with no `model_<axis>_stars` at all. Caught by running
+    # the pipeline and diffing the CSV header, not by a unit test.
+    from pixcull.model_assets import resolve as _resolve_model
+    md = Path(model_dir)
     for axis_def in RUBRIC_AXES:
-        p = axis_model_path(md, axis_def.name)
+        p = _resolve_model(axis_model_path(md, axis_def.name))
         if not p.exists():
             continue
         try:
