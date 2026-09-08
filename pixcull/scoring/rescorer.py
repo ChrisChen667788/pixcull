@@ -88,7 +88,11 @@ def load_rescorer(path: Path | str | None) -> RescorerArtifact | None:
     """
     if path is None:
         return None
-    p = Path(path)
+    # v3.44 — a relative path that does not resolve in the working
+    # directory falls back to the copy inside the package. Before this,
+    # `pip install pixcull` could never find the default.
+    from pixcull.model_assets import resolve as _resolve
+    p = _resolve(path)
     if not p.exists():
         print(f"[rescorer] model file not found: {p} — running rule-only",
               file=sys.stderr)

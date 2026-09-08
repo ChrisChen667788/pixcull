@@ -935,6 +935,7 @@ pixcull/
 │   ├── db/                     # annotations.jsonl + scores.csv schema helpers
 │   ├── report/templates/       # the results.html web UI (zero-build, vanilla JS)
 │   ├── license/                # local license-token state machine
+│   ├── models/                 # the trained rescorer that ships with the package
 │   ├── verticals.py            # per-genre scoring policy
 │   ├── sync.py                 # INFRA-2 multi-machine folder mirror
 │   └── tether.py               # P2.2 Lr/C1 tether watcher
@@ -947,6 +948,7 @@ pixcull/
 ├── lr_plugin/PixCull.lrplugin/ # Lightroom plugin (Lua)
 ├── app/                        # PyInstaller spec for the .app bundle
 ├── tests/                      # pytest suite (1,200+ tests across 88 files)
+├── models/                     # where `scripts/train_*.py` writes; shadows the packaged copy
 ├── training.csv                # sanitized rubric ground truth (130 rows)
 ├── training_axis.csv           # sanitized per-axis ground truth (3,000 rows)
 ├── ROADMAP.md                  # the next ~12 months of work

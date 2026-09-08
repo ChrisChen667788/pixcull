@@ -208,6 +208,8 @@ include = [
     "pixcull/locale/*.json",             # v2.23 — 13-locale i18n strings load at runtime; without these _t() falls back to keys
     "pixcull/data/*.txt",                # v3.39 — tether_drift reads finished_run_columns.txt from inside the package; the module shipped and its data did not
     "pixcull/data/*.tsv",                # v3.39 — the deferral inventory, same reason
+    "pixcull/models/*.joblib",           # v3.44 — the rescorer the README promises; the default path is CWD-relative and resolved to nothing after pip install
+    "pixcull/models/*.json",             # v3.44 — its per-axis training metadata
 ]
 
 [tool.ruff]

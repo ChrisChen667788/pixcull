@@ -138,7 +138,8 @@ def load_axis_rescorers(model_dir: Path | str) -> dict[str, AxisModel]:
     the joblib bumps mtime, which invalidates the cache transparently.
     """
     out: dict[str, AxisModel] = {}
-    md = Path(model_dir)
+    from pixcull.model_assets import resolve_dir as _resolve_dir
+    md = _resolve_dir(model_dir)   # v3.44 — packaged copy when unset
     if not md.exists():
         return out
     for axis_def in RUBRIC_AXES:

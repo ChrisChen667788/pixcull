@@ -67,6 +67,13 @@ MUST_HAVE_DATA = (
     # .txt lexicon above, found the same way: by looking.
     "pixcull/data/finished_run_columns.txt",
     "pixcull/data/deferrals.tsv",
+    # v3.44 — v3.38's reachability sweep: RescorerConfig.model_path is
+    # relative to the working directory and these were not in the wheel,
+    # so every pip install ran rule-only. The README lists the learned
+    # head as something you get.
+    "pixcull/models/rescorer_v1.joblib",
+    "pixcull/models/rescorer_axis_technical.joblib",
+    "pixcull/models/rescorer_axis_meta.json",
 )
 
 

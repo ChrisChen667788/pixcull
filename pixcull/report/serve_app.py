@@ -12167,7 +12167,8 @@ class _Handler(BaseHTTPRequestHandler):
                     max(0, _AUTO_RETRAIN_THRESHOLD - _annotations_since_retrain),
             }
         # Augment with on-disk meta if available (last-completed run)
-        meta_path = Path("models/rescorer_axis_meta.json")
+        from pixcull.model_assets import resolve as _resolve_model
+        meta_path = _resolve_model("models/rescorer_axis_meta.json")
         if meta_path.exists():
             try:
                 state["last_meta"] = json.loads(meta_path.read_text("utf-8"))
