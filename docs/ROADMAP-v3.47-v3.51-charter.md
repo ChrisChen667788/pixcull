@@ -78,6 +78,20 @@ or say what is broken.
 **Wrong, not late:** if moving it turns something red, that is the
 finding, not a setback — those 39 tests have never run on Linux.
 
+**Done.** One step moved above the hermetic run. All 39 pass locally with
+ffmpeg present, so the expectation for Linux is green rather than a
+finding — but they have genuinely never run there, so the push is the
+measurement.
+
+The guard took two attempts and the first one is worth writing down. It
+matched the raw workflow text for the string `ffmpeg` inside the window
+before the hermetic step, and **passed on its own explanatory comment**
+after the step had been moved back out. Seventh time a guard in this
+repository has been satisfied by its own prose. It parses the YAML now
+and asserts the step *index* of each binary is below the index of the
+run — order, not presence, because an install step only fixes the tests
+that come after it.
+
 ### v3.49 — the rescorer ships, and nothing can open it
 
 v3.44 put the eight rescorer artifacts inside the package because

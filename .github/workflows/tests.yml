@@ -173,11 +173,30 @@ jobs:
       # arguments are right and proves nothing about what exiftool does
       # with them. Three of its behaviours were taken on trust.
       #
-      # Same reasoning as the ffmpeg step below: a test that skips
-      # because a binary is missing reports green having tested nothing,
-      # and this repo has been bitten by skip-as-a-pass three times now.
+      # Same reasoning as the ffmpeg step: a test that skips because a
+      # binary is missing reports green having tested nothing, and this
+      # repo has been bitten by skip-as-a-pass three times now.
       - name: Install exiftool (embedded-IPTC effect test)
         run: sudo apt-get update -qq && sudo apt-get install -y -qq libimage-exiftool-perl
+
+      # v2.45 — ffmpeg is what makes the video tests run instead of
+      # skip. Without it _tiny_video() bails out and they report green
+      # while testing nothing.
+      #
+      # v3.48 — this step used to sit after the hermetic run, where it
+      # served the end-to-end video journey alone. So v2.45's lesson
+      # landed one step too late in the file: thirty-nine tests in the
+      # hermetic run — the whole of test_video, test_reel_assembly,
+      # test_edit_render, test_raw_proxy and test_audio_events — skipped
+      # on every push from the day the video block shipped. Found by
+      # reading the CI log's SKIPPED lines rather than by accident,
+      # which is the fifth time this shape has turned up here.
+      #
+      # An install step only fixes the tests that come AFTER it. Both of
+      # these have to stay above the run below; a guard in
+      # tests/test_writers_do_not_overwrite.py holds them there.
+      - name: Install ffmpeg (video tests + the journey)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
 
       - name: Run hermetic tests
         run: |
@@ -200,14 +219,6 @@ jobs:
       # suite green throughout, because unit tests exercise functions
       # and those were broken journeys. Each of the four was replayed as
       # a mutation and this file caught all four.
-      # v2.45 — ffmpeg is what makes the video journey run instead of
-      # skip. Without it _tiny_video() bails out and the four new
-      # journey tests report green while testing nothing, which is the
-      # skip-as-a-pass failure this repo has already been bitten by
-      # twice.
-      - name: Install ffmpeg (video journey)
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
-
       - name: End-to-end smoke (run -> serve -> export, video -> cut -> render)
         run: pytest -q -m "not slow" tests/test_e2e_smoke.py
 

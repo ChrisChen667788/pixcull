@@ -248,21 +248,47 @@ def test_the_destructive_path_is_still_destructive_when_asked():
         assert "Ceremony" not in got["keywords"]
 
 
-def test_ci_installs_exiftool_so_the_effect_tests_cannot_skip_forever():
+def test_ci_installs_the_binaries_before_the_tests_that_need_them():
     """A skip is only honest while somewhere runs it for real.
 
     v2.45 added the ffmpeg step for exactly this reason and wrote down
     why: without it four journey tests reported green having tested
-    nothing. Removing the exiftool step would put the five above into
-    permanent skip, and the suite would go on passing while the writer
-    that edits people's originals went unverified.
+    nothing. v3.41 added exiftool on the same precedent.
+
+    v3.48 — and then found that the ffmpeg step had been sitting AFTER
+    the hermetic run all along, serving the end-to-end journey alone, so
+    thirty-nine video tests skipped on every push. An install step only
+    fixes the tests that come after it, which makes ORDER the thing to
+    assert, not presence.
+
+    Read from the parsed workflow with comments gone. The first version
+    of this check matched the raw file text and passed on its own
+    explanatory comment — the seventh time a guard in this repository
+    has been satisfied by its own prose.
     """
-    ci = (Path(__file__).resolve().parent.parent
-          / ".github" / "workflows" / "tests.yml").read_text(encoding="utf-8")
-    assert "libimage-exiftool-perl" in ci
-    # And in the job that runs the hermetic suite, not a lane that only
-    # fires on a schedule.
-    # v3.42 inserted a browser job above this one, so anchor the window
-    # at the hermetic job rather than at the top of the file.
-    head = ci[ci.index("  pytest:"):ci.index("Run hermetic tests")]
-    assert "libimage-exiftool-perl" in head
+    import yaml
+
+    ci = yaml.safe_load(
+        (Path(__file__).resolve().parent.parent
+         / ".github" / "workflows" / "tests.yml").read_text(encoding="utf-8"))
+    steps = ci["jobs"]["pytest"]["steps"]
+    scripts = [str(s.get("run", "")) for s in steps]
+
+    def index_of(binary: str) -> int:
+        for i, run in enumerate(scripts):
+            if f"install -y -qq {binary}" in run:
+                return i
+        raise AssertionError(
+            f"the hermetic job installs no {binary} — every test that "
+            f"needs it will skip and the tick will be green")
+
+    hermetic = next(i for i, s in enumerate(steps)
+                    if s.get("name") == "Run hermetic tests")
+    for binary, why in (("libimage-exiftool-perl",
+                         "five embedded-IPTC effect tests"),
+                        ("ffmpeg",
+                         "thirty-nine video, reel, edit and audio tests")):
+        at = index_of(binary)
+        assert at < hermetic, (
+            f"{binary} is installed at step {at}, after the hermetic run "
+            f"at step {hermetic} — {why} will skip")
