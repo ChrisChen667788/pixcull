@@ -68,9 +68,35 @@ def test_an_unrated_file_gets_pixculls_rating():
 
 
 def test_the_destructive_path_still_exists_but_must_be_asked_for():
+    """It REPLACES the keyword tag rather than clearing it and appending.
+
+    v3.41's effect test in CI found that `-IPTC:Keywords=` followed by
+    `-IPTC:Keywords+=ours` in one invocation does not net to "only ours"
+    — the photographer's keyword survived a write that had explicitly
+    been asked to replace everything. Assigning the first value is
+    exiftool's own idiom and leaves no window where two assignments have
+    to compose.
+    """
     args = _args(preserve_existing=False, prior={})
-    assert "-IPTC:Keywords=" in args
+    assert "-IPTC:Keywords=PixCull:maybe" in args
+    assert "-IPTC:Keywords=" not in args, (
+        "a bare clear is back; it does not compose with the += that "
+        "follows it")
     assert "-XMP:Rating=3" in args
+
+
+def test_a_replacing_write_with_nothing_to_write_clears():
+    args = _args(preserve_existing=False, prior={}, keywords=["", "  "])
+    assert "-IPTC:Keywords=" in args
+    assert "-XMP-dc:Subject=" in args
+
+
+def test_the_preserving_path_never_clears():
+    """The safety-critical half, restated after the change: it removes
+    our own values by name and issues no assignment at all."""
+    args = _args()
+    assert not [a for a in args if a.startswith("-IPTC:Keywords=")]
+    assert not [a for a in args if a.startswith("-XMP-dc:Subject=")]
 
 
 def test_preserving_is_the_default():

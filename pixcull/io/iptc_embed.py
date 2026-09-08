@@ -149,20 +149,36 @@ def build_args(exiftool: str, image_path, *, rating=None, color_label="",
                 if str(k).startswith(PIXCULL_KEYWORD_PREFIX):
                     args.append(f"-IPTC:Keywords-={k}")
                     args.append(f"-XMP-dc:Subject-={k}")
-        else:
+        existing = set(prior.get("keywords", []))
+        wanted = [str(k).strip() for k in keywords if str(k).strip()]
+        if preserve_existing:
+            wanted = [k for k in wanted
+                      if k not in existing
+                      or k.startswith(PIXCULL_KEYWORD_PREFIX)]
+        # v3.41 — the first value of a replacing write uses `=`, not a
+        # bare clear followed by `+=`.
+        #
+        # The CI effect test found this: `-IPTC:Keywords=` followed by
+        # `-IPTC:Keywords+=ours` in ONE invocation does not net to "only
+        # ours" — the photographer's keyword survived a write that had
+        # explicitly been asked to replace everything. Assigning the
+        # first value replaces the tag outright, which is exiftool's own
+        # idiom, and leaves no window where the two assignments have to
+        # compose.
+        #
+        # The preserving path is unaffected: it never clears, it removes
+        # our own previous values by name.
+        first = not preserve_existing
+        for k_clean in wanted:
+            op = "=" if first else "+="
+            args.append(f"-IPTC:Keywords{op}{k_clean}")
+            args.append(f"-XMP-dc:Subject{op}{k_clean}")
+            first = False
+        if not preserve_existing and first:
+            # Replacing write with nothing to write: the clear is the
+            # whole instruction.
             args.append("-IPTC:Keywords=")
             args.append("-XMP-dc:Subject=")
-        existing = set(prior.get("keywords", []))
-        for k in keywords:
-            k_clean = str(k).strip()
-            if not k_clean or (preserve_existing and k_clean in existing
-                               and not k_clean.startswith(
-                                   PIXCULL_KEYWORD_PREFIX)):
-                continue
-            # exiftool's ``+=`` syntax appends without replacing the
-            # whole tag (one item per arg).
-            args.append(f"-IPTC:Keywords+={k_clean}")
-            args.append(f"-XMP-dc:Subject+={k_clean}")
 
     if description:
         args.append(f"-IPTC:Caption-Abstract={description}")
