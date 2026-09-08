@@ -85,6 +85,25 @@ not have started.
 the real run still wins when it is there — the fixture is the floor, not
 the replacement.
 
+**Done, and it caught itself on the first push.** All eight tests in that
+file run now instead of four. `scripts/make_present_fixture.py` expands
+the six committed `smoke_run` rows into twenty-four — no images, no
+models, no network, because the probe reads text nodes and a card with a
+broken thumbnail still renders every number the client must not see.
+
+The fixture then failed in CI on a file that had never been in the
+commit. `.gitignore` carries a bare `output/`, which matches a directory
+of that name at any depth, and the exception under it named the
+*previous* fixture by name. So it existed locally, every local run
+passed, and the push was the first thing that could tell. The rule is a
+glob now, and a test asserts `git ls-files` can see the fixture, because
+existing on disk is not the same as being in the commit — which is this
+version's own subject, one level down.
+
+The charter section you are reading had no recorded result until after
+the block closed, which is the gap this version opened by fixing the
+same one for v3.37. Written down rather than quietly filled in.
+
 ### v3.48 — ffmpeg arrives after the tests that need it
 
 v2.45 added `apt-get install ffmpeg` to CI and wrote down why: without it
