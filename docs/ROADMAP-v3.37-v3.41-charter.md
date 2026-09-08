@@ -66,6 +66,19 @@ claim-and-code agreement, and says so.
 downgrade the moment the learned weight exists. Precedence has to be decided
 here, not discovered later: corrections beat the prior, always.
 
+**Done: the prior is opt-in and corrections beat it.** `primary_axes` reaches
+the scorer through `verticals.axis_weight_prior`, behind
+`PIXCULL_VERTICAL_AXIS_PRIOR=1`, and `orchestrator` applies it only when
+`_axis_pref is None` — so a photographer who has corrected anything gets their
+own weights, not the curated guess. Ten hand-authored judgements that had been
+read by a serialiser and a phrase generator now do something.
+
+The README was the half that was wrong, and it was corrected rather than
+defended: naming a vertical shifts thresholds and tolerates the flags that genre
+forgives; axis *weighting* comes from corrections, with the curated prior as an
+opt-in cold start. That sentence is what v3.38's inventory then checked, and it
+is the one claim of eighteen that the sweep had to fix.
+
 ### v3.38 — every feature claim, checked against a code path
 The sweep. One in five failed on the first list opened; the rest held, including
 one that names a specific model (`InsightFace ArcFace`) and is accurate down to

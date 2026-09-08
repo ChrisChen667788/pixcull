@@ -100,3 +100,37 @@ def test_the_parser_would_notice_a_new_claim():
     assert CLAIM_RE.findall(sample) == ["19"]
     assert CODE_TOKEN.findall("see `report/gallery.py::build_gallery_zip`") \
         == ["report/gallery.py"]
+
+
+def test_a_claim_the_reader_cannot_reach_says_so_in_the_readme():
+    """v3.47 — the inventory knowing is not the same as the reader knowing.
+
+    v3.38 found the iOS companion is a Swift package you build in Xcode,
+    wrote "source only" in the third column, and left the README claim
+    reading like something `pip install` hands you. The inventory is a
+    document a maintainer opens; the claim is what a photographer reads.
+    Where the third column says the shipped default does not reach it,
+    the claim itself has to carry the caveat.
+    """
+    section = (ROOT / "README.md").read_text(encoding="utf-8") \
+        .split("## What you get today", 1)[1].split("\n## ", 1)[0]
+    unreachable = [r for r in inventory_rows()
+                   if "source only" in r[3].lower()
+                   or "**source" in r[3].lower()]
+    assert unreachable, (
+        "no row is marked source-only — if that is now true the check "
+        "below is guarding nothing; delete it deliberately")
+    missing = []
+    for row in unreachable:
+        # The claim's own paragraph is the numbered block with that index.
+        num = row[0].rstrip("abc")
+        block = re.split(rf"^{num}\. \*\*", section, flags=re.M)
+        if len(block) < 2:
+            missing.append(f"row {row[0]}: no such claim in the README")
+            continue
+        para = re.split(r"^\d+\. \*\*", block[1], flags=re.M)[0]
+        if not re.search(r"source|build it|Xcode|not on the App Store|自己在",
+                         para, re.I):
+            missing.append(f"row {row[0]}: the claim does not say it is "
+                           f"source only")
+    assert not missing, missing

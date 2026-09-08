@@ -207,7 +207,9 @@ PixCull is the alternative that flips all three:
     you can email to a client.
 12. **iOS swipe companion.** SwiftUI app for swipe-style triage on
     your phone while the laptop runs the heavy work. Talks to the
-    `/api/v1/` namespace.
+    `/api/v1/` namespace. It ships as source — `mobile/PixCullCompanion`,
+    a Swift package you build in Xcode. It is not on the App Store and
+    `pip install` does not give it to you.
 13. **Lr / Capture One tether mode.** Point it at the tether
     destination folder; PixCull watches and emits live verdicts as
     the camera shoots. Partial `scores.csv` survives Ctrl-C.
@@ -1095,7 +1097,9 @@ PixCull 把这三件事全部翻过来:
     Abstract 由 场景+人物+地点+建议 自动合成 (免费) 或 DeepSeek 润色
     (INFRA-4 budget 内),独立 HTML 相册打包成 zip 直接发客户。
 12. **iOS 滑动伴侣 App。** SwiftUI 写的手机端滑动选片 App,后台跑笔记
-    本上的重活。走 `/api/v1/` 接口。
+    本上的重活。走 `/api/v1/` 接口。以源码形式提供 ——
+    `mobile/PixCullCompanion`,一个要你自己在 Xcode 里编译的 Swift
+    package;没上 App Store,`pip install` 也不会给你。
 13. **Lr / C1 Tether 模式。** 指向 tether 目录;PixCull 监控,每个快门
     ~2 s 内给出实时 verdict,partial scores.csv 在 Ctrl-C 后保留。
 14. **跨机同步 (INFRA-2)。** 基于符号链接的目录镜像,走 iCloud / Dropbox /

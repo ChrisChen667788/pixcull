@@ -18,11 +18,13 @@ fails, something new is showing a verdict to a client — that is the
 signal, and no CSS change makes it pass by accident.
 """
 import ast
+import csv
 import os
 import re
 import signal
 import socket
 import subprocess
+import sys
 import time
 import urllib.request
 from pathlib import Path
@@ -34,7 +36,12 @@ CSS = REPO / "pixcull" / "report" / "templates" / "src" / "results.css"
 MOD = (REPO / "pixcull" / "report" / "templates" / "src" / "modules"
        / "33-client-present.js")
 BUILT = REPO / "pixcull" / "report" / "templates" / "results.html"
-PY = REPO / "pixcull" / ".venv" / "bin" / "python"
+# v3.47 — the repo venv exists on a maintainer's laptop and nowhere
+# else, so on CI this pointed at a file that is not there and the server
+# never started. `sys.executable` is the interpreter already running the
+# suite, which is the right one anyway.
+_VENV_PY = REPO / "pixcull" / ".venv" / "bin" / "python"
+PY = _VENV_PY if _VENV_PY.is_file() else Path(sys.executable)
 
 # Anything a client could read as a verdict on their own photographs.
 JUDGEMENT = r"剔除|保留|拿不准|建议留|综合分|★|☆|\d\.\d\d"
@@ -95,10 +102,20 @@ def _free_port() -> int:
 @pytest.fixture(scope="module")
 def served():
     pytest.importorskip("playwright.sync_api")
+    # v3.47 — the 5,069-row perf run is the realistic subject and it
+    # lives on one laptop, so these four tests skipped everywhere else,
+    # including CI. That is the fourth time this repository has shipped
+    # a test that reports green by not running (ffmpeg v2.45, exiftool
+    # v3.41, the whole browser lane v3.42). The committed 24-row fixture
+    # is the floor; the real run still wins when it is present.
     demo = os.environ.get("PIXCULL_TEST_DEMO_ROOT") or "/tmp/pixcull_perf"
     run = os.environ.get("PIXCULL_TEST_RUN") or "perf5069"
     if not (Path(demo) / run / "output" / "scores.csv").is_file():
-        pytest.skip(f"no run at {demo}/{run} — see docs/FIRST-SCREEN-MEASUREMENT.md")
+        demo = str(REPO / "tests" / "fixtures")
+        run = "present_run"
+    if not (Path(demo) / run / "output" / "scores.csv").is_file():
+        pytest.skip(f"no run at {demo}/{run} and no committed fixture — "
+                    "run scripts/make_present_fixture.py")
     env = dict(os.environ, PIXCULL_DEMO_ROOT=demo)
     log = Path(f"/tmp/pixcull_cp_test_{os.getpid()}.log")
     proc = subprocess.Popen(
@@ -228,3 +245,50 @@ def test_the_indicator_survives_a_reload(page):
     finally:
         page.keyboard.press("Shift+C")
         page.wait_for_timeout(500)
+
+
+# ---------------------------------------------------------------------------
+# v3.47 — keeping the four live tests above from going back to skipping.
+# ---------------------------------------------------------------------------
+
+def test_the_fixture_exists_so_the_live_tests_cannot_skip():
+    """The four tests above assert that no verdict, score or star is
+    readable in client-present mode. That is the one screen a
+    photographer turns toward someone who is not paying to see the
+    machine's opinion of their work, and it had no CI coverage at all
+    because the run it needed lived on one laptop."""
+    csv_path = (REPO / "tests" / "fixtures" / "present_run"
+                / "output" / "scores.csv")
+    assert csv_path.is_file(), (
+        "the committed fixture is gone — run scripts/make_present_fixture.py")
+    rows = list(csv.DictReader(csv_path.open()))
+    # The live tests need >10 cards and >50 visible judgement strings.
+    assert len(rows) > 10, f"only {len(rows)} rows; the grid tests need >10"
+    assert len({r["decision"] for r in rows}) == 3, \
+        "the fixture must carry keep, maybe and cull — one of each colour"
+
+
+def test_the_fixture_matches_its_generator():
+    """A hand-edited fixture drifts from the script that explains it,
+    and then nobody can tell which one is right."""
+    import subprocess
+    import sys as _sys
+    target = REPO / "tests" / "fixtures" / "present_run" / "output" / "scores.csv"
+    before = target.read_bytes()
+    try:
+        subprocess.run([_sys.executable,
+                        str(REPO / "scripts" / "make_present_fixture.py")],
+                       check=True, capture_output=True)
+        after = target.read_bytes()
+    finally:
+        target.write_bytes(before)
+    assert before == after, (
+        "tests/fixtures/present_run does not match "
+        "scripts/make_present_fixture.py — regenerate it")
+
+
+def test_the_interpreter_the_server_runs_under_actually_exists():
+    """It used to be a hard-coded path into the maintainer's venv. On any
+    other machine the server never started, and the fixture skipped with
+    'server did not come up' — a sentence that reads like a flake."""
+    assert Path(PY).is_file(), PY
