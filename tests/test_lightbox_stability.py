@@ -5,10 +5,15 @@ Two things the hermetic suite couldn't catch and a real-photo dogfood did:
     keystroke killed it and the UI froze (the v2.6 stability sweep);
   * the v2.6-P1 near-dup fold UI (≈ pill → fold → ≈N badge → compare).
 
-Uses the same launch-a-real-chromium path as ``test_visual_smoke`` (which
-is green in CI), with a private demo root: the committed fixture run plus
-a synthetic ``embeddings.npz`` so the near-dup endpoint needs no model.
-Skips cleanly when Playwright / chromium aren't available.
+Uses the same launch-a-real-chromium path as ``test_visual_smoke``, with
+a private demo root: the committed fixture run plus a synthetic
+``embeddings.npz`` so the near-dup endpoint needs no model. Skips cleanly
+when Playwright / chromium aren't available locally.
+
+v3.42 — this docstring used to say test_visual_smoke "is green in CI".
+It was green because playwright had never been installed on a runner and
+every browser test skipped. The `browser` job now installs it and proves
+a browser launched; see ``tests/test_browser_lane_runs.py``.
 """
 from __future__ import annotations
 
@@ -52,9 +57,18 @@ def server(tmp_path_factory):
          base + np.array([0, 0, .07, 0, 0, 0, 0, 0], np.float32),
          eye[3], eye[4], eye[5]][:len(fns)]
     vecs = np.stack(v); vecs /= np.linalg.norm(vecs, axis=1, keepdims=True)
+    # v2.56.4 stamps the preprocessing version into the cache and
+    # discards anything written by a different one. A synthetic cache
+    # that omits the stamp reads as "(pre-v2.56.4)", gets thrown away,
+    # and the endpoint falls through to building embeddings from photos
+    # this fixture deliberately does not have — 425, and the toggle
+    # never lights. Import the constant rather than copying its value,
+    # so the next bump takes this fixture with it.
+    from pixcull.scoring.semantic_search import PREPROC_VERSION
     with open(out / "embeddings.npz", "wb") as fh:
         np.savez(fh, filenames=np.array(fns), vectors=vecs,
-                 model=np.array("clip"))
+                 model=np.array("clip"),
+                 preproc=np.array(PREPROC_VERSION))
     env = {**os.environ, "PIXCULL_DEMO_ROOT": str(root)}
     port = _free_port()
     proc = subprocess.Popen(

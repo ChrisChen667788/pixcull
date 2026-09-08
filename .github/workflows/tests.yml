@@ -77,6 +77,68 @@ jobs:
           python -c "import pixcull.tether; print('tether: ok')"
           python -c "import pixcull.sync; print('sync: ok')"
 
+  browser:
+    # v3.42 — playwright has never been installed on a runner, so every
+    # test in these three files has been reporting green by skipping.
+    #
+    # `pytest.importorskip("playwright.sync_api")` at the top of each
+    # file is the correct local behaviour and the wrong CI behaviour:
+    # `test_lightbox_stability.py` even says in its own docstring that
+    # it uses "the same launch-a-real-chromium path as test_visual_smoke
+    # (which is green in CI)". test_visual_smoke was green in CI because
+    # it never ran. Fourth instance of skip-as-a-pass in this repo.
+    #
+    # Its own job, not folded into the hermetic one, so a red run says
+    # which lane broke and so the chromium download does not sit in
+    # front of every other assertion.
+    name: browser (playwright)
+    runs-on: ubuntu-latest
+    needs: import
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        env:
+          PIP_EXTRA_INDEX_URL: https://download.pytorch.org/whl/cpu
+        run: |
+          python -m pip install --upgrade pip
+          pip install --index-url https://download.pytorch.org/whl/cpu \
+                      --extra-index-url https://pypi.org/simple \
+                      "torch==2.4.1" "torchvision==0.19.1"
+          pip install -e ".[dev]"
+          pip install playwright
+          python -m playwright install --with-deps chromium
+
+      - name: Run browser tests
+        run: |
+          pytest -q -p no:randomly \
+            tests/test_visual_smoke.py \
+            tests/test_lightbox_stability.py \
+            tests/test_client_present.py
+
+      - name: Prove the browser actually launched
+        # The whole point of this job. Before this version the three
+        # files above skipped on a missing import and the tick was
+        # green, so the tick has to be tied to something the skip path
+        # cannot satisfy.
+        run: |
+          python -c "import playwright.sync_api; print('playwright: importable')"
+          python - <<'EOF'
+          from playwright.sync_api import sync_playwright
+          with sync_playwright() as pw:
+              b = pw.chromium.launch()
+              pg = b.new_page(); pg.set_content("<b id=x>hi</b>")
+              assert pg.inner_text("#x") == "hi"
+              b.close()
+          print("chromium: launched")
+          EOF
+
   pytest:
     name: pytest (hermetic subset)
     runs-on: ubuntu-latest

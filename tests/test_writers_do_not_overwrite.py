@@ -262,5 +262,7 @@ def test_ci_installs_exiftool_so_the_effect_tests_cannot_skip_forever():
     assert "libimage-exiftool-perl" in ci
     # And in the job that runs the hermetic suite, not a lane that only
     # fires on a schedule.
-    head = ci[:ci.index("Run hermetic tests")]
+    # v3.42 inserted a browser job above this one, so anchor the window
+    # at the hermetic job rather than at the top of the file.
+    head = ci[ci.index("  pytest:"):ci.index("Run hermetic tests")]
     assert "libimage-exiftool-perl" in head
