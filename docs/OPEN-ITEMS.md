@@ -72,11 +72,19 @@ a result, not a failure.
 Recorded because "waiting on the owner" is a comfortable place to put something
 that is actually unfinished.
 
-**v3.28's fix is construction-tested, not effect-tested.** exiftool is not
-installed here, so the command line is asserted through `build_args` as a pure
-function. That proves the arguments are right and does not prove exiftool does
-what the arguments say. Installing it is a change to the machine and is the
-owner's call, but nothing else blocks it.
+~~**v3.28's fix is construction-tested, not effect-tested.**~~ **Closed by
+v3.41 — and it found something.** The test went into CI rather than onto anyone's
+machine, following the ffmpeg precedent from v2.45, so no install was needed.
+
+The four assertions that protect the photographer's metadata passed on the first
+run: the three exiftool behaviours v3.28 took on trust are correct. The fifth
+failed. `preserve_existing=False`, the documented escape hatch, emitted a bare
+`-IPTC:Keywords=` and then `-IPTC:Keywords+=ours`, and those two do not net to
+"only ours" in one invocation — the photographer's keyword survived a write that
+had been explicitly asked to replace everything.
+
+No construction test could have found it. The arguments were exactly what the
+docstring described; exiftool simply did not compose them that way.
 
 **v3.29's second half did not run.** The charter asked for `evaluate()` re-run
 with and without the non-human rows, so that if the delta is material every

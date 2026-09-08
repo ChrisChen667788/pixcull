@@ -103,8 +103,13 @@ keywords **inside the photograph**, with `-overwrite_original` so exiftool kept
 no backup. The fix is asserted through `build_args` as a pure function: the
 arguments are right, and nothing proves exiftool does what they say.
 **Measure:** one real file with a rating, a colour label and two keywords; run
-the writer; read it back. **[owner]** — installing exiftool is a change to the
-machine and is the owner's call. Everything else is ready.
+the writer; read it back.
+
+~~**[owner]**~~ **Not an owner ask after all.** v2.45 had already set the
+precedent — `apt-get install ffmpeg` in CI, because without it four journey
+tests reported green having tested nothing. exiftool is the same shape and goes
+the same place: one apt line, running on every push, instead of one run on
+somebody's laptop.
 **Wrong, not late:** a construction test that passes while the effect test fails
 is worse than no test, because it reads as coverage. This version exists to
 close that gap, not to widen the construction tests.
