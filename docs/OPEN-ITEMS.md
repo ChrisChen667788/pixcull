@@ -141,6 +141,43 @@ between three golds is a brand call. Flagged rather than guessed at.
 
 ---
 
+### 6. What number the next release carries — unblocks cutting one at all
+
+Found 2026-09-09, updating the public description.
+
+`pyproject.toml` used to be bumped in lockstep with the iteration
+number — v2.73 → `2.73.0`, v2.74 → `2.74.0`, v2.75 → `2.75.0`. The last
+bump was commit `0a1f5f7` on 2026-08-22. Since then v2.76 through v2.99
+and v3.1 through v3.53 have shipped and the version has not moved.
+
+So two things are stale in a way that feeds each other:
+
+| | says | actually |
+|---|---|---|
+| `pyproject.toml` | 2.75.0 | 78 iterations later |
+| latest GitHub Release | v2.47.0 (2026-08-06) | ditto, plus 28 |
+
+The release badge at the top of the README reads the second one, so the
+first thing a visitor sees is a version from a month ago.
+
+**The ask is one number.** The convention says pyproject mirrors the
+iteration, and the current iteration is v3.53 — which makes the next
+release `3.53.0`, a major bump with the meaning that carries on PyPI.
+Continuing in 2.x (`2.99.0`) is the other honest reading. Both are
+defensible and neither is an engineering call.
+
+Once it is chosen: bump `pyproject.toml`, push the tag, and
+`.github/workflows/release.yml` builds the wheel and sdist, runs
+`twine check`, smoke-tests the wheel in a clean venv and creates the
+GitHub Release with both attached. PyPI upload stays a separate manual
+step, so tagging publishes nothing to PyPI on its own.
+
+A gate for this drift is deliberately **not** added yet: written today it
+would be red on arrival and would block every push until the number is
+decided, which is the wrong way to ask a question.
+
+---
+
 ## Three gaps the skip ledger now names
 
 v3.51 turned the CI skip census into `tests/ci_skip_dispositions.tsv`,
