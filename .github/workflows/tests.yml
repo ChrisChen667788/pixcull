@@ -100,6 +100,22 @@ jobs:
                       "torch==2.4.1" "torchvision==0.19.1"
           pip install -e ".[dev]"
 
+      # v3.41 — exiftool is what makes the embedded-IPTC test run
+      # instead of skip.
+      #
+      # v3.28 fixed a writer that was destroying hand-set ratings and
+      # keywords INSIDE the photograph, with -overwrite_original so
+      # exiftool kept no backup. The fix is asserted through a pure
+      # function that builds the command line, which proves the
+      # arguments are right and proves nothing about what exiftool does
+      # with them. Three of its behaviours were taken on trust.
+      #
+      # Same reasoning as the ffmpeg step below: a test that skips
+      # because a binary is missing reports green having tested nothing,
+      # and this repo has been bitten by skip-as-a-pass three times now.
+      - name: Install exiftool (embedded-IPTC effect test)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libimage-exiftool-perl
+
       - name: Run hermetic tests
         run: |
           # Skip:
