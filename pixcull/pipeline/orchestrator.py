@@ -564,6 +564,35 @@ def run_pipeline(
     except Exception:
         _personal_shift = 0.0
         _axis_pref = None
+
+    # v3.37 — the curated per-vertical prior, as a COLD START only.
+    #
+    # `verticals.primary_axes` has been hand-authored for all ten
+    # verticals since V17 and read by a serialiser and a phrase
+    # generator, while the README claimed each vertical "weights the
+    # axes to taste".  It is the prior for the weights v3.8 learns from
+    # corrections — for a photographer who has corrected nothing yet.
+    #
+    # PRECEDENCE IS DECIDED HERE, not discovered later: corrections beat
+    # the prior, always.  A hand-made guess that overrides a measured
+    # profile is a downgrade the moment the profile exists, so this only
+    # runs when `_axis_pref` is still None.
+    if _axis_pref is None:
+        try:
+            from pixcull.verticals import axis_prior_enabled, axis_weight_prior
+            if axis_prior_enabled():
+                _prior = axis_weight_prior(vertical)
+                if _prior:
+                    _axis_pref = _prior
+                    _top = max(_prior, key=lambda a: _prior[a])
+                    console.print(
+                        f"[cyan]Vertical prior[/] axis weights tilted toward "
+                        f"[b]{_top}[/] for {vertical} — a curated starting "
+                        f"point, replaced the moment your own corrections "
+                        f"can be learned from")
+        except Exception:
+            pass
+
     decisions, dim_scores, reasons_all = [], [], []
     _decide_args: list[dict] = []      # v2.48-P1 — for the re-decide pass
     rescorer_preds: list[str | None] = []

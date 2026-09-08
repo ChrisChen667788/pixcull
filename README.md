@@ -158,12 +158,18 @@ PixCull is the alternative that flips all three:
    moment, aesthetic. Each axis: 1–5 stars with rationale.
    Calibrated against thousands of human labels; per-axis rescorer
    trained on the same data.
-2. **Per-genre verticals.** Wedding · wildlife · sports · landscape ·
-   portrait · event · journalism · commercial · still-life. Each
-   vertical adjusts the keep/maybe thresholds and weights the axes
-   to taste (e.g. wildlife rewards moment-axis sharpness even when
-   composition slips, weddings reward expression even when light is
-   marginal).
+2. **Per-genre verticals.** Wedding, wildlife, sports, landscape,
+   portrait, event, journalism, commercial, still-life. Naming a
+   vertical shifts the keep/maybe thresholds and tolerates the flags
+   that genre forgives — wildlife stops culling a tiny subject,
+   landscape stops culling a long exposure for softness.
+
+   Axis *weighting* is a separate thing and it comes from your own
+   corrections, not from the genre: once you have corrected enough
+   frames, the axes you demonstrably care about are weighted higher.
+   Each vertical also ships a curated starting point for those weights
+   (`PIXCULL_VERTICAL_AXIS_PRIOR=1`), which your corrections replace as
+   soon as there are enough of them to learn from.
 3. **V20 advice envelope.** Every photo carries a short verdict, a
    list of strengths cited to canon (Adams Zone System, Cartier-
    Bresson decisive moment, Rule of Thirds, etc.), a list of

@@ -93,8 +93,16 @@ class Vertical:
     # 20 is the smallest count that gives statistically meaningful
     # threshold tuning; below ~10 the noise dominates.
     sample_target: int = 20
-    # Axes the vertical historically cares about most. Used as a hint
-    # in the per-vertical eval HTML report; not yet wired into scoring.
+    # Axes the vertical historically cares about most, in order.
+    #
+    # v3.37: hand-authored for all ten verticals and, until now, read by
+    # exactly two callers — a serialiser and a phrase generator.  Ten
+    # judgements in the data model feeding nothing, while the README
+    # claimed each vertical "weights the axes to taste".
+    #
+    # It is now the COLD START for the per-vertical axis weights v3.8
+    # learns from corrections: a prior for a photographer who has
+    # corrected nothing yet.  See `axis_weight_prior`.
     primary_axes:  tuple[str, ...] = ()
     # V17.2 — per-vertical scoring policy. Empty default = no override.
     policy:        VerticalPolicy = field(default_factory=VerticalPolicy)
@@ -547,3 +555,71 @@ __all__ = [
     "hashed_filename",
     "registry_with_progress",
 ]
+
+
+# ---------------------------------------------------------------------------
+# v3.37 — the curated prior, as weights
+# ---------------------------------------------------------------------------
+
+#: How far the prior is allowed to move the weights away from equal.
+#:
+#: 0.0 is equal weighting — the pre-v3.37 behaviour.  1.0 is the raw rank
+#: ordering, which on a three-axis vertical puts 2.4x the weight of an
+#: equal split on one axis.
+#:
+#: 0.5 because this is a PRIOR and nothing has measured it.  A hand-made
+#: guess that reorders a photographer's cull as hard as a measured
+#: profile would is a guess wearing a measurement's clothes.  The number
+#: is named rather than baked into the formula so that "how much may an
+#: unmeasured prior move the answer" stays a visible decision.
+PRIOR_STRENGTH = 0.5
+
+ENV_FLAG = "PIXCULL_VERTICAL_AXIS_PRIOR"
+
+
+def axis_prior_enabled() -> bool:
+    """Off by default.
+
+    Wiring the prior into the default path would change the culls of
+    every user who names a vertical, on the strength of a curated guess
+    nobody has evaluated.  The measure that would earn the default is in
+    `ROADMAP-v3.37-v3.41-charter.md` and it needs the correction set.
+    """
+    import os
+    return os.environ.get(ENV_FLAG, "0") == "1"
+
+
+def axis_weight_prior(vertical: str | None,
+                      strength: float = PRIOR_STRENGTH) -> dict | None:
+    """Per-axis weights from a vertical's curated `primary_axes`.
+
+    Returns None when the vertical is unknown or lists no axes — None,
+    not equal weights, so a caller can tell "no opinion" from "the
+    opinion is that everything matters equally".
+
+    The prior is a RANK statement, not a magnitude one: `primary_axes` is
+    an ordered list of what this kind of shoot cares about, and nobody
+    wrote down how much.  So rank becomes weight and `strength` decides
+    how far that is allowed to pull away from an equal split.
+    """
+    from pixcull.scoring.rubric import RUBRIC_AXES
+
+    v = get_vertical(vertical) if vertical else None
+    listed = tuple(getattr(v, "primary_axes", ()) or ()) if v else ()
+    if not listed:
+        return None
+
+    axes = [a.name for a in RUBRIC_AXES]
+    equal = 1.0 / len(axes)
+    k = len(listed)
+    #: An unlisted axis is not worthless — it is unmentioned. Half a rank
+    #: keeps it in the scoring rather than switching it off, which no
+    #: vertical's author asked for.
+    raw = {a: 0.5 for a in axes}
+    for i, a in enumerate(listed):
+        if a in raw:
+            raw[a] = float(k - i)
+    total = sum(raw.values()) or 1.0
+    ranked = {a: raw[a] / total for a in axes}
+    s = max(0.0, min(1.0, float(strength)))
+    return {a: equal + s * (ranked[a] - equal) for a in axes}
