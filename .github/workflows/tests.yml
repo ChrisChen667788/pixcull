@@ -208,6 +208,15 @@ jobs:
       - name: Install ffmpeg (video tests + the journey)
         run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
 
+      # v3.51 — mediapipe's system half. v3.50 installed the Python
+      # package and the four face tests started running for the first
+      # time, which is when the runner said
+      # `OSError: libEGL.so.1: cannot open shared object file`. The
+      # detector links against OpenGL, a headless ubuntu image does not
+      # carry it, and pip cannot tell you that.
+      - name: Install mediapipe's system libraries (face detector)
+        run: sudo apt-get install -y -qq libegl1 libgl1 libglib2.0-0t64 || sudo apt-get install -y -qq libegl1 libgl1 libglib2.0-0
+
       - name: Run hermetic tests
         run: |
           # Skip:

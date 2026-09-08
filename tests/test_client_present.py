@@ -292,3 +292,23 @@ def test_the_interpreter_the_server_runs_under_actually_exists():
     other machine the server never started, and the fixture skipped with
     'server did not come up' — a sentence that reads like a flake."""
     assert Path(PY).is_file(), PY
+
+
+def test_the_fixture_is_actually_tracked_by_git():
+    """v3.51 — existing on disk is not the same as being in the commit.
+
+    `.gitignore` carries a bare `output/`, which matches a directory of
+    that name at any depth, and the exception under it named `smoke_run`
+    specifically. So the fixture v3.47 added lived happily on one machine,
+    passed every local run, and was never committed — CI failed on a file
+    that had never existed there. A per-name exception to a glob is a trap
+    with a delay on it; the rule is a glob now, and this is the check that
+    would have caught it before the push.
+    """
+    import subprocess
+    out = subprocess.run(["git", "ls-files", "tests/fixtures/present_run"],
+                         cwd=REPO, capture_output=True, text=True).stdout
+    tracked = [l for l in out.splitlines() if l.strip()]
+    assert any(l.endswith("scores.csv") for l in tracked), (
+        "the present-mode fixture is not tracked by git — check .gitignore; "
+        f"git ls-files returned {tracked}")
