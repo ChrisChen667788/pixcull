@@ -24,7 +24,11 @@ yaml = pytest.importorskip("yaml")
 ROOT = Path(__file__).resolve().parent.parent
 BROWSER_TESTS = ("tests/test_visual_smoke.py",
                  "tests/test_lightbox_stability.py",
-                 "tests/test_client_present.py")
+                 "tests/test_client_present.py",
+                 # v3.45 — rasterizes every README image and counts the
+                 # colours, because the hero demo shipped as 921,600
+                 # pixels of pure black and nothing was looking.
+                 "tests/test_readme_images_render.py")
 
 
 def _workflow() -> dict:
@@ -68,7 +72,7 @@ def test_the_lane_proves_a_browser_actually_launched():
     assert "chromium.launch()" in script
 
 
-def test_the_three_files_are_still_the_three_files():
+def test_the_browser_files_are_still_the_browser_files():
     """A new playwright test that nobody adds to the lane is the same
     bug wearing a different name."""
     found = sorted(

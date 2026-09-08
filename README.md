@@ -10,11 +10,13 @@
 
 <!-- Animated hero-reveal demo: SVG SMIL keyframes mirroring the
      v0.9-P0-2 in-product opening sequence (workspace bar slide-in,
-     sidebar slide-in, 24 cards stagger fade-up, stats count from 0).
+     sidebar slide-in, 24 cards stagger fade-up). The static frame is
+     the finished screen, so this stays legible wherever SMIL does not
+     run — v3.45, after it shipped as a black rectangle.
      Regenerate via: python scripts/brand/gen_animated_demo.py -->
 <div align="center">
   <img src="docs/brand/pixcull-hero-reveal-demo.svg"
-       alt="PixCull hero reveal — workspace bar slides in, Library sidebar slides in, 24 photo cards stagger fade-up, keep/maybe/cull stats count from 0 to final"
+       alt="PixCull review screen — workspace bar, Library sidebar and a grid of 24 analyzed photos each tagged keep, maybe or cull; the header reads 1500 frames, 127 keep, 163 maybe, 1210 cull"
        width="100%" />
 </div>
 

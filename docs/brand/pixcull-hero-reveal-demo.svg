@@ -1,16 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <svg xmlns="http://www.w3.org/2000/svg"
-     xmlns:xlink="http://www.w3.org/1999/xlink"
      viewBox="0 0 1280 720"
      width="1280" height="720" role="img"
-     aria-label="PixCull demo — hero reveal of analyzed photo grid">
+     aria-label="PixCull review screen — workspace bar, Library sidebar and a grid of 24 analyzed photos, each tagged keep, maybe or cull">
   <title>PixCull · hero reveal</title>
   <desc>
-    Demo of PixCull's signature 2-second opening moment: workspace bar
-    slide-in, Library sidebar slide-in, 24 photo cards stagger fade-up
-    from bottom with soft-bounce easing, and the keep/maybe/cull stats
-    count up from zero with brand-gradient on the keep number.
-    Mirrors the live behaviour shipped in v0.9-P0-2.
+    PixCull's opening moment: the workspace bar slides down, the Library
+    sidebar slides in from the left, and 24 photo cards stagger up from
+    below with soft-bounce easing, each carrying a keep / maybe / cull
+    dot. The shoot header reads 1500 frames — 127 keep,
+    163 maybe, 1210 cull. Mirrors the live behaviour shipped in
+    v0.9-P0-2. Where SMIL animation is unavailable this renders as the
+    finished screen rather than an empty one.
   </desc>
   <defs>
     <linearGradient id="demoBrandGrad" x1="0" y1="0" x2="1" y2="1">
@@ -30,7 +31,7 @@
   <rect width="1280" height="720" fill="#101113" opacity="0.35"/>
 
   <!-- =========== Workspace bar (slides down 0.3s) =========== -->
-  <g opacity="0">
+  <g>
     <rect x="0" y="0" width="1280" height="48"
           fill="rgba(20,23,28,0.94)"/>
     <line x1="0" y1="48" x2="1280" y2="48"
@@ -45,7 +46,7 @@
       <circle cx="12" cy="12" r="7"  fill="url(#demoBrandGrad)"/>
     </g>
     <text x="56" y="30" font-family="Inter, -apple-system, sans-serif"
-          font-size="15" font-weight="700" fill="#efe9df">
+          font-size="15" font-weight="700" fill="#d6d3cd">
       Pix<tspan fill="url(#demoBrandGrad)">Cull</tspan>
     </text>
     <text x="120" y="30" font-family="Inter, sans-serif"
@@ -53,25 +54,25 @@
           letter-spacing="0.5">
       / 分析结果 · sample_a1b2
     </text>
-    <!-- Stats group (counter animates 0→target) -->
-    <g transform="translate(900,30)">
+    <!-- Shoot header. Authored values, not animated — see note 3. -->
+    <g transform="translate(880,30)">
       <text x="0" y="0" font-family="Inter,sans-serif"
             font-size="13" fill="#8b8f97">
-        共 <tspan id="totN" font-family="Charter,Georgia,serif"
+        共 <tspan font-family="Charter,Georgia,serif"
             font-weight="700" font-size="22"
-            fill="url(#demoBrandGrad)">0</tspan> 张
+            fill="url(#demoBrandGrad)">1500</tspan> 张
       </text>
-      <text x="105" y="0" font-family="Inter,sans-serif"
-            font-size="13" fill="#88e0a6">
-        keep <tspan id="keepN" font-weight="700" font-size="15">0</tspan>
+      <text x="120" y="0" font-family="Inter,sans-serif"
+            font-size="13" fill="#63bd7f">
+        keep <tspan font-weight="700" font-size="15">127</tspan>
       </text>
-      <text x="190" y="0" font-family="Inter,sans-serif"
-            font-size="13" fill="#e3c25e">
-        maybe <tspan id="mayN" font-weight="700" font-size="15">0</tspan>
+      <text x="215" y="0" font-family="Inter,sans-serif"
+            font-size="13" fill="#d6a443">
+        maybe <tspan font-weight="700" font-size="15">163</tspan>
       </text>
-      <text x="285" y="0" font-family="Inter,sans-serif"
-            font-size="13" fill="#ee8888">
-        cull <tspan id="culN" font-weight="700" font-size="15">0</tspan>
+      <text x="320" y="0" font-family="Inter,sans-serif"
+            font-size="13" fill="#e0604e">
+        cull <tspan font-weight="700" font-size="15">1210</tspan>
       </text>
     </g>
     <animate attributeName="opacity" from="0" to="1"
@@ -83,7 +84,7 @@
   </g>
 
   <!-- =========== Library sidebar (slides in 0.42s) =========== -->
-  <g opacity="0">
+  <g>
     <rect x="0" y="48" width="236" height="672"
           fill="rgba(15,17,22,0.92)"/>
     <line x1="236" y1="48" x2="236" y2="720"
@@ -118,11 +119,11 @@
 
   <!-- =========== Grid cards (stagger fade-up) =========== -->
   
-    <g opacity="0" transform="translate(380,244)">
+    <g transform="translate(380,220)">
       <rect width="124" height="92" rx="8"
             fill="#1a1611" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
       <rect x="6" y="6" width="112" height="60" rx="4" fill="#241f17"/>
-      <circle cx="116" cy="78" r="6" fill="#88e0a6"/>
+      <circle cx="116" cy="78" r="6" fill="#63bd7f"/>
       <text x="10" y="84" font-family="ui-monospace, monospace"
             font-size="8.5" fill="#8b8f97">IMG_0000.jpg</text>
       <animate attributeName="opacity"
@@ -132,11 +133,11 @@
                begin="1.0s" dur="0.5s" fill="freeze"
                calcMode="spline" keySplines="0.34 1.56 0.64 1"/>
     </g>
-    <g opacity="0" transform="translate(522,244)">
+    <g transform="translate(522,220)">
       <rect width="124" height="92" rx="8"
             fill="#1a1611" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
       <rect x="6" y="6" width="112" height="60" rx="4" fill="#241f17"/>
-      <circle cx="116" cy="78" r="6" fill="#e3c25e"/>
+      <circle cx="116" cy="78" r="6" fill="#d6a443"/>
       <text x="10" y="84" font-family="ui-monospace, monospace"
             font-size="8.5" fill="#8b8f97">IMG_0001.jpg</text>
       <animate attributeName="opacity"
@@ -146,11 +147,11 @@
                begin="1.08s" dur="0.5s" fill="freeze"
                calcMode="spline" keySplines="0.34 1.56 0.64 1"/>
     </g>
-    <g opacity="0" transform="translate(664,244)">
+    <g transform="translate(664,220)">
       <rect width="124" height="92" rx="8"
             fill="#1a1611" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
       <rect x="6" y="6" width="112" height="60" rx="4" fill="#241f17"/>
-      <circle cx="116" cy="78" r="6" fill="#ee8888"/>
+      <circle cx="116" cy="78" r="6" fill="#e0604e"/>
       <text x="10" y="84" font-family="ui-monospace, monospace"
             font-size="8.5" fill="#8b8f97">IMG_0002.jpg</text>
       <animate attributeName="opacity"
@@ -160,11 +161,11 @@
                begin="1.16s" dur="0.5s" fill="freeze"
                calcMode="spline" keySplines="0.34 1.56 0.64 1"/>
     </g>
-    <g opacity="0" transform="translate(806,244)">
+    <g transform="translate(806,220)">
       <rect width="124" height="92" rx="8"
             fill="#1a1611" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
       <rect x="6" y="6" width="112" height="60" rx="4" fill="#241f17"/>
-      <circle cx="116" cy="78" r="6" fill="#88e0a6"/>
+      <circle cx="116" cy="78" r="6" fill="#63bd7f"/>
       <text x="10" y="84" font-family="ui-monospace, monospace"
             font-size="8.5" fill="#8b8f97">IMG_0003.jpg</text>
       <animate attributeName="opacity"
@@ -174,11 +175,11 @@
                begin="1.24s" dur="0.5s" fill="freeze"
                calcMode="spline" keySplines="0.34 1.56 0.64 1"/>
     </g>
-    <g opacity="0" transform="translate(948,244)">
+    <g transform="translate(948,220)">
       <rect width="124" height="92" rx="8"
             fill="#1a1611" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
       <rect x="6" y="6" width="112" height="60" rx="4" fill="#241f17"/>
-      <circle cx="116" cy="78" r="6" fill="#e3c25e"/>
+      <circle cx="116" cy="78" r="6" fill="#d6a443"/>
       <text x="10" y="84" font-family="ui-monospace, monospace"
             font-size="8.5" fill="#8b8f97">IMG_0004.jpg</text>
       <animate attributeName="opacity"
@@ -188,11 +189,11 @@
                begin="1.32s" dur="0.5s" fill="freeze"
                calcMode="spline" keySplines="0.34 1.56 0.64 1"/>
     </g>
-    <g opacity="0" transform="translate(1090,244)">
+    <g transform="translate(1090,220)">
       <rect width="124" height="92" rx="8"
             fill="#1a1611" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
       <rect x="6" y="6" width="112" height="60" rx="4" fill="#241f17"/>
-      <circle cx="116" cy="78" r="6" fill="#ee8888"/>
+      <circle cx="116" cy="78" r="6" fill="#e0604e"/>
       <text x="10" y="84" font-family="ui-monospace, monospace"
             font-size="8.5" fill="#8b8f97">IMG_0005.jpg</text>
       <animate attributeName="opacity"
@@ -202,11 +203,11 @@
                begin="1.4s" dur="0.5s" fill="freeze"
                calcMode="spline" keySplines="0.34 1.56 0.64 1"/>
     </g>
-    <g opacity="0" transform="translate(380,354)">
+    <g transform="translate(380,330)">
       <rect width="124" height="92" rx="8"
             fill="#1a1611" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
       <rect x="6" y="6" width="112" height="60" rx="4" fill="#241f17"/>
-      <circle cx="116" cy="78" r="6" fill="#88e0a6"/>
+      <circle cx="116" cy="78" r="6" fill="#63bd7f"/>
       <text x="10" y="84" font-family="ui-monospace, monospace"
             font-size="8.5" fill="#8b8f97">IMG_0006.jpg</text>
       <animate attributeName="opacity"
@@ -216,11 +217,11 @@
                begin="1.48s" dur="0.5s" fill="freeze"
                calcMode="spline" keySplines="0.34 1.56 0.64 1"/>
     </g>
-    <g opacity="0" transform="translate(522,354)">
+    <g transform="translate(522,330)">
       <rect width="124" height="92" rx="8"
             fill="#1a1611" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
       <rect x="6" y="6" width="112" height="60" rx="4" fill="#241f17"/>
-      <circle cx="116" cy="78" r="6" fill="#e3c25e"/>
+      <circle cx="116" cy="78" r="6" fill="#d6a443"/>
       <text x="10" y="84" font-family="ui-monospace, monospace"
             font-size="8.5" fill="#8b8f97">IMG_0007.jpg</text>
       <animate attributeName="opacity"
@@ -230,11 +231,11 @@
                begin="1.56s" dur="0.5s" fill="freeze"
                calcMode="spline" keySplines="0.34 1.56 0.64 1"/>
     </g>
-    <g opacity="0" transform="translate(664,354)">
+    <g transform="translate(664,330)">
       <rect width="124" height="92" rx="8"
             fill="#1a1611" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
       <rect x="6" y="6" width="112" height="60" rx="4" fill="#241f17"/>
-      <circle cx="116" cy="78" r="6" fill="#ee8888"/>
+      <circle cx="116" cy="78" r="6" fill="#e0604e"/>
       <text x="10" y="84" font-family="ui-monospace, monospace"
             font-size="8.5" fill="#8b8f97">IMG_0008.jpg</text>
       <animate attributeName="opacity"
@@ -244,11 +245,11 @@
                begin="1.6400000000000001s" dur="0.5s" fill="freeze"
                calcMode="spline" keySplines="0.34 1.56 0.64 1"/>
     </g>
-    <g opacity="0" transform="translate(806,354)">
+    <g transform="translate(806,330)">
       <rect width="124" height="92" rx="8"
             fill="#1a1611" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
       <rect x="6" y="6" width="112" height="60" rx="4" fill="#241f17"/>
-      <circle cx="116" cy="78" r="6" fill="#88e0a6"/>
+      <circle cx="116" cy="78" r="6" fill="#63bd7f"/>
       <text x="10" y="84" font-family="ui-monospace, monospace"
             font-size="8.5" fill="#8b8f97">IMG_0009.jpg</text>
       <animate attributeName="opacity"
@@ -258,11 +259,11 @@
                begin="1.72s" dur="0.5s" fill="freeze"
                calcMode="spline" keySplines="0.34 1.56 0.64 1"/>
     </g>
-    <g opacity="0" transform="translate(948,354)">
+    <g transform="translate(948,330)">
       <rect width="124" height="92" rx="8"
             fill="#1a1611" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
       <rect x="6" y="6" width="112" height="60" rx="4" fill="#241f17"/>
-      <circle cx="116" cy="78" r="6" fill="#e3c25e"/>
+      <circle cx="116" cy="78" r="6" fill="#d6a443"/>
       <text x="10" y="84" font-family="ui-monospace, monospace"
             font-size="8.5" fill="#8b8f97">IMG_0010.jpg</text>
       <animate attributeName="opacity"
@@ -272,11 +273,11 @@
                begin="1.8s" dur="0.5s" fill="freeze"
                calcMode="spline" keySplines="0.34 1.56 0.64 1"/>
     </g>
-    <g opacity="0" transform="translate(1090,354)">
+    <g transform="translate(1090,330)">
       <rect width="124" height="92" rx="8"
             fill="#1a1611" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
       <rect x="6" y="6" width="112" height="60" rx="4" fill="#241f17"/>
-      <circle cx="116" cy="78" r="6" fill="#ee8888"/>
+      <circle cx="116" cy="78" r="6" fill="#e0604e"/>
       <text x="10" y="84" font-family="ui-monospace, monospace"
             font-size="8.5" fill="#8b8f97">IMG_0011.jpg</text>
       <animate attributeName="opacity"
@@ -286,11 +287,11 @@
                begin="1.88s" dur="0.5s" fill="freeze"
                calcMode="spline" keySplines="0.34 1.56 0.64 1"/>
     </g>
-    <g opacity="0" transform="translate(380,464)">
+    <g transform="translate(380,440)">
       <rect width="124" height="92" rx="8"
             fill="#1a1611" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
       <rect x="6" y="6" width="112" height="60" rx="4" fill="#241f17"/>
-      <circle cx="116" cy="78" r="6" fill="#88e0a6"/>
+      <circle cx="116" cy="78" r="6" fill="#63bd7f"/>
       <text x="10" y="84" font-family="ui-monospace, monospace"
             font-size="8.5" fill="#8b8f97">IMG_0012.jpg</text>
       <animate attributeName="opacity"
@@ -300,11 +301,11 @@
                begin="1.96s" dur="0.5s" fill="freeze"
                calcMode="spline" keySplines="0.34 1.56 0.64 1"/>
     </g>
-    <g opacity="0" transform="translate(522,464)">
+    <g transform="translate(522,440)">
       <rect width="124" height="92" rx="8"
             fill="#1a1611" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
       <rect x="6" y="6" width="112" height="60" rx="4" fill="#241f17"/>
-      <circle cx="116" cy="78" r="6" fill="#e3c25e"/>
+      <circle cx="116" cy="78" r="6" fill="#d6a443"/>
       <text x="10" y="84" font-family="ui-monospace, monospace"
             font-size="8.5" fill="#8b8f97">IMG_0013.jpg</text>
       <animate attributeName="opacity"
@@ -314,11 +315,11 @@
                begin="2.04s" dur="0.5s" fill="freeze"
                calcMode="spline" keySplines="0.34 1.56 0.64 1"/>
     </g>
-    <g opacity="0" transform="translate(664,464)">
+    <g transform="translate(664,440)">
       <rect width="124" height="92" rx="8"
             fill="#1a1611" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
       <rect x="6" y="6" width="112" height="60" rx="4" fill="#241f17"/>
-      <circle cx="116" cy="78" r="6" fill="#ee8888"/>
+      <circle cx="116" cy="78" r="6" fill="#e0604e"/>
       <text x="10" y="84" font-family="ui-monospace, monospace"
             font-size="8.5" fill="#8b8f97">IMG_0014.jpg</text>
       <animate attributeName="opacity"
@@ -328,11 +329,11 @@
                begin="2.12s" dur="0.5s" fill="freeze"
                calcMode="spline" keySplines="0.34 1.56 0.64 1"/>
     </g>
-    <g opacity="0" transform="translate(806,464)">
+    <g transform="translate(806,440)">
       <rect width="124" height="92" rx="8"
             fill="#1a1611" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
       <rect x="6" y="6" width="112" height="60" rx="4" fill="#241f17"/>
-      <circle cx="116" cy="78" r="6" fill="#88e0a6"/>
+      <circle cx="116" cy="78" r="6" fill="#63bd7f"/>
       <text x="10" y="84" font-family="ui-monospace, monospace"
             font-size="8.5" fill="#8b8f97">IMG_0015.jpg</text>
       <animate attributeName="opacity"
@@ -342,11 +343,11 @@
                begin="2.2s" dur="0.5s" fill="freeze"
                calcMode="spline" keySplines="0.34 1.56 0.64 1"/>
     </g>
-    <g opacity="0" transform="translate(948,464)">
+    <g transform="translate(948,440)">
       <rect width="124" height="92" rx="8"
             fill="#1a1611" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
       <rect x="6" y="6" width="112" height="60" rx="4" fill="#241f17"/>
-      <circle cx="116" cy="78" r="6" fill="#e3c25e"/>
+      <circle cx="116" cy="78" r="6" fill="#d6a443"/>
       <text x="10" y="84" font-family="ui-monospace, monospace"
             font-size="8.5" fill="#8b8f97">IMG_0016.jpg</text>
       <animate attributeName="opacity"
@@ -356,11 +357,11 @@
                begin="2.2800000000000002s" dur="0.5s" fill="freeze"
                calcMode="spline" keySplines="0.34 1.56 0.64 1"/>
     </g>
-    <g opacity="0" transform="translate(1090,464)">
+    <g transform="translate(1090,440)">
       <rect width="124" height="92" rx="8"
             fill="#1a1611" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
       <rect x="6" y="6" width="112" height="60" rx="4" fill="#241f17"/>
-      <circle cx="116" cy="78" r="6" fill="#ee8888"/>
+      <circle cx="116" cy="78" r="6" fill="#e0604e"/>
       <text x="10" y="84" font-family="ui-monospace, monospace"
             font-size="8.5" fill="#8b8f97">IMG_0017.jpg</text>
       <animate attributeName="opacity"
@@ -370,11 +371,11 @@
                begin="2.3600000000000003s" dur="0.5s" fill="freeze"
                calcMode="spline" keySplines="0.34 1.56 0.64 1"/>
     </g>
-    <g opacity="0" transform="translate(380,574)">
+    <g transform="translate(380,550)">
       <rect width="124" height="92" rx="8"
             fill="#1a1611" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
       <rect x="6" y="6" width="112" height="60" rx="4" fill="#241f17"/>
-      <circle cx="116" cy="78" r="6" fill="#88e0a6"/>
+      <circle cx="116" cy="78" r="6" fill="#63bd7f"/>
       <text x="10" y="84" font-family="ui-monospace, monospace"
             font-size="8.5" fill="#8b8f97">IMG_0018.jpg</text>
       <animate attributeName="opacity"
@@ -384,11 +385,11 @@
                begin="2.44s" dur="0.5s" fill="freeze"
                calcMode="spline" keySplines="0.34 1.56 0.64 1"/>
     </g>
-    <g opacity="0" transform="translate(522,574)">
+    <g transform="translate(522,550)">
       <rect width="124" height="92" rx="8"
             fill="#1a1611" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
       <rect x="6" y="6" width="112" height="60" rx="4" fill="#241f17"/>
-      <circle cx="116" cy="78" r="6" fill="#e3c25e"/>
+      <circle cx="116" cy="78" r="6" fill="#d6a443"/>
       <text x="10" y="84" font-family="ui-monospace, monospace"
             font-size="8.5" fill="#8b8f97">IMG_0019.jpg</text>
       <animate attributeName="opacity"
@@ -398,11 +399,11 @@
                begin="2.52s" dur="0.5s" fill="freeze"
                calcMode="spline" keySplines="0.34 1.56 0.64 1"/>
     </g>
-    <g opacity="0" transform="translate(664,574)">
+    <g transform="translate(664,550)">
       <rect width="124" height="92" rx="8"
             fill="#1a1611" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
       <rect x="6" y="6" width="112" height="60" rx="4" fill="#241f17"/>
-      <circle cx="116" cy="78" r="6" fill="#ee8888"/>
+      <circle cx="116" cy="78" r="6" fill="#e0604e"/>
       <text x="10" y="84" font-family="ui-monospace, monospace"
             font-size="8.5" fill="#8b8f97">IMG_0020.jpg</text>
       <animate attributeName="opacity"
@@ -412,11 +413,11 @@
                begin="2.6s" dur="0.5s" fill="freeze"
                calcMode="spline" keySplines="0.34 1.56 0.64 1"/>
     </g>
-    <g opacity="0" transform="translate(806,574)">
+    <g transform="translate(806,550)">
       <rect width="124" height="92" rx="8"
             fill="#1a1611" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
       <rect x="6" y="6" width="112" height="60" rx="4" fill="#241f17"/>
-      <circle cx="116" cy="78" r="6" fill="#88e0a6"/>
+      <circle cx="116" cy="78" r="6" fill="#63bd7f"/>
       <text x="10" y="84" font-family="ui-monospace, monospace"
             font-size="8.5" fill="#8b8f97">IMG_0021.jpg</text>
       <animate attributeName="opacity"
@@ -426,11 +427,11 @@
                begin="2.6799999999999997s" dur="0.5s" fill="freeze"
                calcMode="spline" keySplines="0.34 1.56 0.64 1"/>
     </g>
-    <g opacity="0" transform="translate(948,574)">
+    <g transform="translate(948,550)">
       <rect width="124" height="92" rx="8"
             fill="#1a1611" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
       <rect x="6" y="6" width="112" height="60" rx="4" fill="#241f17"/>
-      <circle cx="116" cy="78" r="6" fill="#e3c25e"/>
+      <circle cx="116" cy="78" r="6" fill="#d6a443"/>
       <text x="10" y="84" font-family="ui-monospace, monospace"
             font-size="8.5" fill="#8b8f97">IMG_0022.jpg</text>
       <animate attributeName="opacity"
@@ -440,11 +441,11 @@
                begin="2.76s" dur="0.5s" fill="freeze"
                calcMode="spline" keySplines="0.34 1.56 0.64 1"/>
     </g>
-    <g opacity="0" transform="translate(1090,574)">
+    <g transform="translate(1090,550)">
       <rect width="124" height="92" rx="8"
             fill="#1a1611" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
       <rect x="6" y="6" width="112" height="60" rx="4" fill="#241f17"/>
-      <circle cx="116" cy="78" r="6" fill="#ee8888"/>
+      <circle cx="116" cy="78" r="6" fill="#e0604e"/>
       <text x="10" y="84" font-family="ui-monospace, monospace"
             font-size="8.5" fill="#8b8f97">IMG_0023.jpg</text>
       <animate attributeName="opacity"
@@ -454,37 +455,4 @@
                begin="2.84s" dur="0.5s" fill="freeze"
                calcMode="spline" keySplines="0.34 1.56 0.64 1"/>
     </g>
-
-  <!-- =========== Number count-up via SMIL animate
-       Browsers render SMIL <animate> on text nodes via the textContent
-       update path — this gives the 0→target ramp without JS. =========== -->
-  <g>
-    <text>
-      <animate xlink:href="#totN" attributeName="textContent"
-               values="0;120;430;820;1500;1500" dur="0.9s"
-               begin="0.4s" fill="freeze"/>
-    </text>
-    <text>
-      <animate xlink:href="#keepN" attributeName="textContent"
-               values="0;12;48;94;127;127" dur="0.9s"
-               begin="0.4s" fill="freeze"/>
-    </text>
-    <text>
-      <animate xlink:href="#mayN" attributeName="textContent"
-               values="0;18;72;120;163;163" dur="0.9s"
-               begin="0.4s" fill="freeze"/>
-    </text>
-    <text>
-      <animate xlink:href="#culN" attributeName="textContent"
-               values="0;88;310;608;1210;1210" dur="0.9s"
-               begin="0.4s" fill="freeze"/>
-    </text>
-  </g>
-
-  <!-- =========== Soft-bounce restart loop (rewind everything every
-       6 seconds so the demo plays on loop) =========== -->
-  <rect width="1280" height="720" fill="none">
-    <animate attributeName="fill" values="none;none" dur="6s"
-             repeatCount="indefinite"/>
-  </rect>
 </svg>

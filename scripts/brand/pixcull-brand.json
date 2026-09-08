@@ -20,5 +20,10 @@
     "textBody": "#d6d3cd",
     "textMuted": "#8b8f97"
   },
-  "outputDir": "docs/brand"
+  "outputDir": "docs/brand",
+  "decision": {
+    "keep": "#63bd7f",
+    "maybe": "#d6a443",
+    "cull": "#e0604e"
+  }
 }
