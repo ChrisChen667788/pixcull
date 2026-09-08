@@ -215,7 +215,36 @@ jobs:
       # detector links against OpenGL, a headless ubuntu image does not
       # carry it, and pip cannot tell you that.
       - name: Install mediapipe's system libraries (face detector)
-        run: sudo apt-get install -y -qq libegl1 libgl1 libglib2.0-0t64 || sudo apt-get install -y -qq libegl1 libgl1 libglib2.0-0
+        # v3.50 installed the Python package and the four face tests ran
+        # for the first time, which is when the runner started naming
+        # shared objects it did not have: libEGL.so.1, then
+        # libGLESv2.so.2. The detector links the whole GL/GLES stack and
+        # a headless ubuntu image carries none of it; pip cannot tell you
+        # that. Installed one .so at a time this costs a CI round trip
+        # each, so the set goes in together and the check below names
+        # anything still missing instead of letting a test fail with an
+        # OSError three steps later.
+        run: |
+          sudo apt-get install -y -qq \
+            libegl1 libgles2 libgl1 libglx-mesa0 libopengl0 || true
+          sudo apt-get install -y -qq libglib2.0-0t64 \
+            || sudo apt-get install -y -qq libglib2.0-0 || true
+          python - <<'EOF'
+          import ctypes
+          import sys
+
+          def loadable(name):
+              try:
+                  ctypes.CDLL(name)
+                  return True
+              except OSError:
+                  return False
+
+          need = ("libEGL.so.1", "libGLESv2.so.2", "libGL.so.1")
+          missing = [n for n in need if not loadable(n)]
+          print("GL libraries missing:", ", ".join(missing) or "none")
+          sys.exit(1 if missing else 0)
+          EOF
 
       - name: Run hermetic tests
         run: |
