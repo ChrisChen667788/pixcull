@@ -145,7 +145,13 @@ jobs:
     runs-on: ubuntu-latest
     needs: import
     steps:
+      # v3.53 — full history. The release-notes staleness gate reads the
+      # version titles out of the commit log, and the default shallow
+      # checkout gives it one commit, which it would read as "no
+      # releases" and pass on.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5

@@ -9,6 +9,188 @@ The most recent releases stay in the README under **What's new**.
 
 ---
 
+## v2.44 – v2.93
+
+These never appeared in the README. The **What's new** section stopped being
+updated after v2.45 and eighty-five releases went by, so there was nothing to
+move down here when v3.36 split this file out — the record existed only in the
+commit log.
+
+Restored from it, one line each, exactly as the release was titled at the time.
+The titles are the record; they are not summaries written afterwards.
+
+**v2.93** — closing the block: two defects that only appear when the versions meet
+
+**v2.92** — 3.13 MB went out uncompressed to a browser that asked for gzip
+
+**v2.91** — the guards a prompt A/B needs, built; the run is the owner's to authorise
+
+**v2.90** — 97.6% of frames are "burst peaks", and the number is empty
+
+**v2.89** — one metric was answering two questions; the boundary is still unobservable
+
+**v2.88** — the accuracy baseline cannot be computed, and now it cannot be faked either
+
+**v2.87** — a proof sheet the client opens, with no account anywhere
+
+**v2.86** — a sharpness tool was serving soft thumbnails to Retina screens
+
+**v2.85** — a hundred identical cards, torn down and rebuilt, to append placeholders
+
+**v2.84** — warm first-screen: four hypotheses measured, four refuted, nothing shipped
+
+**v2.83** — "we could not measure" was printing as "personalisation does nothing"
+
+**v2.82** — four more passes wired, and a guard so the fifth cannot be forgotten
+
+**v2.81** — the deep critique was withheld from every photograph being thrown away
+
+**v2.80** — the machinery for asking photographers, built; the asking is not mine to do
+
+**v2.79** — "too shallow" becomes 45.7%
+
+**v2.78** — 40% of a core, held forever, for an animation nobody could see
+
+**v2.77** — the first open, which is the one that was never measured
+
+**v2.76** — a photograph gets one name, and that name gets that photograph
+
+**v2.75** — 774 photographs the product could not show, and the render fix that wasn't
+
+**v2.74** — Scenes — name the stretch from what is in it, never guess the event
+
+**v2.73** — counterfactual measured, then deleted — and the user guide was promising it
+
+**v2.72** — `--vlm-mode off` uploaded the photographs anyway
+
+**v2.71** — a silent fallback has to be counted — and the counter found another one
+
+**v2.70** — which flags are evidence — and the answer is "we cannot drop any of them"
+
+**v2.69** — the filter panel spoke to a Chinese photographer in enum values
+
+**v2.68.6** — the advice pass had never run — seventeen versions of an unreachable feature
+
+**v2.68.5** — the photographer had never seen model-written advice
+
+**v2.68.4** — NaN reached the photographer's screen, and the advice never said who wrote it
+
+**v2.68.3** — closing the lightbox locked the tab; the next-photo arrow sat on the inspector
+
+**v2.68.2** — the de-materialiser was reading layout while it mutated
+
+**v2.68.1** — the MutationObserver feedback loop that froze Safari
+
+**v2.68** — a hard-cull flag stops deleting photographs
+
+**v2.67.1** — the release tooling leaked a token, and reported no-ops as failures
+
+**v2.67** — the A/B, run — the evidence block earns its place, and more of it does not
+
+**v2.66** — the evidence A/B, framework and guards (not yet run)
+
+**v2.65.1** — input validation does not need a key, and my test never ran
+
+**v2.65** — a stratified sample carries its own weights, or it is refused
+
+**v2.64** — `primary` ships — and the metric had been guessing what `maybe` means
+
+**v2.63** — the tool said SHIP for the first time, and it was wrong
+
+**v2.62.1** — document calibrate, in both READMEs
+
+**v2.62** — orientation debt closed, and the charter says what actually happened
+
+**v2.61.1** — a 1250-frame pass has to be legible, not just resumable
+
+**v2.61** — keyboard labelling, because 1250 frames is the actual bar
+
+**v2.60.1** — learned exemptions live in the profile, not in the defaults
+
+**v2.60** — an unfounded claim is not grounds for a cull
+
+**v2.59** — pixcull calibrate — and it says the threshold is the wrong lever
+
+**v2.58** — the judge no longer gets authority just for being switched on
+
+**v2.57.2** — correct a false default I published thirty minutes earlier
+
+**v2.57.1** — four tests that only ever ran on the author's laptop
+
+**v2.57** — personalization was tuned to the rule stack, and said "tuned to you"
+
+**v2.56.5** — the orientation debt closed, with the exceptions verified
+
+**v2.56.4** — CLIP embeds the upright frame; the heatmap points at the photo
+
+**v2.56.3** — traced the orientation debt — no score is affected
+
+**v2.56.2** — the flags predict nothing, and 45% of frames were shown sideways
+
+**v2.56.1** — the first non-circular measurement, and two holes it found
+
+**v2.56** — label blind, then score — the only structural fix in the family
+
+**v2.55.2** — circularity is per class, and a global rate cannot see it
+
+**v2.55** — the first rankable number, and why it still cannot move the default
+
+**v2.54.3** — a busy port names the squatter instead of printing a traceback
+
+**v2.54.2** — a sample that cannot answer the question must say so
+
+**v2.54.1** — an agreement row cannot be asked which system was right
+
+**v2.54** — three authority modes, and the second shape of the circularity bug
+
+**v2.53.2** — the save button that saved nothing
+
+**v2.53.1** — sample the disagreements, and let each card carry its own answer
+
+**v2.53** — your 17-of-18 verdict, and the mechanism that produced it
+
+**v2.52.6** — the video wire format is verified, and 36 silent rows get a reason
+
+**v2.52.5** — M3 works, the eval ran, and the answer is that it cannot answer
+
+**v2.52.4** — one region sweep, because I got the same one wrong three times
+
+**v2.52.3** — tell the two MiniMax failures apart, in the message
+
+**v2.52.2** — MiniMax has two regions, and I picked the wrong one
+
+**v2.52.1** — wire up the five modules I shipped without connecting
+
+**v2.52** — M3 watches the clip, so reel ranking stops being pure proxy
+
+**v2.51** — M3 writes the advice, having actually looked at the photo
+
+**v2.50** — cloud judging ships on, and the product finally says so
+
+**v2.49.1** — check the join and the photos before spending anything
+
+**v2.49** — measure whether M3 actually decides better — and let it say no
+
+**v2.48** — P0: MiniMax M3 adapter — correct contract, and proof it is correct
+
+**v2.47** — measure the review page; nearly report a bug that was not there
+
+**v2.46** — speaker chips in the review panel; two correct fixes that broke each other
+
+**v2.45.1** — tell people the last five versions happened; fix an undo that only half-worked
+
+**v2.45** — put the video chain in the end-to-end smoke
+
+**v2.44.3** — speaker diarization: verified, fixed, and stopped from lying
+
+**v2.44.2** — one-click render: text edit through to a finished cut
+
+**v2.44.1** — edit by text in the review page; fix CSS that never applied
+
+**v2.44** — a domain lexicon for Mandarin ASR; the edit-by-text state model
+
+---
+
 **v2.43.4** — **every published wheel contained no Python code.** The sdist
 allowlist had no `*.py` pattern and `python -m build` builds the wheel *from*
 the sdist, so nine releases shipped 35 data files and nothing else; the smoke

@@ -98,3 +98,91 @@ def test_no_stock_marketing_phrases_in_the_readmes():
         text = path.read_text(encoding="utf-8").lower()
         for phrase in banned:
             assert phrase.lower() not in text, f"{path.parent.name}/{path.name}: {phrase!r}"
+
+
+# ---------------------------------------------------------------------------
+# v3.53 — the section stopped being updated and nobody noticed for 85 releases.
+# ---------------------------------------------------------------------------
+
+#: How far behind the newest shipped release the README's newest entry may
+#: fall. Some slack, because a release and its note are separate commits.
+MAX_RELEASES_BEHIND = 3
+
+_VERSION_COMMIT = re.compile(r"^v(2\.\d+(?:\.\d+)*)\s*(?:—|:|-)\s")
+
+
+def _released_versions() -> list[tuple[int, ...]]:
+    import subprocess
+    out = subprocess.run(["git", "log", "--format=%s"], cwd=ROOT,
+                         capture_output=True, text=True)
+    if out.returncode != 0:
+        return []
+    seen = set()
+    for subject in out.stdout.splitlines():
+        m = _VERSION_COMMIT.match(subject.strip())
+        if m:
+            seen.add(tuple(int(x) for x in m.group(1).split(".")))
+    return sorted(seen, reverse=True)
+
+
+def _entry_versions(path: Path, pattern: str) -> list[tuple[int, ...]]:
+    out = []
+    for e in _entries(path, pattern):
+        m = re.search(r"v(\d+(?:\.\d+)+)", e)
+        if m:
+            out.append(tuple(int(x) for x in m.group(1).split(".")))
+    return sorted(out, reverse=True)
+
+
+def _newest_entry(path: Path, pattern: str) -> tuple[int, ...] | None:
+    vs = _entry_versions(path, pattern)
+    return vs[0] if vs else None
+
+
+def test_whats_new_has_not_stopped_being_updated():
+    """The defect this catches, stated plainly: "What's new" listed v2.45
+    while the newest release was v2.99, so the public description of the
+    product was eighty-five releases out of date and every gate in this
+    file passed the whole time — they check the shape of the section, and
+    a stale section is perfectly shaped.
+    """
+    released = _released_versions()
+    if len(released) < 5:
+        # A shallow checkout cannot answer this. Say so rather than
+        # passing: a gate that cannot see is not a gate that agrees.
+        raise AssertionError(
+            "only %d release commits visible — this needs full history "
+            "(actions/checkout with fetch-depth: 0)" % len(released))
+    newest = released[0]
+    for path, pattern in CASES:
+        top = _newest_entry(path, pattern)
+        assert top is not None, f"{path.name}: no version in the section"
+        behind = sum(1 for v in released if v > top)
+        assert behind <= MAX_RELEASES_BEHIND, (
+            f"{path.parent.name}/{path.name}: newest entry is "
+            f"v{'.'.join(map(str, top))} and {behind} releases have shipped "
+            f"since, up to v{'.'.join(map(str, newest))}. Move the old ones "
+            "into the changelog and write the new ones.")
+
+
+def test_the_changelog_carries_what_the_readme_dropped():
+    """The two halves have to add up, or moving an entry down loses it."""
+    for readme, pattern, changelog in (
+            (ROOT / "README.md", CASES[0][1], ROOT / "CHANGELOG.md"),
+            (ROOT / "modelscope" / "README.md", CASES[1][1],
+             ROOT / "modelscope" / "CHANGELOG.md")):
+        held = _entry_versions(readme, pattern)
+        assert held, f"{readme.name}: no versions in the section"
+        # Everything OLDER than the oldest entry the README still shows
+        # has to be findable in the changelog. The ones it still shows
+        # are not missing; they are upstairs.
+        oldest_held = held[-1]
+        listed = {tuple(int(x) for x in m.split("."))
+                  for m in re.findall(r"\*\*v(\d+(?:\.\d+)+)\*\*",
+                                      changelog.read_text(encoding="utf-8"))}
+        missing = [v for v in _released_versions()
+                   if v < oldest_held and v not in listed and v >= (2, 44)]
+        assert not missing, (
+            f"{changelog.parent.name}/{changelog.name} is missing "
+            f"{len(missing)} releases that are no longer in the README: "
+            + ", ".join("v" + ".".join(map(str, v)) for v in missing[:6]))

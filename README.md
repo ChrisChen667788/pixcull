@@ -49,59 +49,57 @@
 
 ## What's new
 
-**v2.45** — Four of seventeen CLI commands had a journey test. The video
-block added across v2.42 to v2.44.3 had none.
+**v2.99** — `pixcull deliver` writes the folder you actually hand over. Export
+could produce XMP sidecars or a ratings CSV — useful to Lightroom, useless to a
+person with a client waiting — so the studio path went back through another
+application, or copied files by hand.
 
-Four tests now drive `video → cut --render` end to end. They check that the
-render comes out shorter than the source — equal length means the edit was
-ignored and the clip merely re-encoded — and that an edit keeping nothing is
-refused rather than written out as a zero-length file. Both mutations reproduce
-the original symptoms.
+Copying by hand destroys the two things PixCull knows that nothing else does, at
+the moment they matter most: which stretch of the shoot a frame belongs to, and
+which frames are the same moment with one of them best. The second is the whole
+conversation beside the client. The folder keeps both.
 
-CI installs ffmpeg. Without it the four tests skip and the run goes green
-having tested nothing.
+**v2.98** — Over WeChat, the only identifier that survives is the pixels. A
+filename in a caption is gone the moment the album reorders, the client
+screenshots a subset, or two of the sends fail; position is not an identifier,
+it is the thing that changes.
 
-**v2.44.3** — Speaker labels had sat in the adapter for three versions
-without ever running. They do work. But every segment came back as speaker 0,
-and neither acoustically distinct material nor an explicit speaker count moved
-it.
+So the number is burned into the frame — top left, about 9% of the image height,
+white on an opaque plate. Measured through WeChat's usual treatment (long edge to
+1080, re-encoded at q=50, shown as a ~220 px thumbnail) it is still readable, and
+a test asserts the plate is still solid after exactly that round trip.
 
-FunASR's clusterer returns "everybody is speaker 0" below twenty embeddings,
-before it looks at them. A 59-second dialogue clears that bar and separates two
-voices, eighteen lines out of eighteen correct.
+**v2.97** — 客户在场模式. Measured on one screen of a 5,069-photo run, before
+building anything: 539 pieces of judgement text, every card reading 保留 and a
+score, and a count along the top of how many were marked for deletion.
 
-Below the bar the output is the same whether one person spoke or the clip was
-too short to tell. PixCull reports `speaker=None` for both now.
+The studio workflow this is for has the client sitting beside the photographer,
+looking at the same screen. So the client was reading the machine's verdict on
+their own wedding, with a number attached to each frame. That turns choosing
+pictures into defending them. Shift+C hides all of it and leaves the filenames,
+so the person driving can still work.
 
-**v2.44.2** — `pixcull cut --render`, and an 出片 button in the review page.
+**v2.96** — The open item left by the previous block turned out not to be a
+regression. Two machine loads had been compared as though they were one, and the
+difference was the machine, not the code.
 
-It cuts hard rather than using the reel's half-second dissolve. The kept spans
-are usually two halves of one sentence, and a dissolve there eats the words you
-chose to keep.
+**v2.95** — The run summary reported decisions the judge had already overturned.
+`Keep=6 Maybe=0 Cull=0` printed directly under `6 decision(s) changed by the
+judge`, and every row in the CSV said `cull`.
 
-Checked by feeding the rendered mp4 back through ASR: the deleted words are
-gone from the audio, the kept ones are still there.
+Two sources, one stale: decisions are appended per row while scoring, and with
+VLM authority set to primary the judge rewrites them in place afterwards. The
+summary was reading the list, the CSV was written from the frame. A photographer
+read that everything was kept and opened the results to find nothing was.
 
-**v2.44.1** — Edit by text in the browser (screenshot below). Strike a line,
-or select words inside one, and the video goes with them. Word selection only
-appears when the engine reported per-character times — inventing them puts cuts
-on the wrong frames.
+**v2.94** — The only tool that produces genuinely blind labels wrote them in the
+one shape the provenance guard rejects. `pixcull m3 label` shows a photograph, a
+serial number and two buttons; the guard needs a `source` field and one record
+per photograph, and the sheet wrote a single record with a verdict map.
 
-Separately: 32 CSS variable references in `video_review.html` had never
-resolved. That page carries its own palette, and the v2.43 transcript panel had
-been styled with the shared design tokens, so its hover backgrounds did
-nothing.
-
-**v2.44** — Generic ASR hears 掌交 for 长焦 and 被选 for 备选, and one wrong
-character ruins a subtitle line.
-
-An 88-term lexicon of shoot jargon, chosen from domain knowledge rather than
-from the errors of the evaluation set, cuts held-out CER from 2.59% to 1.11% on
-ten sentences it had never seen.
-
-`pixcull cut` layers deletions over an immutable transcript, so undo cannot
-leave the text disagreeing with the timeline.
-
+Neither knew about the other, so the labelling that unblocks three measurements
+produced a file read as `unknown` and refused — advertised and unreachable, in
+the exact place the project's next real number was supposed to come from.
 
 Earlier releases are in [`CHANGELOG.md`](CHANGELOG.md).
 
