@@ -78,6 +78,26 @@ dependencies = [
     "pyiqa>=0.1.11",
     # duplicate detection
     "imagededup>=0.3.2",
+    # v3.49 — scikit-learn and joblib were never declared. They arrived
+    # transitively through imagededup, entirely unpinned, and the eight
+    # rescorer artifacts this package ships are version-sensitive
+    # pickles of a HistGradientBoostingClassifier. Measured against the
+    # committed models/*.joblib:
+    #
+    #     scikit-learn 1.6.1  loads
+    #     scikit-learn 1.7.2  loads
+    #     scikit-learn 1.8.0  loads
+    #     scikit-learn 1.9.0  ModuleNotFoundError: No module named '_loss'
+    #
+    # Undeclared meant the version of the library PixCull's learned head
+    # depends on was decided by a deduplication package's dependency
+    # graph, and when it drifted the whole failure was one stderr line
+    # and a silent fall back to rule-only — the exact outcome v3.44 was
+    # written to end. Raise the ceiling only after re-running that
+    # matrix; the artifacts are the thing that has to load, not the
+    # library that is newest.
+    "scikit-learn>=1.6,<1.9",
+    "joblib>=1.3",
     # v2.48 — the OpenAI SDK is the client for every OpenAI-compatible
     # endpoint we speak to (MiniMax M3, DeepSeek, OpenAI itself). FIVE
     # first-party modules import it — m3, vlm_judge, meta_judge,

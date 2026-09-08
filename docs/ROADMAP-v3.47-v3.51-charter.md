@@ -119,6 +119,31 @@ artifacts were pickled under, so the next drift is a readable error.
 is a learned head that silently is not there, which is what the last
 three versions were about.
 
+**Measured, then pinned.** Against the committed artifacts:
+
+```
+scikit-learn 1.6.1  loads
+scikit-learn 1.7.2  loads
+scikit-learn 1.8.0  loads
+scikit-learn 1.9.0  ModuleNotFoundError: No module named '_loss'
+```
+
+So `scikit-learn>=1.6,<1.9` and `joblib>=1.3` are declared dependencies
+now, with that matrix written beside them — the ceiling moves when
+somebody re-runs it, not when a resolver picks something newer. 1.9 moved
+scikit-learn's internal `_loss` module, and these are pickles of a
+`HistGradientBoostingClassifier`, so the break is structural rather than
+a warning.
+
+The artifacts record no version of their own. Nothing in them says what
+pickled them, and there is no way to add it without retraining, which
+would change the model — so the range lives in `pyproject.toml` and in
+the loader's error, and the load matrix is the thing to re-run.
+
+The three tests fail now instead of skipping. That skip was written to be
+tolerant of a thin environment, which was reasonable while the pair was
+undeclared and is exactly how every other instance in this block began.
+
 ### v3.50 — faces are a README claim with no CI coverage
 
 Claim 4 of eighteen: InsightFace ArcFace embeddings, DBSCAN, a cross-run

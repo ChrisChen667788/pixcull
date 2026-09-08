@@ -111,8 +111,23 @@ def load_rescorer(path: Path | str | None) -> RescorerArtifact | None:
     except Exception as exc:  # noqa: BLE001
         # joblib/numpy/sklearn version drift most commonly lands here; we
         # want the full class to help the user diagnose, not a generic msg.
-        print(f"[rescorer] failed to load {p}: {type(exc).__name__}: {exc} "
-              f"— running rule-only", file=sys.stderr)
+        #
+        # v3.49 — and when it IS drift, say so in the sentence rather
+        # than leaving the reader to recognise a scikit-learn internal.
+        # These artifacts are pickles of a HistGradientBoostingClassifier
+        # and 1.9 moved the `_loss` module; the symptom is a
+        # ModuleNotFoundError that names nothing the user has heard of.
+        hint = ""
+        if isinstance(exc, (ModuleNotFoundError, AttributeError, ImportError)):
+            try:
+                import sklearn
+                got = sklearn.__version__
+            except Exception:            # noqa: BLE001
+                got = "not installed"
+            hint = (f" — this reads like scikit-learn version drift "
+                    f"(installed: {got}; these artifacts need >=1.6,<1.9)")
+        print(f"[rescorer] failed to load {p}: {type(exc).__name__}: {exc}"
+              f"{hint} — running rule-only", file=sys.stderr)
         return None
 
     try:
