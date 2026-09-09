@@ -39,6 +39,11 @@ consent means later runs upload without asking again. The endpoint is
 MiniMax's China region. `--vlm-mode off` forces the local path outright,
 and since v2.72 a test holds the socket layer shut to prove it.
 
+One detail worth knowing before you test this: clearing the
+`MINIMAX_API_KEY` environment variable does not force a local run on
+macOS, because the key is also read from the keychain. `--vlm-mode off`
+is the switch that holds.
+
 **`pixcull export` stopped overwriting your own metadata.** XMP ratings,
 colour labels and non-PixCull keywords you set by hand now survive an
 export; only prior `PixCull:*` keywords are replaced. This is almost

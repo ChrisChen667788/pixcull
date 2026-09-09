@@ -314,6 +314,19 @@ PixCull 不是"AI 替你选片",而是 "AI 把不重要的 60% 卡过滤掉,让�
 `--vlm-mode off` 是完整的本地路径,一次网络连接都不会发起(v2.72 起由测试守住)。
 标注永远归你。
 
+> **注意:清掉 `MINIMAX_API_KEY` 环境变量并不足以强制本地运行。**
+> macOS 上 `api_key_from_env()` 在环境变量为空时会回落到钥匙串
+> (`security find-generic-password -s MINIMAX_API_KEY`),因为 App 把 key 存在
+> 那里,好让从图形界面启动、没有 shell 环境的进程也能找到。所以
+> `env -u MINIMAX_API_KEY pixcull run ...` 照样会走云端 —— 只要钥匙串里有
+> key、而且你之前同意过一次。
+>
+> **可靠的开关是 `--vlm-mode off`。** 运行前那一行
+> "Judging with MiniMax M3 — photos are uploaded" 会如实告诉你走的是哪条路,
+> 值得在按回车之后扫一眼。
+> (v3.56 补 —— 我自己在验证发布产物时就踩了这个坑,上传了 6 张样例图。)
+
+
 > 这一行原来写的是"云端判官默认开启",少了 key 这个前提,是错的。
 > `cli.py:96` 写得很清楚:`vlm_mode = "minimax" if api_key_from_env() else "off"`。
 > 一个刚 `pip install` 的人没有 key,跑的是全本地。v3.55 更正。

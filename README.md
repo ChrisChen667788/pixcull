@@ -437,6 +437,16 @@ from your machine, not from a fixed default:
 | key, consent never given | prompts once; declining, or any non-interactive run, stays on-device |
 | key **and** consent recorded | **uploads** — the run prints that it is doing so |
 
+> **Unsetting `MINIMAX_API_KEY` is not enough to force a local run.** On
+> macOS the key is also looked up in the keychain, because that is where
+> the app stores it so a GUI launch with no shell environment can still
+> find it. `env -u MINIMAX_API_KEY pixcull run …` will still go to the
+> cloud if a keychain entry exists and consent was given once before.
+> **`--vlm-mode off` is the switch that holds.** The line the run prints
+> before it starts — "Judging with MiniMax M3 — photos are uploaded" —
+> is the thing to read.
+
+
 So a key plus one recorded consent is enough for photos to leave the
 machine on every subsequent run. `pixcull m3 consent --revoke` undoes
 it; `--vlm-mode off` overrides per run.
