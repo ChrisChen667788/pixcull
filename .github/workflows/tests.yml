@@ -178,6 +178,16 @@ jobs:
           # the public-domain astronaut face the serve-side test uses.
           pip install -e ".[face]"
           pip install scikit-image
+          # v3.61 — the last `gap` row in the skip ledger. mDNS
+          # auto-discovery is the half of README claim 14 that finds the
+          # other machine for you, and its three tests skipped on every
+          # push. zeroconf is pure python and installs in seconds; the
+          # ledger already named this as the closer.
+          pip install -e ".[sync]"
+          # v3.61 — shot-boundary detection, README claim 17: a reel
+          # candidate never spans a hard cut. Its test is marked slow
+          # and takes 0.29 seconds.
+          pip install -e ".[shots]"
 
       # v3.41 — exiftool is what makes the embedded-IPTC test run
       # instead of skip.
@@ -279,6 +289,18 @@ jobs:
       # rescorer (v3.49). Each was found by tripping over it. This makes
       # the census routine: every reason this run printed has to have a
       # disposition in tests/ci_skip_dispositions.tsv.
+      # v3.61 — the tests marked `slow`, which nothing ran.
+      #
+      # Both pytest invocations in this file say `-m "not slow"` and no
+      # lane says `-m slow`, so three tests had never run in CI. One of
+      # them is shot-boundary detection — README claim 17 — and it takes
+      # 0.29 seconds. "Slow" had become a place things went.
+      #
+      # The skip auditor below cannot see this: a deselected test prints
+      # no SKIPPED line, so the ledger was blind to it by construction.
+      - name: Run the slow tests
+        run: pytest -q -rs -m slow | tee -a /tmp/hermetic-report.txt
+
       - name: Audit the skips
         run: python scripts/audit_ci_skips.py /tmp/hermetic-report.txt
 

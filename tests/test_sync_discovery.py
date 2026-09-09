@@ -17,6 +17,8 @@ from __future__ import annotations
 
 import socket
 
+from pathlib import Path
+
 import pytest
 
 from pixcull.sync.discovery import (
@@ -206,3 +208,29 @@ def test_unadvertise_removes_from_next_discover():
         # s2 — that's OK, the protocol is best-effort.
     finally:
         close_zc()
+
+
+def test_ci_installs_the_sync_extra_so_these_cannot_skip_forever():
+    """v3.61 — the last `gap` row in the skip ledger.
+
+    mDNS auto-discovery is the half of README claim 14 that finds the
+    other machine for you instead of asking the photographer to paste a
+    URL, and its three tests skipped on every push. zeroconf is pure
+    python and installs in seconds; the ledger had already named this as
+    the closer, which is what a ledger is for.
+    """
+    import yaml
+
+    ci = yaml.safe_load(
+        (Path(__file__).resolve().parent.parent
+         / ".github" / "workflows" / "tests.yml").read_text(encoding="utf-8"))
+    steps = ci["jobs"]["pytest"]["steps"]
+    install = next(i for i, s in enumerate(steps) if s.get("name") == "Install")
+    hermetic = next(i for i, s in enumerate(steps)
+                    if s.get("name") == "Run hermetic tests")
+    body = "\n".join(l.split("#", 1)[0]
+                     for l in str(steps[install].get("run", "")).splitlines())
+    assert ".[sync]" in body, (
+        "the hermetic job does not install the sync extra — the three "
+        "discovery tests skip and the tick stays green")
+    assert install < hermetic

@@ -24,7 +24,5 @@ sentry_sdk installed	deliberate	Inverted check: it simulates the dependency bein
 golden-set portrait not present	deliberate	A real client frame. It will never be committed; the public-domain equivalent runs in test_serve_faces.py.
 smoke fixture missing	deliberate	Guards against a half-deleted fixture tree rather than describing an environment.
 not defined in	deliberate	A theme token that a given theme legitimately does not define.
-zeroconf not installed	gap	Multi-machine sync discovery has no CI coverage. Closed by adding the sync extra to the hermetic install, the same one-line shape as v3.50's face extra.
-scikit-image unavailable	gap	The public-domain astronaut face. v3.50 installs scikit-image, so this should stop appearing; if it persists the install did not take.
-shot detection extra not installed	gap	README claim 17 says a reel candidate never spans a hard cut. Closed by adding pixcull[shots] to the hermetic install.
+shot detection extra not installed	covered-elsewhere	README claim 17. The test is marked slow, so it was deselected rather than skipped and never reached this ledger at all; v3.61 added a lane that runs -m slow and installs pixcull[shots].
 not compiled into this ffmpeg	deliberate	A codec the runner's ffmpeg build lacks. The test asserts the fallback, which is the part that matters.

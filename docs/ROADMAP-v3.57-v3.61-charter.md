@@ -190,6 +190,28 @@ install, the same one line as v3.50's face extra.
 install on the runner, the row changes from `gap` to `deliberate` with
 the reason, and that is a real answer too.
 
+**Done, and closing it emptied the column — then found a bigger hole.**
+`pip install -e ".[sync]"` in the hermetic install; the three discovery
+tests run. The other two `gap` rows turned out to be closed already:
+scikit-image by v3.50, and `shot detection extra not installed` was
+never a gap at all.
+
+That last one is the finding. Its test is marked `@pytest.mark.slow`,
+and both pytest invocations in the workflow say `-m "not slow"` while no
+lane says `-m slow`. So it was **deselected, not skipped** — and three
+tests had therefore never run in CI, one of them shot-boundary
+detection, README claim 17, which takes **0.29 seconds**. "Slow" had
+stopped meaning slow and become a place things went.
+
+v3.51's auditor could not have caught this and never will: a deselected
+test emits no `SKIPPED` line, so a census built on reading them is blind
+to it by construction. Two tests close that: every marker excluded by
+some invocation has to be included by another, and a marker that exists
+in the suite while the workflow filters on a different name is a filter
+matching nothing.
+
+The ledger's `gap` column is empty for the first time.
+
 ---
 
 ## Deliberately declined
