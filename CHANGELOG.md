@@ -9,6 +9,51 @@ The most recent releases stay in the README under **What's new**.
 
 ---
 
+## Upgrading from 2.47.0 — read this first
+
+2.47.0 was the last version on PyPI, and 3.53.1 is the next one. A
+hundred and six releases sit between them. Five of the changes alter
+what the same command does to the same photographs, and none of them
+announce themselves at run time.
+
+**The cull boundary moved, so old shoots re-cull differently.** Under
+the default `standard` strictness, `cull_max_score` went from 4.0 to
+5.75. Every frame scoring in that band used to come back `maybe` and now
+comes back `cull`. Re-running a shoot you have already reviewed will not
+reproduce your old decisions. `--strictness lenient` (3.0) is the
+closest thing to the old default if you want fewer culls.
+
+**Detector flags no longer cull on their own.** Blur, closed eyes and
+no-clear-subject used to force a `cull` outright; since v2.68 a flag
+demotes a `keep` to `maybe` and never decides alone. Frames that were
+discarded automatically now come back for review. Combined with the
+threshold above, the net effect on a given shoot is not predictable
+without running it.
+
+**A cloud judge exists, and whether it runs depends on your machine.**
+With no MiniMax key present, `pixcull run` is entirely on-device and
+nothing is sent — the same as 2.47.0. With a key in your environment or
+macOS keychain, cloud judging becomes the default: PixCull asks once
+before the first upload, declining keeps you local, and a recorded
+consent means later runs upload without asking again. The endpoint is
+MiniMax's China region. `--vlm-mode off` forces the local path outright,
+and since v2.72 a test holds the socket layer shut to prove it.
+
+**`pixcull export` stopped overwriting your own metadata.** XMP ratings,
+colour labels and non-PixCull keywords you set by hand now survive an
+export; only prior `PixCull:*` keywords are replaced. This is almost
+always what you want, but if you built a workflow on "export always
+wins", it no longer does, and there is no flag to restore it.
+
+**Three new required dependencies:** `scikit-learn>=1.6,<1.9`,
+`joblib>=1.3`, `openai>=1.40`. The scikit-learn ceiling is not
+cosmetic — the rescorer artifacts this package ships are pickles that
+1.9 cannot load. An environment already pinning `openai<1.40` or
+`scikit-learn>=1.9` will fail to resolve and the upgrade will abort
+without installing anything.
+
+---
+
 ## v2.44 – v2.93
 
 These never appeared in the README. The **What's new** section stopped being

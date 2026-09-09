@@ -16,7 +16,9 @@ pip install pixcull
 ```
 
 Python 3.11–3.12. First run downloads the optional scoring models to
-`~/.pixcull/models/` (everything runs on-device; Apple-silicon accelerated).
+`~/.pixcull/models/`; the measurements they make run on-device and are
+Apple-silicon accelerated. Whether the *judge* is local or cloud is a
+separate question — see the last two bullets below.
 
 ## Quickstart
 
@@ -59,7 +61,7 @@ interactive review workspace: keyboard-first grid, ⌘K palette, per-axis
 - **Video too** — temporal scoring, audio events (laughter / applause /
   music), reel-candidate detection with the same glass-box treatment.
 - **13 UI languages**, dark/light studio-neutral themes, WCAG-conscious.
-- **You choose where it runs** — cloud judging by default (photos are uploaded to MiniMax), or `--vlm-mode off` for a fully on-device run. No telemetry either way.
+- **You choose where it runs** — with a MiniMax key configured, cloud judging is the default and your photos are uploaded to MiniMax (it asks once, and declining keeps you on-device); with no key, a bare `pixcull run` never leaves the machine. `--vlm-mode off` forces the on-device path outright. No telemetry either way.
 - **Cloud judging needs a funded MiniMax account.** It is their API and their bill, paid with your own key. Without balance the API returns 402 and PixCull falls back to the on-device rule stack, so nothing breaks; it just stops being the thing the first bullet describes. `pixcull m3 doctor` tells you which of those you are in, and distinguishes 'no balance' from 'bad key' — they look identical otherwise.
 
 ## Links

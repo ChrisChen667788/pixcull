@@ -9,6 +9,30 @@ from rich.markup import escape
 from rich.table import Table
 
 app = typer.Typer(help="PixCull — AI photo culling & scoring", no_args_is_help=True)
+
+
+# v3.55 — `pixcull --version`.
+#
+# The package has carried a version since v0.1 and there was no way to
+# ask it for one. That went unnoticed for as long as it did because the
+# number itself had stopped moving: v3.54 found pyproject frozen at
+# 2.75.0 while seventy-eight iterations shipped. Bumping it and leaving
+# no way to read it back would have been half a fix — the first thing
+# anyone does with a bug report is ask which version produced it.
+def _version_callback(value: bool) -> None:
+    if value:
+        from pixcull import __version__
+        typer.echo(f"pixcull {__version__}")
+        raise typer.Exit()
+
+
+@app.callback()
+def _main(
+    version: bool = typer.Option(
+        False, "--version", "-V", callback=_version_callback,
+        is_eager=True, help="Print the version and exit."),
+) -> None:
+    """PixCull — AI photo culling & scoring."""
 console = Console()
 
 

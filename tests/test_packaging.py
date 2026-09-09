@@ -32,6 +32,7 @@ on every change, not weekly.
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 import tarfile
@@ -173,3 +174,51 @@ def test_console_script_is_declared(built):
     _, wheel = built
     entry = [n for n in wheel if n.endswith("dist-info/entry_points.txt")]
     assert entry, "no entry_points.txt in the wheel"
+
+
+#: Fingerprints of a checkout directory rather than of a home directory.
+#: The leak this guards was
+#: `~/Downloads/zero-basics-python/2/pixcull-restored/pixcull/training_axis.csv`
+#: — the build machine's own tree, recorded at training time.
+#:
+#: Deliberately narrower than "any /Users/ path". The first cut flagged
+#: fifteen files and every one was a false positive: `/Users/you/Pictures/
+#: tether` is the tether page's placeholder, and it is *localised*, so
+#: the second cut still tripped on `sie`, `tu`, `vous`, `jij`, `voce`
+#: and `sen`. `pixcull/error_reporting.py` matched because it is the
+#: module that does the redacting and its docstring shows the pattern.
+#: A broad rule here is a rule somebody switches off.
+_BUILD_MACHINE_MARKERS = (
+    "zero-basics-python", "pixcull-restored",
+    "~/Downloads", "~/Desktop", "~/Documents",
+)
+
+
+def test_no_shipped_file_carries_a_path_from_the_build_machine(built):
+    """v3.55 — what goes to PyPI is permanent.
+
+    `models/rescorer_axis_meta.json` recorded the training CSV as a path
+    inside the maintainer's own checkout, written at training time and
+    shipped inside every wheel. There was no username in it, so the repo
+    hygiene check passed it, and it was on its way to a package index
+    that never forgets.
+
+    The useful content of that field is which file trained the model,
+    not where it happened to live on one laptop.
+    """
+    _sdist_names, wheel_names = built
+    readable = (".json", ".txt", ".tsv", ".yaml", ".yml", ".py", ".cfg")
+    bad = []
+    for name in wheel_names:
+        if not name.endswith(readable):
+            continue
+        f = ROOT / name
+        if not f.is_file():
+            continue
+        text = f.read_text(encoding="utf-8", errors="ignore")
+        for marker in _BUILD_MACHINE_MARKERS:
+            if marker in text:
+                bad.append(f"{name}: {marker}")
+    assert not bad, (
+        "these files ship a path from the machine that built them: "
+        + "; ".join(sorted(set(bad))))
