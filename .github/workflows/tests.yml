@@ -345,3 +345,8 @@ jobs:
           pytest -q \
             tests/test_semantic_search.py::test_build_search_real_clip_end_to_end \
             tests/test_reel_caption.py::test_vlm_caption_real_model
+          # v3.61 — the full journey needs cached CLIP weights, which is
+          # what this lane is for. It skipped in the hermetic run and
+          # nothing else was running it; saying "covered elsewhere" in
+          # the ledger is only true if somewhere covers it.
+          pytest -q -m slow tests/test_e2e_smoke.py

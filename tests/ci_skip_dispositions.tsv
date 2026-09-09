@@ -15,6 +15,9 @@
 #                      closes it
 #
 # pattern	disposition	note
+weights not cached (openai/clip	covered-elsewhere	The full journey needs cached CLIP weights. The weekly real-model lane downloads them and runs `pytest -m slow tests/test_e2e_smoke.py`; the hermetic run must not depend on a download.
+no ASR engine installed	deliberate	The asr extra is funasr plus torchaudio and its weights are a further download, too heavy for every push. The transcription logic itself has 50 tests in test_transcribe.py that do run here; what skips is the end-to-end journey through a real engine.
+needs macOS `say`	deliberate	Synthesises test speech with the macOS speech binary, which a Linux runner does not have and should not fake. It runs on the maintainer's machine, where the engine and its weights already are.
 could not import 'playwright.sync_api'	covered-elsewhere	The browser job installs playwright and chromium and runs these four files by name; see tests/test_browser_lane_runs.py, which fails if it stops.
 chromium unavailable	covered-elsewhere	Same lane. Launch failure rather than a missing import; the browser job proves a browser launched before it is allowed to go green.
 weights not cached locally	covered-elsewhere	The weekly real-model lane downloads CLIP and BLIP; the hermetic run is not allowed to depend on a download.
