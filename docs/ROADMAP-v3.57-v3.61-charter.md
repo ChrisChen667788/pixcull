@@ -93,6 +93,20 @@ their output. **Wrong, not late:** the fix is not only `mkdir -p`; a
 command that cannot proceed should say so in a sentence rather than
 printing a traceback at a photographer.
 
+**Done, and "it forgot mkdir" was not the mechanism.** The destination
+was created as a *side effect* of `out.parent.mkdir` while copying the
+first photograph. So it existed whenever there was something to copy and
+did not when there was nothing — every frame culled, or `--only`
+matching none of them. A photographer who runs this before deciding
+anything has no keeps yet, which makes the crash the normal first
+encounter rather than an edge case. It is created up front now, as
+`proof_sheet.py` has always done.
+
+Fixing the traceback left the softer half of the same defect: a green
+tick over "0 photographs", handed to somebody who asked for a folder to
+give a client. It now says which filter matched nothing, suggests
+`--only all`, and exits non-zero.
+
 ### v3.59 — a journey for the eighteen commands that have none
 
 Not a full test each. The cheapest thing that would have caught both

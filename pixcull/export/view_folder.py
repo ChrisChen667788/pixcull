@@ -147,6 +147,20 @@ def write_view_folder(rows: list[dict], dest: Path, *, resolve,
     quietly four frames short is discovered in front of the client.
     """
     plan = plan_layout(rows, only=only)
+
+    # v3.58 — create the destination up front.
+    #
+    # It used to appear as a side effect of `out.parent.mkdir` while
+    # copying the first photograph, so a run with nothing to deliver —
+    # every frame culled, or `only` matching none of them — never created
+    # it, and the manifest write below raised FileNotFoundError as an
+    # unhandled traceback. That is not an edge case: a photographer who
+    # runs this before making any decisions has no keeps yet.
+    #
+    # `proof_sheet.py` has always done this unconditionally. Same block,
+    # same shape of argument, two behaviours.
+    dest.mkdir(parents=True, exist_ok=True)
+
     written, missing = 0, []
     for chapter, entries in sorted(plan.chapters.items()):
         for rel, row in entries:

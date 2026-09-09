@@ -515,6 +515,24 @@ def view_folder(
     res = write_view_folder(rows, out, resolve=index.get,
                             only=("" if only == "all" else only),
                             max_width=max_width)
+    # v3.58 — an empty folder is not a success.
+    #
+    # This used to raise FileNotFoundError from the manifest write when
+    # nothing matched, because the destination was only ever created as a
+    # side effect of copying the first photograph. Creating it up front
+    # fixed the traceback and left the softer version of the same
+    # problem: a green tick over "0 photographs", handed to somebody who
+    # asked for a folder to give a client.
+    if not res["written"]:
+        shown = only or "all"
+        console.print(
+            f"[yellow]Nothing to deliver[/yellow] — no frame in {run_dir} "
+            f"matches [bold]{shown}[/bold], so {out} is empty.")
+        if shown == "keep":
+            console.print(
+                "  [dim]This run has no keeps yet. Decide some frames "
+                "first, or pass --only all.[/dim]")
+        raise typer.Exit(code=1)
     console.print(
         f"[green]✓ {res['written']} photographs[/green] → {out}\n"
         f"  {res['chapters']} 个章节 · {res['bursts']} 组连拍 · "
