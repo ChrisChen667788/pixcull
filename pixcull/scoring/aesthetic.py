@@ -1,4 +1,7 @@
+import logging
 from functools import cache
+
+logger = logging.getLogger(__name__)
 
 from PIL import Image
 
@@ -46,7 +49,31 @@ class AestheticScorer(Detector):
     def analyze(self, img: Image.Image, **_: object) -> DetectionResult:
         import torch
 
-        metrics, device = _metrics()
+        # v3.60 — pyiqa missing must not take the run down with it.
+        #
+        # It is a required dependency, so this should not happen from a
+        # plain `pip install pixcull`. It happens in the environments
+        # people actually build: `--no-deps`, a constrained mirror, a
+        # conda base where the resolver gave up. Before this, the whole
+        # pipeline died on `ImportError: No module named pyiqa` at the
+        # first photograph, with nothing to say which of two dozen
+        # dependencies was the one.
+        #
+        # The other five rubric axes do not need it. Losing the aesthetic
+        # axis is a real loss and it is reported as one — an empty result
+        # with a flag, not silence, and not a crash.
+        try:
+            metrics, device = _metrics()
+        except ImportError as exc:
+            logger.warning(
+                "aesthetic axis unavailable: %s. Install it with "
+                "`pip install pyiqa` (it ships with pixcull; a --no-deps "
+                "or constrained install can miss it). The other five axes "
+                "are unaffected.", exc)
+            out = DetectionResult()
+            out.flags.append("aesthetic_unavailable")
+            return out
+
         with torch.no_grad():
             t = _pre()(img).unsqueeze(0).to(device)
             result = DetectionResult()

@@ -75,6 +75,17 @@ dependencies = [
     # splits reliably at ε=0.50.
     "insightface>=0.7",
     # aesthetic / IQA metrics
+    # v3.60 — pyiqa lists its own development tooling in requires_dist,
+    # so a plain `pip install pixcull` also installs pre-commit, pytest,
+    # ruff and yapf: ten packages, 15.1 MB, measured in a clean venv
+    # against the published wheel. 0.1.16 is the current release and
+    # still does it.
+    #
+    # Kept anyway. It supplies laion_aes and clipiqa behind the
+    # aesthetic axis, one of the six, and dropping it to save 15 MB
+    # would silently remove a scoring axis from everyone who upgrades.
+    # The import is lazy and a missing pyiqa now costs that one axis
+    # rather than the run — see pixcull/scoring/aesthetic.py.
     "pyiqa>=0.1.11",
     # duplicate detection
     "imagededup>=0.3.2",

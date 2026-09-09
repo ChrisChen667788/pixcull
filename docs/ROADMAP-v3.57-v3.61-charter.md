@@ -155,6 +155,30 @@ function used, or accept it and write down why. **Wrong, not late:**
 a packaging one. If it stays, the honest outcome is a written note, not
 a silent 50 MB.
 
+**Measured: ten packages, 15.1 MB.** pytest, ruff, yapf, pre-commit and
+their five transitive dependencies, all through `pyiqa`, which lists its
+own development tooling in `requires_dist`. 0.1.16 is the current
+release and still does — this is upstream's, not ours.
+
+**Kept, and written down.** pyiqa supplies `laion_aes` and `clipiqa`
+behind the aesthetic axis, one of the six. Dropping it to save 15 MB
+would silently remove a scoring axis from everyone who upgrades, which
+is a worse trade than the megabytes. The note sits in `pyproject.toml`
+beside the dependency, where the next person to notice will be standing.
+
+**And the part that was ours.** `import pyiqa` is already lazy, but
+nothing caught it failing — so an environment without pyiqa did not lose
+one axis, it lost the run: `ImportError: No module named pyiqa` at the
+first photograph, with nothing to say which of two dozen dependencies
+was missing. A plain install cannot reach that; `--no-deps`, a
+constrained mirror, and a conda base where the resolver gave up all can.
+It now costs the aesthetic axis, says so in the log, and flags the row
+`aesthetic_unavailable` — reported, not silent, and not a crash.
+
+The blocker in the test earns its own assertion. The first draft used
+the long-removed `find_module` hook, so it blocked nothing and the
+degradation test passed with pyiqa loaded the whole time.
+
 ### v3.61 — the last `gap` row
 
 `zeroconf not installed` — three tests in `test_sync_discovery.py`.
