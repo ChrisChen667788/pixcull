@@ -77,13 +77,21 @@ def _cli(*argv: str, cwd: Path) -> subprocess.CompletedProcess:
 
 
 def _top_level_commands() -> set[str]:
-    proc = subprocess.run(
-        [sys.executable, "-m", "pixcull.cli", "--help"], cwd=ROOT,
-        capture_output=True, text=True,
-        env=dict(os.environ, COLUMNS="200", PYTHONPATH=str(ROOT)))
-    import re
-    return set(re.findall(r"^\s*│?\s*([a-z][a-z0-9-]+)\s{2,}",
-                          proc.stdout + proc.stderr, re.M))
+    """Ask the Typer app, not its rendered help.
+
+    The first version parsed `--help` with a regex over Rich's box
+    drawing. That works on a developer's terminal and found zero
+    commands on the CI runner, where Rich renders without a TTY — the
+    census then reported that every command it knew about had been
+    deleted. A test whose subject is "does this command exist" must not
+    depend on how a table looks.
+    """
+    from pixcull.cli import app
+
+    names = {c.name or c.callback.__name__.replace("_", "-")
+             for c in app.registered_commands}
+    names |= {g.name for g in app.registered_groups if g.name}
+    return names
 
 
 @pytest.fixture(scope="module")
