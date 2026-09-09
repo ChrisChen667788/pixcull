@@ -20,6 +20,22 @@ name: Release
 on:
   push:
     tags: ['v*']
+  # v3.54 — publishing to PyPI is a separate, deliberate act.
+  #
+  # The upload step used to run on any tag push where PYPI_API_TOKEN
+  # happened to exist, and it does exist. So tagging — an ordinary,
+  # reversible thing — silently performed an irreversible one: PyPI
+  # refuses to accept a version number twice, so a mistagged release
+  # burns that number for good. The two were the same gesture and only
+  # one of them can be undone.
+  workflow_dispatch:
+    inputs:
+      publish_pypi:
+        description: >-
+          Upload to PyPI as well. Irreversible: the version number can
+          never be reused. Run this from the tag you want to publish.
+        type: boolean
+        default: false
 
 permissions:
   contents: write   # gh release create needs to write releases
@@ -84,7 +100,11 @@ jobs:
       # Secrets → Actions, value = a pypi.org API token), this step is a
       # clean skip — it never fails the release. Once the secret exists,
       # every v* tag ships to PyPI automatically.
-      - name: Publish to PyPI (if token configured)
+      # Reachable only by running this workflow by hand with the box
+      # ticked. A tag push builds, checks and releases on GitHub, and
+      # stops there.
+      - name: Publish to PyPI (explicit opt-in only)
+        if: github.event_name == 'workflow_dispatch' && inputs.publish_pypi
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}

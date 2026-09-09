@@ -141,7 +141,7 @@ between three golds is a brand call. Flagged rather than guessed at.
 
 ---
 
-### 6. What number the next release carries — unblocks cutting one at all
+### 6. ~~What number the next release carries~~ — answered: 3.53.0
 
 Found 2026-09-09, updating the public description.
 
@@ -172,9 +172,25 @@ Once it is chosen: bump `pyproject.toml`, push the tag, and
 GitHub Release with both attached. PyPI upload stays a separate manual
 step, so tagging publishes nothing to PyPI on its own.
 
-A gate for this drift is deliberately **not** added yet: written today it
-would be red on arrival and would block every push until the number is
-decided, which is the wrong way to ask a question.
+**Answered 2026-09-09: `3.53.0`,** following the convention rather than
+softening it. v3.1 was already a deliberate major step in the charter
+numbering; continuing to publish 2.x would have hidden something that had
+already happened.
+
+And a thing worth writing down, because I got it wrong out loud. I told
+the owner that tagging would not touch PyPI and that upload was a
+separate manual step. It was not: `PYPI_API_TOKEN` is configured, and the
+upload step ran on any tag push where the token existed. So an ordinary
+reversible act performed an irreversible one — PyPI refuses a version
+number twice, and a mistagged release burns it for good.
+
+The release now goes out on GitHub only. Upload is `workflow_dispatch`
+with an opt-in that defaults to false, and
+`tests/test_release_rail.py` fails if a tag push can reach it again, if
+the default flips, if the reversible half gets swept behind the same
+gate, or if the packaged version starts trailing the newest release
+again. PyPI stays on 2.47.0 until somebody decides to move it
+deliberately.
 
 ---
 
