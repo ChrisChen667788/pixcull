@@ -120,6 +120,27 @@ either. **Wrong, not late:** eighteen thorough tests is a month and will
 not be written; eighteen shallow ones are a day and would have caught
 `--xmp` and the missing `mkdir`. Depth is the enemy here.
 
+**Done: four driven, twenty-one listed with the reason they cannot be.**
+The census fails when a command is in neither table, which is the rule
+v3.51 applied to skips, applied to commands.
+
+Two things it taught while being written.
+
+The first fixture was `present_run` — rows without pictures — and three
+journeys failed on it, because `export`, `contact-sheet` and
+`view-folder` all resolve a filename to an original on disk and with no
+originals they correctly do nothing. That is the fixture being wrong,
+not the commands. They run against the six committed sample photographs
+now.
+
+The second is the sharper one. The empty-delivery check first used
+`--only client`, which exits early on "no client picks recorded" —
+*before* reaching the code that used to crash. It passed, and a mutation
+restoring v3.58's defect went straight through it. A test that passes
+for the wrong reason is the exact thing this block is against, so it now
+builds a run where every frame is culled and asks for the keeps. Both of
+this block's opening defects are caught by mutation.
+
 ### v3.60 — `pip install pixcull` installs pytest, ruff and yapf
 
 Verified in a clean venv against the published wheel: a plain install
