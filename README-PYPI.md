@@ -27,7 +27,8 @@ separate question — see the last two bullets below.
 pixcull run /path/to/photos -o ./out
 
 # write the decisions back as XMP sidecars for Lightroom / Capture One
-pixcull export ./out --xmp
+# (sidecars land next to each original; -t collected gathers them instead)
+pixcull export ./out
 
 # score a video → temporal windows + reel candidates
 pixcull video clip.mp4 -o ./out

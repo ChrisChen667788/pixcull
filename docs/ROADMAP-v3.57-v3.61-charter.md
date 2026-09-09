@@ -55,6 +55,25 @@ supply. **Wrong, not late:** a quickstart is a promise made to somebody
 who has no other information, so it is checked against the artifact, not
 against the source tree.
 
+**Done, and the gate found a second one while it was being written.**
+The quickstart line is `pixcull export ./out` — `--format xmp` is the
+default, so the flag was superfluous as well as wrong.
+
+Checking that every command on the page exists then reported that
+`serve` did not. It does; `python -m pixcull.cli` could not see it.
+Typer registers a command when its decorator runs, and
+`if __name__ == "__main__": app()` was sitting around line 2814 of a
+3,000-line file, so the module-execution path called `app()` before
+`serve`, `cut` and `library` were defined. The console script imports
+the whole module first and had all twenty-five; `python -m` had
+twenty-two. Two front doors to one CLI, disagreeing by three commands,
+one of them the one that opens the review page.
+
+Moved to the end of the file, where it has to be. Two tests hold it: the
+command sets have to match, and nothing may be registered after the
+`__main__` block — the failure mode is silent, the command simply is not
+listed.
+
 ### v3.58 — `view-folder` will not create the folder it was asked for
 
 `pixcull view-folder <run> --out <dir>` is v2.99, the delivery folder,

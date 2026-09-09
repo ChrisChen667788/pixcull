@@ -2811,9 +2811,6 @@ def trim_dupes(
         console.print(f"[dim]plan → {output}[/dim]")
 
 
-if __name__ == "__main__":
-    app()
-
 
 @app.command()
 def serve(
@@ -3207,3 +3204,20 @@ def cut(
             raise typer.Exit(code=4) from None
         console.print(f"[green]✓[/] {res.duration_s:.1f}s rendered")
         console.print(f"  [dim]{res.mp4_path}[/dim]")
+
+
+# v3.57 — this has to be the last thing in the file.
+#
+# It used to sit around line 2814, in the middle, and Typer registers a
+# command when its decorator runs. So `python -m pixcull.cli` executed
+# app() before `serve`, `cut` and `library` had been defined, and those
+# three were missing from it — while the `pixcull` console script, which
+# imports the whole module before calling the entry point, had all
+# twenty-five. Two front doors to the same CLI, disagreeing by three
+# commands, one of them `serve`.
+#
+# Found by a gate written for something else: the check that every
+# command on the PyPI quickstart page exists asked `python -m` and was
+# told `serve` did not.
+if __name__ == "__main__":
+    app()
