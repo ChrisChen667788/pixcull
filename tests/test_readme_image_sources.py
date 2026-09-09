@@ -31,7 +31,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 READMES = ("README.md", "modelscope/README.md")
 
-LOCAL_IMG = re.compile(r'src="(\.?/?(?:docs|assets)/[^"]+\.(?:svg|png|jpg|jpeg|gif))"')
+#: v3.62 — `srcset` as well as `src`. The light half of a <picture> pair
+#: is only ever named in a srcset, so a src-only scanner rendered the
+#: dark hero, passed, and shipped the light one unlooked-at. Half a
+#: theme-aware image is exactly the kind of thing nobody opens until a
+#: reader on a light system opens it.
+LOCAL_IMG = re.compile(
+    r'(?:src|srcset)="(\.?/?(?:docs|assets)/[^"]+\.(?:svg|png|jpg|jpeg|gif))"')
 
 
 def referenced_images() -> list[Path]:
@@ -146,3 +152,49 @@ def test_the_generator_and_the_committed_file_agree():
         "docs/brand/pixcull-hero-reveal-demo.svg does not match what its "
         "generator produces — regenerate it, or port the hand edit into "
         "scripts/brand/gen_animated_demo.py")
+
+
+def test_the_hero_ships_both_themes_and_they_agree():
+    """v3.62 — a <picture> pair is two files that have to stay a pair.
+
+    `prefers-color-scheme` inside an `<img>`-embedded SVG reads the
+    operating system's setting rather than GitHub's own theme toggle, so
+    `<picture>` with `media=` on each `<source>` is the only mechanism
+    that follows the toggle. That means two files, and two files drift:
+    one gets regenerated, the other does not, and the half nobody looks
+    at is the half a reader on the other theme sees.
+    """
+    dark = ROOT / "docs" / "brand" / "pixcull-hero-dark.svg"
+    light = ROOT / "docs" / "brand" / "pixcull-hero-light.svg"
+    for f in (dark, light):
+        assert f.is_file(), f"{f.name} is missing — run scripts/brand/gen_hero.py"
+
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert 'media="(prefers-color-scheme: dark)"' in readme
+    assert "pixcull-hero-dark.svg" in readme and "pixcull-hero-light.svg" in readme
+
+    # Same composition, different palette: the frame count and the
+    # decision they show must not diverge.
+    d, l = dark.read_text("utf-8"), light.read_text("utf-8")
+    for needle in ("保留 0.85", "same moment", "data:image/jpeg;base64"):
+        assert needle in d and needle in l, f"{needle!r} is in only one theme"
+    assert d.count("<image ") == l.count("<image "), (
+        "the two themes show a different number of photographs")
+
+
+def test_the_hero_matches_its_generator():
+    import subprocess
+    import sys
+    targets = [ROOT / "docs" / "brand" / f"pixcull-hero-{t}.svg"
+               for t in ("dark", "light")]
+    before = [t.read_bytes() for t in targets]
+    try:
+        subprocess.run([sys.executable,
+                        str(ROOT / "scripts" / "brand" / "gen_hero.py")],
+                       check=True, capture_output=True)
+        after = [t.read_bytes() for t in targets]
+    finally:
+        for t, b in zip(targets, before):
+            t.write_bytes(b)
+    assert before == after, (
+        "the hero SVGs do not match scripts/brand/gen_hero.py — regenerate")

@@ -35,8 +35,11 @@ tasks:
      doesn't carry docs/brand/). -->
 ![PixCull · 本地优先 AI 选片](https://raw.githubusercontent.com/ChrisChen667788/pixcull/main/docs/brand/pixcull-horizontal-lockup.svg)
 
-<!-- Animated SVG hero-reveal demo — same source path strategy. -->
-![PixCull 启动动画](https://raw.githubusercontent.com/ChrisChen667788/pixcull/main/docs/brand/pixcull-hero-reveal-demo.svg)
+<!-- 主视觉。一次真实拍摄里的六帧,五帧被压到后面,被标记的那一帧套着裁切
+     框 —— 就是品牌标识本身,放大到能看清它框住的是什么。它右边那张是几秒后
+     的同一把剪刀,而"留哪张"正是这个工具存在的理由。照片和分数都是真的。
+     ModelScope 不渲染 <picture>,所以这里固定用深色版。 -->
+![PixCull —— 一次拍摄里的六帧,被标记的那一帧](https://raw.githubusercontent.com/ChrisChen667788/pixcull/main/docs/brand/pixcull-hero-dark.svg)
 
 [![GitHub](https://img.shields.io/badge/GitHub-ChrisChen667788%2Fpixcull-181717.svg?style=flat-square&logo=github)](https://github.com/ChrisChen667788/pixcull)
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](https://github.com/ChrisChen667788/pixcull/blob/main/LICENSE)

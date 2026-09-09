@@ -8,16 +8,27 @@
        width="100%" />
 </div>
 
-<!-- Animated hero-reveal demo: SVG SMIL keyframes mirroring the
-     v0.9-P0-2 in-product opening sequence (workspace bar slide-in,
-     sidebar slide-in, 24 cards stagger fade-up). The static frame is
-     the finished screen, so this stays legible wherever SMIL does not
-     run — v3.45, after it shipped as a black rectangle.
-     Regenerate via: python scripts/brand/gen_animated_demo.py -->
+<!-- The hero. Six frames from one real shoot, five pushed back, the one
+     that was marked in crop brackets — the brand mark at a size where
+     you can see what it is bracketing. Its neighbour is the same
+     scissors seconds later, which is the choice this tool exists to
+     make. Photographs and scores are real, from
+     docs/screenshots/01-results-grid.png.
+
+     Two files rather than one: prefers-color-scheme inside an
+     <img>-embedded SVG reads the OS setting, not GitHub's theme toggle,
+     so <picture> + media= is the only thing that follows the toggle.
+     Regenerate via: python scripts/brand/gen_hero.py -->
 <div align="center">
-  <img src="docs/brand/pixcull-hero-reveal-demo.svg"
-       alt="PixCull review screen — workspace bar, Library sidebar and a grid of 24 analyzed photos each tagged keep, maybe or cull; the header reads 1500 frames, 127 keep, 163 maybe, 1210 cull"
-       width="100%" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)"
+            srcset="docs/brand/pixcull-hero-dark.svg" />
+    <source media="(prefers-color-scheme: light)"
+            srcset="docs/brand/pixcull-hero-light.svg" />
+    <img src="docs/brand/pixcull-hero-dark.svg"
+         alt="Six frames from one museum shoot laid out as a strip. Five are desaturated and dimmed; the fourth is at full colour inside amber crop brackets with a green badge reading 保留 0.85. The frame beside it is the same subject seconds later, scored 0.72, tied to it by a line labelled same moment."
+         width="100%" />
+  </picture>
 </div>
 
 <p align="center">
@@ -1534,6 +1545,25 @@ TL;DR:可信本地用户,不可信图像输入 (Pillow 钉在 ≥ 10.2);无遥
 ## 协议
 
 [MIT](LICENSE)。可商用、自由 fork、欢迎 PR。
+
+## Star history
+
+<a href="https://star-history.com/#ChrisChen667788/pixcull&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)"
+            srcset="https://api.star-history.com/svg?repos=ChrisChen667788/pixcull&type=Date&theme=dark" />
+    <source media="(prefers-color-scheme: light)"
+            srcset="https://api.star-history.com/svg?repos=ChrisChen667788/pixcull&type=Date" />
+    <img alt="PixCull star history"
+         src="https://api.star-history.com/svg?repos=ChrisChen667788/pixcull&type=Date"
+         width="100%" />
+  </picture>
+</a>
+
+<sub>Served by <a href="https://star-history.com">star-history.com</a>.
+GitHub proxies it through camo, so opening this page does not hand your
+address to them.</sub>
+
 
 ## 作者
 
