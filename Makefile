@@ -68,3 +68,9 @@ goldenset-dryrun:
 # or attaches it to a GitHub Release).
 wheel:
 	pixcull/.venv/bin/python -m build --wheel -o dist_wheel .
+
+# v3.70 — release bookkeeping, before the push instead of after it.
+# ~21s, no models.  The gates in it are the ones that kept turning red
+# on a runner nine minutes after a release went out.
+preflight:
+	pixcull/.venv/bin/python scripts/preflight.py

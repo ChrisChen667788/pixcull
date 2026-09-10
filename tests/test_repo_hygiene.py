@@ -30,11 +30,29 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 
-# Text files worth scanning. Binaries and vendored assets are excluded by
-# extension rather than by trying to sniff their contents.
-_SCAN_SUFFIXES = {
-    ".py", ".md", ".txt", ".json", ".yaml", ".yml", ".toml", ".cfg",
-    ".ini", ".html", ".js", ".css", ".sh", ".jsonl", ".csv", ".j2",
+# v3.70 — inverted. This was an allowlist of sixteen text extensions,
+# and it silently excluded fifty-eight tracked text files: `.env.example`,
+# the Lightroom plugin's six `.lua`, ten `.swift`, twenty-two `.svg`, the
+# Homebrew cask, `.gitignore`. Nothing was leaking in them — every gate
+# below was run against exactly those files and all seven passed — but a
+# privacy sweep that reports "the repository is clean" while never
+# opening a file type is making a claim it did not check.
+#
+# An allowlist of text types has to be extended every time somebody adds
+# a language. A denylist of binary types only has to be extended when
+# somebody adds a binary format, and getting that wrong is loud (a
+# decode error) rather than silent. Anything that fails to decode as
+# UTF-8 is skipped as binary regardless.
+_BINARY_SUFFIXES = {
+    ".png", ".jpg", ".jpeg", ".gif", ".ico", ".webp", ".bmp", ".tiff",
+    ".heic", ".dng", ".cr2", ".cr3", ".arw", ".nef", ".raf",
+    ".mp3", ".wav", ".m4a", ".aac", ".flac",
+    ".mp4", ".mov", ".avi", ".mkv", ".webm",
+    ".pdf", ".zip", ".gz", ".tar", ".bz2", ".xz", ".7z",
+    ".woff", ".woff2", ".ttf", ".otf", ".eot",
+    ".joblib", ".npz", ".npy", ".onnx", ".pt", ".pth", ".safetensors",
+    ".so", ".dylib", ".dll", ".pyc", ".pyd", ".o", ".a",
+    ".cube", ".icc", ".psd", ".sketch", ".xcf",
 }
 _SKIP_DIRS = {".git", "node_modules", ".venv", "venv", "__pycache__",
               "dist", "dist_wheel", "build", ".pytest_cache"}
@@ -52,9 +70,30 @@ def _tracked_files() -> list[Path]:
         p = ROOT / name
         if any(part in _SKIP_DIRS for part in p.parts):
             continue
-        if p.suffix.lower() in _SCAN_SUFFIXES and p.is_file():
-            files.append(p)
+        if p.suffix.lower() in _BINARY_SUFFIXES or not p.is_file():
+            continue
+        files.append(p)
     return files
+
+
+def test_the_sweep_is_actually_reading_the_repository(tracked_text):
+    """v3.70 — every gate in this file is of the form "no file contains
+    X", and every one of them passes when the file list is empty. The
+    discovery is a `git ls-files` and a suffix filter; break either and
+    the whole privacy sweep goes green having opened nothing, in exactly
+    the shape of a sweep that found nothing wrong.
+
+    The number is a floor, not a target — it only has to be too large to
+    reach by accident."""
+    assert len(tracked_text) >= 600, (
+        f"the hygiene sweep read {len(tracked_text)} files. It should see "
+        "the whole tracked tree; at this size it is not checking what it "
+        "reports on.")
+    # And it has to be reading real content, not empty strings.
+    total = sum(len(text) for _, text in tracked_text)
+    assert total > 1_000_000, (
+        f"{len(tracked_text)} files but only {total} characters — the "
+        "reader is returning empty content")
 
 
 @pytest.fixture(scope="module")
