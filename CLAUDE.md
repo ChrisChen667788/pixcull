@@ -396,6 +396,80 @@ pipeline column with no live-path disposition), `test_comparative_claims_are_sou
 (`resolve-maybes-btn`, confirmed identical at fee978d).  It hides because the
 local gate convention ignores that file.
 
+**v3.36 → v3.65 SHIPPED** — thirty versions, and what they were mostly about
+was **gates that pass without checking anything**.  Read this before writing
+another one.
+
+Five instances of *skip-as-a-pass* — a test that skips because a binary or a
+module is missing, reports green, and has tested nothing: ffmpeg (v2.45,
+re-found v3.48), exiftool (v3.41), the browser lane (v3.42), the design-token
+ratchet (v3.46), the packaged rescorer (v3.49).  v3.51 built a ledger so a
+skip has to be a decision once, and **v3.61 found the shape the ledger cannot
+see**: three tests marked `@pytest.mark.slow` with every pytest invocation
+saying `-m "not slow"` and no lane saying `-m slow`.  A *deselected* test emits
+no SKIPPED line, so a census built on reading them is blind to it by
+construction.
+
+Seven occurrences of **a guard satisfied by its own prose** — the explanatory
+comment above the check contains the string the check greps for.  Fix by
+parsing YAML/AST or stripping comments before matching.  v3.65 fixup is the
+newest: the hero gate asserted `"same moment"` was present, and it was — in a
+stale `aria-label` describing photographs that had been replaced twice.
+
+**Two guards had an expiry date they did not announce**, which is the same
+family and the more dangerous one:
+- **v3.65** `test_readme_style.py` matched release commits with `^v(2\.\d+…)`.
+  v3.0 shipped eleven days after it was written; the check then reported the
+  README current, forever, against a question that had stopped being asked.
+  Sixty-four v3 releases with **What's new** frozen on v2.99.
+- **v3.64** the numpy runtime guard still fired on 2.x and told users to
+  `pip install 'numpy<2'` after the pin had moved to 2.x.
+Both now have a second, deliberately independent check beside them.
+
+**Do not trust `face_count == 0`.**  v3.64: the product's own detector reported
+a candidate pool clean and it held two portraits, a readable vehicle plate, and
+a girl whose face is entirely legible at native resolution — she shipped in the
+hero and four screenshots.  A single-shot detector handed a downsized 5472 px
+frame is looking for something ten pixels tall in what it receives.  Screening
+is eyes at ≥1600 px, then a native-resolution zoom anywhere a human figure
+appears; the detector is a pointer.  The rejections are recorded with reasons
+in `scripts/brand/prepare_samples.py` — read it before re-adding anything.
+
+**A sample set picked for scores cannot demonstrate the product.**  The
+thirty-two highest scorers left one near-duplicate pair and every frame a
+`keep`.  It is four pairs and one `maybe` now, chosen for that.
+
+**The product did not run offline at all** (v3.64) — `transformers` contacts
+the hub before using a cached model, so `pixcull run` with no network gave
+`Analyzed 0/32`.  All six call sites go through
+`pixcull.model_assets.from_pretrained`, which tries the network first and falls
+back to disk.  Do not call `X.from_pretrained` directly; `test_runs_without_network.py`
+fails if you do.
+
+**Unbounded dependency pins are how a major version arrives unannounced.**
+v3.65 fixup: `opencv-python>=4.9` let CI resolve 5.0.0.93, which changed
+`HoughLinesP` from `(N, 1, 4)` to `(N, 4)` and raised IndexError on every
+photograph.  Seven tests caught it in CI and none locally — this laptop still
+had 4.11 from an earlier resolve, so **the machine that makes a pin change is
+the one machine that cannot see its effect**.  numpy is `>=2.0,<2.5` (numba's
+ceiling, not mediapipe's), mediapipe `<1.0` (1.0.1 hard-aborts on
+`DrishtiMetalHelper`), opencv `>=4.9,<6`.  The same pins live in
+`modelscope/requirements.txt` — twin-path, checked by
+`test_numpy_pin_is_stated_once.py`.
+
+**`.gitignore`'s bare `output/` has eaten two load-bearing directories** —
+`tests/fixtures/present_run/output` (v3.51) and `samples/output` (v3.63, which
+made the 示例数据 button return 500 for every visitor).  It has glob exceptions
+now; add one before committing anything under a directory of that name.
+
+**An ID selector carrying `display:` beats `[hidden] { display: none }`**, so
+`el.hidden = true` is inert (v3.64, the client-present bar that was on screen
+permanently saying the scores were hidden).
+
+`pixcull 3.53.1` is on PyPI, the first release since 2.47.0.  Publishing is
+`workflow_dispatch` + opt-in; a tag push used to upload, which burns a version
+number irreversibly.
+
 **Next block: `docs/ROADMAP-v3.1-v3.27-charter.md`** — twenty-seven versions read
 out of the same 46-entry competitive research at the level of PixCull's own core
 (decision, rubric, judge, critique, personalisation, sequence, ingestion,
