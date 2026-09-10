@@ -34,7 +34,6 @@ It asks the installed program, not the source tree. A quickstart is a
 promise made to somebody who has no other information.
 """
 import functools
-import glob
 import re
 import subprocess
 import sys
@@ -62,26 +61,56 @@ _FLAG = re.compile(r"^--[a-z][a-z0-9-]*$")
 
 
 @functools.lru_cache(maxsize=None)
-def _help(path: str) -> str | None:
-    r = subprocess.run([sys.executable, "-m", "pixcull", *path.split(), "--help"],
-                       cwd=ROOT, capture_output=True, text=True)
-    if "No such command" in (r.stdout + r.stderr):
-        return None
-    return r.stdout
+def _root():
+    """The command tree as Click holds it.
+
+    v3.67 fixup — the first cut parsed `--help` output for lines starting
+    with `│`, which is Rich's box drawing. On this laptop that works; on
+    the CI runner Typer renders without it, so `_subcommands("")` came
+    back empty, every documented command resolved to "not a command", and
+    three tests went red at once.
+
+    They went red rather than green, which was the point of writing
+    `test_the_cli_is_importable_at_all` separately — a sweep that finds
+    nothing must not read as a sweep that found nothing wrong. But the
+    right source was never the rendered text: help output wraps, hides
+    options behind a narrower terminal, and changes with the Rich
+    version. Click's own tree is what the program will actually accept.
+    """
+    import typer.main
+    from pixcull.cli import app
+    return typer.main.get_command(app)
+
+
+def _node(path: str):
+    """The command at `path` ("" is the root), or None."""
+    cmd = _root()
+    for part in path.split():
+        children = getattr(cmd, "commands", None)
+        if not children or part not in children:
+            return None
+        cmd = children[part]
+    return cmd
 
 
 @functools.lru_cache(maxsize=None)
 def _subcommands(path: str) -> frozenset:
-    h = _help(path)
-    if not h or "Commands" not in h:
-        return frozenset()
-    return frozenset(re.findall(r"^│ ([a-z][a-z0-9-]*)",
-                                h.split("Commands", 1)[1], re.M))
+    cmd = _node(path)
+    return frozenset(getattr(cmd, "commands", {}) or {})
 
 
 @functools.lru_cache(maxsize=None)
 def _flags(path: str) -> frozenset:
-    return frozenset(re.findall(r"(--[a-z][a-z0-9-]*)", _help(path) or ""))
+    cmd = _node(path)
+    if cmd is None:
+        return frozenset()
+    out = set()
+    for param in getattr(cmd, "params", []):
+        out.update(o for o in getattr(param, "opts", []) if o.startswith("--"))
+        out.update(o for o in getattr(param, "secondary_opts", [])
+                   if o.startswith("--"))
+    out.add("--help")
+    return frozenset(out)
 
 
 def _scan(root: Path = None):
@@ -119,11 +148,24 @@ def _scan(root: Path = None):
 
 def test_the_cli_is_importable_at_all():
     """Stated separately so the sweep below cannot pass by finding
-    nothing. If `python -m pixcull --help` does not run, every
-    invocation in every document would resolve to "no such command" and
-    a naive check would report the docs as clean."""
-    assert _help("") is not None, "python -m pixcull --help does not run"
+    nothing. If the command tree comes back empty, every invocation in
+    every document resolves to "not a command" — and a sweep that finds
+    nothing must not read as a sweep that found nothing wrong.
+
+    This is not hypothetical. The first cut of this file read the tree
+    out of `--help` text, and on the CI runner that output has no box
+    drawing in it, so the tree was empty and three tests failed at once.
+    That is the behaviour this assertion is for."""
     assert _subcommands(""), "the CLI reports no commands at all"
+    assert len(_subcommands("")) > 10, (
+        f"only {len(_subcommands(''))} top-level commands — the tree "
+        "looks truncated")
+
+    # And it has to run as a program, not only import as a module.
+    r = subprocess.run([sys.executable, "-m", "pixcull", "--help"],
+                       cwd=ROOT, capture_output=True, text=True)
+    assert r.returncode == 0, (
+        f"python -m pixcull --help exited {r.returncode}: {r.stderr[:200]}")
 
 
 def test_every_documented_command_exists():
@@ -181,10 +223,10 @@ def test_the_sweep_reaches_past_the_claims_section():
 def test_the_two_commands_this_was_built_from_stay_fixed():
     """Named, because a general sweep can be quietly narrowed and still
     look green. These two are the measurements."""
-    assert _help("view-folder") is not None, (
+    assert _node("view-folder") is not None, (
         "pixcull view-folder is gone — it is what v2.99 actually shipped "
         "and what the README's `deliver` should have said")
-    assert _help("deliver") is None, (
+    assert _node("deliver") is None, (
         "a `deliver` command now exists; update this test and the history "
         "note in it rather than deleting them")
     assert "--xmp" not in _flags("export"), (
