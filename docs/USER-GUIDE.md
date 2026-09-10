@@ -292,7 +292,7 @@ pt_BR  nl_NL  tr_TR  ru_RU  ar_SA        ← v0.12
 ## 14. 下一步
 
 * **进阶**: 风格 V2 训练 —— 拿你过去 1 年的 keep 当参考,训练个性化模型(`🎨 训练风格模型`)。下次扫照片时,model 用你的偏好打分,而不是通用美学。
-* **批量回写**: 用 `pixcull export --xmp ...` 把决策写回原图 XMP sidecar,Lightroom / Capture One 直接读。
+* **批量回写**: 用 `pixcull export <run> --target alongside` 把决策写回原图 XMP sidecar,Lightroom / Capture One 直接读(`--format xmp` 本来就是默认值)。
 * **CI 集成**: `pixcull/.venv/bin/python scripts/ci_rescorer_regression.py` 接进任何 CI 流水线 —— 每次模型重训自动对照 baseline。
 
 ---

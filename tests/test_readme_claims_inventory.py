@@ -26,6 +26,20 @@ CODE_TOKEN = re.compile(r"`([A-Za-z0-9_./-]+\.(?:py|js|swift))(?:::\w+)?`")
 
 
 def readme_claims() -> list[str]:
+    """Only the numbered claims, and only from their own section.
+
+    That is deliberate — the inventory is a row-per-claim table and the
+    claims are numbered there — but v3.67 found what it costs. `pixcull
+    deliver`, a command that has never existed, sat in **What's new** for
+    twelve releases and every test in this file passed, because this
+    function cannot see that half of the file.
+
+    `tests/test_documented_commands_exist.py` covers the whole surface
+    instead: every `pixcull …` in every public document, resolved against
+    the live CLI. Keep them separate. Widening this one to the file would
+    make the inventory table meaningless; narrowing that one to a section
+    would reintroduce the defect.
+    """
     text = (ROOT / "README.md").read_text(encoding="utf-8")
     section = text.split("## What you get today", 1)[1].split("\n## ", 1)[0]
     return CLAIM_RE.findall(section)
