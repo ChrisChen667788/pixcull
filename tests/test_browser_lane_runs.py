@@ -28,7 +28,13 @@ BROWSER_TESTS = ("tests/test_visual_smoke.py",
                  # v3.45 — rasterizes every README image and counts the
                  # colours, because the hero demo shipped as 921,600
                  # pixels of pure black and nothing was looking.
-                 "tests/test_readme_images_render.py")
+                 "tests/test_readme_images_render.py",
+                 # v3.73 — compares design-system/tokens.json against the
+                 # colours a browser actually paints, in both themes. It
+                 # found fifteen of sixteen role tokens holding a palette
+                 # the product replaced, and no hermetic check could have:
+                 # the values are computed with relative oklch().
+                 "tests/test_design_system_matches_the_product.py")
 
 
 def _workflow() -> dict:
@@ -75,9 +81,42 @@ def test_the_lane_proves_a_browser_actually_launched():
 def test_the_browser_files_are_still_the_browser_files():
     """A new playwright test that nobody adds to the lane is the same
     bug wearing a different name."""
-    found = sorted(
-        f"tests/{p.name}" for p in (ROOT / "tests").glob("test_*.py")
-        if "playwright" in p.read_text("utf-8"))
-    assert found == sorted(BROWSER_TESTS + ("tests/test_browser_lane_runs.py",)), (
+    # v3.73 — matched on the raw text once, so a file that merely
+    # MENTIONED playwright in a docstring ("the render-based one lives in
+    # the browser lane and skips without playwright") was reported as a
+    # browser test. This repository keeps finding guards satisfied by
+    # their own prose; this was the same thing inverted, a guard tripped
+    # by it. Parse for a real import instead.
+    import ast
+
+    def _drives_playwright(path):
+        try:
+            tree = ast.parse(path.read_text("utf-8"))
+        except SyntaxError:
+            return False
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                if any(a.name.split(".")[0] == "playwright" for a in node.names):
+                    return True
+            elif isinstance(node, ast.ImportFrom):
+                if (node.module or "").split(".")[0] == "playwright":
+                    return True
+            elif isinstance(node, ast.Call):
+                fn = node.func
+                name = getattr(fn, "attr", getattr(fn, "id", ""))
+                if name == "importorskip" and node.args:
+                    arg = node.args[0]
+                    if isinstance(arg, ast.Constant) and \
+                            str(arg.value).split(".")[0] == "playwright":
+                        return True
+        return False
+
+    found = sorted(f"tests/{p.name}" for p in (ROOT / "tests").glob("test_*.py")
+                   if _drives_playwright(p))
+    # This file is no longer in the expected set: it reads the workflow
+    # and never launches anything. Under the old substring match it
+    # matched itself, which is the kind of self-inclusion that makes a
+    # list look maintained when it is not.
+    assert found == sorted(BROWSER_TESTS), (
         "a file drives playwright and is not in the CI browser lane: "
-        f"{found}")
+        f"{sorted(set(found) - set(BROWSER_TESTS))}")

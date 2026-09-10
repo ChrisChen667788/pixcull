@@ -130,6 +130,21 @@ Kotlin 常量。**这一步把 design system 从"15k 行 results.html 里硬编�
 
 ### Phase A · "设计基础设施"(2 周 · v0.11 P0 平行做)
 
+> **Phase A.1 —— 已完成(v3.73,2026-09-10)。** 浅色主题终于进了
+> `design-system/tokens.json`(`_themes.light`,26 条),三个产物(CSS /
+> Swift / Python)都带两套主题了。
+>
+> 但做的时候发现的事比 Phase A.1 本身重要:**十六条角色 token 里有十五条,
+> 连深色主题的值都是错的**。它们还是 v2.21 之前的暖色调(页面底色
+> `#161310`,而实际发布的是 `#161616`;前景 `#f3ede1` 对 `#e6e6e6`)——
+> v2.21 把表面改成无彩色,好让照片周围的环境不去污染颜色判断,而设计系统
+> 从没被告知。**Phase A.1 差点把第二套主题加进一个连第一套都说错的文件里。**
+>
+> 读 CSS 是查不出来的:调色板用相对颜色算(`oklch(from var(--accent)
+> calc(l + 0.064) c h)`),源码里是算式不是值,而另一套主题拿不同的基色跑
+> 同一套算式。现在两套主题都从渲染后的页面量出来
+> (`scripts/measure_theme_tokens.py`),并在 browser lane 里比对。
+
 **目标:** 把目前 15k 行 results.html 里的 CSS variables(brand gradient /
 typography ramp / 24 个 surface / shadow stack)**整体抽出**到一个独立的、
 设计师可编辑的源文件。

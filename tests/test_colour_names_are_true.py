@@ -353,3 +353,74 @@ def test_the_accent_ramp_is_complete_in_both_themes():
             f"the light theme lacks {step} outside the @supports "
             "fallback; on a browser with relative colour every rule "
             "using it renders with no colour there")
+
+
+# ---------------------------------------------------------------------------
+# v3.73 — Phase A.1: the design system models both themes.
+# ---------------------------------------------------------------------------
+
+def _tokens_doc():
+    import json
+    return json.loads(TOKENS.read_text(encoding="utf-8"))
+
+
+def _role_map():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "mtt", ROOT / "scripts" / "measure_theme_tokens.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.ROLE
+
+
+def test_the_design_system_models_the_light_theme():
+    """Hermetic half of the Phase A.1 check. The render-based one lives
+    in the browser lane and skips without playwright, so a runner
+    without a browser must still notice the theme disappearing."""
+    light = (_tokens_doc().get("_themes") or {}).get("light") or {}
+    role = _role_map()
+    assert light, (
+        "design-system/tokens.json models no light theme; every "
+        "light-theme colour the product ships then counts as undesigned")
+    missing = sorted(set(role) - set(light))
+    assert not missing, f"light theme is missing {len(missing)}: {missing}"
+
+
+def test_every_role_names_a_property_the_product_defines():
+    """The map is only meaningful if both halves exist. A role pointing
+    at a property nothing declares would compare a token against
+    nothing and pass."""
+    tokens_css = (SRC / "modules" / "tokens.css").read_text(encoding="utf-8")
+    absent = sorted({p for p in _role_map().values()
+                     if not re.search(re.escape(p) + r"\s*:", tokens_css)})
+    assert not absent, (
+        f"these roles name custom properties the product never defines: "
+        f"{absent}")
+
+
+def test_the_generated_outputs_carry_both_themes():
+    """The JSON is the source; three files are generated from it. Adding
+    a theme to the source and not the emitters means every consumer —
+    web, iOS, Python — still sees one."""
+    css = (ROOT / "design-system" / "tokens.css").read_text(encoding="utf-8")
+    swift = (ROOT / "design-system" / "iOS" / "BrandTokens.swift").read_text(encoding="utf-8")
+    pyj = (ROOT / "design-system" / "tokens.python.json").read_text(encoding="utf-8")
+    assert '[data-theme="light"]' in css, "tokens.css has no light block"
+    assert "enum Light" in swift, "BrandTokens.swift has no light values"
+    assert "_themes.light" in pyj, "tokens.python.json has no light values"
+
+
+def test_the_ratchet_counts_light_theme_values_as_designed():
+    """The consumer, not the parser. v3.72's undesigned figure went UP
+    for adding two correct light-theme values, because the linter read
+    only the nested {"value": …} leaves and the theme block is a flat
+    map. Fixing the file without fixing the reader would have changed
+    nothing the number reports."""
+    mod = _lint()
+    known = mod._load_design_tokens()
+    light = (_tokens_doc().get("_themes") or {}).get("light") or {}
+    assert light, "no light theme to check"
+    absent = sorted({v.lower() for v in light.values()} - known)
+    assert not absent, (
+        f"the linter does not recognise {len(absent)} light-theme values "
+        f"as design tokens: {absent[:6]}")

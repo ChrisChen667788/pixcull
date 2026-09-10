@@ -90,19 +90,36 @@ def _flatten(node: Any, prefix: str = "", out: dict | None = None) -> dict:
     return out
 
 
-def render_css(tokens: dict) -> str:
-    """Emit CSS custom-property block."""
+def _css_var(key: str) -> str:
+    return "--" + key.replace(".", "-").lower()
+
+
+def render_css(tokens: dict, light: dict | None = None) -> str:
+    """Emit CSS custom-property blocks, one per theme.
+
+    v3.73 (Phase A.1) — until now this emitted `:root` and nothing else,
+    because the design system held one theme. It held the wrong one: the
+    values were the warm palette v2.21 replaced with an achromatic set,
+    so fifteen of the sixteen role tokens described a product that had
+    not shipped in a long time. Both themes are measured out of a
+    rendered page now (scripts/measure_theme_tokens.py).
+    """
     lines = [HEADER, ":root {"]
-    # Pre-sort so output is deterministic
-    for key in sorted(tokens.keys()):
-        val = tokens[key]
-        css_var = "--" + key.replace(".", "-").lower()
-        lines.append(f"  {css_var}: {val};")
+    for key in sorted(tokens):
+        lines.append(f"  {_css_var(key)}: {tokens[key]};")
     lines.append("}")
+    if light:
+        lines.append("")
+        lines.append('/* Theme: light. Overrides only — anything absent here')
+        lines.append(' * is shared with the default (dark) theme above. */')
+        lines.append('[data-theme="light"] {')
+        for key in sorted(light):
+            lines.append(f"  {_css_var(key)}: {light[key]};")
+        lines.append("}")
     return "\n".join(lines) + "\n"
 
 
-def render_swift(tokens: dict) -> str:
+def render_swift(tokens: dict, light: dict | None = None) -> str:
     """Emit Swift constants under ``enum BrandTokens``."""
     swift_header = (
         "// AUTO-GENERATED — DO NOT EDIT BY HAND.\n"
@@ -164,13 +181,26 @@ def render_swift(tokens: dict) -> str:
                     f"  public static let {ident}: String = \"{escaped}\""
                 )
         lines.append("")
+    if light:
+        lines.append("  // Theme: light. Overrides only; anything absent")
+        lines.append("  // here is shared with the default theme above.")
+        lines.append("  public enum Light {")
+        for key in sorted(light):
+            ident = _swift_safe_id(key.replace(".", "_"))
+            lines.append(
+                f"    public static let {ident}: String = \"{light[key]}\"")
+        lines.append("  }")
+        lines.append("")
     lines.append("}")
     return "\n".join(lines) + "\n"
 
 
-def render_python_json(tokens: dict) -> str:
+def render_python_json(tokens: dict, light: dict | None = None) -> str:
     """Emit a flat key→value map for Python consumers."""
-    return json.dumps(tokens, indent=2, sort_keys=True,
+    payload = dict(tokens)
+    if light:
+        payload["_themes.light"] = light
+    return json.dumps(payload, indent=2, sort_keys=True,
                        ensure_ascii=False) + "\n"
 
 
@@ -207,9 +237,13 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     tokens = _flatten(raw)
-    css      = render_css(tokens)
-    swift    = render_swift(tokens)
-    py_json  = render_python_json(tokens)
+    # `_themes` is skipped by the walker (leading underscore), so the
+    # default block stays exactly the dark theme and the overrides are
+    # read out separately.
+    light = raw.get("_themes", {}).get("light", {})
+    css      = render_css(tokens, light)
+    swift    = render_swift(tokens, light)
+    py_json  = render_python_json(tokens, light)
 
     if args.check:
         drift = []

@@ -488,6 +488,21 @@ instance *of* before naming it in the assertion.
 made the 示例数据 button return 500 for every visitor).  It has glob exceptions
 now; add one before committing anything under a directory of that name.
 
+**The design system was wrong about the product it describes** (v3.73).
+Fifteen of the sixteen role tokens in `design-system/tokens.json` held
+the warm palette v2.21 replaced with an achromatic set — `#161310` for
+the page background against the shipped `#161616`, `#f3ede1` against
+`#e6e6e6`.  The product changed, nothing compared the two, and the file
+kept describing a PixCull that had not shipped in a long time.  Phase
+A.1 was about to add a light theme to it.  **Reading the CSS could not
+have caught it**: the palette is computed with relative colour
+(`oklch(from var(--accent) calc(l + 0.064) c h)`), so the source holds
+arithmetic and each theme runs it from a different base.  Both themes
+are measured out of a rendered page now —
+`scripts/measure_theme_tokens.py`, which paints each value into a 1x1
+canvas because `getComputedStyle` and `canvas.fillStyle` both preserve
+`oklch()` — and compared in the browser lane.
+
 **A single-file HTML app paints in three places, not one** (v3.71).
 `<style>` blocks, inline `style="…"` attributes, and JavaScript that
 assembles SVG as a string — the design-token scanner read the first and

@@ -128,6 +128,19 @@ def _load_design_tokens() -> set[str]:
             for v in n:
                 _walk(v)
     _walk(doc)
+
+    # v3.73 — `_themes.light` holds the second theme as a flat
+    # path -> value map, which `_walk` does not reach because those
+    # entries are bare strings rather than {"value": …} leaves. Until it
+    # was read, every light-theme colour the product ships counted as
+    # "in no design token", which is what made the undesigned figure go
+    # UP in v3.72 for adding two correct values.
+    for theme in (doc.get("_themes") or {}).values():
+        if isinstance(theme, dict):
+            for v in theme.values():
+                if isinstance(v, str):
+                    for m in HEX_RE.finditer(v):
+                        found.add(m.group(0).lower())
     return found
 
 
