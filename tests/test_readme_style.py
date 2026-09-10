@@ -108,7 +108,20 @@ def test_no_stock_marketing_phrases_in_the_readmes():
 #: fall. Some slack, because a release and its note are separate commits.
 MAX_RELEASES_BEHIND = 3
 
-_VERSION_COMMIT = re.compile(r"^v(2\.\d+(?:\.\d+)*)\s*(?:—|:|-)\s")
+#: v3.65 — this used to be `^v(2\.\d+…)`, the series that was current when
+#: the gate was written. The moment v3.0 shipped it stopped matching anything
+#: and the check went quiet: sixty-four v3 releases went by with **What's
+#: new** frozen on v2.99, and every test in this file passed the whole time.
+#: The same defect this file exists to catch, caught by nothing, because the
+#: guard was pinned to the shape of the data on the day it was written.
+#: `test_the_gate_can_see_the_newest_release` below is the part that does not
+#: expire.
+_VERSION_COMMIT = re.compile(r"^v(\d+\.\d+(?:\.\d+)*)\s*(?:—|:|-)\s")
+
+#: Deliberately independent of the pattern above: any leading `vN.N`, with no
+#: opinion about what comes after it. If this finds a newer release than
+#: `_VERSION_COMMIT` does, the gate has a blind spot.
+_ANY_VERSION_COMMIT = re.compile(r"^v(\d+\.\d+(?:\.\d+)*)\b")
 
 
 def _released_versions() -> list[tuple[int, ...]]:
@@ -137,6 +150,40 @@ def _entry_versions(path: Path, pattern: str) -> list[tuple[int, ...]]:
 def _newest_entry(path: Path, pattern: str) -> tuple[int, ...] | None:
     vs = _entry_versions(path, pattern)
     return vs[0] if vs else None
+
+
+def test_the_gate_can_see_the_newest_release():
+    """The defect that made the rest of this file useless for sixty-four
+    releases: `_VERSION_COMMIT` was written as `^v(2\\.\\d+…)`, so when the
+    version numbers moved to 3.x it matched nothing new and reported the
+    README as current forever.
+
+    Checking the README against the log is only a check if the thing
+    reading the log can still read it. So: scan for release commits a
+    second way, with a pattern that has no opinion about the major
+    version, and fail if that finds something newer. A regex narrowed
+    to today's numbers gets caught the first time a new series ships,
+    instead of eleven releases later.
+    """
+    import subprocess
+    out = subprocess.run(["git", "log", "--format=%s"], cwd=ROOT,
+                         capture_output=True, text=True)
+    if out.returncode != 0:
+        pytest.skip("not a git checkout")
+    loose = set()
+    for subject in out.stdout.splitlines():
+        m = _ANY_VERSION_COMMIT.match(subject.strip())
+        if m:
+            loose.add(tuple(int(x) for x in m.group(1).split(".")))
+    if not loose:
+        raise AssertionError("no release commits at all — shallow checkout?")
+    strict = _released_versions()
+    assert strict, "the release-commit pattern matches nothing in this log"
+    assert max(strict) == max(loose), (
+        f"the release-commit pattern's newest match is v{max(strict)} but "
+        f"the log's newest release-shaped subject is v{max(loose)}. The "
+        "pattern has gone blind to the series currently shipping, which is "
+        "exactly how What's new froze on v2.99 for sixty-four releases.")
 
 
 def test_whats_new_has_not_stopped_being_updated():

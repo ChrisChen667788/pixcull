@@ -59,6 +59,156 @@ without installing anything.
 
 ---
 
+## v2.94 – v3.59
+
+The same hole as the one below, dug a second time. v3.53 found that
+**What's new** had stopped at v2.45 while eighty-five releases shipped, and
+built a gate so it could not happen again. The gate reads release commits with
+`^v(2\.\d+…)` — the series that was current when it was written — so the
+moment the next major arrived it went quiet, and stayed quiet through
+sixty-four v3 releases while every test in the file passed.
+
+The lesson is not "remember to update the regex". A guard pinned to the
+shape of today's data has an expiry date it does not announce. There is a test
+beside it now asserting the guard can still see the newest release in the log,
+which is the thing that was actually false.
+
+One line each, exactly as the release was titled at the time.
+
+**v3.59** — a journey for the eighteen commands that had none
+
+**v3.58** — the delivery folder crashed when there was nothing to deliver
+
+**v3.57** — the PyPI quickstart told people to run a flag that does not exist
+
+**v3.55** — four fixes the artifact needed before it goes somewhere permanent
+
+**v3.54** — 3.53.0, and a tag push that no longer publishes irreversibly
+
+**v3.53** — the product description had stopped 85 releases ago
+
+**v3.52** — the same claim, corrected on one front door and not the other
+
+**v3.51** — a skip has to be a decision, once
+
+**v3.50** — faces are a README claim with no CI coverage anywhere
+
+**v3.49** — the rescorer ships, and nothing installed could open it
+
+**v3.48** — ffmpeg arrived one step too late, for thirty-nine tests
+
+**v3.47** — the leftovers, and a test fixture that lived on one laptop
+
+**v3.46** — the design system's own gate had never been run
+
+**v3.45** — the README hero was 921,600 pixels of black, and nothing was looking
+
+**v3.44** — ship the rescorer, so pip install stops meaning rule-only
+
+**v3.43** — two style-guide rules that had never fired once
+
+**v3.42** — the browser tests were green because they never ran
+
+**v3.41** — the effect test goes in CI, so nobody has to install anything
+
+**v3.40** — the missing module was deleted on purpose, and nobody said so
+
+**v3.39** — the deferral comments, and the census was wrong first
+
+**v3.38** — every README claim checked, and one of them is unreachable
+
+**v3.37** — the axis weighting the README promised and the scorer never did
+
+**v3.36** — v2.91 was waiting on a decision the owner would already have made
+
+**v3.33** — v3.33–v3.35: the three remaining owner asks, made cheap to answer
+
+**v3.32** — seven waiting measurements, one budget, one refusal
+
+**v3.31** — the numbers on screen, checked against the file the client gets
+
+**v3.30** — the live path was thin because of one dict literal
+
+**v3.29** — sync was pouring another photographer's taste into your profile
+
+**v3.28** — the same defect as v3.23, inside the photograph this time
+
+**v3.27** — the return leg, and refusing to keep score on the client
+
+**v3.26** — the refresh stops writing a confidence it did not earn
+
+**v3.25** — the same bar outward: a claim about a competitor carries a source
+
+**v3.24** — the live path's 63 missing columns, each one now somebody's decision
+
+**v3.23** — PixCull was silently destroying the photographer's own ratings
+
+**v3.22** — the export says how it was produced, and leaks nothing saying it
+
+**v3.21** — the run's health was computed every time and shown never
+
+**v3.20** — PixCull addressable by an assistant, for questions only
+
+**v3.19** — "deliver 400 selects", as an instruction the tool can take
+
+**v3.18** — the judge finally sees two frames of the burst at once
+
+**v3.17** — route resolution, and be allowed to be wrong in one direction only
+
+**v3.16** — the incremental cache orchestrator.py has promised since its first commit
+
+**v3.15** — the tether verdict finally reaches the application on the screen
+
+**v3.14** — a deliberate reframe is not a duplicate
+
+**v3.13** — this stretch's best five, and whether any of them is any good
+
+**v3.12** — the burst winner, checkable at a glance instead of on faith
+
+**v3.11** — reference frames the photographer judged, never ones the system scored
+
+**v3.10** — seed the cold start from the catalogue, without letting it vote
+
+**v3.9** — the compare modal had the gesture all along; it threw away the comparison
+
+**v3.8** — one taste profile for a photographer who shoots two different jobs
+
+**v3.7** — the verdict reached Lightroom; the doubt behind it did not
+
+**v3.6** — the confidence on the card is self-reported; this measures it instead
+
+**v3.5** — ask about two axes at a time, and refuse to merge a partial answer
+
+**v3.4** — the prompt has principles; now it also has a finished critique
+
+**v3.3** — the critique now knows the frame lost a comparison
+
+**v3.2** — temperature was not in the cache key, so self-consistency was unmeasurable
+
+**v3.1** — a depth figure that does not name its field is how the last one went wrong
+
+**v3.0.3** — a re-shot screenshot never reached ModelScope, and nothing said so
+
+**v3.0.2** — the filter that was designed and not built, and two screenshots that were not real
+
+**v3.0.1** — the on-site half: `p` records what the client points at
+
+**v3.0** — what the client chose, kept out of what the photographer judged
+
+**v2.99** — the folder you hand a client, with the structure still in it
+
+**v2.98** — over WeChat the only identifier that survives is the pixels
+
+**v2.97** — 客户在场模式: the client was reading the machine's verdict on their own wedding
+
+**v2.96** — the one open item was not a regression; it was two machine loads
+
+**v2.95** — the run summary reported the decisions the judge had already overturned
+
+**v2.94** — the only tool that makes real labels wrote them in the one shape the guard rejects
+
+---
+
 ## v2.44 – v2.93
 
 These never appeared in the README. The **What's new** section stopped being

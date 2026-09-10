@@ -60,57 +60,49 @@
 
 ## What's new
 
-**v2.99** — `pixcull deliver` writes the folder you actually hand over. Export
-could produce XMP sidecars or a ratings CSV — useful to Lightroom, useless to a
-person with a client waiting — so the studio path went back through another
-application, or copied files by hand.
+**v3.64** — A resolvable face shipped in the cover picture. In one of the
+sample frames a girl runs across a field at the right edge; at the 1600 px
+working size she is thirty pixels tall and reads as a speck, and at native
+resolution her face is entirely legible. She was in the hero and in four
+screenshots.
 
-Copying by hand destroys the two things PixCull knows that nothing else does, at
-the moment they matter most: which stretch of the shoot a frame belongs to, and
-which frames are the same moment with one of them best. The second is the whole
-conversation beside the client. The folder keeps both.
+The product's own face detector had reported that whole pool clean, which is
+the part worth writing down: a single-shot detector handed a downsized 5472 px
+frame is looking for something ten pixels tall in what it receives. Screening
+is eyes now, and the detector is a pointer. Looking properly also found two
+portraits in the same "clean" pool and a readable vehicle registration.
 
-**v2.98** — Over WeChat, the only identifier that survives is the pixels. A
-filename in a caption is gone the moment the album reorders, the client
-screenshots a subset, or two of the sends fail; position is not an identifier,
-it is the thing that changes.
+numpy moved to `>=2.0,<2.5` in the same version. Both reasons for the old `<2`
+ceiling were re-measured and neither still held; the real ceiling is numba's.
+Two other copies of that pin had been left behind, one of them a runtime
+warning telling correctly-installed users to downgrade.
 
-So the number is burned into the frame — top left, about 9% of the image height,
-white on an opaque plate. Measured through WeChat's usual treatment (long edge to
-1080, re-encoded at q=50, shown as a ~220 px thumbnail) it is still readable, and
-a test asserts the plate is still solid after exactly that round trip.
+**v3.63** — The sample data was six gradients with "Mountain Range" and "Eagle
+in Flight" burned into them as labels. That is what a visitor saw when they
+clicked 示例数据. It is thirty-two real frames now, and the button itself had
+been returning 500 to everybody: it copies `samples/output` into a run, and
+`.gitignore` carried a bare `output/` that matched any directory of that name
+at any depth, so the directory could never be committed.
 
-**v2.97** — 客户在场模式. Measured on one screen of a 5,069-photo run, before
-building anything: 539 pieces of judgement text, every card reading 保留 and a
-score, and a count along the top of how many were marked for deletion.
+**v3.62** — The README hero was a hand-drawn SVG of the product UI in which
+every photograph was an empty grey rectangle. A photo-culling tool whose
+opening image contains no photographs has already failed the two-second test.
 
-The studio workflow this is for has the client sitting beside the photographer,
-looking at the same screen. So the client was reading the machine's verdict on
-their own wedding, with a number attached to each frame. That turns choosing
-pictures into defending them. Shift+C hides all of it and leaves the filenames,
-so the person driving can still work.
+**v3.61** — `pip install -e ".[sync]"` closed the last row of the gap ledger,
+and closing it found the hole underneath. Three tests were marked
+`@pytest.mark.slow`; both pytest invocations in the workflow said
+`-m "not slow"` and no lane said `-m slow`, so they were deselected rather
+than skipped and had never run in CI. One of them is shot-boundary detection,
+and it takes 0.29 seconds. "Slow" had stopped meaning slow and become a place
+things went.
 
-**v2.96** — The open item left by the previous block turned out not to be a
-regression. Two machine loads had been compared as though they were one, and the
-difference was the machine, not the code.
-
-**v2.95** — The run summary reported decisions the judge had already overturned.
-`Keep=6 Maybe=0 Cull=0` printed directly under `6 decision(s) changed by the
-judge`, and every row in the CSV said `cull`.
-
-Two sources, one stale: decisions are appended per row while scoring, and with
-VLM authority set to primary the judge rewrites them in place afterwards. The
-summary was reading the list, the CSV was written from the frame. A photographer
-read that everything was kept and opened the results to find nothing was.
-
-**v2.94** — The only tool that produces genuinely blind labels wrote them in the
-one shape the provenance guard rejects. `pixcull m3 label` shows a photograph, a
-serial number and two buttons; the guard needs a `source` field and one record
-per photograph, and the sheet wrote a single record with a verdict map.
-
-Neither knew about the other, so the labelling that unblocks three measurements
-produced a file read as `unknown` and refused — advertised and unreachable, in
-the exact place the project's next real number was supposed to come from.
+**v3.60** — `pip install pixcull` also installed pytest, ruff and yapf: ten
+packages and 15.1 MB of somebody else's development tooling, arriving through
+pyiqa. Kept, because pyiqa supplies the aesthetic axis and dropping it to save
+the megabytes would silently remove a scoring axis from everyone who upgrades.
+Investigating it found the part that was ours — `import pyiqa` was lazy but
+nothing caught it failing, so an environment without pyiqa lost the whole run
+rather than one axis.
 
 Earlier releases are in [`CHANGELOG.md`](CHANGELOG.md).
 
