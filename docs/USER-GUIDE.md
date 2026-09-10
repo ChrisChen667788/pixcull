@@ -297,6 +297,85 @@ pt_BR  nl_NL  tr_TR  ru_RU  ar_SA        ← v0.12
 
 ---
 
+## 15. 环境变量
+
+PixCull 读取下面这些环境变量,**只有这些**。设了别的名字,程序不会用,
+从 v3.69 起启动时会提醒你,并给出最接近的真名。
+
+标 ⚠ 的几条决定「照片会不会离开这台机器」。这一条是 v3.69 补的:
+`--vlm-mode off` 原本只是命令行参数,而 `PIXCULL_VLM_MODEL`、
+`PIXCULL_VLM_API_KEY`、`PIXCULL_VLM_WORKERS` 都存在 —— 于是
+`PIXCULL_VLM_MODE` 既是最自然的猜法,又和一个真名只差一个字母,
+而设了它没有任何效果、也没有任何提示。现在它是真的了。
+
+| 变量 | 作用 |
+|---|---|
+| `PIXCULL_ADVISE_CULL` | include culled frames in the advice pass |
+| `PIXCULL_API_CORS_ORIGINS` | allowed CORS origins for the review server |
+| `PIXCULL_API_KEY` | API key for the containerised server |
+| `PIXCULL_APPCAST_URL` | Sparkle appcast URL for the desktop app |
+| `PIXCULL_ASPECT_GUARD` | aspect-ratio guard in near-duplicate matching |
+| `PIXCULL_AUDIO_MODEL` | audio tagger model id |
+| `PIXCULL_AUDIO_SYNC` | enable audio-to-moment sync |
+| `PIXCULL_AXIS_GROUPS` | axis grouping strategy |
+| `PIXCULL_BURST_MULTI_IMAGE` | send a whole burst to the judge in one call |
+| `PIXCULL_CONSISTENCY_DRAWS` | repeat draws for the consistency measurement |
+| `PIXCULL_CRITIQUE_EXEMPLARS` | exemplar bank for the critique pass |
+| `PIXCULL_DATA_DIR` | data directory for the containerised server |
+| `PIXCULL_DEBUG` | verbose server logging |
+| `PIXCULL_DEMO_ROOT` | root the demo server serves from |
+| `PIXCULL_DETECTOR_CACHE` | detector cache on/off |
+| `PIXCULL_DETECTOR_CACHE_DIR` | detector cache location |
+| `PIXCULL_DISABLE_QUOTA` | bypass the licence quota (development) |
+| `PIXCULL_ENV` | environment name reported in telemetry |
+| `PIXCULL_HOME` | PixCull home directory (models, caches) |
+| `PIXCULL_INLINE_ROWS` | how many rows the first paint inlines |
+| `PIXCULL_KEYWORD_PREFIX` | prefix for IPTC keywords written back |
+| `PIXCULL_LIBRARY_DIR` | cross-run library index location |
+| `PIXCULL_LICENSE_API` | licence server base URL |
+| `PIXCULL_LICENSE_KEY` | licence key for issuing scripts |
+| `PIXCULL_LLM_BUDGET_YUAN` | daily cloud-judging spend ceiling |
+| `PIXCULL_LOG_LEVEL` | logging level |
+| `PIXCULL_MEASURE_STRIP` | measure the film-strip effect |
+| `PIXCULL_MLX_WHISPER_MODEL` | MLX Whisper model id for transcription |
+| `PIXCULL_NL_EXPLAIN` | natural-language explanations on/off |
+| `PIXCULL_NL_MODEL_PATH` | local GGUF model for explanations |
+| `PIXCULL_NOTARY_PROFILE` | notarytool keychain profile (release only) |
+| `PIXCULL_NO_AUTO_INDEX` | skip adding the run to the library index |
+| `PIXCULL_PLUGINS_AUTOLOAD` | autoload plugins on start |
+| `PIXCULL_PORT` | port for the screenshot capture server |
+| `PIXCULL_RAW_TRANSCODER` | RAW transcoder backend |
+| `PIXCULL_REEL_CAPTION` | reel captioning on/off |
+| `PIXCULL_REEL_VLM` | reel VLM backend (ModelScope Studio) |
+| `PIXCULL_RESOLUTION_ROUTER` | resolution routing strategy |
+| `PIXCULL_SENTRY_DSN` ⚠ | Sentry DSN for error reporting |
+| `PIXCULL_SIGN_IDENTITY` | codesign identity (release only) |
+| `PIXCULL_SMOKE_RUN` | run directory for the visual smoke test |
+| `PIXCULL_STRIPE_WEBHOOK_SECRET` | Stripe webhook secret (licence issuing) |
+| `PIXCULL_SYNC_DIR` | multi-machine sync directory |
+| `PIXCULL_TELEMETRY` ⚠ | telemetry on/off |
+| `PIXCULL_TEST_DEMO_ROOT` | demo root for fixture generation |
+| `PIXCULL_TEST_RUN` | run id for fixture generation |
+| `PIXCULL_TETHER_XMP` | write XMP sidecars in tether mode |
+| `PIXCULL_UNSPLASH_PING` ⚠ | allow the Unsplash reachability ping |
+| `PIXCULL_USER` | current user for multi-user runs |
+| `PIXCULL_VERTICAL_AXIS_PRIOR` | per-vertical axis prior on/off |
+| `PIXCULL_VLM_API_KEY` ⚠ | API key for the cloud judge |
+| `PIXCULL_VLM_MODE` ⚠ | off | minimax | local — WHETHER PHOTOGRAPHS ARE UPLOADED |
+| `PIXCULL_VLM_MODEL` | captioning model id |
+| `PIXCULL_VLM_WORKERS` | concurrent cloud-judge workers |
+| `PIXCULL_WECHAT_APIV3_KEY` | WeChat Pay APIv3 key (licence issuing) |
+| `PIXCULL_WORKERS` | worker processes for analysis |
+
+想让一次运行完全不出网,两种写法等价:
+
+```bash
+pixcull run <folder> --vlm-mode off
+PIXCULL_VLM_MODE=off pixcull run <folder>
+```
+
+---
+
 ## 设计思想
 
 PixCull 不是"AI 替你选片",而是 "AI 把不重要的 60% 卡过滤掉,让你把人类时间花在剩下 40% 真正需要判断的临界案例上"。

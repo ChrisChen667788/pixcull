@@ -87,12 +87,19 @@ def run(
              "Default (unset) uses models/rescorer_v1.joblib."
     ),
     vlm_mode: Optional[str] = typer.Option(
-        None, "--vlm-mode",
+        # v3.69 — reachable from the environment as well as the command
+        # line. It was a flag only, while PIXCULL_VLM_MODEL,
+        # PIXCULL_VLM_API_KEY and PIXCULL_VLM_WORKERS all existed, so
+        # PIXCULL_VLM_MODE was both the obvious guess and one character
+        # from a real name — and setting it did nothing, silently, on
+        # the one setting that decides whether photographs are uploaded.
+        None, "--vlm-mode", envvar="PIXCULL_VLM_MODE",
         help="Vision judge that actually looks at the pixels. "
              "'minimax' (MiniMax M3, cloud — needs MINIMAX_API_KEY) | "
              "'local' (Qwen3-VL via MLX, on-device) | 'off'. "
              "Default (unset): 'minimax' when a MiniMax key is present, "
-             "else 'off'. Photos ARE uploaded in cloud modes."
+             "else 'off'. Photos ARE uploaded in cloud modes. "
+             "Also read from PIXCULL_VLM_MODE."
     ),
     vlm_authority: str = typer.Option(
         "primary", "--vlm-authority",
@@ -110,6 +117,12 @@ def run(
 ) -> None:
     """Run full culling + scoring pipeline on a folder."""
     from pixcull.pipeline.orchestrator import run_pipeline
+
+    # v3.69 — before anything is decided, say which PIXCULL_* names in
+    # this environment PixCull does not read. A misspelt setting used to
+    # be indistinguishable from a setting that had been applied.
+    from pixcull.env_registry import warn_about_unknown_variables
+    warn_about_unknown_variables()
 
     # v2.48 — the run command had no --vlm-mode at all, so the vision
     # judge was unreachable for anyone using the CLI: run_pipeline

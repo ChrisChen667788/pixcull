@@ -462,9 +462,10 @@ from your machine, not from a fixed default:
 > the app stores it so a GUI launch with no shell environment can still
 > find it. `env -u MINIMAX_API_KEY pixcull run …` will still go to the
 > cloud if a keychain entry exists and consent was given once before.
-> **`--vlm-mode off` is the switch that holds.** The line the run prints
-> before it starts — "Judging with MiniMax M3 — photos are uploaded" —
-> is the thing to read.
+> **`--vlm-mode off` is the switch that holds**, and since v3.69
+> `PIXCULL_VLM_MODE=off` is the same switch, for scripts and CI. The
+> line the run prints before it starts — "Judging with MiniMax M3 —
+> photos are uploaded" — is the thing to read.
 
 
 So a key plus one recorded consent is enough for photos to leave the

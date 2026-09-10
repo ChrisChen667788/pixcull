@@ -633,7 +633,8 @@ v2.48 那个设计管用的第一份证据。**证据不是越多越好** ——
 > key 还会从钥匙串里查一次 —— 应用把它存在那里,好让没有 shell 环境的
 > GUI 启动也能找到。只要钥匙串里有条目、而且之前同意过一次,
 > `env -u MINIMAX_API_KEY pixcull run …` 照样会走云端。
-> **`--vlm-mode off` 才是握得住的那个开关。** 运行开始前打印的那一行
+> **`--vlm-mode off` 才是握得住的那个开关**,v3.69 起 `PIXCULL_VLM_MODE=off`
+> 是同一个开关,方便脚本和 CI 使用。 运行开始前打印的那一行
 > ——「Judging with MiniMax M3 — photos are uploaded」—— 是该读的东西。
 
 也就是说:**一个 key 加一次同意,之后每次运行照片都会离开本机。**
