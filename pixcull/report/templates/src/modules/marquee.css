@@ -33,9 +33,9 @@
       box-shadow: 0 8px 24px rgba(0, 0, 0, 0.40),
                   0 0 0 1px rgba(255, 255, 255, 0.08) inset;
       z-index: 50;
-      transition: transform var(--duration-md, 220ms) var(--ease-out,
+      transition: transform var(--duration-normal, 220ms) var(--ease-out,
                     cubic-bezier(0.2, 0.8, 0.2, 1)),
-                  opacity var(--duration-md, 220ms);
+                  opacity var(--duration-normal, 220ms);
       opacity: 0;
       color: #fff;
     }
@@ -45,7 +45,7 @@
       transform: translate(-50%, 0);
     }
     .bulk-toolbar .bulk-count {
-      font: 600 13px/1 var(--font-sans, system-ui);
+      font: 600 13px/1 var(--font-body, system-ui);
       padding: 4px 8px;
       border-radius: 6px;
       background: rgba(255, 255, 255, 0.10);
@@ -56,7 +56,7 @@
       border: 1px solid rgba(255, 255, 255, 0.10);
       border-radius: 999px;
       padding: 6px 12px;
-      font: 500 12px/1 var(--font-sans, system-ui);
+      font: 500 12px/1 var(--font-body, system-ui);
       cursor: pointer;
       transition: background-color var(--duration-fast) var(--ease-out),
                   border-color var(--duration-fast) var(--ease-out);

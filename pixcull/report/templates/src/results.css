@@ -187,7 +187,7 @@
        in the top-left, reinforcing identity every time. */
     .brand-mark .wordmark span {
       background: var(--brand-gradient,
-        linear-gradient(135deg, #d5b584, #93743f));
+        linear-gradient(135deg, var(--accent), var(--accent-deep)));
       -webkit-background-clip: text;
       background-clip: text;
       color: transparent;
@@ -344,7 +344,7 @@
     .score-number,
     .stat-value-large {
       background: var(--brand-gradient,
-        linear-gradient(135deg, #d5b584, #93743f));
+        linear-gradient(135deg, var(--accent), var(--accent-deep)));
       -webkit-background-clip: text;
       background-clip: text;
       color: transparent;
@@ -360,7 +360,7 @@
     button.btn-primary,
     .export-btn.primary-cta {
       background: var(--brand-gradient,
-        linear-gradient(135deg, #d5b584, #93743f)) !important;
+        linear-gradient(135deg, var(--accent), var(--accent-deep))) !important;
       color: #ffffff !important;
       border: 0 !important;
       box-shadow: 0 4px 14px rgba(213,181,132, 0.35);
@@ -623,7 +623,7 @@
     }
     .cmdk-item-mark {
       background: var(--brand-gradient,
-        linear-gradient(135deg, #d5b584, #93743f));
+        linear-gradient(135deg, var(--accent), var(--accent-deep)));
       -webkit-background-clip: text;
       background-clip: text;
       color: transparent;
@@ -656,7 +656,7 @@
     .cmdk-foot-spacer { flex: 1; }
     .cmdk-foot-brand {
       background: var(--brand-gradient,
-        linear-gradient(135deg, #d5b584, #93743f));
+        linear-gradient(135deg, var(--accent), var(--accent-deep)));
       -webkit-background-clip: text;
       background-clip: text;
       color: transparent;
@@ -722,7 +722,7 @@
       display: inline-flex; align-items: center; gap: 8px;
       padding: 4px 10px 4px 8px;
       background: rgba(213,181,132, 0.16);     /* brand indigo wash */
-      color: #eaca98;
+      color: var(--accent-hi);
       border: 1px solid rgba(213,181,132, 0.34);
       border-radius: 999px;
       font-size: 11px;
@@ -731,8 +731,8 @@
       margin-left: 10px;
       white-space: nowrap;
       cursor: pointer;                          /* click → expand modal */
-      transition: background var(--motion-fast, 160ms) ease,
-                  border-color var(--motion-fast, 160ms) ease;
+      transition: background var(--duration-fast, 160ms) ease,
+                  border-color var(--duration-fast, 160ms) ease;
     }
     .presence-pill:hover {
       background: rgba(213,181,132, 0.24);
@@ -779,7 +779,7 @@
       background: var(--surface-2, #242424);
       border: 1px solid rgba(213,181,132, 0.40);
       border-top: 3px solid transparent;
-      border-image: linear-gradient(90deg, #d5b584, #b5945f, #93743f) 1;
+      border-image: linear-gradient(90deg, var(--accent), var(--accent-mid), var(--accent-deep)) 1;
       border-radius: 14px;
       padding: 16px 18px;
       box-shadow: 0 18px 40px -8px rgba(0, 0, 0, 0.55);
@@ -788,7 +788,7 @@
       font-size: 11px;
       letter-spacing: 0.18em;
       text-transform: uppercase;
-      color: #eaca98;
+      color: var(--accent-hi);
       margin: 0 0 8px;
     }
     #presenceModal .pp-list { display: flex; flex-direction: column; gap: 10px; }
@@ -802,7 +802,7 @@
     #presenceModal .pp-avatar {
       width: 28px; height: 28px;
       border-radius: 50%;
-      background: linear-gradient(135deg, #d5b584, #93743f);
+      background: linear-gradient(135deg, var(--accent), var(--accent-deep));
       color: #fff;
       display: inline-flex; align-items: center; justify-content: center;
       font-size: 12px; font-weight: 700;
@@ -810,7 +810,7 @@
     }
     #presenceModal .pp-name { font-weight: 600; color: #fff; font-size: 13px; }
     #presenceModal .pp-meta { font-size: 11px; color: #9ca3af; margin-top: 2px; line-height: 1.5; }
-    #presenceModal .pp-fn { color: #eaca98; }
+    #presenceModal .pp-fn { color: var(--accent-hi); }
     #presenceModal .pp-action { color: #4ade80; }
     #presenceModal .pp-empty { color: #6b7280; font-size: 12px; padding: 12px 4px; }
     #presenceModal .pp-foot {
@@ -822,7 +822,7 @@
       display: flex; justify-content: space-between; gap: 8px; align-items: center;
     }
     #presenceModal .pp-foot a {
-      color: #eaca98;
+      color: var(--accent-hi);
       text-decoration: none;
       cursor: pointer;
     }
@@ -1158,7 +1158,7 @@
     }
     .cluster-divider .compare-btn {
       cursor: pointer; padding: 2px 8px; border-radius: 4px;
-      background: rgba(213,181,132,0.15); color: #eaca98;
+      background: rgba(213,181,132,0.15); color: var(--accent-hi);
       border: 1px solid rgba(213,181,132,0.3);
       font-size: 10px; text-transform: none; letter-spacing: 0;
       user-select: none;
@@ -1684,7 +1684,7 @@
     /* V9.0 style chip in card */
     .row1 .style-chip {
       font-size: 9px; padding: 1px 5px; border-radius: 2px;
-      background: rgba(213,181,132, 0.18); color: #eaca98;
+      background: rgba(213,181,132, 0.18); color: var(--accent-hi);
       letter-spacing: 0.02em;
     }
     /* v0.4 — toolbar button used throughout the header.  Same
@@ -1719,7 +1719,7 @@
       opacity: 0.4; cursor: wait; transform: none;
     }
     .filters .export-status { font-size: 11px; color: var(--muted); }
-    .filters .export-status a { color: #eaca98; text-decoration: none; }
+    .filters .export-status a { color: var(--accent-hi); text-decoration: none; }
     .filters .export-status a:hover { text-decoration: underline; }
 
     /* P-UX-1 — export action menu. The 5 export-related buttons
@@ -2349,7 +2349,7 @@
       position: fixed; left: 50%; transform: translateX(-50%);
       bottom: 14px; z-index: 60;
       padding: 6px 14px; border-radius: 999px;
-      background: var(--panel, #1c1d21); color: var(--fg, #e9e9ea);
+      background: var(--bg-card, #1c1d21); color: var(--fg, #e9e9ea);
       border: 1px solid var(--border, #2a2c31);
       font-size: 12px; letter-spacing: .02em;
       display: flex; gap: 10px; align-items: center;

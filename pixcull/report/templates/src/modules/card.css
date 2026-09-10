@@ -72,15 +72,15 @@
       display: inline-flex; align-items: center; gap: 3px;
       padding: 2px 8px; border-radius: 4px; cursor: pointer;
       font-size: 11px; font-weight: 600; line-height: 1.4;
-      color: #161616; background: linear-gradient(180deg, #eaca98, #d5b584);
+      color: #161616; background: linear-gradient(180deg, var(--accent-hi), var(--accent));
       border: 1px solid rgba(22,22,22, 0.25);
-      box-shadow: 2px 2px 0 -1px #d5b584, 4px 4px 0 -2px #93743f,
+      box-shadow: 2px 2px 0 -1px var(--accent), 4px 4px 0 -2px var(--accent-deep),
                   0 2px 6px rgba(0, 0, 0, 0.35);
       transition: transform 0.12s ease, box-shadow 0.12s ease;
     }
     .card .burst-stack-badge:hover {
       transform: translateY(-1px);
-      box-shadow: 2px 2px 0 -1px #d5b584, 5px 5px 0 -2px #93743f,
+      box-shadow: 2px 2px 0 -1px var(--accent), 5px 5px 0 -2px var(--accent-deep),
                   0 4px 10px rgba(0, 0, 0, 0.45);
     }
     .card .burst-stack-badge:active { transform: translateY(0); }
@@ -252,7 +252,7 @@
       font-family: ui-monospace, monospace; cursor: help;
     }
     .row1 .rs.dis { background: var(--maybe); color: white; }
-    .row1 .rs.meta { background: rgba(213,181,132, 0.18); color: #eaca98; }
+    .row1 .rs.meta { background: rgba(213,181,132, 0.18); color: var(--accent-hi); }
     .row1 .rs.meta.dis { background: var(--maybe); color: white; }
     .row2 { display: flex; align-items: center; justify-content: space-between;
             margin-top: 4px; font-size: 11px; color: var(--muted); }
@@ -344,9 +344,9 @@
        ──────────────────────────────────────────────────────────── */
     .ai-num {
       background: linear-gradient(135deg,
-                  var(--brand-indigo, #d5b584) 0%,
-                  var(--brand-violet, #b5945f) 50%,
-                  var(--brand-pink,   #93743f) 100%);
+                  var(--accent, #d5b584) 0%,
+                  var(--accent-mid, #b5945f) 50%,
+                  var(--accent-deep,   #93743f) 100%);
       -webkit-background-clip: text;
               background-clip: text;
       -webkit-text-fill-color: transparent;
@@ -375,7 +375,7 @@
       stroke-linecap: round;
       transform: rotate(-90deg);
       transform-origin: center;
-      transition: stroke-dashoffset var(--duration-mid, 280ms)
+      transition: stroke-dashoffset var(--duration-slow, 280ms)
                   var(--ease-out, cubic-bezier(0.34, 1.56, 0.64, 1));
     }
     .score-radial.lg svg { width: 36px; height: 36px; flex-basis: 36px; }
@@ -400,7 +400,7 @@
                   rgba(220, 184, 126, 0.32));
       pointer-events: none;
       z-index: 0;
-      transition: height var(--duration-mid, 280ms)
+      transition: height var(--duration-slow, 280ms)
                   var(--ease-out, cubic-bezier(0.34, 1.56, 0.64, 1));
     }
     .row3 .ax > * { position: relative; z-index: 1; }
@@ -531,7 +531,7 @@
     }
     .card-action:hover {
       background: var(--brand-gradient,
-        linear-gradient(135deg, #d5b584, #93743f));
+        linear-gradient(135deg, var(--accent), var(--accent-deep)));
       border-color: transparent;
       color: #ffffff;
       transform: translateY(-1px) scale(1.06);

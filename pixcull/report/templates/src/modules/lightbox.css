@@ -78,7 +78,7 @@
       border: 1px solid transparent;
     }
     .lightbox .advice-src.saw {
-      color: #d5b584; border-color: rgba(213,181,132,0.35);
+      color: var(--accent); border-color: rgba(213,181,132,0.35);
       background: rgba(213,181,132,0.10);
     }
     .lightbox .advice-src.tmpl {
@@ -102,7 +102,7 @@
     }
     .lightbox .lb-alt-k {
       display: block; font-size: 10.5px; letter-spacing: 0.04em;
-      color: #d5b584; margin-bottom: 3px;
+      color: var(--accent); margin-bottom: 3px;
     }
     .lightbox .info-pane::-webkit-scrollbar { width: 8px; }
     .lightbox .info-pane::-webkit-scrollbar-thumb {
@@ -308,7 +308,7 @@
     .lightbox .info-pane .style-tag {
       display: inline-block; margin-right: 4px;
       font-size: 10px; padding: 1px 6px; border-radius: 2px;
-      background: rgba(213,181,132,0.18); color: #eaca98;
+      background: rgba(213,181,132,0.18); color: var(--accent-hi);
     }
     .lightbox .close-btn {
       position: absolute; top: 18px;

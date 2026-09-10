@@ -24,6 +24,7 @@ public enum BrandTokens {
   public static let color_brand_champagne: String = "#d5b584"
   public static let color_brand_champagne_deep: String = "#93743f"
   public static let color_brand_champagne_hi: String = "#eaca98"
+  public static let color_brand_champagne_mid: String = "#b5945f"
   public static let color_brand_gradient: String = "linear-gradient(135deg, #d5b584 0%, #93743f 100%)"
   public static let color_brand_wordmark_end: String = "#c2a878"
   public static let color_brand_wordmark_gradient: String = "linear-gradient(135deg, #f2ead9 0%, #dfcfae 55%, #c2a878 100%)"

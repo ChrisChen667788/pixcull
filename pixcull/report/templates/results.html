@@ -103,13 +103,23 @@
          active".
 
          Accent variants derived from --accent via relative-color:
-           --accent-hi  = accent + 0.064 L  (#eaca98  L≈0.854)
+           --accent-hi  = accent + 0.064 L  (var(--accent-hi)  L≈0.854)
            --accent-soft = accent at 16% alpha
            --accent-glow = accent at 40% alpha
            --focus-ring  = accent-hi at 55% alpha
       */
       /* --accent is already declared above as the root oklch value */
       --accent-hi:    oklch(from var(--accent) calc(l + 0.064) c h);
+      /* v3.72 — the ramp had two more steps that were never tokens, so
+         every gradient using them wrote them as literals and every one
+         of those literals stayed champagne in the light theme, where
+         --accent is deep bronze. Declared rather than derived: the
+         measured ramp is not constant-chroma (C rises 0.0744 -> 0.0807
+         toward the deep end) and deriving with `c` unchanged moved the
+         dark theme by 5-6 channels. A literal belongs in the definition
+         of a token and nowhere else, which is the whole point. */
+      --accent-mid:   #b5945f;
+      --accent-deep:  #93743f;
       --accent-soft:  oklch(from var(--accent) l c h / 0.16);
       --accent-glow:  oklch(from var(--accent) l c h / 0.40);
       --focus-ring:   oklch(from var(--accent) calc(l + 0.064) c h / 0.55);
@@ -155,6 +165,17 @@
       --keep:  var(--c-success);
       --maybe: var(--c-warn);
       --cull:  var(--c-danger);
+      /* v3.72 — three tints that were referenced and never defined, so
+         what rendered was always the fallback: rgba(248,113,113,…) and
+         rgba(217,163,12,…). Those are a red and an amber that appear
+         nowhere else in the product — the decision colours are
+         --c-danger #e0604e and --c-warn #d6a443 — so the cull and maybe
+         chips have been a slightly different hue from every other cull
+         and maybe marker on the page, in both themes. Derived now, so
+         they follow the decision colour and the theme. */
+      --cull-soft:   color-mix(in oklab, var(--cull) 12%, transparent);
+      --cull-border: color-mix(in oklab, var(--cull) 28%, transparent);
+      --maybe-soft:  color-mix(in oklab, var(--maybe) 15%, transparent);
       --keep-cb:  #0ea5e9;     /* P-UX-23 color-blind palette unchanged */
       --maybe-cb: #f59e0b;
       --cull-cb:  #d946ef;
@@ -248,7 +269,8 @@
          large score numbers.  "See the gradient, know it's PixCull." */
       /* v2.21 — champagne→bronze tonal.  Brand signature lives in
          the wordmark / hero numbers / primary CTA only. */
-      --brand-gradient:  linear-gradient(135deg, #d5b584 0%, #93743f 100%);
+      --brand-gradient:  linear-gradient(135deg, var(--accent) 0%,
+                                           var(--accent-deep) 100%);
       --brand-gradient-soft: linear-gradient(135deg,
                               rgba(213,181,132,0.16) 0%,
                               rgba(147,116,63,0.16) 100%);
@@ -351,6 +373,14 @@
       */
       --base:     oklch(0.975 0 0);         /* neutral paper #f7f7f7 */
       --accent:   oklch(0.450 0.075 78);    /* deep bronze   #6c501f */
+      /* v3.72 — the same two steps, at the same lightness offsets the
+         dark ramp uses (-0.105 and -0.212), with chroma pulled back to
+         the largest value that stays inside sRGB at those levels. Not a
+         new brand decision: the accent ramp was settled in v3.66 and
+         this applies it, so a gradient that used to read champagne on
+         white paper now reads bronze. */
+      --accent-mid:   #4d3401;              /* L 0.345 */
+      --accent-deep:  #2b1c00;              /* L 0.238 */
       --contrast: oklch(0.205 0 0);         /* near-black    #171717 */
 
       /* —— SURFACES: derived from --base (v2.21 neutral) ————————— */
@@ -428,13 +458,15 @@
       :root {
         --bg-card: #1d1d1d; --bg-card-hi: #242424; --surface-2: #242424;
         --surface-3: #2e2e2e; --chrome: #0f0f0f; --fg: #e6e6e6;
-        --accent-hi: #eaca98; --accent-soft: rgba(213,181,132,0.16);
+        --accent-hi: #eaca98; --accent-mid: #b5945f; --accent-deep: #93743f;
+        --accent-soft: rgba(213,181,132,0.16);
         --accent-glow: rgba(213,181,132,0.40); --focus-ring: rgba(234,202,152,0.55);
       }
       html[data-theme="light"] {
         --bg-card: #fdfdfd; --bg-card-hi: #eeeeee; --surface-2: #e9e9e9;
         --surface-3: #dddddd; --chrome: #fdfdfd; --fg: #171717;
-        --accent-hi: #866939; --accent-soft: rgba(108,80,31,0.10);
+        --accent-hi: #866939; --accent-mid: #4d3401; --accent-deep: #2b1c00;
+        --accent-soft: rgba(108,80,31,0.10);
         --accent-glow: rgba(108,80,31,0.30); --focus-ring: rgba(108,80,31,0.45);
       }
     }
@@ -643,7 +675,7 @@
        in the top-left, reinforcing identity every time. */
     .brand-mark .wordmark span {
       background: var(--brand-gradient,
-        linear-gradient(135deg, #d5b584, #93743f));
+        linear-gradient(135deg, var(--accent), var(--accent-deep)));
       -webkit-background-clip: text;
       background-clip: text;
       color: transparent;
@@ -800,7 +832,7 @@
     .score-number,
     .stat-value-large {
       background: var(--brand-gradient,
-        linear-gradient(135deg, #d5b584, #93743f));
+        linear-gradient(135deg, var(--accent), var(--accent-deep)));
       -webkit-background-clip: text;
       background-clip: text;
       color: transparent;
@@ -816,7 +848,7 @@
     button.btn-primary,
     .export-btn.primary-cta {
       background: var(--brand-gradient,
-        linear-gradient(135deg, #d5b584, #93743f)) !important;
+        linear-gradient(135deg, var(--accent), var(--accent-deep))) !important;
       color: #ffffff !important;
       border: 0 !important;
       box-shadow: 0 4px 14px rgba(213,181,132, 0.35);
@@ -1079,7 +1111,7 @@
     }
     .cmdk-item-mark {
       background: var(--brand-gradient,
-        linear-gradient(135deg, #d5b584, #93743f));
+        linear-gradient(135deg, var(--accent), var(--accent-deep)));
       -webkit-background-clip: text;
       background-clip: text;
       color: transparent;
@@ -1112,7 +1144,7 @@
     .cmdk-foot-spacer { flex: 1; }
     .cmdk-foot-brand {
       background: var(--brand-gradient,
-        linear-gradient(135deg, #d5b584, #93743f));
+        linear-gradient(135deg, var(--accent), var(--accent-deep)));
       -webkit-background-clip: text;
       background-clip: text;
       color: transparent;
@@ -1178,7 +1210,7 @@
       display: inline-flex; align-items: center; gap: 8px;
       padding: 4px 10px 4px 8px;
       background: rgba(213,181,132, 0.16);     /* brand indigo wash */
-      color: #eaca98;
+      color: var(--accent-hi);
       border: 1px solid rgba(213,181,132, 0.34);
       border-radius: 999px;
       font-size: 11px;
@@ -1187,8 +1219,8 @@
       margin-left: 10px;
       white-space: nowrap;
       cursor: pointer;                          /* click → expand modal */
-      transition: background var(--motion-fast, 160ms) ease,
-                  border-color var(--motion-fast, 160ms) ease;
+      transition: background var(--duration-fast, 160ms) ease,
+                  border-color var(--duration-fast, 160ms) ease;
     }
     .presence-pill:hover {
       background: rgba(213,181,132, 0.24);
@@ -1235,7 +1267,7 @@
       background: var(--surface-2, #242424);
       border: 1px solid rgba(213,181,132, 0.40);
       border-top: 3px solid transparent;
-      border-image: linear-gradient(90deg, #d5b584, #b5945f, #93743f) 1;
+      border-image: linear-gradient(90deg, var(--accent), var(--accent-mid), var(--accent-deep)) 1;
       border-radius: 14px;
       padding: 16px 18px;
       box-shadow: 0 18px 40px -8px rgba(0, 0, 0, 0.55);
@@ -1244,7 +1276,7 @@
       font-size: 11px;
       letter-spacing: 0.18em;
       text-transform: uppercase;
-      color: #eaca98;
+      color: var(--accent-hi);
       margin: 0 0 8px;
     }
     #presenceModal .pp-list { display: flex; flex-direction: column; gap: 10px; }
@@ -1258,7 +1290,7 @@
     #presenceModal .pp-avatar {
       width: 28px; height: 28px;
       border-radius: 50%;
-      background: linear-gradient(135deg, #d5b584, #93743f);
+      background: linear-gradient(135deg, var(--accent), var(--accent-deep));
       color: #fff;
       display: inline-flex; align-items: center; justify-content: center;
       font-size: 12px; font-weight: 700;
@@ -1266,7 +1298,7 @@
     }
     #presenceModal .pp-name { font-weight: 600; color: #fff; font-size: 13px; }
     #presenceModal .pp-meta { font-size: 11px; color: #9ca3af; margin-top: 2px; line-height: 1.5; }
-    #presenceModal .pp-fn { color: #eaca98; }
+    #presenceModal .pp-fn { color: var(--accent-hi); }
     #presenceModal .pp-action { color: #4ade80; }
     #presenceModal .pp-empty { color: #6b7280; font-size: 12px; padding: 12px 4px; }
     #presenceModal .pp-foot {
@@ -1278,7 +1310,7 @@
       display: flex; justify-content: space-between; gap: 8px; align-items: center;
     }
     #presenceModal .pp-foot a {
-      color: #eaca98;
+      color: var(--accent-hi);
       text-decoration: none;
       cursor: pointer;
     }
@@ -1614,7 +1646,7 @@
     }
     .cluster-divider .compare-btn {
       cursor: pointer; padding: 2px 8px; border-radius: 4px;
-      background: rgba(213,181,132,0.15); color: #eaca98;
+      background: rgba(213,181,132,0.15); color: var(--accent-hi);
       border: 1px solid rgba(213,181,132,0.3);
       font-size: 10px; text-transform: none; letter-spacing: 0;
       user-select: none;
@@ -2140,7 +2172,7 @@
     /* V9.0 style chip in card */
     .row1 .style-chip {
       font-size: 9px; padding: 1px 5px; border-radius: 2px;
-      background: rgba(213,181,132, 0.18); color: #eaca98;
+      background: rgba(213,181,132, 0.18); color: var(--accent-hi);
       letter-spacing: 0.02em;
     }
     /* v0.4 — toolbar button used throughout the header.  Same
@@ -2175,7 +2207,7 @@
       opacity: 0.4; cursor: wait; transform: none;
     }
     .filters .export-status { font-size: 11px; color: var(--muted); }
-    .filters .export-status a { color: #eaca98; text-decoration: none; }
+    .filters .export-status a { color: var(--accent-hi); text-decoration: none; }
     .filters .export-status a:hover { text-decoration: underline; }
 
     /* P-UX-1 — export action menu. The 5 export-related buttons
@@ -2482,15 +2514,15 @@
       display: inline-flex; align-items: center; gap: 3px;
       padding: 2px 8px; border-radius: 4px; cursor: pointer;
       font-size: 11px; font-weight: 600; line-height: 1.4;
-      color: #161616; background: linear-gradient(180deg, #eaca98, #d5b584);
+      color: #161616; background: linear-gradient(180deg, var(--accent-hi), var(--accent));
       border: 1px solid rgba(22,22,22, 0.25);
-      box-shadow: 2px 2px 0 -1px #d5b584, 4px 4px 0 -2px #93743f,
+      box-shadow: 2px 2px 0 -1px var(--accent), 4px 4px 0 -2px var(--accent-deep),
                   0 2px 6px rgba(0, 0, 0, 0.35);
       transition: transform 0.12s ease, box-shadow 0.12s ease;
     }
     .card .burst-stack-badge:hover {
       transform: translateY(-1px);
-      box-shadow: 2px 2px 0 -1px #d5b584, 5px 5px 0 -2px #93743f,
+      box-shadow: 2px 2px 0 -1px var(--accent), 5px 5px 0 -2px var(--accent-deep),
                   0 4px 10px rgba(0, 0, 0, 0.45);
     }
     .card .burst-stack-badge:active { transform: translateY(0); }
@@ -2662,7 +2694,7 @@
       font-family: ui-monospace, monospace; cursor: help;
     }
     .row1 .rs.dis { background: var(--maybe); color: white; }
-    .row1 .rs.meta { background: rgba(213,181,132, 0.18); color: #eaca98; }
+    .row1 .rs.meta { background: rgba(213,181,132, 0.18); color: var(--accent-hi); }
     .row1 .rs.meta.dis { background: var(--maybe); color: white; }
     .row2 { display: flex; align-items: center; justify-content: space-between;
             margin-top: 4px; font-size: 11px; color: var(--muted); }
@@ -2754,9 +2786,9 @@
        ──────────────────────────────────────────────────────────── */
     .ai-num {
       background: linear-gradient(135deg,
-                  var(--brand-indigo, #d5b584) 0%,
-                  var(--brand-violet, #b5945f) 50%,
-                  var(--brand-pink,   #93743f) 100%);
+                  var(--accent, #d5b584) 0%,
+                  var(--accent-mid, #b5945f) 50%,
+                  var(--accent-deep,   #93743f) 100%);
       -webkit-background-clip: text;
               background-clip: text;
       -webkit-text-fill-color: transparent;
@@ -2785,7 +2817,7 @@
       stroke-linecap: round;
       transform: rotate(-90deg);
       transform-origin: center;
-      transition: stroke-dashoffset var(--duration-mid, 280ms)
+      transition: stroke-dashoffset var(--duration-slow, 280ms)
                   var(--ease-out, cubic-bezier(0.34, 1.56, 0.64, 1));
     }
     .score-radial.lg svg { width: 36px; height: 36px; flex-basis: 36px; }
@@ -2810,7 +2842,7 @@
                   rgba(220, 184, 126, 0.32));
       pointer-events: none;
       z-index: 0;
-      transition: height var(--duration-mid, 280ms)
+      transition: height var(--duration-slow, 280ms)
                   var(--ease-out, cubic-bezier(0.34, 1.56, 0.64, 1));
     }
     .row3 .ax > * { position: relative; z-index: 1; }
@@ -2941,7 +2973,7 @@
     }
     .card-action:hover {
       background: var(--brand-gradient,
-        linear-gradient(135deg, #d5b584, #93743f));
+        linear-gradient(135deg, var(--accent), var(--accent-deep)));
       border-color: transparent;
       color: #ffffff;
       transform: translateY(-1px) scale(1.06);
@@ -2987,7 +3019,7 @@
     .modal-action     {
       border-top: 3px solid transparent !important;
       border-image: var(--brand-gradient,
-        linear-gradient(135deg, #d5b584, #93743f)) 1 0 0 0 !important;
+        linear-gradient(135deg, var(--accent), var(--accent-deep))) 1 0 0 0 !important;
       border-image-slice: 1 !important;
     }
     .modal-detail     { border-top: 3px solid var(--accent, #d5b584) !important; }
@@ -2999,7 +3031,7 @@
     .modal-action .btn-primary,
     .modal-action button[type="submit"] {
       background: var(--brand-gradient,
-        linear-gradient(135deg, #d5b584, #93743f));
+        linear-gradient(135deg, var(--accent), var(--accent-deep)));
       border: 0;
       color: #ffffff;
     }
@@ -3546,7 +3578,7 @@
       width: 100%;
       padding: 6px 12px;
       background: rgba(213,181,132,0.18);
-      color: #eaca98;
+      color: var(--accent-hi);
       border: 1px solid rgba(213,181,132,0.35);
       border-radius: 5px;
       font-size: 11.5px; font-weight: 500;
@@ -3610,7 +3642,7 @@
       padding: 8px 14px;
       background: rgba(213,181,132, 0.14);
       border: 1px solid rgba(213,181,132, 0.55);
-      color: #eaca98;
+      color: var(--accent-hi);
       border-radius: 8px;
       font-size: 12px; line-height: 1.4;
       box-shadow: 0 8px 28px rgba(0,0,0,0.45);
@@ -3620,7 +3652,7 @@
     .scene-anomaly-banner .sab-msg   { flex: 1; }
     .scene-anomaly-banner .sab-msg b { color: #fff; }
     .scene-anomaly-banner .sab-close {
-      background: transparent; color: #eaca98;
+      background: transparent; color: var(--accent-hi);
       border: 1px solid rgba(213,181,132, 0.4);
       width: 22px; height: 22px;
       border-radius: 4px; cursor: pointer;
@@ -3634,7 +3666,7 @@
        Slides down beneath the banner when the user clicks the
        "查看分布详情" link; inline SVG, no external chart lib. */
     .scene-anomaly-banner .sab-toggle {
-      background: transparent; color: #eaca98;
+      background: transparent; color: var(--accent-hi);
       border: 1px solid rgba(213,181,132, 0.40);
       padding: 2px 8px; font-size: 11px;
       border-radius: 5px; cursor: pointer;
@@ -3705,7 +3737,7 @@
     .a11y-toggle:hover { opacity: 1; }
     .a11y-toggle.on {
       background: rgba(14,165,233,0.18);
-      color: #eaca98; border-color: rgba(14,165,233,0.40);
+      color: var(--accent-hi); border-color: rgba(14,165,233,0.40);
       opacity: 1;
     }
 
@@ -4757,7 +4789,7 @@
       border: 1px solid transparent;
     }
     .lightbox .advice-src.saw {
-      color: #d5b584; border-color: rgba(213,181,132,0.35);
+      color: var(--accent); border-color: rgba(213,181,132,0.35);
       background: rgba(213,181,132,0.10);
     }
     .lightbox .advice-src.tmpl {
@@ -4781,7 +4813,7 @@
     }
     .lightbox .lb-alt-k {
       display: block; font-size: 10.5px; letter-spacing: 0.04em;
-      color: #d5b584; margin-bottom: 3px;
+      color: var(--accent); margin-bottom: 3px;
     }
     .lightbox .info-pane::-webkit-scrollbar { width: 8px; }
     .lightbox .info-pane::-webkit-scrollbar-thumb {
@@ -4987,7 +5019,7 @@
     .lightbox .info-pane .style-tag {
       display: inline-block; margin-right: 4px;
       font-size: 10px; padding: 1px 6px; border-radius: 2px;
-      background: rgba(213,181,132,0.18); color: #eaca98;
+      background: rgba(213,181,132,0.18); color: var(--accent-hi);
     }
     .lightbox .close-btn {
       position: absolute; top: 18px;
@@ -5529,9 +5561,9 @@
       box-shadow: 0 8px 24px rgba(0, 0, 0, 0.40),
                   0 0 0 1px rgba(255, 255, 255, 0.08) inset;
       z-index: 50;
-      transition: transform var(--duration-md, 220ms) var(--ease-out,
+      transition: transform var(--duration-normal, 220ms) var(--ease-out,
                     cubic-bezier(0.2, 0.8, 0.2, 1)),
-                  opacity var(--duration-md, 220ms);
+                  opacity var(--duration-normal, 220ms);
       opacity: 0;
       color: #fff;
     }
@@ -5541,7 +5573,7 @@
       transform: translate(-50%, 0);
     }
     .bulk-toolbar .bulk-count {
-      font: 600 13px/1 var(--font-sans, system-ui);
+      font: 600 13px/1 var(--font-body, system-ui);
       padding: 4px 8px;
       border-radius: 6px;
       background: rgba(255, 255, 255, 0.10);
@@ -5552,7 +5584,7 @@
       border: 1px solid rgba(255, 255, 255, 0.10);
       border-radius: 999px;
       padding: 6px 12px;
-      font: 500 12px/1 var(--font-sans, system-ui);
+      font: 500 12px/1 var(--font-body, system-ui);
       cursor: pointer;
       transition: background-color var(--duration-fast) var(--ease-out),
                   border-color var(--duration-fast) var(--ease-out);
@@ -6106,7 +6138,7 @@
       position: fixed; left: 50%; transform: translateX(-50%);
       bottom: 14px; z-index: 60;
       padding: 6px 14px; border-radius: 999px;
-      background: var(--panel, #1c1d21); color: var(--fg, #e9e9ea);
+      background: var(--bg-card, #1c1d21); color: var(--fg, #e9e9ea);
       border: 1px solid var(--border, #2a2c31);
       font-size: 12px; letter-spacing: .02em;
       display: flex; gap: 10px; align-items: center;
@@ -6201,13 +6233,13 @@
            Diagonal version drives 1-D stroke + dot fills; vertical drives
            the area-under-the-curve fill in the inspector sparkline. -->
       <linearGradient id="aiBrandGrad" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%"   stop-color="#d5b584"/>
-        <stop offset="55%"  stop-color="#b5945f"/>
-        <stop offset="100%" stop-color="#93743f"/>
+        <stop offset="0%"   stop-color="var(--accent)"/>
+        <stop offset="55%"  stop-color="var(--accent-mid)"/>
+        <stop offset="100%" stop-color="var(--accent-deep)"/>
       </linearGradient>
       <linearGradient id="aiBrandGradV" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%"   stop-color="#d5b584"/>
-        <stop offset="100%" stop-color="#93743f"/>
+        <stop offset="0%"   stop-color="var(--accent)"/>
+        <stop offset="100%" stop-color="var(--accent-deep)"/>
       </linearGradient>
       <!-- Archive / bucket — for the P-UX-22 deliverable buckets toggle -->
       <symbol id="icon-archive" viewBox="0 0 24 24" fill="none"
@@ -6611,8 +6643,8 @@
           <defs>
             <linearGradient id="pcBrandGrad"
                             x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0%"   stop-color="#d5b584"/>
-              <stop offset="100%" stop-color="#93743f"/>
+              <stop offset="0%"   stop-color="var(--accent)"/>
+              <stop offset="100%" stop-color="var(--accent-deep)"/>
             </linearGradient>
           </defs>
           <!-- the crowd -->
@@ -7354,15 +7386,15 @@
           <div class="shortcut-row"><span class="keys">拖动图片</span><span class="desc">在 1:1 模式下平移</span></div>
           <div class="shortcut-row"><span class="keys">滚轮</span><span class="desc">以光标为中心放大/缩小</span></div>
           <!-- v0.13.4 — surface v0.11-v0.13 new keys -->
-          <div class="shortcut-row"><span class="keys"><kbd>A</kbd></span><span class="desc"><span style="color:#d5b584">v0.13</span> · 6 轴 AI attribution heatmap</span></div>
-          <div class="shortcut-row"><span class="keys"><kbd>H</kbd></span><span class="desc"><span style="color:#d5b584">v0.12</span> · EXIF / 直方图 overlay</span></div>
-          <div class="shortcut-row"><span class="keys"><kbd>\</kbd></span><span class="desc"><span style="color:#d5b584">v0.12</span> · 一键打开同 burst 组 A/B 比较</span></div>
-          <div class="shortcut-row"><span class="keys">底部 1px 条</span><span class="desc"><span style="color:#d5b584">v0.11</span> · 拖动 scrub 所有可见照片(DaVinci-style)</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>A</kbd></span><span class="desc"><span style="color:var(--accent)">v0.13</span> · 6 轴 AI attribution heatmap</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>H</kbd></span><span class="desc"><span style="color:var(--accent)">v0.12</span> · EXIF / 直方图 overlay</span></div>
+          <div class="shortcut-row"><span class="keys"><kbd>\</kbd></span><span class="desc"><span style="color:var(--accent)">v0.12</span> · 一键打开同 burst 组 A/B 比较</span></div>
+          <div class="shortcut-row"><span class="keys">底部 1px 条</span><span class="desc"><span style="color:var(--accent)">v0.11</span> · 拖动 scrub 所有可见照片(DaVinci-style)</span></div>
         </div>
         <!-- v0.13.4 — grid: marquee + v0.12 bulk -->
         <div class="shortcut-section" data-ctx="grid">
           <div class="shortcut-section-title">批量(v0.11+)</div>
-          <div class="shortcut-row"><span class="keys">网格空白处拖框</span><span class="desc"><span style="color:#d5b584">v0.11</span> · marquee 框选;底部弹出批量工具栏</span></div>
+          <div class="shortcut-row"><span class="keys">网格空白处拖框</span><span class="desc"><span style="color:var(--accent)">v0.11</span> · marquee 框选;底部弹出批量工具栏</span></div>
           <div class="shortcut-row"><span class="keys"><kbd>⌘</kbd>+<kbd>A</kbd></span><span class="desc">全选当前可见</span></div>
           <div class="shortcut-row"><span class="keys"><kbd>Esc</kbd></span><span class="desc">取消所有 marquee 选择</span></div>
           <div class="shortcut-row"><span class="keys"><kbd>⌘</kbd>+<kbd>K</kbd></span><span class="desc">命令面板(模糊搜索动作)</span></div>

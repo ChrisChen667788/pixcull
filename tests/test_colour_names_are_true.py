@@ -284,3 +284,72 @@ def test_the_reported_number_excludes_definitions(tmp_path):
         "counted as work somebody could do")
     assert got[0][2] == "rule"
     assert mod.undesigned(vs, tokens) == [], "a known token is not undesigned"
+
+
+# ---------------------------------------------------------------------------
+# v3.72 — a var() pointing at nothing looks migrated and is not.
+# ---------------------------------------------------------------------------
+
+SRC = ROOT / "pixcull" / "report" / "templates" / "src"
+
+
+def _custom_properties():
+    """(defined, referenced) across the shipped stylesheet source."""
+    files = list(SRC.rglob("*.css")) + list(SRC.rglob("*.html")) + \
+        list(SRC.rglob("*.js"))
+    whole = "\n".join(f.read_text(encoding="utf-8") for f in files)
+    defined = set(re.findall(r"(--[A-Za-z0-9_-]+)\s*:", whole))
+    used = set(re.findall(r"var\(\s*(--[A-Za-z0-9_-]+)", whole))
+    return defined, used
+
+
+def test_no_var_reference_points_at_a_property_that_is_never_defined():
+    """`var(--brand-indigo, #d5b584)` reads as a token reference and
+    behaves as a hardcoded colour: the property was never defined
+    anywhere, so the fallback is what always rendered — in both themes,
+    which is the thing tokens exist to prevent.
+
+    Eleven of these were live when this was written. Three were the old
+    purple brand names that v3.66's rename could not reach, because that
+    pass looked at definitions and these were references to nothing.
+    Three more were decision tints whose fallbacks were a red and an
+    amber used nowhere else in the product."""
+    defined, used = _custom_properties()
+    # Properties set from JavaScript at render time are defined, just not
+    # in a stylesheet — `style="--axis-fill:0.83"` is the axis bars.
+    js = (SRC / "results.js").read_text(encoding="utf-8")
+    runtime = set(re.findall(r"(--[A-Za-z0-9_-]+)\s*:", js))
+
+    assert len(used) >= 50, (
+        f"only {len(used)} var() references found — the scan is broken")
+    dangling = sorted(used - defined - runtime)
+    assert not dangling, (
+        f"these are referenced and never defined, so their fallback is "
+        f"what renders and no theme can reach them: {dangling}")
+
+
+def test_the_accent_ramp_is_complete_in_both_themes():
+    """The migration's premise. Replacing `#93743f` with
+    `var(--accent-deep)` is only correct if that property exists on both
+    grounds; if the light theme lacks it the rule falls back to nothing
+    and the element loses its colour entirely."""
+    tokens = (SRC / "modules" / "tokens.css").read_text(encoding="utf-8")
+
+    # The `@supports not (oklch(from …))` region is a fallback for
+    # browsers without relative colour, and it redeclares the same
+    # properties. The first cut of this test sliced on the first
+    # `html[data-theme="light"]` it found, which put that fallback on
+    # the light side — so deleting the real light definition still
+    # passed, because the fallback's copy was counted. Cut it out first.
+    at = tokens.find("@supports not (background: oklch")
+    assert at != -1, "the relative-colour fallback block is gone"
+    primary = tokens[:at]
+
+    split = primary.index('html[data-theme="light"]')
+    dark, light = primary[:split], primary[split:]
+    for step in ("--accent", "--accent-hi", "--accent-mid", "--accent-deep"):
+        assert re.search(re.escape(step) + r"\s*:", dark), f"dark lacks {step}"
+        assert re.search(re.escape(step) + r"\s*:", light), (
+            f"the light theme lacks {step} outside the @supports "
+            "fallback; on a browser with relative colour every rule "
+            "using it renders with no colour there")

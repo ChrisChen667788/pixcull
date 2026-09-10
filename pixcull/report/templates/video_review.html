@@ -611,11 +611,11 @@ function drawGPS(){
   if(!g || !g.points || g.points.length<2){ $('gpsmap').style.display='none'; return; }
   $('gpsmap').style.display='block';
   const p=g.points, p0=p[0], pN=p[p.length-1];
-  let s='<path d="'+g.path+'" fill="none" stroke="#d5b584" stroke-width="2" '
+  let s='<path d="'+g.path+'" fill="none" stroke="var(--accent)" stroke-width="2" '
       +'stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/>';
   s+='<circle cx="'+p0.x+'" cy="'+p0.y+'" r="4" fill="#63bd7f"/>';
   s+='<circle cx="'+pN.x+'" cy="'+pN.y+'" r="4" fill="#e0604e"/>';
-  s+='<circle id="gpsdot" cx="'+p0.x+'" cy="'+p0.y+'" r="5.5" fill="#d5b584" '
+  s+='<circle id="gpsdot" cx="'+p0.x+'" cy="'+p0.y+'" r="5.5" fill="var(--accent)" '
       +'stroke="#161616" stroke-width="1.5"/>';
   $('gpssvg').innerHTML=s;
   const km=(g.distance_km!=null && g.distance_km>0)?(g.distance_km.toFixed(2)+' km · '):'';
@@ -637,13 +637,13 @@ function drawTimeline(){
   REEL.forEach(c=>{
     const x1=tx(+c.start_s), x2=tx(+c.end_s);
     const op=0.10+0.22*Math.min(1,(+c.score||0));
-    s+='<rect x="'+x1.toFixed(1)+'" y="0" width="'+Math.max(2,(x2-x1)).toFixed(1)+'" height="'+H+'" fill="#d5b584" opacity="'+op.toFixed(2)+'"/>';
-    s+='<text x="'+(x1+3).toFixed(1)+'" y="13" fill="#eaca98" font-size="10">#'+c.rank+'</text>';
+    s+='<rect x="'+x1.toFixed(1)+'" y="0" width="'+Math.max(2,(x2-x1)).toFixed(1)+'" height="'+H+'" fill="var(--accent)" opacity="'+op.toFixed(2)+'"/>';
+    s+='<text x="'+(x1+3).toFixed(1)+'" y="13" fill="var(--accent-hi)" font-size="10">#'+c.rank+'</text>';
   });
   // v2.19-P2 — audio-event bottom lane (laughter/applause/music). Same
   // deterministic glass-box philosophy: the shooter SEES what the audio
   // tagger heard, aligned to the frames it heard it under.
-  const AUD_STYLE={laughter:['#63bd7f','😄 笑声'],applause:['#d5b584','👏 掌声'],music:['#9b9b9b','🎵 音乐']};
+  const AUD_STYLE={laughter:['#63bd7f','😄 笑声'],applause:['var(--accent)','👏 掌声'],music:['#9b9b9b','🎵 音乐']};
   AUDIO.forEach(e=>{
     const st=AUD_STYLE[e.kind]; if(!st) return;
     const x1=tx(+e.start_s), x2=tx(+e.end_s);
@@ -661,14 +661,14 @@ function drawTimeline(){
     area+=' '+x+','+y; line+=(i?' L':'M')+x+' '+y; });
   area+=' 1000,'+H;
   s+='<polygon points="'+area+'" fill="rgba(213,181,132,0.22)"/>';
-  s+='<path d="'+line+'" fill="none" stroke="#eaca98" stroke-width="1.6"/>';
+  s+='<path d="'+line+'" fill="none" stroke="var(--accent-hi)" stroke-width="1.6"/>';
   // score_final faint line
   let lf=''; let any=false;
   FRAMES.forEach((f,i)=>{ if(f.sF==null) return; any=true; const x=tx(f.t).toFixed(1), y=(H-f.sF*H).toFixed(1); lf+=(lf?' L':'M')+x+' '+y; });
   if(any) s+='<path d="'+lf+'" fill="none" stroke="#3f3f3f" stroke-width="1" stroke-dasharray="3 3"/>';
   // playhead
-  s+='<line id="ph" x1="0" y1="0" x2="0" y2="'+H+'" stroke="#93743f" stroke-width="2"/>';
-  s+='<circle id="phd" cx="0" cy="6" r="5" fill="#93743f"/>';
+  s+='<line id="ph" x1="0" y1="0" x2="0" y2="'+H+'" stroke="var(--accent-deep)" stroke-width="2"/>';
+  s+='<circle id="phd" cx="0" cy="6" r="5" fill="var(--accent-deep)"/>';
   svg.innerHTML=s;
   svg.addEventListener('pointerdown',seekEvt);
   svg.addEventListener('pointermove',e=>{ if(dragging) seekEvt(e); });

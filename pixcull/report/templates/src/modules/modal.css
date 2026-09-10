@@ -20,7 +20,7 @@
     .modal-action     {
       border-top: 3px solid transparent !important;
       border-image: var(--brand-gradient,
-        linear-gradient(135deg, #d5b584, #93743f)) 1 0 0 0 !important;
+        linear-gradient(135deg, var(--accent), var(--accent-deep))) 1 0 0 0 !important;
       border-image-slice: 1 !important;
     }
     .modal-detail     { border-top: 3px solid var(--accent, #d5b584) !important; }
@@ -32,7 +32,7 @@
     .modal-action .btn-primary,
     .modal-action button[type="submit"] {
       background: var(--brand-gradient,
-        linear-gradient(135deg, #d5b584, #93743f));
+        linear-gradient(135deg, var(--accent), var(--accent-deep)));
       border: 0;
       color: #ffffff;
     }
