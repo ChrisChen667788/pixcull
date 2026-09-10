@@ -35,7 +35,8 @@ this repo.  Read it before each session.
 4. **Commit / push only when asked.**  Pushing to GitHub or ModelScope
    is publishing public content — confirm first, then run the audit
    (below) before any push.
-5. **`make preflight` before every release push** (v3.70).  Twenty-one
+5. **`make preflight` AFTER the release commit, before the push**
+   (v3.70; the ordering is v3.72).  Twenty-one
    test files, ~21 s, no models: the version rail, both READMEs, the
    changelogs, the dependency pins, the settings registry, the docs'
    command names, repo hygiene, the skip ledger.  Eight of the last
@@ -44,7 +45,12 @@ this repo.  Read it before each session.
    not, learned from a runner nine minutes later.  The list is
    drift-checked by `tests/test_preflight_covers.py`, which finds
    bookkeeping gates the list has not got — it found ten the hour it was
-   written.
+   written.  **Order matters:** `test_release_rail.py` and
+   `test_readme_style.py` measure distance from the newest release
+   *commit*, so running them before committing counts one release fewer
+   and they pass on a tree that CI will fail.  That happened on v3.72 —
+   preflight green, push, CI red — so preflight now warns when the tree
+   is dirty.
 
 ## Release & distribution sync (KEEP GITHUB ⇄ MODELSCOPE CONSISTENT)
 

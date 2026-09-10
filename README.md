@@ -62,6 +62,41 @@
 
 ## What's new
 
+**v3.72** — The light theme was painting champagne gold where the design
+system says deep bronze. Sixty-two colour literals sat in rules that run in
+both themes, so a hardcoded dark-theme value reached white paper; the shipped
+light-theme screenshot had 769 champagne pixels in it. Verified by render: the
+dark theme is unchanged to the pixel, the light theme is not, and that
+difference is the fix.
+
+Eleven `var()` references pointed at properties never defined anywhere, so what
+rendered was always their fallback — including three left over from the purple
+palette, which v3.66's rename could not reach because it looked at definitions
+and these were references to nothing.
+
+**v3.71** — The counter for that work had been describing something nobody
+could act on. It counted `--accent: #d5b584`, the token being *defined*, which
+cannot become a reference to itself; and it read only inside `<style>`, one of
+the three places a single-file page paints. In one template that was the whole
+number: three counted, all three definitions, and seven real usages in
+JavaScript-built SVG invisible to it.
+
+**v3.70** — Eight of the previous twenty releases needed a follow-up commit,
+and the recent ones were all the same shape: the change was right, the
+bookkeeping around it was not, and CI said so nine minutes after the push.
+`make preflight` runs those checks in eighteen seconds instead. The privacy
+sweep also had a hole — an allowlist of sixteen text extensions meant
+fifty-eight tracked files were never opened. Nothing was leaking in them; a
+sweep that reports a repository clean while never opening a file type is
+claiming something it did not check.
+
+**v3.69** — `PIXCULL_VLM_MODE=off` did nothing. The setting deciding whether
+photographs are uploaded for cloud judging was a command-line flag and nothing
+else, while `PIXCULL_VLM_MODEL`, `PIXCULL_VLM_API_KEY` and
+`PIXCULL_VLM_WORKERS` all existed — so that name is both the obvious guess and
+one character from a real one. It is real now, and any `PIXCULL_*` name the
+product does not read is reported at startup with the nearest match.
+
 **v3.68** — Two files pin the dependencies a user can install from, and a
 gate exists so they cannot disagree. It spelled `numpy` as a literal, so it
 had been enforcing parity for the one dependency somebody had already been
@@ -81,45 +116,6 @@ gate built to catch exactly this could not see it — it reads one section of
 one file, and the instruction was three sections away. Every `pixcull …`
 invocation in every document is checked against the CLI's own command tree
 now, which found a second one: a flag on `export` that does not exist either.
-
-**v3.66** — Three questions had been flagged for a human to answer. Two of
-them turned out to be the wrong question. The palette was not a three-way
-choice between competing brand ramps — the three files hold the product
-accent, the wordmark gradient and a stale copy, which are three roles, not
-three opinions. And the repository's weight was not the 9 MB of sample
-photographs but the 62 MB of screenshots beside them, now 31 MB with no
-visible change at the size a README displays them.
-
-**v3.65** — The gate built in v3.53 to catch a stale **What's new** section
-was reading release commits with a pattern pinned to the version series that
-was current when it was written. The next major arrived and it went quiet,
-staying quiet through sixty-four releases while every test beside it passed.
-A guard pinned to the shape of today's data has an expiry date it does not
-announce.
-
-**v3.64** — A resolvable face shipped in the cover picture. In one of the
-sample frames a girl runs across a field at the right edge; at the 1600 px
-working size she is thirty pixels tall and reads as a speck, and at native
-resolution her face is entirely legible. She was in the hero and in four
-screenshots.
-
-The product's own face detector had reported that whole pool clean, which is
-the part worth writing down: a single-shot detector handed a downsized 5472 px
-frame is looking for something ten pixels tall in what it receives. Screening
-is eyes now, and the detector is a pointer. Looking properly also found two
-portraits in the same "clean" pool and a readable vehicle registration.
-
-numpy moved to `>=2.0,<2.5` in the same version. Both reasons for the old `<2`
-ceiling were re-measured and neither still held; the real ceiling is numba's.
-Two other copies of that pin had been left behind, one of them a runtime
-warning telling correctly-installed users to downgrade.
-
-**v3.63** — The sample data was six gradients with "Mountain Range" and "Eagle
-in Flight" burned into them as labels. That is what a visitor saw when they
-clicked 示例数据. It is thirty-two real frames now, and the button itself had
-been returning 500 to everybody: it copies `samples/output` into a run, and
-`.gitignore` carried a bare `output/` that matched any directory of that name
-at any depth, so the directory could never be committed.
 
 Earlier releases are in [`CHANGELOG.md`](CHANGELOG.md).
 

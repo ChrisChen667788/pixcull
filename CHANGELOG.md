@@ -59,7 +59,7 @@ without installing anything.
 
 ---
 
-## v2.94 – v3.62
+## v2.94 – v3.66
 
 The same hole as the one below, dug a second time. v3.53 found that
 **What's new** had stopped at v2.45 while eighty-five releases shipped, and
@@ -74,6 +74,17 @@ beside it now asserting the guard can still see the newest release in the log,
 which is the thing that was actually false.
 
 One line each, exactly as the release was titled at the time.
+
+**v3.66** — three things flagged for a human, and two of the three questions
+were wrong
+
+**v3.65** — the gate that catches a stale README was pinned to the version
+series that had ended
+
+**v3.64** — a face in the cover picture, and numpy pinned to a reason that had
+expired
+
+**v3.63** — real photographs, and the demo button that returned 500
 
 **v3.62** — a hero with photographs in it, and a star history chart
 

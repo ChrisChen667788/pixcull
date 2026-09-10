@@ -94,3 +94,38 @@ def test_the_makefile_offers_it():
     assert re.search(r"^preflight:", mk, re.M), (
         "Makefile has no `preflight` target")
     assert "scripts/preflight.py" in mk
+
+
+def test_preflight_declares_which_gates_it_cannot_see_early():
+    """v3.72 — preflight passed, the push went out, and CI failed on
+    `test_readme_style.py` regardless. Neither was wrong: that gate asks
+    how far the README is behind the newest release COMMIT, and at
+    preflight time the release being made was not a commit yet.
+
+    So the tool built to stop learning this from a runner was, for two
+    of its gates, structurally unable to. It says so now. This asserts
+    the warning still names them — the set is easy to let rot, and a
+    stale one reads exactly like a correct one."""
+    src = PREFLIGHT.read_text(encoding="utf-8")
+    m = re.search(r"COMMIT_RELATIVE\s*=\s*\{([^}]*)\}", src)
+    assert m, "preflight no longer declares COMMIT_RELATIVE"
+    named = set(re.findall(r'"([^"]+)"', m.group(1)))
+    assert named, "COMMIT_RELATIVE is empty"
+
+    listed = set(_listed())
+    assert named <= listed, (
+        f"COMMIT_RELATIVE names gates preflight does not run: {named - listed}")
+
+    # Every gate that reads the git log to find releases is one of these.
+    reads_log = set()
+    for path in listed:
+        text = (ROOT / path).read_text(encoding="utf-8")
+        if re.search(r'"git",\s*"log"|\bgit\b[^\n]*log', text) and \
+                re.search(r"release|version", text, re.I):
+            reads_log.add(path)
+    assert reads_log, "no gate appears to read the release log — scan broken"
+    missing = sorted(reads_log - named)
+    assert not missing, (
+        f"these read the release history and are not declared "
+        f"commit-relative: {missing}. Run before the commit, they measure "
+        "the previous release.")

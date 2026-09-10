@@ -82,8 +82,41 @@ GATES: list[tuple[str, str]] = [
 ]
 
 
+#: Gates whose answer depends on where HEAD is, not on the working tree.
+#: They ask "how far behind the newest release commit is X", so running
+#: them before the release is committed always sees one release fewer.
+COMMIT_RELATIVE = {
+    "tests/test_release_rail.py",
+    "tests/test_readme_style.py",
+}
+
+
+def _uncommitted() -> list[str]:
+    out = subprocess.run(["git", "-C", str(ROOT), "status", "--porcelain"],
+                         capture_output=True, text=True)
+    return [l for l in out.stdout.splitlines() if l.strip()]
+
+
 def main() -> int:
     print(f"preflight — {len(GATES)} release gates\n")
+
+    # v3.72 — preflight passed, the push went out, and CI failed on
+    # `test_readme_style.py` anyway. Both were right: the gate measures
+    # distance from the newest release commit, and at preflight time the
+    # release being made was not a commit yet, so it counted one fewer.
+    #
+    # The tool built in v3.70 to stop learning about this from a runner
+    # could not see the thing it was checking. Run it AFTER `git commit`
+    # and before `git push`, and say so when it is being run too early.
+    dirty = _uncommitted()
+    if dirty:
+        print(f"  ⚠  {len(dirty)} uncommitted change(s) in the tree.\n"
+              f"     {', '.join(sorted(COMMIT_RELATIVE))}\n"
+              "     measure distance from the newest release COMMIT, so "
+              "running now\n"
+              "     counts one release fewer than the push will. Commit "
+              "first, then\n"
+              "     run this, then push.\n")
     failed = []
     t0 = time.time()
     for path, why in GATES:
@@ -107,8 +140,13 @@ def main() -> int:
               "about after the push.")
         return 1
 
+    note = ("  NOTE: run on a dirty tree — the commit-relative gates above "
+            "have not\n        seen the release you are about to make.\n"
+            if dirty else "")
     print(f"\npreflight OK — {len(GATES)} gates in {total:.1f}s. "
           "Product tests are a separate run; this is the bookkeeping.")
+    if note:
+        print(note)
     return 0
 
 
