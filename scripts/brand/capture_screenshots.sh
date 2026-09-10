@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # v0.10 — capture fresh real-UI screenshots for README + ModelScope.
 #
+# v3.63 — the goto timeout was 20s and every /results/<run> shot failed
+# on a cold load once samples/ became a 32-frame shoot: the page builds
+# thumbnails on first request, and seven of twelve captures timed out
+# while five that touch lighter pages went through. A capture script
+# that silently produces five of twelve is worse than one that fails.
+#
 # Walks the live serve_demo through each major surface and saves PNG
 # screenshots into docs/screenshots/.  Uses Playwright headless so the
 # capture is deterministic (no manual window-resize, no human jitter).
@@ -74,12 +80,18 @@ echo "[capture] share token: ${SHARE_TOKEN:-<none>}"
 "$PYTHON" - "$PORT" "$RUN" "$SHARE_TOKEN" <<'PYEOF'
 import asyncio
 import sys
+import json
 from pathlib import Path
 from playwright.async_api import async_playwright
 
 PORT, RUN, SHARE_TOKEN = sys.argv[1], sys.argv[2], sys.argv[3]
 BASE = f"http://127.0.0.1:{PORT}"
 OUT = Path("docs/screenshots")
+
+
+def _wants_light(actions):
+    return any(a[0] == "storage_init" and a[1] == "pixcull_theme=light"
+               for a in (actions or []))
 OUT.mkdir(exist_ok=True)
 
 # (path, viewport, post-load action(s), output filename, full_page)
@@ -133,7 +145,37 @@ async def main():
                     # exception list TARGETS_KEEP_MOTION below for
                     # frames we WANT animated.
                     reduced_motion="reduce",
+                    # v3.63 — and the colour scheme, because the theme
+                    # module falls back to "system" when it finds no
+                    # stored preference. Without this the whole set came
+                    # back in the light theme on a light Mac.
+                    color_scheme=("light" if _wants_light(actions)
+                                  else "dark"),
                 )
+                # Seed before ANY page script runs, on every navigation.
+                # The previous approach — navigate home, write the key,
+                # navigate on — left the first paint to chance, and the
+                # first paint is what gets photographed.
+                _seed = {k: v for k, v in
+                         (a[1].split("=", 1) for a in actions or []
+                          if a[0] == "storage_init")}
+                _seed.setdefault("pixcull_theme", "dark")
+                # Client-present mode hides every verdict, which is the
+                # opposite of what a screenshot of a culling tool should
+                # show. It persists, so a capture inherits whatever the
+                # last one left behind.
+                _seed.setdefault("pixcull_client_present", "0")
+                for _k in ("pixcull_onboarded_v1",
+                           "pixcull_seen_lightbox_keys_v0_13",
+                           "pixcull_seen_rubric_intro_v1",
+                           "pixcull_seen_closeups_v1",
+                           "pixcull_seen_transparency_v1",
+                           "pixcull_tour_pulse_v1"):
+                    _seed.setdefault(_k, "1")
+                await ctx.add_init_script(
+                    "try{const s=%s;for(const k in s)"
+                    "localStorage.setItem(k,s[k]);}catch(e){}"
+                    % json.dumps(_seed))
                 page = await ctx.new_page()
                 # Apply any localStorage seed BEFORE the first nav so
                 # the page's on-load code reads our value.  Used for
@@ -146,7 +188,7 @@ async def main():
                         # key, then navigate to the real target.
                         await page.goto(BASE + "/",
                                         wait_until="domcontentloaded",
-                                        timeout=20_000)
+                                        timeout=90_000)
                         for _, kv in seeds:
                             k, v = kv.split("=", 1)
                             await page.evaluate(
@@ -161,7 +203,7 @@ async def main():
                 # the rendered cards to actually appear.
                 await page.goto(BASE + path,
                                 wait_until="domcontentloaded",
-                                timeout=20_000)
+                                timeout=90_000)
                 # For /results/ — wait for the JS-rendered cards to
                 # exist before screenshotting; otherwise we capture
                 # the un-hydrated template-string skeleton.
@@ -174,7 +216,21 @@ async def main():
                         )
                     except Exception:
                         pass  # fall through, capture whatever we have
-                await page.wait_for_timeout(1500)  # let JS settle
+                await page.wait_for_timeout(5000)  # let JS settle
+                # v3.63 — close the scene-distribution banner the way a
+                # user would. It fires on this sample run because 23 of
+                # 32 frames are one scene, which is true and worth
+                # saying, but it is positioned OVER the sort and preset
+                # controls rather than above them, so a screenshot with
+                # it open shows a toolbar nobody can read. The overlap
+                # is a real layout defect and is written up separately;
+                # this only stops it from being photographed.
+                try:
+                    await page.locator(".sab-close").first.click(
+                        timeout=2_000)
+                    await page.wait_for_timeout(700)
+                except Exception:
+                    pass
                 if actions:
                     for action in actions:
                         kind, arg = action

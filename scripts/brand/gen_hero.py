@@ -58,29 +58,33 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-SCREENSHOT = ROOT / "docs" / "screenshots" / "01-results-grid.png"
+SAMPLES = ROOT / "samples" / "input"
 BRAND_FILE = Path(__file__).resolve().parent / "pixcull-brand.json"
 OUT_DIR = ROOT / "docs" / "brand"
 
 W, H = 1280, 540
 
-#: Where each frame sits in the source screenshot, and what the product
-#: scored it. Crops start 48 px below the card's top edge to leave the
-#: UI's own tick badge out of the picture.
+#: Six frames from the take in `samples/input`, with the score PixCull
+#: actually gave them. Reproduce with:
+#:
+#:     pixcull run samples/input -o /tmp/run --vlm-mode off
+#:
+#: The pair that matters is 8537 and 8538: one burst, two frames, and
+#: the tool picked the first (peak_rank 0) over the second by 0.05. That
+#: is not a composition invented for a hero — it is what the run said.
 FRAMES = [
-    # (name, x0, x1, y0, score, chosen)
-    ("3J0A9822", 522, 1078, 351, "0.88", False),
-    ("3J0A9601", 1690, 2246, 351, "0.77", False),
-    ("3J0A9893", 522, 1078, 958, "0.73", False),
-    ("3J0A9496", 1106, 1662, 351, "0.85", True),    # kept
-    ("3J0A9494", 1690, 2246, 958, "0.72", False),   # its near-duplicate
-    ("3J0A9541", 1106, 1662, 958, "0.73", False),
+    ("3J0A8470", "0.72", False),   # the wide view, before the light came
+    ("3J0A8506", "0.81", False),   # the sun still above the ridge
+    ("3J0A8544", "0.75", False),   # one of a four-frame burst, all 0.75
+    ("3J0A8537", "0.71", True),    # kept — peak of its burst
+    ("3J0A8538", "0.66", False),   # the same burst, half a second later
+    ("3J0A8589", "0.82", False),   # highest of the take, the mudflat
 ]
 
-#: The chosen frame's index in FRAMES — the fourth of six, near the
-#: golden-ratio point rather than dead centre.
+#: The chosen frame's index — the fourth of six, near the golden-ratio
+#: point rather than dead centre.
 CHOSEN = 3
-#: Its near-duplicate, which sits immediately to the right.
+#: Its burst twin, which sits immediately to the right.
 TWIN = 4
 
 THUMB_W = 200
@@ -94,19 +98,18 @@ def brand() -> dict:
 
 
 def _thumbs() -> dict[str, str]:
-    """Crop, downscale and base64 each frame. Returns name -> data URI."""
+    """Downscale each frame and base64 it. Returns name -> data URI."""
     from PIL import Image
 
-    if not SCREENSHOT.is_file():
-        raise SystemExit(f"missing {SCREENSHOT}")
-    src = Image.open(SCREENSHOT).convert("RGB")
     out = {}
-    for name, x0, x1, y0, _score, _chosen in FRAMES:
-        # +48 clears the UI tick badge; the card's photo area is 339 tall.
-        crop = src.crop((x0 + 8, y0 + 48, x1 - 8, y0 + 339))
-        h = round(crop.height * THUMB_W / crop.width)
+    for name, _score, _chosen in FRAMES:
+        src = SAMPLES / f"{name}.jpg"
+        if not src.is_file():
+            raise SystemExit(f"missing {src} — is samples/input intact?")
+        im = Image.open(src).convert("RGB")
+        h = round(im.height * THUMB_W / im.width)
         buf = io.BytesIO()
-        crop.resize((THUMB_W, h), Image.LANCZOS).save(
+        im.resize((THUMB_W, h), Image.LANCZOS).save(
             buf, "JPEG", quality=JPEG_QUALITY, optimize=True)
         out[name] = ("data:image/jpeg;base64,"
                      + base64.b64encode(buf.getvalue()).decode())
@@ -133,8 +136,7 @@ def _svg(theme: str, thumbs: dict[str, str]) -> str:
     y0 = 292
 
     cells = []
-    for i, (name, *_rest) in enumerate(FRAMES):
-        score = FRAMES[i][4]
+    for i, (name, score, _chosen) in enumerate(FRAMES):
         chosen = i == CHOSEN
         x = x0 + i * (fw + gap)
         # The marked frame stands slightly proud of the strip.
@@ -174,11 +176,19 @@ def _svg(theme: str, thumbs: dict[str, str]) -> str:
               font-family="Inter,-apple-system,'PingFang SC',sans-serif"
               font-size="11" font-weight="700" fill="#0d1a12">保留 {score}</text>
       </g>''')
-        else:
+        elif i == TWIN:
+            # Only the pair carries a number. The other four frames of
+            # the take scored higher than the one that was chosen —
+            # 0.82 and 0.81 against 0.71 — because the choice being
+            # shown is which of TWO near-duplicates is the peak of its
+            # burst, not which frame of the shoot is best. Printing all
+            # six scores invites the comparison the picture is not
+            # making, and the honest fix is to show the two that are
+            # actually being compared rather than to reorder them.
             cells.append(f'''
       <text x="{cx+w-8:.0f}" y="{y+h-9:.0f}" text-anchor="end"
             font-family="ui-monospace,'SF Mono',Menlo,monospace"
-            font-size="10.5" fill="{text_lo}" opacity="0.85">{score}</text>''')
+            font-size="11.5" fill="{text_lo}">{score}</text>''')
         if i == TWIN:
             # Tie the pair together explicitly. "same moment" floating
             # under one frame reads as a caption for that frame; a line

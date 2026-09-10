@@ -50,6 +50,15 @@ thumbs/
 !tests/fixtures/*/output/
 !tests/fixtures/*/output/**
 
+# v3.63 — and samples/output, for the same reason and found the same
+# way. The in-product "示例数据" button copies samples/output into a run
+# and serves it; the bare `output/` above meant that directory could
+# never be committed, so the button returned
+# `500 samples/ not bundled with this build` for every user who ever
+# clicked it. Second time this rule has eaten something load-bearing.
+!samples/output/
+!samples/output/**
+
 # Internal / not for public repo
 MARKET_ANALYSIS_*.md
 .claude/

@@ -176,7 +176,23 @@ def test_the_hero_ships_both_themes_and_they_agree():
     # Same composition, different palette: the frame count and the
     # decision they show must not diverge.
     d, l = dark.read_text("utf-8"), light.read_text("utf-8")
-    for needle in ("保留 0.85", "same moment", "data:image/jpeg;base64"):
+    # The score comes from the generator rather than being written down
+    # here. The first cut pinned the literal "保留 0.85", which was the
+    # figure at the time; when the hero moved to the real sunset take
+    # and the real run scored the kept frame 0.71, the gate failed for a
+    # change that was correct. Pin the shape, read the number.
+    import importlib.util as _ilu
+    _spec = _ilu.spec_from_file_location(
+        "_gen_hero", ROOT / "scripts" / "brand" / "gen_hero.py")
+    _gen = _ilu.module_from_spec(_spec)
+    _spec.loader.exec_module(_gen)
+    chosen_score = _gen.FRAMES[_gen.CHOSEN][1]
+    twin_score = _gen.FRAMES[_gen.TWIN][1]
+    assert chosen_score != twin_score, (
+        "the hero's whole point is that the pair scored differently")
+
+    for needle in (f"保留 {chosen_score}", twin_score,
+                   "same moment", "data:image/jpeg;base64"):
         assert needle in d and needle in l, f"{needle!r} is in only one theme"
     assert d.count("<image ") == l.count("<image "), (
         "the two themes show a different number of photographs")
