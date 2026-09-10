@@ -60,11 +60,44 @@ def test_a_job_installs_playwright_and_a_browser():
     assert "playwright install" in script and "chromium" in script
 
 
+def _pytest_arguments(script: str) -> set:
+    """Every path handed to a `pytest` invocation, following backslash
+    continuations.
+
+    v3.73 fixup — this used to be `f in script`, and a filename appended
+    to the end of a continued command WITHOUT the trailing backslash
+    satisfies that check while the shell treats it as a command of its
+    own. That is what shipped: the lane exited 126 with "Permission
+    denied", pytest never received the file, and the step that proves a
+    browser launched never ran. Substring presence is not invocation.
+    """
+    joined, args, in_pytest = [], set(), False
+    for raw in script.splitlines():
+        line = raw.strip()
+        if not in_pytest:
+            if line.startswith("pytest ") or line.startswith("python -m pytest"):
+                in_pytest = True
+                joined = [line]
+            else:
+                continue
+        else:
+            joined.append(line)
+        if not line.endswith("\\"):
+            whole = " ".join(x.rstrip("\\").strip() for x in joined)
+            args.update(w for w in whole.split() if w.endswith(".py"))
+            in_pytest = False
+    return args
+
+
 def test_that_job_runs_all_three_browser_files():
     """Named individually. A glob would quietly drop the next one."""
     script = _run_script(_workflow()["jobs"]["browser"])
-    missing = [f for f in BROWSER_TESTS if f not in script]
-    assert not missing, f"browser lane does not run: {missing}"
+    args = _pytest_arguments(script)
+    assert args, "the browser lane runs no pytest invocation"
+    missing = [f for f in BROWSER_TESTS if f not in args]
+    assert not missing, (
+        f"browser lane does not pass these to pytest: {missing}. "
+        f"It invokes: {sorted(args)}")
 
 
 def test_the_lane_proves_a_browser_actually_launched():

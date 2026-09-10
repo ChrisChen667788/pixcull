@@ -121,7 +121,7 @@ jobs:
             tests/test_visual_smoke.py \
             tests/test_lightbox_stability.py \
             tests/test_client_present.py \
-            tests/test_readme_images_render.py
+            tests/test_readme_images_render.py \
             tests/test_design_system_matches_the_product.py
 
       - name: Prove the browser actually launched
