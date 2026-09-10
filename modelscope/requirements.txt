@@ -18,10 +18,18 @@ rich>=13.7
 opencv-python>=4.9,<6
 rawpy>=0.19
 
-# DL — CPU wheels are fine for the Studio's free tier
-torch>=2.2
-torchvision>=0.17
-transformers>=4.40
+# DL — CPU wheels are fine for the Studio's free tier.
+#
+# v3.68 — the major ceilings are here because they are in pyproject.toml,
+# and they were in pyproject.toml because transformers 5.x silently
+# changed CLIP get_image_features to return a BaseModelOutputWithPooling
+# instead of a tensor. The Studio ran uncapped for the whole time that
+# ceiling existed, so the one install a visitor cannot inspect was the
+# one install with no protection. Kept in step by
+# tests/test_dependency_pins_agree.py — do not edit one file alone.
+torch>=2.2,<3
+torchvision>=0.17,<1
+transformers>=4.40,<6
 safetensors>=0.4
 
 # Bilingual VLM caption (Tab 2): BLIP captions the frame in English,

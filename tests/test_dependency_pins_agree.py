@@ -1,17 +1,29 @@
-"""v3.64 — three files carried the numpy pin and two of them were wrong.
+"""v3.64 / v3.68 — the package pins have to say the same thing twice.
 
-`pyproject.toml` moved to `numpy>=2.0,<2.5`. Left behind:
+**v3.64.** `pyproject.toml` moved to `numpy>=2.0,<2.5`. Left behind:
+`pixcull/__init__.py`'s runtime guard still fired on numpy 2.x and told
+the user to run ``pip install 'numpy<2'`` — advice that breaks a
+correctly installed copy, printed on every import — and
+`modelscope/requirements.txt` still pinned `numpy>=1.26,<2`, so the
+Studio resolved a different numpy than the package beside it.
 
-* `pixcull/__init__.py`'s runtime guard still fired on numpy 2.x and
-  told the user to run ``pip install 'numpy<2'`` — advice that breaks a
-  correctly installed copy, printed on every single import.
-* `modelscope/requirements.txt` still pinned `numpy>=1.26,<2`, so the
-  Studio build resolved a different numpy than the package it installs
-  alongside it.
+**v3.68 — and then the gate written for that only ever checked numpy.**
+It named the package as a literal, so it enforced parity for the one
+dependency somebody had already been bitten by and left the other
+fifteen to luck. Three had drifted: `torch`, `torchvision` and
+`transformers` carry major ceilings in `pyproject.toml` and carried none
+in the Studio's requirements.
 
-Twin-path drift, which this repository keeps rediscovering. The fix is
-not to remember: it is for the copies to be read from the source and
-compared.
+Those three are exactly the ones with a ceiling that was *earned* —
+transformers 5.x silently changed CLIP `get_image_features` to return a
+`BaseModelOutputWithPooling` instead of a tensor. So the pattern was:
+every dependency painful enough to be capped was a dependency the Studio
+was running uncapped. The public demo, the install a visitor cannot
+inspect or fix, had the least protection of any install.
+
+The gate compares every shared requirement now, and asserts it found a
+plausible number of them — a parity check that silently comes back with
+nothing to compare is the shape this file exists to prevent.
 """
 import ast
 import re
@@ -24,6 +36,71 @@ _SPEC = re.compile(r"numpy\s*>=\s*([\d.]+)\s*,\s*<\s*([\d.]+)")
 
 def _ver(text: str) -> tuple[int, ...]:
     return tuple(int(x) for x in text.rstrip(".").split("."))
+
+
+def _requirements(path: Path) -> dict:
+    """`{package: specifier}` from a requirements.txt, comments stripped."""
+    out = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.split("#", 1)[0].strip()
+        if not line or line.startswith("-") or line.startswith("git+"):
+            continue
+        m = re.match(r"^([A-Za-z0-9_.\-]+)\s*(?:\[[^\]]*\])?\s*(.*)$", line)
+        if m:
+            out[m.group(1).lower().replace("_", "-")] = m.group(2).strip()
+    return out
+
+
+def _pyproject_requirements() -> dict:
+    """`{package: specifier}` from pyproject's dependencies AND extras.
+
+    Extras count: the Studio installs `mediapipe` and friends by name,
+    not by extra, so a ceiling living in an extra still has to reach it.
+    """
+    import tomllib
+    doc = tomllib.loads((ROOT / "pyproject.toml").read_bytes().decode("utf-8"))
+    out = {}
+    specs = list(doc["project"].get("dependencies", []))
+    for group in doc["project"].get("optional-dependencies", {}).values():
+        specs.extend(group)
+    for spec in specs:
+        m = re.match(r"^([A-Za-z0-9_.\-]+)\s*(?:\[[^\]]*\])?\s*(.*)$", spec.strip())
+        if m:
+            out.setdefault(m.group(1).lower().replace("_", "-"), m.group(2).strip())
+    return out
+
+
+def _ceiling(spec: str) -> str | None:
+    m = re.search(r"<=?\s*([\d.]+)", spec or "")
+    return m.group(0).replace(" ", "") if m else None
+
+
+def test_every_shared_pin_carries_the_same_ceiling():
+    """The general form of the numpy defect.
+
+    A ceiling exists because something broke. If it is stated in one of
+    the two files a user can install from and not the other, then the
+    install nobody can inspect — the hosted Studio — is the unprotected
+    one."""
+    proj = _pyproject_requirements()
+    studio = _requirements(ROOT / "modelscope" / "requirements.txt")
+    shared = sorted(set(proj) & set(studio))
+
+    # The data source has to be alive. A parity check comparing zero
+    # packages passes, and reads exactly like a parity check that agreed.
+    assert len(shared) >= 10, (
+        f"only {len(shared)} shared requirements found ({shared}) — the "
+        "parser is broken, not the pins")
+
+    drift = []
+    for pkg in shared:
+        want, got = _ceiling(proj[pkg]), _ceiling(studio[pkg])
+        if want != got:
+            drift.append(f"{pkg}: pyproject {proj[pkg]!r} vs Studio {studio[pkg]!r}")
+    assert not drift, (
+        "these carry a different upper bound in the two files a user can "
+        f"install from: {drift}. A ceiling is written because something "
+        "broke; stating it in one place only leaves the other exposed.")
 
 
 def _pyproject_band() -> tuple[tuple[int, ...], tuple[int, ...]]:

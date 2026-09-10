@@ -455,7 +455,17 @@ the one machine that cannot see its effect**.  numpy is `>=2.0,<2.5` (numba's
 ceiling, not mediapipe's), mediapipe `<1.0` (1.0.1 hard-aborts on
 `DrishtiMetalHelper`), opencv `>=4.9,<6`.  The same pins live in
 `modelscope/requirements.txt` — twin-path, checked by
-`test_numpy_pin_is_stated_once.py`.
+`test_dependency_pins_agree.py`.
+
+**That gate was named for one package and enforced one package** (v3.68).
+It said `numpy` as a literal, so it covered the dependency somebody had
+already been bitten by and left the other fifteen alone — and `torch`,
+`torchvision` and `transformers` had all drifted, each carrying a ceiling
+in `pyproject.toml` and none in the Studio.  Those three are precisely
+the ones whose ceiling was *earned*, so **the packages painful enough to
+cap were the packages the public demo ran uncapped.**  When a guard is
+written after being burned by one instance, ask what the instance is an
+instance *of* before naming it in the assertion.
 
 **`.gitignore`'s bare `output/` has eaten two load-bearing directories** —
 `tests/fixtures/present_run/output` (v3.51) and `samples/output` (v3.63, which
