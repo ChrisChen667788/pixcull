@@ -15,7 +15,7 @@ pydantic>=2.7
 rich>=13.7
 
 # CV
-opencv-python>=4.9
+opencv-python>=4.9,<6
 rawpy>=0.19
 
 # DL — CPU wheels are fine for the Studio's free tier

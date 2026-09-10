@@ -98,6 +98,33 @@ TWIN = 4
 THUMB_W = 200
 JPEG_QUALITY = 62
 
+#: The phrase that ties the pair together, written once. Until v3.65 it
+#: existed three times — in the drawn label, in the SVG's `aria-label`,
+#: and in the README's `alt` — and two of those three were still saying
+#: "same moment" about frames that are 5 seconds apart in a different
+#: shoot from the one they described. The gate that was meant to catch
+#: this asserted the string "same moment" was present, so the stale
+#: aria-label satisfied the check that the label was current.
+TIE_LABEL = "same view, 5s apart · 同一处 · 相隔 5 秒"
+
+
+def alt_text() -> str:
+    """The one description, derived from `FRAMES` rather than typed.
+
+    Used for the SVG's `aria-label` and asserted against the README's
+    `alt` by `tests/test_readme_image_sources.py`, because those are the
+    two places a screen-reader user actually meets this picture.
+    """
+    chosen = FRAMES[CHOSEN]
+    twin = FRAMES[TWIN]
+    return (
+        f"{len(FRAMES)} real frames laid out as a strip, five of them "
+        f"desaturated and dimmed. The {CHOSEN + 1}th stands proud at full "
+        f"colour inside amber crop brackets, carrying a green badge reading "
+        f"保留 {chosen[1]}. The frame beside it is the same view five seconds "
+        f"later, scored {twin[1]}, tied to it by a line — the choice this "
+        f"tool exists to make and to explain.")
+
 
 def brand() -> dict:
     data = json.loads(BRAND_FILE.read_text(encoding="utf-8"))
@@ -206,7 +233,7 @@ def _svg(theme: str, thumbs: dict[str, str]) -> str:
             stroke-width="2.5" paint-order="stroke"
             opacity="0.95">{score}</text>''')
         if i == TWIN:
-            # Tie the pair together explicitly. "same moment" floating
+            # Tie the pair together explicitly. A phrase floating
             # under one frame reads as a caption for that frame; a line
             # spanning both says which two it is talking about, which is
             # the entire point of the picture.
@@ -221,7 +248,7 @@ def _svg(theme: str, thumbs: dict[str, str]) -> str:
       </g>
       <text x="{mid:.0f}" y="{ty+4:.0f}" text-anchor="middle"
             font-family="Inter,-apple-system,'PingFang SC',sans-serif"
-            font-size="11.5" fill="{text_lo}">same view, 5s apart · 同一处 · 相隔 5 秒</text>''')
+            font-size="11.5" fill="{text_lo}">{TIE_LABEL}</text>''')
         cells.append("    </g>")
 
     # The rest of the take, pushed back: desaturated as well as dimmed.
@@ -253,16 +280,9 @@ def _svg(theme: str, thumbs: dict[str, str]) -> str:
     return f'''<?xml version="1.0" encoding="utf-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}"
      role="img"
-     aria-label="Six frames from one museum shoot. The fourth is bracketed and marked keep at 0.85; the frame beside it is the same moment at 0.72.">
+     aria-label="{alt_text()}">
   <title>PixCull — the frame you marked</title>
-  <desc>
-    Six photographs from one shoot, laid out as a strip on a dark warm
-    ground. Five are dimmed. The fourth stands slightly proud, at full
-    brightness, inside amber crop brackets and carrying a green keep
-    badge reading 0.85. The frame immediately to its right is the same
-    subject photographed seconds apart, dimmed, scored 0.72 and labelled
-    "same moment" — the choice this tool exists to make and to explain.
-  </desc>
+  <desc>{alt_text()}</desc>
   <defs>
     <radialGradient id="ground" cx="32%" cy="22%" r="92%">
       <stop offset="0%"   stop-color="{ground_a}"/>

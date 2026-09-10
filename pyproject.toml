@@ -60,7 +60,13 @@ dependencies = [
     "rich>=13.7",
     "structlog>=24.1",
     # CV
-    "opencv-python>=4.9",
+    # v3.65 fixup — a ceiling, because there was none and OpenCV 5
+    # arrived on its own. 5.0.0.93 changed `HoughLinesP` from (N, 1, 4)
+    # to (N, 4), which raised IndexError on every photograph and took
+    # the horizon-tilt signal with it. The code handles both shapes now
+    # and CI has run 5, so the ceiling is the next major rather than 5 —
+    # but it is stated, so the next one cannot arrive unannounced.
+    "opencv-python>=4.9,<6",
     "rawpy>=0.19",
     # DL — upper bounds added after transformers 5.x silently changed
     # CLIP get_image_features/get_text_features to return a

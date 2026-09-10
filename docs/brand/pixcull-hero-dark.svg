@@ -1,16 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 540"
      role="img"
-     aria-label="Six frames from one museum shoot. The fourth is bracketed and marked keep at 0.85; the frame beside it is the same moment at 0.72.">
+     aria-label="6 real frames laid out as a strip, five of them desaturated and dimmed. The 4th stands proud at full colour inside amber crop brackets, carrying a green badge reading 保留 0.84. The frame beside it is the same view five seconds later, scored 0.76, tied to it by a line — the choice this tool exists to make and to explain.">
   <title>PixCull — the frame you marked</title>
-  <desc>
-    Six photographs from one shoot, laid out as a strip on a dark warm
-    ground. Five are dimmed. The fourth stands slightly proud, at full
-    brightness, inside amber crop brackets and carrying a green keep
-    badge reading 0.85. The frame immediately to its right is the same
-    subject photographed seconds apart, dimmed, scored 0.72 and labelled
-    "same moment" — the choice this tool exists to make and to explain.
-  </desc>
+  <desc>6 real frames laid out as a strip, five of them desaturated and dimmed. The 4th stands proud at full colour inside amber crop brackets, carrying a green badge reading 保留 0.84. The frame beside it is the same view five seconds later, scored 0.76, tied to it by a line — the choice this tool exists to make and to explain.</desc>
   <defs>
     <radialGradient id="ground" cx="32%" cy="22%" r="92%">
       <stop offset="0%"   stop-color="#1e2024"/>

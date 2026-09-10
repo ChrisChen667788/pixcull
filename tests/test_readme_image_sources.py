@@ -191,11 +191,55 @@ def test_the_hero_ships_both_themes_and_they_agree():
     assert chosen_score != twin_score, (
         "the hero's whole point is that the pair scored differently")
 
-    for needle in (f"保留 {chosen_score}", twin_score,
-                   "same moment", "data:image/jpeg;base64"):
+    for needle in (f"保留 {chosen_score}", twin_score, _gen.TIE_LABEL,
+                   "data:image/jpeg;base64"):
         assert needle in d and needle in l, f"{needle!r} is in only one theme"
     assert d.count("<image ") == l.count("<image "), (
         "the two themes show a different number of photographs")
+
+    # v3.65 fixup — this list used to hold the literal "same moment",
+    # and that is how the picture's own description went stale twice
+    # without failing. The phrase survived in the SVG's `aria-label` and
+    # in the README's `alt` long after the drawn label stopped saying
+    # it, so the assertion passed *because* of the text that was wrong.
+    # A retired phrase is now a failure rather than a pass.
+    for retired in ("same moment", "museum shoot", "scissors"):
+        assert retired not in d and retired not in l, (
+            f"the hero still says {retired!r} somewhere — it describes a "
+            "picture this is not any more")
+
+
+def test_the_hero_is_described_the_same_way_everywhere():
+    """A screen-reader user meets this picture through the README's `alt`
+    and the SVG's `aria-label`, and until v3.65 both of them described a
+    different photograph from the one on screen: "one museum shoot", "the
+    same scissors", "keep at 0.85", "0.72". The frames had been replaced
+    twice underneath, and nothing read the description.
+
+    So there is one description, `gen_hero.alt_text()`, built from
+    `FRAMES`. Both copies have to match it exactly.
+    """
+    import importlib.util as _ilu
+    _spec = _ilu.spec_from_file_location(
+        "_gen_hero", ROOT / "scripts" / "brand" / "gen_hero.py")
+    _gen = _ilu.module_from_spec(_spec)
+    _spec.loader.exec_module(_gen)
+    alt = _gen.alt_text()
+
+    for theme in ("dark", "light"):
+        svg = (ROOT / "docs" / "brand" / f"pixcull-hero-{theme}.svg").read_text("utf-8")
+        assert f'aria-label="{alt}"' in svg, (
+            f"pixcull-hero-{theme}.svg's aria-label is not the generated "
+            "one — regenerate with scripts/brand/gen_hero.py")
+
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    m = re.search(r'<img src="docs/brand/pixcull-hero-dark\.svg"\s+alt="([^"]*)"',
+                  readme)
+    assert m, "README has no hero <img> with an alt"
+    assert m.group(1) == alt, (
+        "the README's hero alt text has drifted from the generator.\n"
+        f"  README: {m.group(1)[:90]}...\n"
+        f"  should be: {alt[:90]}...")
 
 
 def test_the_hero_matches_its_generator():

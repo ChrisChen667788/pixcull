@@ -8,12 +8,14 @@
        width="100%" />
 </div>
 
-<!-- The hero. Six frames from one real shoot, five pushed back, the one
-     that was marked in crop brackets — the brand mark at a size where
-     you can see what it is bracketing. Its neighbour is the same
-     scissors seconds later, which is the choice this tool exists to
-     make. Photographs and scores are real, from
-     docs/screenshots/01-results-grid.png.
+<!-- The hero. Six real frames, five pushed back, the one that was
+     marked in crop brackets — the brand mark at a size where you can
+     see what it is bracketing. Its neighbour is the same view five
+     seconds later, and the run folds the two into one cluster, so the
+     picture shows a grouping the product actually makes. Photographs
+     and scores come from samples/input and the run in samples/output.
+     The alt text below is generated — do not edit it by hand; it comes
+     from gen_hero.alt_text() and a gate compares the two.
 
      Two files rather than one: prefers-color-scheme inside an
      <img>-embedded SVG reads the OS setting, not GitHub's theme toggle,
@@ -26,7 +28,7 @@
     <source media="(prefers-color-scheme: light)"
             srcset="docs/brand/pixcull-hero-light.svg" />
     <img src="docs/brand/pixcull-hero-dark.svg"
-         alt="Six frames from one museum shoot laid out as a strip. Five are desaturated and dimmed; the fourth is at full colour inside amber crop brackets with a green badge reading 保留 0.85. The frame beside it is the same subject seconds later, scored 0.72, tied to it by a line labelled same moment."
+         alt="6 real frames laid out as a strip, five of them desaturated and dimmed. The 4th stands proud at full colour inside amber crop brackets, carrying a green badge reading 保留 0.84. The frame beside it is the same view five seconds later, scored 0.76, tied to it by a line — the choice this tool exists to make and to explain."
          width="100%" />
   </picture>
 </div>

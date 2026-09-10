@@ -92,8 +92,19 @@ def _detect_horizon_tilt(gray: np.ndarray) -> float | None:
     if lines is None:
         return None
 
+    # v3.65 fixup — `HoughLinesP` returns (N, 1, 4) on OpenCV 4 and
+    # (N, 4) on OpenCV 5, and `opencv-python>=4.9` has no upper bound, so
+    # the first CI machine to resolve 5.0.0.93 raised
+    #
+    #     IndexError: too many indices for array: array is
+    #     2-dimensional, but 3 were indexed
+    #
+    # on every photograph, taking the whole horizon-tilt signal with it.
+    # Seven tests caught it, all of them here, and none of them locally:
+    # this laptop still had 4.11 installed from an earlier resolve. The
+    # reshape is right for both shapes and does not care which is which.
     angles: list[float] = []
-    for seg in lines[:, 0, :]:
+    for seg in np.asarray(lines).reshape(-1, 4):
         x1, y1, x2, y2 = seg
         if x2 == x1:
             continue
