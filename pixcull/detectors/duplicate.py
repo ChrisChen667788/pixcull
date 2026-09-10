@@ -19,8 +19,9 @@ def _dino():
         else "mps" if torch.backends.mps.is_available()
         else "cpu"
     )
-    proc = AutoImageProcessor.from_pretrained("facebook/dinov2-base")
-    model = AutoModel.from_pretrained("facebook/dinov2-base").to(device).eval()
+    from pixcull.model_assets import from_pretrained as _fp
+    proc = _fp(AutoImageProcessor, "facebook/dinov2-base")
+    model = _fp(AutoModel, "facebook/dinov2-base").to(device).eval()
     return proc, model, device
 
 

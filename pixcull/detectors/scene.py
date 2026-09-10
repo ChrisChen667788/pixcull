@@ -135,8 +135,9 @@ def _clip():
         else "mps" if torch.backends.mps.is_available()
         else "cpu"
     )
-    proc = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
-    model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(device).eval()
+    from pixcull.model_assets import from_pretrained as _fp
+    proc = _fp(CLIPProcessor, "openai/clip-vit-base-patch32")
+    model = _fp(CLIPModel, "openai/clip-vit-base-patch32").to(device).eval()
     return proc, model, device
 
 

@@ -1,6 +1,6 @@
 [project]
 name = "pixcull"
-version = "3.61.0"
+version = "3.64.0"
 description = "AI photo culling for professional photographers — MiniMax M3 judges the frame while reading the on-device measurements, 6-axis rubric, XMP/IPTC export, Lightroom & Capture One ready."
 # v2.23 — dedicated PyPI readme: the repo README leans on relative-path
 # screenshots and GitHub-only markup that render broken on pypi.org.
@@ -35,13 +35,22 @@ classifiers = [
 
 dependencies = [
     # core
-    # numpy upper bound: mediapipe 0.10.x is built against numpy 1.x;
-    # importing it under numpy 2.x silently fails to load the face
-    # detector (V18.1 + V22.0.1 both bit us). Also: rescorer joblibs
-    # serialized under numpy 2.x use ``numpy.random._pcg64.PCG64``
-    # paths that 1.x can't unpickle (V18.3 ABI break). Until mediapipe
-    # ships numpy-2-compatible wheels, pin to <2.
-    "numpy>=1.26,<2",
+    # v3.64 — numpy 2.x. The <2 ceiling was set because mediapipe 0.10.x
+    # was built against numpy 1.x and, under 2.x, silently failed to
+    # load the face detector; and because the rescorer joblibs were
+    # thought not to survive the ABI change. Both were re-measured and
+    # neither holds any more:
+    #
+    #     numpy 2.4.6 + mediapipe 0.10.35  detects a face on the
+    #                                      public-domain fixture
+    #     numpy 2.4.6                      loads rescorer_v1.joblib and
+    #                                      the per-axis models
+    #
+    # The ceiling that IS real is numba's: 0.65/0.67 refuse anything
+    # above 2.4 with "Numba needs NumPy 2.4 or less", and numba is on
+    # the audio path through librosa. That is what <2.5 is for — raise
+    # it when numba does, not before.
+    "numpy>=2.0,<2.5",
     "pandas>=2.2",
     "Pillow>=10.2",
     "tqdm>=4.66",
@@ -143,7 +152,17 @@ dev = [
     "types-Pillow",
 ]
 face = [
-    "mediapipe>=0.10.14",
+    # v3.64 — capped below 1.0. mediapipe 1.0.1 installs cleanly and
+    # then aborts the process when the face detector is created:
+    #
+    #     F graph_service.h:139] Check failed: service_ Service is
+    #     unavailable.
+    #     @ -[DrishtiMetalHelper initWithCalculatorContext:]
+    #
+    # It wants a Metal service that is not there on a headless macOS
+    # run, and it is a hard abort rather than an exception, so nothing
+    # downstream can catch it. 0.10.35 works, including under numpy 2.4.
+    "mediapipe>=0.10.14,<1.0",
 ]
 bird = [
     "ultralytics>=8.2",       # YOLOv8

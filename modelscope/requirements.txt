@@ -7,7 +7,7 @@
 # pyproject `dependencies` block.
 
 gradio>=4.0,<5
-numpy>=1.26,<2
+numpy>=2.0,<2.5
 pandas>=2.2
 Pillow>=10.2
 pyyaml>=6.0

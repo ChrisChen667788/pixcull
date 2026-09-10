@@ -188,7 +188,7 @@ async def main():
                         # key, then navigate to the real target.
                         await page.goto(BASE + "/",
                                         wait_until="domcontentloaded",
-                                        timeout=90_000)
+                                        timeout=180_000)
                         for _, kv in seeds:
                             k, v = kv.split("=", 1)
                             await page.evaluate(
@@ -203,7 +203,7 @@ async def main():
                 # the rendered cards to actually appear.
                 await page.goto(BASE + path,
                                 wait_until="domcontentloaded",
-                                timeout=90_000)
+                                timeout=180_000)
                 # For /results/ — wait for the JS-rendered cards to
                 # exist before screenshotting; otherwise we capture
                 # the un-hydrated template-string skeleton.

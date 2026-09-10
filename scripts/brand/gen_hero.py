@@ -64,27 +64,35 @@ OUT_DIR = ROOT / "docs" / "brand"
 
 W, H = 1280, 540
 
-#: Six frames from the take in `samples/input`, with the score PixCull
-#: actually gave them. Reproduce with:
+#: Six frames from `samples/input`, with the score PixCull actually
+#: gave them. Reproduce with:
 #:
 #:     pixcull run samples/input -o /tmp/run --vlm-mode off
 #:
-#: The pair that matters is 8537 and 8538: one burst, two frames, and
-#: the tool picked the first (peak_rank 0) over the second by 0.05. That
-#: is not a composition invented for a hero — it is what the run said.
+#: The pair is 7235 and 7237: the same valley from the same spot, five
+#: seconds apart — 15:26:50 and 15:26:55 by the EXIF. The first took
+#: 0.84 and the second 0.76, and the run **does** fold them into one
+#: cluster, so the hero is showing a grouping the product actually
+#: makes rather than an illustration of one.
+#:
+#: v3.64 replaced the previous pair (7089/7090) for exactly that
+#: reason — those two are the same view but the tool does not group
+#: them, so the picture claimed something the product would not do.
+#: 3J0A9410 came out at the same time: a girl runs across the field at
+#: its right edge and her face is legible at native resolution.
 FRAMES = [
-    ("3J0A8470", "0.72", False),   # the wide view, before the light came
-    ("3J0A8506", "0.81", False),   # the sun still above the ridge
-    ("3J0A8544", "0.75", False),   # one of a four-frame burst, all 0.75
-    ("3J0A8537", "0.71", True),    # kept — peak of its burst
-    ("3J0A8538", "0.66", False),   # the same burst, half a second later
-    ("3J0A8589", "0.82", False),   # highest of the take, the mudflat
+    ("3J0A9972", "0.90", False),   # highest of the set
+    ("3J0A7615", "0.88", False),
+    ("3J0A9858", "0.87", False),
+    ("3J0A7235", "0.84", True),    # kept — the sharper of the two
+    ("3J0A7237", "0.76", False),   # same view, five seconds later
+    ("3J0A7090", "0.87", False),
 ]
 
 #: The chosen frame's index — the fourth of six, near the golden-ratio
 #: point rather than dead centre.
 CHOSEN = 3
-#: Its burst twin, which sits immediately to the right.
+#: The other attempt at the same view, immediately to its right.
 TWIN = 4
 
 THUMB_W = 200
@@ -144,7 +152,11 @@ def _svg(theme: str, thumbs: dict[str, str]) -> str:
         h = fh + 20 if chosen else fh
         w = fw + 14 if chosen else fw
         cx = x - 7 if chosen else x
-        op = 1.0 if chosen else dim
+        # v3.64 — the twin sits between the two treatments. At the
+        # strip's normal dimming it is unreadable as "the same view
+        # again", which is the one thing it is there to say.
+        twin = i == TWIN
+        op = 1.0 if chosen else (dim + (1 - dim) * 0.55 if twin else dim)
         cells.append(f'''
     <g>
       <clipPath id="clip{i}">
@@ -154,7 +166,7 @@ def _svg(theme: str, thumbs: dict[str, str]) -> str:
       <image href="{thumbs[name]}" x="{cx:.0f}" y="{y:.0f}"
              width="{w}" height="{h}" opacity="{op}"
              preserveAspectRatio="xMidYMid slice" clip-path="url(#clip{i})"
-             {'' if chosen else 'filter="url(#rest)"'}/>
+             {'' if chosen else ('filter="url(#twin)"' if twin else 'filter="url(#rest)"')}/>
       <rect x="{cx:.0f}" y="{y:.0f}" width="{w}" height="{h}" rx="5"
             fill="none" stroke="{frame_edge}" stroke-width="1"/>''')
         if chosen:
@@ -177,18 +189,22 @@ def _svg(theme: str, thumbs: dict[str, str]) -> str:
               font-size="11" font-weight="700" fill="#0d1a12">保留 {score}</text>
       </g>''')
         elif i == TWIN:
-            # Only the pair carries a number. The other four frames of
-            # the take scored higher than the one that was chosen —
-            # 0.82 and 0.81 against 0.71 — because the choice being
-            # shown is which of TWO near-duplicates is the peak of its
-            # burst, not which frame of the shoot is best. Printing all
-            # six scores invites the comparison the picture is not
-            # making, and the honest fix is to show the two that are
-            # actually being compared rather than to reorder them.
+            # Only the pair carries a number. Three of the other four
+            # frames scored higher than the one that was chosen — 0.90,
+            # 0.88, 0.87 against 0.84 — because the choice being shown
+            # is which of TWO near-duplicates is the peak of its
+            # cluster, not which frame is best overall. Printing all six
+            # scores invites the comparison the picture is not making.
+            # The number sits ON a photograph, so it takes its
+            # contrast from the picture and not from the theme:
+            # `text_lo` vanished into the light theme's bright hillside
+            # while reading fine on the dark one.
             cells.append(f'''
       <text x="{cx+w-8:.0f}" y="{y+h-9:.0f}" text-anchor="end"
             font-family="ui-monospace,'SF Mono',Menlo,monospace"
-            font-size="11.5" fill="{text_lo}">{score}</text>''')
+            font-size="11.5" fill="#ffffff" stroke="rgba(0,0,0,0.55)"
+            stroke-width="2.5" paint-order="stroke"
+            opacity="0.95">{score}</text>''')
         if i == TWIN:
             # Tie the pair together explicitly. "same moment" floating
             # under one frame reads as a caption for that frame; a line
@@ -205,7 +221,7 @@ def _svg(theme: str, thumbs: dict[str, str]) -> str:
       </g>
       <text x="{mid:.0f}" y="{ty+4:.0f}" text-anchor="middle"
             font-family="Inter,-apple-system,'PingFang SC',sans-serif"
-            font-size="11.5" fill="{text_lo}">same moment · 同一瞬间</text>''')
+            font-size="11.5" fill="{text_lo}">same view, 5s apart · 同一处 · 相隔 5 秒</text>''')
         cells.append("    </g>")
 
     # The rest of the take, pushed back: desaturated as well as dimmed.
@@ -214,6 +230,12 @@ def _svg(theme: str, thumbs: dict[str, str]) -> str:
     unchosen_filter = (
         '  <filter id="rest" x="0" y="0" width="100%" height="100%">\n'
         '    <feColorMatrix type="saturate" values="0.25"/>\n'
+        '  </filter>\n'
+        # The twin keeps most of its colour. It has to look like the
+        # frame beside it, or "you framed it twice" is a caption with
+        # nothing under it.
+        '  <filter id="twin" x="0" y="0" width="100%" height="100%">\n'
+        '    <feColorMatrix type="saturate" values="0.75"/>\n'
         '  </filter>')
 
     grain = ""
@@ -274,16 +296,16 @@ def _svg(theme: str, thumbs: dict[str, str]) -> str:
 
   <text x="{W/2}" y="196" text-anchor="middle"
         font-family="Inter,-apple-system,'PingFang SC',sans-serif"
-        font-size="18.5" fill="{text_hi}">Two frames of one moment. It picks one — and writes down why.</text>
+        font-size="18.5" fill="{text_hi}">You framed it twice. It picks one — and writes down why.</text>
   <text x="{W/2}" y="226" text-anchor="middle"
         font-family="Inter,-apple-system,'PingFang SC','Microsoft Yahei UI',sans-serif"
-        font-size="16" fill="{text_lo}">同一个瞬间拍了两张。它挑出一张,并把理由写下来。</text>
+        font-size="16" fill="{text_lo}">同一处你拍了两张。它挑出一张,并把理由写下来。</text>
 {''.join(cells)}
 
   <text x="{W/2}" y="{H-22}" text-anchor="middle"
         font-family="ui-monospace,'SF Mono',Menlo,monospace"
         font-size="11.5" fill="{text_lo}" opacity="0.75"
-        letter-spacing="0.6">six frames from one shoot · scored on this machine · MIT</text>
+        letter-spacing="0.6">real frames · scored on this machine · MIT</text>
 </svg>
 '''
 

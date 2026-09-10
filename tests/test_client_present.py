@@ -312,3 +312,42 @@ def test_the_fixture_is_actually_tracked_by_git():
     assert any(l.endswith("scores.csv") for l in tracked), (
         "the present-mode fixture is not tracked by git — check .gitignore; "
         f"git ls-files returned {tracked}")
+
+
+def test_the_indicator_can_actually_be_hidden():
+    """v3.64 — `hidden` has to win, and an ID selector beats it.
+
+    `#clientPresentIndicator { display: flex }` outranks the browser's
+    own `[hidden] { display: none }`, so `ind.hidden = true` in
+    33-client-present.js changed nothing: the bar sat on screen for
+    every user, permanently, reading 客户在场模式 · 判决与评分已隐藏
+    while the verdicts and the scores were plainly visible behind it.
+
+    A status bar that is always there is a status bar nobody reads,
+    which is why it survived. It turned up in a screenshot — in all
+    twelve of them.
+    """
+    css = (REPO / "pixcull" / "report" / "templates" / "src"
+           / "results.css").read_text(encoding="utf-8")
+    assert "#clientPresentIndicator[hidden]" in css, (
+        "nothing overrides the display rule, so el.hidden is inert")
+
+    built = BUILT.read_text(encoding="utf-8")
+    assert "#clientPresentIndicator[hidden]" in built, (
+        "the fix is in the source but not in the built results.html — "
+        "run scripts/build_results_html.py")
+
+
+def test_the_indicator_starts_hidden_on_a_fresh_page(page):
+    """The live half: load a run with the mode off and look."""
+    state = page.evaluate("""() => {
+        const el = document.getElementById('clientPresentIndicator');
+        if (!el) return {missing: true};
+        return {hidden: el.hidden,
+                display: getComputedStyle(el).display,
+                mode: document.documentElement.classList.contains('pc-client')};
+    }""")
+    assert not state.get("missing"), "the indicator element is gone"
+    assert state["mode"] is False, "the fixture started in client-present mode"
+    assert state["display"] == "none", (
+        f"client-present mode is off and the bar is still rendered: {state}")

@@ -45,3 +45,35 @@ def resolve(path: Path | str | None) -> Path | None:
 # than whether the file did. In a checkout that directory exists and is
 # empty, so it shadowed all six packaged per-axis models and a real run
 # produced no `model_<axis>_stars`. Resolve one file at a time.
+
+
+def from_pretrained(cls, name: str, **kwargs):
+    """``cls.from_pretrained(name)``, but working when there is no network.
+
+    v3.64 — the product's first claim is that it runs on your machine.
+    It did not. `transformers` contacts the hub before it will use a
+    model it already has: with the weights sitting in
+    ``~/.cache/huggingface`` and the network away, every frame failed
+    with
+
+        OSError: Can't load processor for 'openai/clip-vit-base-patch32'
+
+    and the run ended `Analyzed 0/32 images`. A photographer on a plane,
+    or on a shoot with no signal — the situation local-first exists for —
+    got nothing, with the model on their disk the whole time.
+
+    Setting ``HF_HUB_OFFLINE=1`` fixes it, which is the tell: the files
+    are there and usable, and only the lookup was failing. So try the
+    normal path first, because it is the one that picks up an updated
+    model, and fall back to the copy on disk rather than to an error.
+    """
+    try:
+        return cls.from_pretrained(name, **kwargs)
+    except Exception as first:          # noqa: BLE001 — any network shape
+        try:
+            return cls.from_pretrained(name, local_files_only=True, **kwargs)
+        except Exception:               # noqa: BLE001
+            # Genuinely not on disk. The first error describes what the
+            # user has to fix (no network, and nothing cached), so it is
+            # the one worth showing.
+            raise first

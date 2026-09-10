@@ -8,26 +8,32 @@ try:
     from importlib.metadata import version as _pkg_version
     __version__ = _pkg_version("pixcull")
 except Exception:
-    __version__ = "3.61.0"
+    __version__ = "3.64.0"
+
+#: The band pyproject.toml pins. Kept next to the check that reads it so
+#: the two cannot say different things — until v3.64 this guard was still
+#: telling people to run ``pip install 'numpy<2'`` while the pin had moved
+#: to 2.x, which is advice that breaks a working install.
+_NUMPY_MIN = (2, 0)
+_NUMPY_MAX_EXCLUSIVE = (2, 5)
 
 
 def _check_numpy_compatibility() -> None:
-    """ROADMAP INFRA-5 — runtime guard against the numpy 2.x regression.
+    """ROADMAP INFRA-5 — runtime guard against a numpy outside the pin.
 
-    We've been bitten twice (V18.1 and V22.0.1) when a transitive
-    ``pip install`` upgraded numpy to 2.x. The symptoms are subtle:
-    mediapipe imports cleanly but its face detector silently returns
-    empty results, and pre-V18.3 rescorer joblibs fail to unpickle
-    because the ``numpy.random._pcg64.PCG64`` paths differ between
-    1.x and 2.x. Neither failure is loud — face_count just stays 0
-    on all images, the rescorer silently falls back to rule-only.
+    The pin is enforced at install time, but a later third-party
+    ``pip install`` can still move numpy underneath us, and the failures
+    it causes are quiet ones: mediapipe imports cleanly and its face
+    detector returns nothing, so ``face_count`` stays 0 on every frame;
+    the rescorer joblibs fail to unpickle and scoring silently drops to
+    rule-only. Nothing in a normal run says why.
 
-    Pin in pyproject.toml is ``numpy>=1.26,<2``, but a third-party
-    install command (``pip install some-other-package``) can still
-    blow past the pin. We don't fail hard here — that would break
-    perfectly fine pipelines that don't touch faces — but we DO
-    print a loud warning on every import so the regression is
-    visible at the top of the log.
+    v3.64 — the band is ``>=2.0,<2.5`` now, and both directions are worth
+    warning about. Below 2.0 is the old world the rescorer models are no
+    longer serialized for; 2.5 and above is where numba refuses to import
+    ("Numba needs NumPy 2.4 or less"), which takes the audio path on
+    video with it. We don't fail hard — plenty of pipelines never touch
+    faces, audio or the rescorer — but we say so, loudly, once.
     """
     try:
         import numpy
@@ -35,21 +41,23 @@ def _check_numpy_compatibility() -> None:
         return  # numpy missing is a different problem; let downstream report
     ver = getattr(numpy, "__version__", "")
     try:
-        major = int(ver.split(".")[0])
+        parts = tuple(int(x) for x in ver.split(".")[:2])
     except (ValueError, IndexError):
         return
-    if major >= 2:
-        print(
-            "\n"
-            "⚠ PixCull: numpy " + ver + " detected.\n"
-            "  mediapipe (face detector) and the V18.3 rescorer joblibs\n"
-            "  need numpy 1.x. Run:\n"
-            "      pip install 'numpy<2'\n"
-            "  to fix. Without this, faces won't be detected (face_count\n"
-            "  will be 0 on every photo) and the rescorer falls back to\n"
-            "  rule-only mode.\n",
-            file=sys.stderr,
-        )
+    if len(parts) < 2 or _NUMPY_MIN <= parts < _NUMPY_MAX_EXCLUSIVE:
+        return
+    want = ">=%d.%d,<%d.%d" % (_NUMPY_MIN + _NUMPY_MAX_EXCLUSIVE)
+    print(
+        "\n"
+        "⚠ PixCull: numpy " + ver + " is outside the supported range.\n"
+        "  PixCull is tested against numpy " + want + ".\n"
+        "  Run:\n"
+        "      pip install 'numpy" + want + "'\n"
+        "  Without this, faces may not be detected (face_count stays 0),\n"
+        "  the rescorer can fall back to rule-only, and the audio path\n"
+        "  used by video review may fail to import.\n",
+        file=sys.stderr,
+    )
 
 
 _check_numpy_compatibility()

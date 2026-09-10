@@ -6115,6 +6115,14 @@
       border: 1px solid var(--border, #2a2c31); border-radius: 6px;
       padding: 2px 8px; cursor: pointer;
     }
+    /* v3.64 — an ID selector beats the browser's own
+       `[hidden] { display: none }`, so `ind.hidden = true` in
+       33-client-present.js did nothing and this bar was on screen for
+       every user, permanently, saying "判决与评分已隐藏" while the
+       verdicts and scores sat visible behind it. It survived because
+       nothing reads a status bar that is always there — it turned up in
+       the v3.63 screenshots, in every single frame. */
+    #clientPresentIndicator[hidden] { display: none !important; }
     @media print { #clientPresentIndicator { display: none; } }
 
     /* v3.0 — 客户选.  A ring and a corner tag, in a colour that is not

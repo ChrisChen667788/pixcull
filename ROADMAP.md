@@ -100,9 +100,11 @@ Last refreshed at the V22.2 + INFRA-5 commit (post-V29).
   captioning. Local VLM fallback when offline / hitting cost ceiling.
   1 week.
 - **INFRA-5 — joblib / numpy version-drift discipline** ✅ shipped:
-  pyproject pinned `numpy>=1.26,<2`; `pixcull/__init__.py` runtime
-  guard warns loudly if numpy 2.x sneaks in via a transitive install.
-  Bitten twice (V18.1, V22.0.1); won't be the third time.
+  pyproject pins a band and `pixcull/__init__.py` warns loudly when a
+  transitive install moves numpy outside it. Bitten twice (V18.1,
+  V22.0.1). The band was `>=1.26,<2` until v3.64, when both reasons for
+  the `<2` ceiling were re-measured and neither still held; it is
+  `>=2.0,<2.5` now, and the ceiling is numba's, not mediapipe's.
 
 ---
 

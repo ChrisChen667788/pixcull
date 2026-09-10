@@ -823,7 +823,7 @@ culling" SaaS, the things you'll notice immediately on PixCull:
 git clone https://github.com/ChrisChen667788/pixcull.git
 cd pixcull
 
-# 2. Python 3.11 or 3.12 (mediapipe pins numpy<2 which forces 3.12-max)
+# 2. Python 3.11 or 3.12 (mediapipe 0.10.x ships no wheel above 3.12)
 python3.12 -m venv .venv
 source .venv/bin/activate
 

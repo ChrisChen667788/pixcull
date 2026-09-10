@@ -324,8 +324,9 @@ def _try_vlm():
     _vlm_probed = True
     try:
         from transformers import BlipForConditionalGeneration, BlipProcessor
-        proc = BlipProcessor.from_pretrained(_VLM_MODEL)
-        model = BlipForConditionalGeneration.from_pretrained(_VLM_MODEL)
+        from pixcull.model_assets import from_pretrained as _fp
+        proc = _fp(BlipProcessor, _VLM_MODEL)
+        model = _fp(BlipForConditionalGeneration, _VLM_MODEL)
         model.eval()
         _vlm = (proc, model)
     except Exception:
