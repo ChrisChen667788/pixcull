@@ -130,6 +130,19 @@ So there was nothing to choose. The design system adopted the accent
 ramp, learned the wordmark ramp as the separate role it is, and **no
 pixel a user sees changed** — the reconciliation was a rename.
 
+**v3.71 follow-up — and then the counter was wrong too.** With the
+palettes reconciled, the `unmigrated` figure was supposed to be the
+remaining mechanical work: a token's value written as a literal where a
+`var()` would do. It was neither complete nor correct. It counted
+`--accent: #d5b584` — the token being *defined*, which cannot become a
+var() reference to itself — and it read only inside `<style>`, one of
+the three places a single-file HTML app paints. In `video_review.html`
+that was the whole number: three counted, all three definitions, and
+seven real usages sitting in JavaScript that assembles SVG as a string,
+invisible. The honest figures are 131 undesigned and 81 unmigrated.
+Migrating those 81 is mechanical and still open; it is not ratcheted, so
+it blocks nothing.
+
 **The stated payoff was false.** This entry used to say "reconcile the
 palettes and this falls on its own — the script lowers its own baseline
 whenever violations drop". `_load_design_tokens()` in

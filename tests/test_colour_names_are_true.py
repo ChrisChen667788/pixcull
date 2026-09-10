@@ -197,3 +197,90 @@ def test_the_baseline_keeps_the_reason_somebody_wrote():
     assert body.count("BASELINE_PATH.write_text") <= 1, (
         "more than one place writes the baseline file; they drift, and the "
         "one that forgets to preserve _why deletes it")
+
+
+# ---------------------------------------------------------------------------
+# v3.71 — the migration counter counted the one thing nobody can migrate.
+# ---------------------------------------------------------------------------
+
+def _lint():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("ldt", LINTER)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_a_token_definition_is_not_counted_as_unmigrated(tmp_path):
+    """`--accent: #d5b584` is the token being defined. It cannot become a
+    var() reference to itself, so listing it as work-to-do described
+    something nobody could ever act on."""
+    mod = _lint()
+    p = tmp_path / "t.html"
+    p.write_text("<style>:root{--accent:#d5b584}\n"
+                 ".x{color:#d5b584}</style>", encoding="utf-8")
+    kinds = [(h.lower(), k) for _, h, k in mod._scan(p)]
+    assert ("#d5b584", "definition") in kinds, kinds
+    assert ("#d5b584", "rule") in kinds, kinds
+
+
+def test_the_scanner_sees_paint_outside_a_stylesheet(tmp_path):
+    """A single-file HTML app paints in three places and this read one.
+
+    The failure was not a shortfall but an inversion: in
+    video_review.html every literal it found was a `:root` definition and
+    every real usage — seven of them, in JavaScript assembling SVG — was
+    invisible."""
+    mod = _lint()
+    p = tmp_path / "t.html"
+    p.write_text(
+        '<style>.a{color:#111111}</style>\n'
+        '<span style="background:#222222"></span>\n'
+        '<circle fill="#333333"/>\n'
+        "<script>s+='<path stroke=\"#444444\"/>'</script>\n",
+        encoding="utf-8")
+    found = {h.lower(): k for _, h, k in mod._scan(p)}
+    assert found.get("#111111") == "rule", found
+    assert found.get("#222222") == "inline", found
+    assert found.get("#333333") == "paint", found
+    assert found.get("#444444") == "paint", (
+        "a paint attribute built inside a JavaScript string is still a "
+        f"colour that reaches the screen: {found}")
+
+
+def test_the_shipped_templates_have_no_uncounted_paint():
+    """The regression that would undo this: paint moving back out of the
+    scanner's sight. Asserted on the real templates, because the defect
+    was found there and a synthetic fixture cannot notice it returning."""
+    mod = _lint()
+    seen = {}
+    for target in mod.DEFAULT_TARGETS:
+        for _, _h, kind in mod._scan(ROOT / target if not Path(target).is_absolute()
+                                     else Path(target)):
+            seen[kind] = seen.get(kind, 0) + 1
+    assert seen.get("paint", 0) >= 5, (
+        f"the scanner finds {seen.get('paint', 0)} paint attributes in the "
+        f"shipped templates; there were 17 when this was written: {seen}")
+    assert seen.get("inline", 0) >= 5, (
+        f"the scanner finds {seen.get('inline', 0)} inline styles: {seen}")
+
+
+def test_the_reported_number_excludes_definitions(tmp_path):
+    """Not the label — the number the tool prints.
+
+    The first cut of the gate above checked that `_scan` tags a
+    definition as such, and left the exclusion nested inside `main()`.
+    Putting definitions back into the count then changed nothing any
+    test could see: the parser was covered, its consumer was not."""
+    mod = _lint()
+    p = tmp_path / "t.html"
+    p.write_text("<style>:root{--accent:#d5b584}\n"
+                 ".x{color:#d5b584}</style>", encoding="utf-8")
+    vs = mod._scan(p)
+    tokens = {"#d5b584"}
+    got = mod.unmigrated(vs, tokens)
+    assert len(got) == 1, (
+        f"expected the usage only, got {got} — the definition is being "
+        "counted as work somebody could do")
+    assert got[0][2] == "rule"
+    assert mod.undesigned(vs, tokens) == [], "a known token is not undesigned"

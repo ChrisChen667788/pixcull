@@ -231,11 +231,17 @@ def test_lint_finds_inline_hex(tmp_path):
         .card { background: #1a1c20; color: #fff; }
     """)
     v = lint._scan(p)
-    found = [h for _, h in v]
+    found = [h for _, h, _k in v]
     assert "#6e56cf" in found
     assert "#1a1c20" in found
     # #fff is sanctioned
     assert "#fff" not in found
+    # v3.71 — and the two are not the same kind of thing. `--accent:`
+    # is the token being defined, which cannot become a var() reference
+    # to itself; `.card { background: }` is a usage that can.
+    kinds = {h: k for _, h, k in v}
+    assert kinds["#6e56cf"] == "definition", kinds
+    assert kinds["#1a1c20"] == "rule", kinds
 
 
 def test_lint_skips_svg_symbol_blocks(tmp_path):
@@ -253,7 +259,7 @@ def test_lint_skips_svg_symbol_blocks(tmp_path):
         ),
         encoding="utf-8",
     )
-    found = [h for _, h in lint._scan(p)]
+    found = [h for _, h, _k in lint._scan(p)]
     assert "#6e56cf" in found
     assert "#abcdef" not in found
 
@@ -264,7 +270,7 @@ def test_lint_skips_inline_comments(tmp_path):
         .a { /* color: #deadbe; was an old token */
              background: #6e56cf; }
     """)
-    found = [h for _, h in lint._scan(p)]
+    found = [h for _, h, _k in lint._scan(p)]
     assert "#6e56cf" in found
     assert "#deadbe" not in found
 
@@ -278,7 +284,7 @@ def test_lint_skips_block_comments_multiline(tmp_path):
          */
         .a { background: #abcdef; }
     """)
-    found = [h for _, h in lint._scan(p)]
+    found = [h for _, h, _k in lint._scan(p)]
     assert "#6e56cf" not in found
     assert "#abcdef" in found
 
@@ -293,7 +299,7 @@ def test_lint_sanctioned_hexes_are_allowed(tmp_path):
         .c { color: #FFFFFF; }
         .d { color: #abcdef; }
     """)
-    found = [h.lower() for _, h in lint._scan(p)]
+    found = [h.lower() for _, h, _k in lint._scan(p)]
     assert found == ["#abcdef"]
 
 
@@ -307,7 +313,7 @@ def test_lint_handles_pure_css_file(tmp_path):
     lint = _load("lint_design_tokens.py")
     p = tmp_path / "tokens.css"
     p.write_text(":root { --x: #aabbcc; }\n", encoding="utf-8")
-    found = [h for _, h in lint._scan(p)]
+    found = [h for _, h, _k in lint._scan(p)]
     assert "#aabbcc" in found
 
 

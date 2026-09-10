@@ -131,9 +131,41 @@ def _load_design_tokens() -> set[str]:
     return found
 
 
-def _scan(path: Path) -> list[tuple[int, str]]:
-    """Return list of (lineno, hex_value) for every violation
-    inside the CSS context of ``path``.
+#: A paint literal outside a stylesheet still paints. Matching these by
+#: text is deliberate: several live inside JavaScript that assembles SVG
+#: as a string, where there is no DOM to inspect and no CSS to parse.
+_INLINE_STYLE = re.compile(r"""style\s*=\s*(["'])(.*?)\1""", re.I | re.S)
+_PAINT_ATTR = re.compile(
+    r"""\b(?:fill|stroke|stop-color|flood-color|lighting-color|color|"""
+    r"""bgcolor)\s*=\s*(["'])\s*(\#[0-9a-fA-F]{3,8})\s*\1""", re.I)
+#: `--token: #hex` — the definition of a custom property. This is the one
+#: place a literal is mandatory: a token cannot be a var() reference to
+#: itself. Counting these as "unmigrated" is what v3.71 came from.
+_DEFINITION = re.compile(r"--[A-Za-z0-9_-]+\s*:\s*(\#[0-9a-fA-F]{3,8})")
+
+
+def _sanctioned() -> set[str]:
+    return {h.lower() for h in SANCTIONED_HEX}
+
+
+def _scan(path: Path) -> list[tuple[int, str, str]]:
+    """Return (lineno, hex_value, kind) for every paint literal.
+
+    ``kind`` is one of:
+
+    ``rule``        a declaration inside a stylesheet — migratable
+    ``definition``  ``--token: #hex`` — a custom property being defined,
+                    which cannot become a var() reference to itself
+    ``inline``      a ``style="…"`` attribute in the body
+    ``paint``       an SVG/HTML paint attribute, including ones built
+                    inside JavaScript strings
+
+    v3.71 — this used to look only inside ``<style>``, so it saw one of
+    the three places a single-file HTML app paints. The consequence was
+    not a shortfall but an inversion: of the three literals it found in
+    ``video_review.html`` all three were ``:root`` definitions, the only
+    kind that cannot be migrated, while all seven real usages sat in
+    JavaScript building SVG and were invisible to it.
 
     Skips lines inside SVG <symbol> blocks (illustration pixels)
     and inside comments.  Defensive against multi-line comments
@@ -147,7 +179,7 @@ def _scan(path: Path) -> list[tuple[int, str]]:
     is_html = path.suffix.lower() in (".html", ".htm")
     lines = text.splitlines()
 
-    violations: list[tuple[int, str]] = []
+    violations: list[tuple[int, str, str]] = []
     in_style = not is_html        # plain .css → always in-style
     in_block_comment = False
     in_symbol_block = 0           # nest depth (defensive)
@@ -158,21 +190,56 @@ def _scan(path: Path) -> list[tuple[int, str]]:
     sym_close   = re.compile(r"</symbol>", re.IGNORECASE)
 
     for i, line in enumerate(lines, start=1):
-        # Update <style> context
-        if is_html:
-            if style_open.search(line):
-                in_style = True
-            if style_close.search(line):
-                in_style = False
+        # Split the line into its stylesheet part and its body part.
+        #
+        # v3.71 — this used to flip a flag on `<style` and off on
+        # `</style>`, so a block that opened and closed on one line
+        # turned itself off before its content was read and the CSS in
+        # it was never scanned at all. Harmless while every literal
+        # outside a stylesheet was ignored anyway; the moment the body
+        # became a place worth looking, a one-line block started being
+        # read as body and its declarations matched nothing.
+        css_part, body_part = (line, "") if in_style else ("", line)
+        if is_html and (style_open.search(line) or style_close.search(line)):
+            css_part, body_part, pos = "", "", 0
+            while pos < len(line):
+                if in_style:
+                    m = style_close.search(line, pos)
+                    end = m.start() if m else len(line)
+                    css_part += line[pos:end]
+                    if not m:
+                        break
+                    in_style, pos = False, m.end()
+                else:
+                    m = style_open.search(line, pos)
+                    end = m.start() if m else len(line)
+                    body_part += line[pos:end]
+                    if not m:
+                        break
+                    # skip to the end of the opening tag
+                    gt = line.find(">", m.end())
+                    in_style, pos = True, (gt + 1 if gt != -1 else m.end())
         # Symbol blocks (HTML body)
         if sym_open.search(line):
             in_symbol_block += 1
         if sym_close.search(line):
             in_symbol_block = max(0, in_symbol_block - 1)
-        if not in_style or in_symbol_block:
+        if in_symbol_block:
+            continue
+        if body_part:
+            # A stylesheet is not the only thing that paints, so look at
+            # the two surfaces that also do.
+            for m in _INLINE_STYLE.finditer(body_part):
+                for h in HEX_RE.finditer(m.group(2)):
+                    if h.group(0).lower() not in _sanctioned():
+                        violations.append((i, h.group(0), "inline"))
+            for m in _PAINT_ATTR.finditer(body_part):
+                if m.group(2).lower() not in _sanctioned():
+                    violations.append((i, m.group(2), "paint"))
+        if not css_part:
             continue
         # Multi-line CSS comments
-        l = line
+        l = css_part
         if in_block_comment:
             end = l.find("*/")
             if end == -1:
@@ -184,12 +251,39 @@ def _scan(path: Path) -> list[tuple[int, str]]:
         if "/*" in l:
             l = l.split("/*")[0]
             in_block_comment = True
+        defined = {d.lower() for d in _DEFINITION.findall(l)}
         for m in HEX_RE.finditer(l):
             hexval = m.group(0)
-            if hexval.lower() in {h.lower() for h in SANCTIONED_HEX}:
+            if hexval.lower() in _sanctioned():
                 continue
-            violations.append((i, hexval))
+            kind = "definition" if hexval.lower() in defined else "rule"
+            violations.append((i, hexval, kind))
     return violations
+
+
+def undesigned(violations, tokens) -> list:
+    """Hexes that are in no design token at all — the ratcheted number."""
+    return [(ln, h, k) for ln, h, k in violations if h.lower() not in tokens]
+
+
+def unmigrated(violations, tokens) -> list:
+    """A token's value written as a literal where a var() would do.
+
+    v3.71 — `definition` is excluded. `--accent: #d5b584` is the token
+    being defined, and a token cannot be a var() reference to itself, so
+    counting it as work-to-do described something nobody could ever act
+    on. In `video_review.html` that was the entire number: three counted,
+    all three definitions, and the seven real usages in JavaScript-built
+    SVG unseen.
+
+    At module level rather than nested in main() so a test can check the
+    number the tool reports. The first cut left it inside main(), and the
+    mutation that put definitions back into the count changed nothing any
+    test could see — the label was covered and the use of the label was
+    not.
+    """
+    return [(ln, h, k) for ln, h, k in violations
+            if h.lower() in tokens and k != "definition"]
 
 
 def _write_baseline(total: int) -> None:
@@ -228,28 +322,31 @@ def main(argv: list[str] | None = None) -> int:
 
     tokens = _load_design_tokens()
 
-    all_violations: dict[Path, list[tuple[int, str]]] = {}
+    all_violations: dict[Path, list[tuple[int, str, str]]] = {}
     for t in args.targets:
         vs = _scan(t)
         if vs:
             all_violations[t] = vs
 
     def _undesigned(vs):
-        return [(ln, h) for ln, h in vs if h.lower() not in tokens]
+        return undesigned(vs, tokens)
+
+    def _unmigrated(vs):
+        return unmigrated(vs, tokens)
 
     total = sum(len(_undesigned(vs)) for vs in all_violations.values())
-    unmigrated = sum(len(vs) for vs in all_violations.values()) - total
+    n_unmigrated = sum(len(_unmigrated(vs)) for vs in all_violations.values())
 
     if args.list:
         for path, vs in all_violations.items():
             und = _undesigned(vs)
             print(f"\n--- {path} · {len(und)} undesigned, "
-                  f"{len(vs) - len(und)} unmigrated ---")
-            for ln, h in und[:30]:
-                print(f"  line {ln:>5}  {h}")
+                  f"{len(_unmigrated(vs))} unmigrated ---")
+            for ln, h, k in und[:30]:
+                print(f"  line {ln:>5}  {h}  [{k}]")
             if len(und) > 30:
                 print(f"  … +{len(und) - 30} more")
-        print(f"\nTOTAL undesigned: {total}   unmigrated: {unmigrated}")
+        print(f"\nTOTAL undesigned: {total}   unmigrated: {n_unmigrated}")
         return 0
 
     if args.update_baseline:
@@ -310,14 +407,14 @@ def main(argv: list[str] | None = None) -> int:
         print(
             f"[design-lint] OK — {baseline - total} undesigned colour(s) "
             f"resolved; baseline lowered to {total} "
-            f"({unmigrated} unmigrated)",
+            f"({n_unmigrated} unmigrated)",
             file=sys.stderr,
         )
         return 0
 
     print(
         f"[design-lint] OK — {total} undesigned (at baseline), "
-        f"{unmigrated} unmigrated",
+        f"{n_unmigrated} unmigrated",
         file=sys.stderr,
     )
     return 0

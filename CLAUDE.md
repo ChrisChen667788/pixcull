@@ -482,6 +482,18 @@ instance *of* before naming it in the assertion.
 made the 示例数据 button return 500 for every visitor).  It has glob exceptions
 now; add one before committing anything under a directory of that name.
 
+**A single-file HTML app paints in three places, not one** (v3.71).
+`<style>` blocks, inline `style="…"` attributes, and JavaScript that
+assembles SVG as a string — the design-token scanner read the first and
+was blind to the other two, and a surprising amount of this product's
+colour lives in the third.  The result was not a shortfall but an
+inversion: in `video_review.html` every literal it counted was a
+`--token: #hex` **definition**, the one place a literal is mandatory
+because a token cannot be a var() reference to itself, while all seven
+real usages were invisible.  Numbers are 131 undesigned / 81 unmigrated
+now.  **When a scanner reports a low number, check what it is looking
+at before believing the work is nearly done.**
+
 **An ID selector carrying `display:` beats `[hidden] { display: none }`**, so
 `el.hidden = true` is inert (v3.64, the client-present bar that was on screen
 permanently saying the scores were hidden).
