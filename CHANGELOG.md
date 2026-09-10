@@ -59,7 +59,7 @@ without installing anything.
 
 ---
 
-## v2.94 – v3.59
+## v2.94 – v3.62
 
 The same hole as the one below, dug a second time. v3.53 found that
 **What's new** had stopped at v2.45 while eighty-five releases shipped, and
@@ -74,6 +74,13 @@ beside it now asserting the guard can still see the newest release in the log,
 which is the thing that was actually false.
 
 One line each, exactly as the release was titled at the time.
+
+**v3.62** — a hero with photographs in it, and a star history chart
+
+**v3.61** — `[sync]` closed the gap ledger, and "slow" had become a place
+things went rather than a description
+
+**v3.60** — `pip install pixcull` also installed pytest, ruff and yapf
 
 **v3.59** — a journey for the eighteen commands that had none
 

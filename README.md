@@ -62,6 +62,41 @@
 
 ## What's new
 
+**v3.68** — Two files pin the dependencies a user can install from, and a
+gate exists so they cannot disagree. It spelled `numpy` as a literal, so it
+had been enforcing parity for the one dependency somebody had already been
+bitten by, out of sixteen. Three had drifted — `torch`, `torchvision` and
+`transformers` each carry a major ceiling here and carried none in the hosted
+Studio's requirements.
+
+Those three are not a random three: they are the ones whose ceiling was
+earned. Every dependency painful enough to cap was a dependency the public
+demo was running uncapped — the one install a visitor cannot inspect, pin or
+fix had the least protection of any install.
+
+**v3.67** — The README told people to run a `deliver` command. There has
+never been one; what ships is `pixcull view-folder`. It was
+written into the quickstart twelve versions ago, went out on PyPI, and the
+gate built to catch exactly this could not see it — it reads one section of
+one file, and the instruction was three sections away. Every `pixcull …`
+invocation in every document is checked against the CLI's own command tree
+now, which found a second one: a flag on `export` that does not exist either.
+
+**v3.66** — Three questions had been flagged for a human to answer. Two of
+them turned out to be the wrong question. The palette was not a three-way
+choice between competing brand ramps — the three files hold the product
+accent, the wordmark gradient and a stale copy, which are three roles, not
+three opinions. And the repository's weight was not the 9 MB of sample
+photographs but the 62 MB of screenshots beside them, now 31 MB with no
+visible change at the size a README displays them.
+
+**v3.65** — The gate built in v3.53 to catch a stale **What's new** section
+was reading release commits with a pattern pinned to the version series that
+was current when it was written. The next major arrived and it went quiet,
+staying quiet through sixty-four releases while every test beside it passed.
+A guard pinned to the shape of today's data has an expiry date it does not
+announce.
+
 **v3.64** — A resolvable face shipped in the cover picture. In one of the
 sample frames a girl runs across a field at the right edge; at the 1600 px
 working size she is thirty pixels tall and reads as a speck, and at native
@@ -85,26 +120,6 @@ clicked 示例数据. It is thirty-two real frames now, and the button itself ha
 been returning 500 to everybody: it copies `samples/output` into a run, and
 `.gitignore` carried a bare `output/` that matched any directory of that name
 at any depth, so the directory could never be committed.
-
-**v3.62** — The README hero was a hand-drawn SVG of the product UI in which
-every photograph was an empty grey rectangle. A photo-culling tool whose
-opening image contains no photographs has already failed the two-second test.
-
-**v3.61** — `pip install -e ".[sync]"` closed the last row of the gap ledger,
-and closing it found the hole underneath. Three tests were marked
-`@pytest.mark.slow`; both pytest invocations in the workflow said
-`-m "not slow"` and no lane said `-m slow`, so they were deselected rather
-than skipped and had never run in CI. One of them is shot-boundary detection,
-and it takes 0.29 seconds. "Slow" had stopped meaning slow and become a place
-things went.
-
-**v3.60** — `pip install pixcull` also installed pytest, ruff and yapf: ten
-packages and 15.1 MB of somebody else's development tooling, arriving through
-pyiqa. Kept, because pyiqa supplies the aesthetic axis and dropping it to save
-the megabytes would silently remove a scoring axis from everyone who upgrades.
-Investigating it found the part that was ours — `import pyiqa` was lazy but
-nothing caught it failing, so an environment without pyiqa lost the whole run
-rather than one axis.
 
 Earlier releases are in [`CHANGELOG.md`](CHANGELOG.md).
 

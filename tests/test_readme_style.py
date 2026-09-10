@@ -26,15 +26,19 @@ MAX_BOLD_PER_ENTRY = 2
 
 def _entries(path: Path, pattern: str) -> list[str]:
     text = path.read_text(encoding="utf-8")
-    if "What's new" in text:
-        start = text.index("What's new")
-        end = text.index("Earlier releases are in")
-    elif "最近更新" in text:
-        start = text.index("最近更新")
-        end = text.index("更早的版本记录在")
-    else:
-        return []
-    return re.split(pattern, text[start:end])[1:]
+    # v3.69 — pick the pair whose BOTH markers are present. The first cut
+    # tested for the English opener alone, so the moment a Chinese entry
+    # quoted the phrase "What's new" — describing the gate that reads
+    # this very section — the Chinese README took the English branch and
+    # died on a closing marker it has never had. Five tests failed at
+    # once, all of them saying `ValueError: substring not found`, which
+    # names neither the file nor the phrase.
+    for opener, closer in (("What's new", "Earlier releases are in"),
+                           ("最近更新", "更早的版本记录在")):
+        if opener in text and closer in text:
+            return re.split(pattern, text[text.index(opener):
+                                          text.index(closer)])[1:]
+    return []
 
 
 CASES = [
