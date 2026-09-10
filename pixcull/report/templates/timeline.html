@@ -4,7 +4,7 @@
 <title>PixCull · 照片 + 视频时间线</title>
 <style>
 :root{--bg:#161616;--panel:#1d1d1d;--line:#262626;--ink:#e6e6e6;
---dim:#9b9b9b;--indigo:#d5b584;--indigo2:#eaca98;--pink:#93743f;}
+--dim:#9b9b9b;--accent:#d5b584;--accent-hi:#eaca98;--accent-deep:#93743f;}
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--ink);
 font:13px/1.5 system-ui,-apple-system,sans-serif}
@@ -12,7 +12,7 @@ header{display:flex;align-items:center;gap:12px;padding:12px 18px;
 border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0}
 header h1{font-size:15px;margin:0;font-weight:600}
 header .meta{color:var(--dim)}
-header a{color:var(--indigo2);text-decoration:none;margin-left:auto;
+header a{color:var(--accent-hi);text-decoration:none;margin-left:auto;
 border:1px solid var(--line);padding:5px 10px;border-radius:7px}
 .wrap{max-width:1100px;margin:0 auto;padding:18px}
 .row{display:flex;gap:14px;padding:10px 0;border-bottom:1px solid var(--line)}
@@ -24,11 +24,11 @@ flex-shrink:0;font-size:12px;padding-top:4px}
 background:#1d1d1d;border:1px solid var(--line)}
 .photos img.keep{border-color:#63bd7f}.photos img.cull{opacity:.4}
 .vcard{display:flex;align-items:center;gap:14px;background:#1a1a1a;
-border:1px solid var(--indigo);border-radius:12px;padding:12px 16px}
+border:1px solid var(--accent);border-radius:12px;padding:12px 16px}
 .vcard .ic{font-size:26px}
 .vcard .t{font-weight:600}
 .vcard .sub{color:var(--dim);font-size:12px;margin-top:3px}
-.vcard a{margin-left:auto;background:var(--indigo);color:#fff;
+.vcard a{margin-left:auto;background:var(--accent);color:#fff;
 text-decoration:none;padding:7px 14px;border-radius:8px;font-size:12px}
 .count{color:var(--dim);font-size:12px;margin:2px 0 8px}
 .err{padding:48px;text-align:center;color:var(--dim)}
@@ -44,7 +44,7 @@ text-decoration:none;padding:7px 14px;border-radius:8px;font-size:12px}
 <div class="wrap">
   <div class="legend">
     <span><span class="dot" style="background:#eaca98"></span>照片(本 run)</span>
-    <span><span class="dot" style="background:var(--pink)"></span>视频片段(可审片)</span>
+    <span><span class="dot" style="background:var(--accent-deep)"></span>视频片段(可审片)</span>
     <span id="tally"></span>
   </div>
   <div id="list"></div>

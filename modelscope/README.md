@@ -618,6 +618,13 @@ v2.48 那个设计管用的第一份证据。**证据不是越多越好** ——
 | 有 key、从未同意 | 询问一次;拒绝或非交互运行都留在本机 |
 | 有 key **且已记录同意** | **会上传** —— 运行时会打印一行说明 |
 
+> **清掉 `MINIMAX_API_KEY` 环境变量并不足以强制本机运行。** 在 macOS 上,
+> key 还会从钥匙串里查一次 —— 应用把它存在那里,好让没有 shell 环境的
+> GUI 启动也能找到。只要钥匙串里有条目、而且之前同意过一次,
+> `env -u MINIMAX_API_KEY pixcull run …` 照样会走云端。
+> **`--vlm-mode off` 才是握得住的那个开关。** 运行开始前打印的那一行
+> ——「Judging with MiniMax M3 — photos are uploaded」—— 是该读的东西。
+
 也就是说:**一个 key 加一次同意,之后每次运行照片都会离开本机。**
 `pixcull m3 consent --revoke` 撤销,`--vlm-mode off` 单次覆盖。
 

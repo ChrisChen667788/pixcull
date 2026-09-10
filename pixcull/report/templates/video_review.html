@@ -4,8 +4,8 @@
 <title>PixCull · 视频审片</title>
 <style>
 :root{--bg:#161616;--panel:rgba(29,29,29,0.74);--panel-solid:#1d1d1d;
---line:#262626;--ink:#e6e6e6;--dim:#9b9b9b;--indigo:#d5b584;
---indigo2:#eaca98;--pink:#93743f;--keep:#63bd7f;--cull:#e0604e;
+--line:#262626;--ink:#e6e6e6;--dim:#9b9b9b;--accent:#d5b584;
+--accent-hi:#eaca98;--accent-deep:#93743f;--keep:#63bd7f;--cull:#e0604e;
 --radius:13px;--ease:cubic-bezier(0.34,1.56,0.64,1);
 --serif:"Charter","Iowan Old Style","PT Serif",Georgia,"Songti SC",serif}
 *{box-sizing:border-box}
@@ -19,9 +19,9 @@ border-bottom:1px solid var(--line);background:var(--panel);
 backdrop-filter:blur(22px) saturate(1.3);-webkit-backdrop-filter:blur(22px) saturate(1.3)}
 header h1{font-family:var(--serif);font-size:17px;margin:0;font-weight:600;letter-spacing:0}
 header .meta{color:var(--dim);font-size:12px}
-header a{color:var(--indigo2);text-decoration:none;margin-left:10px;
+header a{color:var(--accent-hi);text-decoration:none;margin-left:10px;
 font-size:12px;border:1px solid var(--line);padding:5px 10px;border-radius:7px}
-header a:hover{border-color:var(--indigo)}
+header a:hover{border-color:var(--accent)}
 .gradewrap{margin-left:auto;color:var(--dim);font-size:12px;
 display:flex;align-items:center;gap:6px}
 .gradewrap select{background:#1d1d1d;color:var(--ink);
@@ -41,10 +41,10 @@ padding:10px 12px;font-variant-numeric:tabular-nums;min-width:188px}
 .bar{display:flex;align-items:center;gap:6px;margin-top:4px;font-size:11px}
 .bar .lbl{width:64px;color:var(--dim)}
 .bar .track{flex:1;height:6px;background:#242424;border-radius:4px;overflow:hidden}
-.bar .fill{height:100%;border-radius:4px;background:linear-gradient(90deg,var(--indigo),var(--indigo2))}
+.bar .fill{height:100%;border-radius:4px;background:linear-gradient(90deg,var(--accent),var(--accent-hi))}
 .bar .val{width:34px;text-align:right;color:var(--ink)}
 .badge{position:absolute;right:14px;top:12px;background:rgba(213,181,132,.16);
-border:1px solid var(--indigo);color:var(--indigo2);padding:5px 10px;
+border:1px solid var(--accent);color:var(--accent-hi);padding:5px 10px;
 border-radius:20px;font-size:11px;display:none}
 .transport{display:flex;align-items:center;gap:8px;padding:10px 16px;
 border-top:1px solid var(--line);background:var(--panel);
@@ -52,9 +52,9 @@ backdrop-filter:blur(22px) saturate(1.3);-webkit-backdrop-filter:blur(22px) satu
 .transport button{background:rgba(255,255,255,0.05);border:1px solid var(--line);color:var(--ink);
 border-radius:10px;padding:8px 13px;font-size:13px;cursor:pointer;min-width:42px;
 transition:transform .18s var(--ease),border-color .18s,background .18s}
-.transport button:hover{border-color:var(--indigo);transform:translateY(-1px)}
+.transport button:hover{border-color:var(--accent);transform:translateY(-1px)}
 .transport button:active{transform:translateY(0) scale(.96)}
-.transport button.on{background:var(--indigo);border-color:var(--indigo);color:#fff;
+.transport button.on{background:var(--accent);border-color:var(--accent);color:#fff;
 box-shadow:0 4px 16px rgba(213,181,132,.4)}
 .transport .spacer{flex:1}
 .transport .count{color:var(--dim);font-variant-numeric:tabular-nums}
@@ -75,9 +75,9 @@ border:1px solid var(--line);border-radius:9px}
 .gpsmeta{color:var(--dim);font-size:11px;margin-top:6px;font-variant-numeric:tabular-nums}
 .cand{padding:10px 14px;border-bottom:1px solid var(--line);cursor:pointer}
 .cand:hover{background:#171717}
-.cand.active{background:#242424;box-shadow:inset 3px 0 0 var(--indigo)}
+.cand.active{background:#242424;box-shadow:inset 3px 0 0 var(--accent)}
 .cand .row1{display:flex;align-items:center;gap:8px}
-.cand .rank{background:var(--indigo);color:#fff;border-radius:6px;
+.cand .rank{background:var(--accent);color:#fff;border-radius:6px;
 padding:1px 7px;font-size:11px;font-weight:600}
 .cand .span{color:var(--dim);font-variant-numeric:tabular-nums;font-size:12px}
 .cand .sc{margin-left:auto;font-weight:600;font-variant-numeric:tabular-nums}
@@ -87,7 +87,7 @@ padding:1px 7px;font-size:11px;font-weight:600}
 .cand .sig{display:inline-flex;align-items:center;gap:4px;font-size:10px;color:var(--dim)}
 .cand .sig b{display:inline-block;width:34px;height:4px;background:var(--line);
   border-radius:2px;overflow:hidden;font-weight:normal}
-.cand .sig u{display:block;height:100%;background:var(--indigo);text-decoration:none}
+.cand .sig u{display:block;height:100%;background:var(--accent);text-decoration:none}
 .cand .whylow{margin-top:4px;font-size:11px;color:var(--cull)}
 .cand .acts{margin-top:7px;display:flex;gap:6px}
 .cand .acts button{flex:1;border:1px solid var(--line);background:#1a1a1a;
@@ -175,7 +175,7 @@ padding:1px 6px;font-size:11px;color:var(--ink)}
      (--fg-2 / --muted / --surface-2 / --border / --focus-ring …).  This
      page does NOT get those: it declares its own palette in the :root
      block at the top (--ink / --dim / --line / --panel-solid /
-     --indigo).  Every one of those var() calls was therefore undefined,
+     --accent).  Every one of those var() calls was therefore undefined,
      the declaration was invalid at computed-value time, and the property
      silently inherited instead.  It looked acceptable, so nobody
      noticed — a live DOM probe did, the same way the v2.3.1 palette leak
@@ -190,7 +190,7 @@ padding:1px 6px;font-size:11px;color:var(--ink)}
     font-size: 12px; color: var(--ink); background: var(--panel-solid);
     border: 1px solid var(--line); border-radius: 6px;
   }
-  #txFind:focus { outline: 2px solid var(--indigo2); outline-offset: 1px; }
+  #txFind:focus { outline: 2px solid var(--accent-hi); outline-offset: 1px; }
   .tx-list { max-height: 320px; overflow-y: auto; }
   .tx-line {
     display: grid; grid-template-columns: 52px 1fr; gap: 8px;
@@ -199,7 +199,7 @@ padding:1px 6px;font-size:11px;color:var(--ink)}
     color: var(--ink); font: inherit; font-size: 12px; line-height: 1.5;
   }
   .tx-line:hover { background: rgba(213,181,132,0.10); color: var(--ink); }
-  .tx-line:focus-visible { outline: 2px solid var(--indigo2);
+  .tx-line:focus-visible { outline: 2px solid var(--accent-hi);
                            outline-offset: -2px; }
   .tx-line.active { background: rgba(213,181,132,0.18); color: var(--ink); }
   .tx-t { color: var(--dim); font-variant-numeric: tabular-nums;
@@ -212,7 +212,7 @@ padding:1px 6px;font-size:11px;color:var(--ink)}
      never made (see _drop_indistinct_speakers). */
   .tx-spk { display: inline-block; margin-left: 5px; padding: 0 5px;
             border-radius: 4px; font-size: 10px; line-height: 16px;
-            vertical-align: 1px; color: var(--bg); background: var(--indigo); }
+            vertical-align: 1px; color: var(--bg); background: var(--accent); }
   .tx-spk.s1 { background: #7fa8c4; }
   .tx-spk.s2 { background: #b58fc4; }
   .tx-spk.s3 { background: #8fc4a0; }
@@ -227,7 +227,7 @@ padding:1px 6px;font-size:11px;color:var(--ink)}
             background: none; border: 0; border-radius: 4px; cursor: pointer;
             color: var(--dim); font: inherit; font-size: 11px; }
   .tx-cut:hover { background: rgba(213,181,132,0.10); color: var(--ink); }
-  .tx-cut:focus-visible { outline: 2px solid var(--indigo2);
+  .tx-cut:focus-visible { outline: 2px solid var(--accent-hi);
                           outline-offset: 1px; }
   .tx-line { align-items: start; }
   .tx-row { display: flex; align-items: start; gap: 2px; }
@@ -245,7 +245,7 @@ padding:1px 6px;font-size:11px;color:var(--ink)}
   .tx-edit-bar a:hover { background: rgba(213,181,132,0.10); color: var(--ink); }
   .tx-edit-bar button:disabled { opacity: .4; cursor: default; }
   .tx-edit-bar button:focus-visible, .tx-edit-bar a:focus-visible {
-    outline: 2px solid var(--indigo2); outline-offset: 1px; }
+    outline: 2px solid var(--accent-hi); outline-offset: 1px; }
   .tx-edit-stat { margin-top: 6px; color: var(--dim); font-size: 11px; }
   .tx-sel { position: absolute; z-index: 40; padding: 4px 9px;
             font-size: 11px; cursor: pointer; color: var(--ink);

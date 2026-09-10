@@ -11,13 +11,38 @@ we don't try to migrate all of them at once (that's Phase A.1).
 We DO refuse to let new ones land: this script tracks a baseline
 of currently-legal violations and fails CI when it grows.
 
+v3.66 — `_load_design_tokens()` was defined here and NEVER CALLED.
+Its docstring described a short-circuit for hexes that match a
+canonical token; the scan never consulted it, so this gate has
+never once read the design system it exists to enforce.  Three
+documents repeated the consequence as fact — `docs/OPEN-ITEMS.md`
+ask 5, the `_why` field in `.lint_baseline.json`, and a test
+docstring — all saying that reconciling the palettes would make
+the number fall on its own.  It could not have.  The number was
+"count of inline hex" and nothing else.
+
+It is wired in now, and the count is split rather than
+short-circuited, because those are two different debts:
+
+  undesigned — a hex that is in NO design token.  Real debt: a
+               colour nobody decided on.  This is what the
+               baseline ratchets.
+  unmigrated — a hex that IS a design token, written as a
+               literal instead of `var(--…)`.  Mechanical, and
+               it must not vanish from the report just because
+               the token file learned the value — that would let
+               a palette edit erase 55 violations without one
+               line of CSS improving.
+
 Rules
 =====
 A violation is:
   * A `#RRGGBB` or `#RGB` literal
   * Inside a CSS rule block (between `<style>` and `</style>` of
     a *.html file, or anywhere in a *.css file)
-  * Whose color value is NOT already in the design-system tokens
+
+and it is `unmigrated` when its value is a design token,
+`undesigned` otherwise.
 
 Sanctioned exceptions (NOT counted as violations):
   * Inside an SVG `<symbol>` block — those are illustration
@@ -65,6 +90,12 @@ SANCTIONED_HEX = {
 
 DEFAULT_TARGETS = (
     Path("pixcull/report/templates/results.html"),
+    # v3.66 — these two ship to users and were scanned by nothing.
+    # 32 further violations lived behind that, including the three
+    # CSS variables literally named --indigo / --indigo2 / --pink
+    # holding the warm gold.
+    Path("pixcull/report/templates/video_review.html"),
+    Path("pixcull/report/templates/timeline.html"),
 )
 
 BASELINE_PATH = Path("design-system/.lint_baseline.json")
@@ -161,6 +192,26 @@ def _scan(path: Path) -> list[tuple[int, str]]:
     return violations
 
 
+def _write_baseline(total: int) -> None:
+    """Rewrite the count and keep everything else in the file.
+
+    v3.66 — both write sites used to replace the whole document with
+    ``{"max_violations": n}``, which silently deleted the ``_why`` field
+    somebody had written to explain the number. The first improvement
+    would have erased the explanation of what the number was for.
+    """
+    doc = {}
+    if BASELINE_PATH.exists():
+        try:
+            existing = json.loads(BASELINE_PATH.read_text(encoding="utf-8"))
+            if isinstance(existing, dict):
+                doc = existing
+        except json.JSONDecodeError:
+            doc = {}
+    doc["max_violations"] = total
+    BASELINE_PATH.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         description="Lint design-token discipline (no inline hex)."
@@ -175,30 +226,35 @@ def main(argv: list[str] | None = None) -> int:
                    default=list(DEFAULT_TARGETS))
     args = p.parse_args(argv)
 
+    tokens = _load_design_tokens()
+
     all_violations: dict[Path, list[tuple[int, str]]] = {}
     for t in args.targets:
         vs = _scan(t)
         if vs:
             all_violations[t] = vs
 
-    total = sum(len(vs) for vs in all_violations.values())
+    def _undesigned(vs):
+        return [(ln, h) for ln, h in vs if h.lower() not in tokens]
+
+    total = sum(len(_undesigned(vs)) for vs in all_violations.values())
+    unmigrated = sum(len(vs) for vs in all_violations.values()) - total
 
     if args.list:
         for path, vs in all_violations.items():
-            print(f"\n--- {path} · {len(vs)} violations ---")
-            for ln, h in vs[:30]:
+            und = _undesigned(vs)
+            print(f"\n--- {path} · {len(und)} undesigned, "
+                  f"{len(vs) - len(und)} unmigrated ---")
+            for ln, h in und[:30]:
                 print(f"  line {ln:>5}  {h}")
-            if len(vs) > 30:
-                print(f"  … +{len(vs) - 30} more")
-        print(f"\nTOTAL violations: {total}")
+            if len(und) > 30:
+                print(f"  … +{len(und) - 30} more")
+        print(f"\nTOTAL undesigned: {total}   unmigrated: {unmigrated}")
         return 0
 
     if args.update_baseline:
         BASELINE_PATH.parent.mkdir(parents=True, exist_ok=True)
-        BASELINE_PATH.write_text(
-            json.dumps({"max_violations": total}, indent=2),
-            encoding="utf-8",
-        )
+        _write_baseline(total)
         print(f"[design-lint] baseline updated → {total}", file=sys.stderr)
         return 0
 
@@ -211,6 +267,14 @@ def main(argv: list[str] | None = None) -> int:
             ).get("max_violations", 0))
         except (json.JSONDecodeError, ValueError):
             baseline = 0
+
+    if not tokens:
+        # A gate that cannot read the design system is not a gate that
+        # agrees with it. This is the shape the whole v3.66 finding took.
+        print("[design-lint] FAIL — design-system/tokens.json produced no "
+              "colour values; every hex would count as undesigned",
+              file=sys.stderr)
+        return 2
 
     if total > baseline:
         new_n = total - baseline
@@ -242,19 +306,18 @@ def main(argv: list[str] | None = None) -> int:
                   "error, not migration progress", file=sys.stderr)
             return 2
         # Migration progress! Lower the baseline so we don't regress.
-        BASELINE_PATH.write_text(
-            json.dumps({"max_violations": total}, indent=2),
-            encoding="utf-8",
-        )
+        _write_baseline(total)
         print(
-            f"[design-lint] OK — {baseline - total} violation(s) "
-            f"migrated; baseline lowered to {total}",
+            f"[design-lint] OK — {baseline - total} undesigned colour(s) "
+            f"resolved; baseline lowered to {total} "
+            f"({unmigrated} unmigrated)",
             file=sys.stderr,
         )
         return 0
 
     print(
-        f"[design-lint] OK — {total} violations (at baseline)",
+        f"[design-lint] OK — {total} undesigned (at baseline), "
+        f"{unmigrated} unmigrated",
         file=sys.stderr,
     )
     return 0

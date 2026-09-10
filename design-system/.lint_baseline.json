@@ -1,4 +1,4 @@
 {
-  "max_violations": 144,
-  "_why": "v3.46 \u2014 raised from 128 to the number the gate actually reports, because it had never been run and 16 violations accumulated behind it. Most of the total is the palette divergence recorded as ask 5 in docs/OPEN-ITEMS.md: the shipped brand colours are not in design-system/tokens.json, so every use counts. Reconcile the palettes and this falls on its own \u2014 the script lowers its own baseline whenever violations drop. Raise it again only with a reason here."
+  "max_violations": 108,
+  "_why": "v3.66 — 108 is `undesigned`: a hex in NO design token. The gate now also reports `unmigrated` (a hex that IS a token, written as a literal instead of var(--…)); that count is 68 and is not ratcheted here, because it is mechanical and because letting it into this number would mean a palette edit could erase violations with no CSS improving. Two things changed the figure from v3.46's 144. `_load_design_tokens()` was dead code — defined, documented, never called — so the gate had never read the design system it enforces, and the old note here claimed reconciling the palettes would lower this on its own, which it could not have. And the scan covered only results.html; video_review.html and timeline.html ship to users and were counted by nothing. Raise it again only with a reason here."
 }

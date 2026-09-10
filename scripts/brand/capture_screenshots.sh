@@ -89,6 +89,36 @@ BASE = f"http://127.0.0.1:{PORT}"
 OUT = Path("docs/screenshots")
 
 
+#: v3.66 — captures are taken at device_scale_factor=2 on a 1440-wide
+#: viewport, which produces 2880 px PNGs. Every consumer of these files
+#: is a README or a model card, and both render inside a column around
+#: 830 CSS px wide, so 1660 is already 2x for a retina reader and 2880
+#: was 3.5x. docs/screenshots was 59 MB — six and a half times the size
+#: of all 32 sample photographs — and one file, 06-share-portfolio.png,
+#: was 12 MB on its own.
+#:
+#: The capture stays at scale factor 2 and is downsampled on save rather
+#: than captured smaller: text rendered at 2x and resampled is sharper
+#: than text rendered at 1.15x. Width, not long edge — 06 is a full-page
+#: capture 2560x6960, and capping its long edge would leave it 611 px wide.
+SHOT_MAX_WIDTH = 1660
+
+
+def _shrink(path):
+    """Cap a capture's width and re-encode. Returns the saved bytes."""
+    from PIL import Image
+    before = path.stat().st_size
+    im = Image.open(path)
+    w, h = im.size
+    if w > SHOT_MAX_WIDTH:
+        s = SHOT_MAX_WIDTH / w
+        im = im.resize((SHOT_MAX_WIDTH, round(h * s)), Image.LANCZOS)
+    im.save(path, "PNG", optimize=True)
+    after = path.stat().st_size
+    print(f"[capture]     {path.name}: {before/1e6:.2f}MB -> {after/1e6:.2f}MB")
+    return before - after
+
+
 def _wants_light(actions):
     return any(a[0] == "storage_init" and a[1] == "pixcull_theme=light"
                for a in (actions or []))
@@ -249,6 +279,7 @@ async def main():
                         elif kind == "wait":
                             await page.wait_for_timeout(int(arg))
                 await page.screenshot(path=str(OUT / name), full_page=full_page)
+                _shrink(OUT / name)
                 print(f"[capture]   ✓ {OUT / name}  viewport={vp}")
                 await ctx.close()
             except Exception as exc:

@@ -111,33 +111,50 @@ because it will apply again: before recording something as blocked, try it.
 
 ---
 
-### 5. Which palette is canonical — unblocks the design-token ratchet
+### 5. ~~Which palette is canonical~~ — answered, and the question was wrong
 
-Found 2026-09-09, auditing what the design-system track actually shipped.
-Three files hold a brand ramp and no two agree:
+Asked 2026-09-09, answered 2026-09-10 in v3.66. Recorded rather than
+deleted, because the way it was wrong is the point.
 
-| where | brand ramp | what it is |
+**The three-way choice did not exist.** Measured in HSL, all three ramps
+sit in the same hue family (35°–41°, warm gold). They differ by role, not
+by opinion:
+
+| where | ramp | what it actually is |
 |---|---|---|
-| `design-system/tokens.json` | `#c4b9a9` `#988b78` `#6a6052`, still **named** `indigo` / `violet` / `pink`, alongside untouched `indigo-b` `#5841C7` etc. | Phase A's source of truth, holding values from a mid-flight version of the warm palette |
-| `pixcull/report/templates/results.html` | `#d5b584` `#eaca98` `#93743f` | what a photographer actually sees |
-| `scripts/brand/pixcull-brand.json` | `#f2ead9` `#dfcfae` `#c2a878` | the brand kit, what the README banner is drawn from |
+| `pixcull/report/templates/results.html` | `#d5b584` `#eaca98` `#93743f` | the **accent**. Its own tokens.css already calls `#d5b584` `--accent` and names it champagne gold |
+| `scripts/brand/pixcull-brand.json` | `#f2ead9` `#dfcfae` `#c2a878` | the **wordmark** ramp — keyed `wordmarkStart/Mid/End`, drawn on the dark banner where the accent would sit too close to the ground |
+| `design-system/tokens.json` | `#c4b9a9` `#988b78` `#6a6052` | the only one nothing renders: a desaturated mid-flight copy, under the names `indigo` / `violet` / `pink` inherited from the purple palette it replaced |
 
-The design system was never told about the redesign that came after it.
-Phase A shipped a token file and a "no new visual debt" ratchet; the
-visual redesign shipped separately; nobody reconnected them.
+So there was nothing to choose. The design system adopted the accent
+ramp, learned the wordmark ramp as the separate role it is, and **no
+pixel a user sees changed** — the reconciliation was a rename.
 
-This is most of the ratchet's number. `scripts/lint_design_tokens.py`
-counts a hex as debt when it is *not one of the design-system tokens*, so
-every use of the shipped `#d5b584` counts — correctly, by its own rule,
-because that colour is not in the design system.
+**The stated payoff was false.** This entry used to say "reconcile the
+palettes and this falls on its own — the script lowers its own baseline
+whenever violations drop". `_load_design_tokens()` in
+`scripts/lint_design_tokens.py` was **defined, documented at length, and
+never called** (verified by AST). The gate had never once read the design
+system it exists to enforce, so the number was "count of inline hex" and
+reconciling the palette could not have moved it by one. The same false
+consequence was written in `.lint_baseline.json`'s `_why` and in a test
+docstring; all three are corrected.
 
-**The ask is one decision:** which of the three is canonical. Then
-`design-system/tokens.json` is regenerated from it, `build_design_tokens.py`
-re-emits the CSS / Swift / Python outputs, and the ratchet's number drops
-on its own — it lowers its own baseline whenever violations fall.
+The gate reads the tokens now, and reports two numbers instead of one:
 
-Not engineering judgement: renaming `indigo` to something true and picking
-between three golds is a brand call. Flagged rather than guessed at.
+| | v3.46 | v3.66 |
+|---|---|---|
+| files scanned | 1 | 3 — `video_review.html` and `timeline.html` ship to users and were counted by nothing |
+| **undesigned** (a hex in no token — real debt) | 144, all of it | **108** |
+| **unmigrated** (a hex that *is* a token, written as a literal) | not distinguished | **68** |
+
+Split rather than short-circuited on purpose: folding `unmigrated` into
+the ratchet would let a palette edit erase 55 violations with no line of
+CSS improving.
+
+Held by `tests/test_colour_names_are_true.py` — no colour token may be
+named for a hue its value is not in, the gate must consult the design
+system, and every template with a `<style>` block must be scanned.
 
 ---
 

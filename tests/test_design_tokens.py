@@ -356,16 +356,26 @@ def test_the_baseline_is_a_number_somebody_wrote_down():
     assert data["max_violations"] >= 0
 
 
-def test_the_three_palettes_that_disagree_are_on_the_open_items_page():
-    """Why the number is what it is.
+def test_the_palette_question_stayed_answered():
+    """Was `test_the_three_palettes_that_disagree_are_on_the_open_items_page`.
 
-    `design-system/tokens.json` still names its brand ramp indigo /
-    violet / pink and holds values from a mid-flight version of the warm
-    palette; the shipped page uses a third set; `pixcull-brand.json` a
-    fourth. Every use of the shipped colour therefore counts as "not in
-    the design-system tokens", which is most of the debt. That is a
-    decision about which palette is canonical, so it is an owner ask and
-    it has to be written where the owner reads."""
+    It asserted the divergence was recorded as an owner ask, and its
+    docstring repeated the claim that the split was "most of the debt".
+    Both stopped being true in v3.66: measured, the three product golds
+    were 55 of 144 violations (38%), and the reconciliation could not
+    have moved the number at all because the gate never read the token
+    file. The ask is answered on the page now, and this holds the answer
+    in place rather than the question.
+    """
     page = (ROOT / "docs" / "OPEN-ITEMS.md").read_text("utf-8")
-    assert "tokens.json" in page and "#d5b584" in page, (
-        "the palette divergence is not recorded on the open-items page")
+    assert "### 5. ~~Which palette is canonical~~" in page, (
+        "ask 5 has been reopened or removed without a note")
+    import json
+    doc = json.loads((ROOT / "design-system" / "tokens.json").read_text("utf-8"))
+    brand = doc["color"]["brand"]
+    assert brand["champagne"]["value"] == "#d5b584", (
+        "the design system's brand ramp no longer matches the shipped "
+        "accent — reconcile it or reopen ask 5 with the reason")
+    for gone in ("indigo", "violet", "pink", "indigo-b", "violet-b", "pink-b"):
+        assert gone not in brand, (
+            f"color.brand.{gone} is back; it names a hue this palette is not")

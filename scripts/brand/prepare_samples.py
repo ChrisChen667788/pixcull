@@ -23,6 +23,22 @@ running across a field whose face is perfectly legible at full size.
 Every name below was looked at by eye at 1600 px, and anywhere a human
 figure appeared, again at native resolution.
 
+Rebuilding the run in `samples/output` afterwards is a second step, and
+it has one non-obvious requirement:
+
+    pixcull run samples/input --output /tmp/samrun --vlm-mode off
+    cp /tmp/samrun/{scores.csv,rubric.jsonl,embeddings.npz} samples/output/
+
+**`--vlm-mode off` is not optional.** Without it, `pixcull run` sends
+every frame to the cloud judge whenever a MiniMax key is on the machine
+and consent was recorded once — which it was, in August. Clearing
+`MINIMAX_API_KEY` does not prevent it: on macOS the key is read from the
+keychain as well, because that is where the app stores it so a GUI launch
+with no shell environment can still find it. Six of these photographs
+went to MiniMax during v3.64 for exactly that reason.
+`tests/test_sample_run_never_went_to_the_cloud.py` checks the artifact
+rather than trusting this paragraph.
+
 Usage:  python scripts/brand/prepare_samples.py <originals-dir>
 """
 from __future__ import annotations
