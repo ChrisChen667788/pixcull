@@ -8,7 +8,7 @@ try:
     from importlib.metadata import version as _pkg_version
     __version__ = _pkg_version("pixcull")
 except Exception:
-    __version__ = "3.64.0"
+    __version__ = "3.69.0"
 
 #: The band pyproject.toml pins. Kept next to the check that reads it so
 #: the two cannot say different things — until v3.64 this guard was still
