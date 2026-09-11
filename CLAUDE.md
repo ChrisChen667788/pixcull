@@ -503,6 +503,18 @@ cap were the packages the public demo ran uncapped.**  When a guard is
 written after being burned by one instance, ask what the instance is an
 instance *of* before naming it in the assertion.
 
+**Nothing the rubric measures separates this owner's keeps from their culls**
+(v3.81).  The 28 frames they culled and the stack kept score HIGHER on every
+axis than the 114 both kept — composition +0.20, moment +0.49, sharpness
++555 — with `score_final` identical to three decimals.  Threshold changes
+cannot help; a dimension the rubric does not have cannot be weighted.  Four
+hypotheses tested and refuted, including two forms of redundancy.
+**`axis_weights` turned that absence into a strong opinion**: `max(0.0, gap)`
+clamped the four negative axes to zero and put all the weight on two gaps of
++0.08 and +0.12, yielding `technical 0.4 · moment 0.6 · rest 0.0` — a
+confident claim that this photographer does not care about composition.  A
+negative gap is evidence against, not absence of evidence.
+
 **The first non-circular accuracy number, 2026-09-12: 73%** (landscape 68%,
 portrait 78%, n=158).  Every earlier label set was circular — the model's
 verdict was on screen while the owner labelled, so `source: "auto"` and

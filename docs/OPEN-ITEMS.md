@@ -149,6 +149,48 @@ from the right model.
 
 ---
 
+## Nothing the product measures separates this photographer's keeps from their culls
+
+Measured 2026-09-12 on the first blind correction set, 158 frames, and
+the reason the 73% agreement number cannot be improved by moving a
+threshold.
+
+The 28 frames the photographer culled and the rule stack kept score
+**higher** than the 114 both agreed to keep, on every axis:
+
+| | culled | both kept | diff |
+|---|---|---|---|
+| composition | 4.83 | 4.63 | +0.20 |
+| moment | 3.19 | 2.71 | +0.49 |
+| light | 4.42 | 4.25 | +0.17 |
+| aesthetic | 3.24 | 3.08 | +0.17 |
+| sharpness (laplacian) | 1428 | 873 | +555 |
+| `score_final` | 0.783 | 0.778 | +0.006 |
+
+Four hypotheses tested and refuted:
+
+* **A loose threshold.** No — the culled frames are not lower-scoring.
+* **Blown skies.** Highlight clipping is *lower* in the culled set
+  (2.19% vs 2.89%), and equal at every threshold. Formed by looking at
+  the frames and rejected by measuring them.
+* **Redundancy, by cluster.** One of 28 sits in a cluster where a
+  sibling was kept. (The sample was drawn evenly across each shoot,
+  which makes near-duplicates unlikely to be sampled together — so this
+  set cannot test redundancy properly. A contiguous sample could.)
+* **Redundancy, by embedding.** Cosine similarity to the nearest other
+  frame is no higher for culled frames (d = +0.09 overall, negative
+  within each vertical).
+
+What is visible in the frames and measured by nothing: tour buses,
+walkways and railings in the landscape frames, and a great many
+near-identical ridge lines. The product has no feature for "there is a
+coach in the shot".
+
+**This is not a threshold problem, and no amount of correction data
+fixes it.** A dimension the rubric does not have cannot be weighted.
+
+---
+
 ## Three gaps that are NOT waiting on a person
 
 Recorded because "waiting on the owner" is a comfortable place to put something

@@ -89,15 +89,59 @@ def learn_profile(examples: Iterable[Example]) -> PersonalProfile:
     return profile_from_preferences(aggregate_prefs(examples))
 
 
+#: A keep-cull gap smaller than this, in stars out of five, is not worth
+#: acting on. Set from the first blind correction set (v3.81): the two
+#: axes that survived clamping there were +0.08 and +0.12, and building
+#: a profile on those produced a confident, wrong answer.
+MIN_MEANINGFUL_GAP = 0.25
+
+
 def axis_weights(profile: PersonalProfile) -> dict:
     """Per-axis weight = how much that axis separates THIS user's keep
     from cull (the keep-mean − cull-mean gap), normalised & non-negative.
-    Falls back to equal weights when the gaps are uninformative."""
-    gaps = {a: max(0.0, profile.axis_keep_means.get(a, 0.0)
-                   - profile.axis_cull_means.get(a, 0.0)) for a in AXES}
+    Equal weights when the gaps do not say anything.
+
+    **v3.81 — `max(0.0, gap)` threw away the evidence that there was no
+    signal.** Measured on the first genuinely blind correction set, four
+    of six axes had a NEGATIVE gap: the frames the photographer culled
+    scored higher on composition, subject, light and aesthetic than the
+    ones they kept. Clamping dropped all four to zero, and the whole
+    weight landed on the two tiny positives that survived — +0.08 and
+    +0.12 stars — producing
+
+        technical 0.4 · moment 0.6 · everything else 0.0
+
+    which is not "learned nothing". It is a confident claim that this
+    photographer does not care about composition at all, built from two
+    gaps that are noise, and it would have been installed if it happened
+    to edge the generic model on a holdout.
+
+    Two rules now, both using only what is already here:
+
+    * a gap under `MIN_MEANINGFUL_GAP` stars is not acted on; and
+    * if the largest gap pointing the WRONG way is as large as the
+      largest pointing the right way, the ordering is noise and nothing
+      is weighted.
+
+    The second is the one that matters. A negative gap is not an absence
+    of evidence, it is evidence against — and discarding it silently is
+    how no signal becomes a strong opinion.
+    """
+    raw = {a: profile.axis_keep_means.get(a, 0.0)
+              - profile.axis_cull_means.get(a, 0.0) for a in AXES}
+    equal = {a: 1.0 / len(AXES) for a in AXES}
+
+    best_right = max(raw.values())
+    worst_wrong = -min(raw.values())          # magnitude of the worst negative
+    if best_right < MIN_MEANINGFUL_GAP:
+        return equal
+    if worst_wrong >= best_right:
+        return equal
+
+    gaps = {a: max(0.0, g) for a, g in raw.items()}
     total = sum(gaps.values())
     if total <= 1e-9:
-        return {a: 1.0 / len(AXES) for a in AXES}
+        return equal
     return {a: gaps[a] / total for a in AXES}
 
 
