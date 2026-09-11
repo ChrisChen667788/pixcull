@@ -217,3 +217,52 @@ def test_run_declines_gracefully_when_it_cannot_ask(monkeypatch, tmp_path):
     CliRunner().invoke(app, ["run", str(tmp_path / "in")])
     assert seen.get("vlm_mode") == "off", (
         "a headless run must not upload on the strength of a key alone")
+
+
+# ── v3.75 fixup — the two questions must not be able to disagree ──────
+
+def test_a_granted_consent_is_always_an_answered_one(tmp_path, monkeypatch):
+    """v3.75 introduced `consent_answered()` beside `has_consent()` and had
+    both read the file independently. Anything that made one true without
+    the other — a test patching only `has_consent`, a half-written file —
+    saw them disagree, and the CLI then re-asked a user who had already
+    said yes. CI caught it: `assert 'off' == 'minimax'`.
+
+    Deriving one from the other makes it structural. Asserted over every
+    reachable file state rather than the happy one.
+    """
+    from pixcull.scoring import m3
+    path = tmp_path / "cloud_consent.json"
+    monkeypatch.setattr(m3, "consent_path", lambda: path)
+
+    states = []
+    states.append(("fresh", m3.has_consent(), m3.consent_answered()))
+    m3.decline_consent()
+    states.append(("declined", m3.has_consent(), m3.consent_answered()))
+    m3.grant_consent()
+    states.append(("granted", m3.has_consent(), m3.consent_answered()))
+    m3.revoke_consent()
+    states.append(("revoked", m3.has_consent(), m3.consent_answered()))
+
+    for name, has, answered in states:
+        assert not has or answered, (
+            f"state {name!r}: has_consent() is True and consent_answered() "
+            "is False — the CLI would ask a user who already said yes")
+
+    assert dict((n, (h, a)) for n, h, a in states) == {
+        "fresh":    (False, False),
+        "declined": (False, True),
+        "granted":  (True, True),
+        "revoked":  (False, False),
+    }
+
+
+def test_a_decline_is_not_mistaken_for_a_grant(tmp_path, monkeypatch):
+    """The file holds both answers now, so the difference is one boolean.
+    Reading it wrongly would upload photographs from a run that declined."""
+    from pixcull.scoring import m3
+    path = tmp_path / "cloud_consent.json"
+    monkeypatch.setattr(m3, "consent_path", lambda: path)
+    m3.decline_consent()
+    assert m3.has_consent() is False, (
+        "a recorded refusal reads as permission to upload")

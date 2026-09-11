@@ -1157,12 +1157,22 @@ def consent_answered() -> bool:
     `has_consent()` answers "may we upload"; this answers "do we need to
     ask". They are different questions and conflating them is what made
     a refusal evaporate.
+
+    v3.75 fixup — but they are not independent, and the first cut wrote
+    them as though they were: both read the file separately, so anything
+    that made one true without the other saw them disagree. A granted
+    consent is, necessarily, an answered one. Deriving that rather than
+    re-reading it makes the invariant hold by construction instead of by
+    both functions happening to agree.
     """
+    if has_consent():
+        return True
     try:
         d = json.loads(consent_path().read_text("utf-8"))
     except (OSError, json.JSONDecodeError):
         return False
-    return "granted" in d and int(d.get("version", 0)) == CONSENT_VERSION
+    return (d.get("granted") is False
+            and int(d.get("version", 0)) == CONSENT_VERSION)
 
 
 def revoke_consent() -> bool:
