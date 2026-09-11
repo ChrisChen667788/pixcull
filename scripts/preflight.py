@@ -117,6 +117,29 @@ def main() -> int:
               "     counts one release fewer than the push will. Commit "
               "first, then\n"
               "     run this, then push.\n")
+    # v3.76 — say when the interpreter is the problem, not the code.
+    #
+    # Twice this reported "FAILED — 21 of 21 gates, 0.5s" and twice I
+    # read it as a flaky tool and re-ran it. It was neither flaky nor
+    # wrong: the invocation had lost its virtualenv, the shebang picked
+    # up the system python, that python has no pytest, and every gate
+    # "failed" identically in half a second.
+    #
+    # Twenty-one identical failures is not twenty-one problems. Check
+    # the one thing they all depend on first and name it, so the reader
+    # is not sent looking through their own diff for a fault that is in
+    # their shell.
+    probe = subprocess.run(
+        [sys.executable, "-c", "import pytest"],
+        capture_output=True, text=True)
+    if probe.returncode != 0:
+        print(f"  ✗  {sys.executable} cannot import pytest.\n"
+              "     Every gate would fail here for that reason alone, "
+              "which is not\n"
+              "     a result. Run this with the project's virtualenv "
+              "python.\n")
+        return 2
+
     failed = []
     t0 = time.time()
     for path, why in GATES:
