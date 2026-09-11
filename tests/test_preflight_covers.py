@@ -116,13 +116,35 @@ def test_preflight_declares_which_gates_it_cannot_see_early():
     assert named <= listed, (
         f"COMMIT_RELATIVE names gates preflight does not run: {named - listed}")
 
-    # Every gate that reads the git log to find releases is one of these.
-    reads_log = set()
-    for path in listed:
-        text = (ROOT / path).read_text(encoding="utf-8")
-        if re.search(r'"git",\s*"log"|\bgit\b[^\n]*log', text) and \
-                re.search(r"release|version", text, re.I):
-            reads_log.add(path)
+    # Which gates actually shell out for the release log.
+    #
+    # v3.77 — two goes at this by text matching, two failures, both this
+    # file flagging itself. First it matched its own comments describing
+    # the rule. Then, with comments stripped, it matched the regex
+    # literal it was searching WITH: a detector that detects itself.
+    #
+    # So: the AST. A gate reads the release log when it makes a call
+    # whose argument list contains "git" and "log". That is a fact about
+    # the code, and no amount of writing about git logs can make it true.
+    def _shells_out_for_the_log(src: str) -> bool:
+        try:
+            tree = ast.parse(src)
+        except SyntaxError:
+            return False
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            words = []
+            for arg in ast.walk(node):
+                if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                    words.append(arg.value)
+            if "git" in words and "log" in words:
+                return True
+        return False
+
+    reads_log = {p for p in listed
+                 if _shells_out_for_the_log(
+                     (ROOT / p).read_text(encoding="utf-8"))}
     assert reads_log, "no gate appears to read the release log — scan broken"
     missing = sorted(reads_log - named)
     assert not missing, (

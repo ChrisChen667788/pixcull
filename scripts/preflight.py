@@ -71,6 +71,18 @@ GATES: list[tuple[str, str]] = [
      "no retired palette survives in a public surface"),
     ("tests/test_pypi_quickstart_runs.py",
      "the PyPI quickstart is a sequence that works"),
+    # v3.77 — FIRST, because it is the one that says whether this list is
+    # complete, and until now preflight did not run it. The comment below
+    # claims the list is maintained "by tests/test_preflight_covers.py,
+    # not by remembering", and that was untrue in the way that matters:
+    # the test existed, preflight never ran it, so the list was in fact
+    # maintained by remembering. Two versions running I added a gate that
+    # asserts on README.md, forgot the row here, and learned about it
+    # from a runner.
+    ("tests/test_preflight_covers.py",
+     "this list still covers every bookkeeping gate in the suite"),
+    ("tests/test_demo_clip_is_safe_to_publish.py",
+     "the demo clip's faces are covered and its metadata is stripped"),
     ("tests/test_screenshots_are_dispositioned.py",
      "every screenshot is regenerated or written down as stale"),
     ("tests/test_readme_image_sources.py",
