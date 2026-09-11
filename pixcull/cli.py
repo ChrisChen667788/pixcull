@@ -1,4 +1,5 @@
 import os
+import sqlite3
 import sys
 from pathlib import Path
 from typing import Optional
@@ -301,6 +302,21 @@ def import_catalog(
                       f"knows[/yellow]\n{exc}")
         console.print("[dim]That is a result, not a failure — the schema it "
                       "expected is named above.[/dim]")
+        raise typer.Exit(code=2)
+    except sqlite3.DatabaseError as exc:
+        # v3.79 — the refusal above covers "right file, wrong schema".
+        # A file that is not a database at all, or a catalogue Lightroom
+        # still has open, fell past it into a Rich traceback with
+        # internal paths in it. Same shape as the contact-sheet fault
+        # v3.75 fixed; that sweep read CLI handlers for missing files and
+        # did not reach the ones that open a database.
+        console.print(f"[red]cannot read {catalog} as a Lightroom "
+                      f"catalogue[/red] — {exc}")
+        console.print("[dim]A .lrcat is a SQLite file. If Lightroom has it "
+                      "open, quit it or point this at a copy.[/dim]")
+        raise typer.Exit(code=2)
+    except OSError as exc:
+        console.print(f"[red]cannot open {catalog}[/red] — {exc}")
         raise typer.Exit(code=2)
 
     counts = Counter(l.decision for l in labels)

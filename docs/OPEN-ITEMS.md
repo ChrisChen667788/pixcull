@@ -67,20 +67,6 @@ Artefacts are local and outside the repository:
 
 ---
 
-### 2. A correction set with the shoot type recorded — unblocks 3
-
-v2.83, v3.8, v3.9.
-
-There is no `annotations.jsonl` anywhere on this machine. The fitted profile at
-`~/.pixcull/personal_profile.json` records 70 blind-provenance annotations and
-the examples behind it are gone; a profile cannot be re-fitted from its own
-output.
-
-`personal_learn.readiness()` says how many more are needed and by which
-vertical, counting the cheapest route to two eligible verticals rather than
-every vertical that exists. `pixcull m3 label` is the session that produces
-them.
-
 ### 3. Human judgement — unblocks 4
 
 **v2.80, v2.88, v2.89** need raters who are working photographers and are not
@@ -95,13 +81,33 @@ about a third party's opinion. `strip_effect.py` records it as a side effect of
 ordinary use — off unless asked for, written to the run's own directory, never
 transmitted, and refusing to report a rate below five observations per side.
 
-### 4. One real Lightroom catalogue — unblocks 1
+### 4. ~~One real Lightroom catalogue~~ — answered 2026-09-12
 
-v3.10. Every test builds its own SQLite fixture in the shape the reader expects,
-which proves the reader is self-consistent and nothing about Adobe's schema.
-`pixcull import-catalog <file.lrcat>` is dry-run by default and prints the
-refusal with the tables and columns it wanted when the shape differs — which is
-a result, not a failure.
+Every test built its own SQLite fixture in the shape the reader expects,
+which proved the reader self-consistent and nothing about Adobe's schema.
+
+Run against the owner's working catalogue — Lightroom Classic v13-3, 137
+tables, 7,941 images, opened read-only from a copy:
+
+    ✓ 2 judged frames (2 keep · 0 cull), provenance lr_catalog
+
+**No schema mismatch.** The reader handles the real thing.
+
+The interesting part is the other number. That catalogue holds **zero
+flags, zero rejects, and six star ratings across 7,941 images** — this
+photographer develops in Lightroom and culls elsewhere. Two frames import
+because `decision_for` maps `rating >= 4` to keep and returns None below
+it, on the grounds that an unflagged three-star frame is a frame nobody
+got round to rather than a judgement. That rule is right and it leaves
+almost nothing to import here.
+
+So the feature works and its premise does not hold for this user. Worth
+knowing before anything is built on top of it.
+
+**Found while checking:** `import-catalog` answers a file it cannot open
+with a raw traceback rather than the clean refusal the section above
+describes — the same shape as the `contact-sheet` fault fixed in v3.75,
+which that sweep did not reach.
 
 ---
 

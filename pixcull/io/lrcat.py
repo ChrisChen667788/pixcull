@@ -32,6 +32,8 @@ empty result that reads like "you have no picks".
 """
 from __future__ import annotations
 
+import shutil
+import tempfile
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
@@ -107,23 +109,48 @@ def read_labels(catalog: Path | str, *,
                 keep_min_stars: float = 4.0) -> list[CatalogLabel]:
     """Every frame in the catalogue the photographer actually judged.
 
-    Opened read-only. A catalogue is the photographer's working
-    database — often the only copy — and this must not be able to write
-    to it even by accident.
+    The photographer's catalogue is never opened for writing. It is often
+    their only copy, and this must not be able to change it even by
+    accident.
+
+    **v3.79 — but `mode=ro` alone could not read a real one.** Lightroom
+    Classic keeps its catalogue in WAL journal mode, and a read-only
+    SQLite connection cannot create the `-shm` shared-memory file WAL
+    requires, so every open failed with "unable to open database file".
+    Read-write worked, which is the tell, and is the one thing this
+    reader must not do.
+
+    Verified only by fixtures until then, and every fixture was created
+    in the default rollback mode — self-consistent, and silent about the
+    mode every real catalogue is actually in. It is the fault that
+    `docs/OPEN-ITEMS.md` ask 4 existed to find, and finding it took
+    pointing the reader at a working catalogue.
+
+    So: copy first, read the copy. The copy is opened read-write, which
+    WAL needs, and the original is opened only by `shutil.copy` — for
+    reading. The `-wal` sidecar comes along when it exists so a
+    catalogue with uncommitted frames is read whole rather than stale.
     """
     path = Path(catalog)
     if not path.exists():
         raise FileNotFoundError(str(path))
-    uri = f"file:{path.as_posix()}?mode=ro"
-    con = sqlite3.connect(uri, uri=True)
-    try:
-        _check_schema(con)
-        rows = con.execute(
-            f"SELECT f.baseName, f.extension, i.pick, i.rating "
-            f"FROM {_IMAGES} i JOIN {_FILES} f ON f.id_local = i.rootFile"
-        ).fetchall()
-    finally:
-        con.close()
+
+    with tempfile.TemporaryDirectory(prefix="pixcull-lrcat-") as tmp:
+        work = Path(tmp) / path.name
+        shutil.copy2(path, work)
+        for side in ("-wal", "-shm"):
+            sidecar = path.with_name(path.name + side)
+            if sidecar.exists():
+                shutil.copy2(sidecar, work.with_name(work.name + side))
+        con = sqlite3.connect(str(work))
+        try:
+            _check_schema(con)
+            rows = con.execute(
+                f"SELECT f.baseName, f.extension, i.pick, i.rating "
+                f"FROM {_IMAGES} i JOIN {_FILES} f ON f.id_local = i.rootFile"
+            ).fetchall()
+        finally:
+            con.close()
 
     out: list[CatalogLabel] = []
     for base, ext, pick, rating in rows:
