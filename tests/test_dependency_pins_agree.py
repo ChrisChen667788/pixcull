@@ -168,17 +168,34 @@ def test_the_modelscope_studio_pins_the_same_numpy():
 def test_no_document_still_advertises_the_old_ceiling():
     """`README.md` explained the Python 3.12 ceiling as "mediapipe pins
     numpy<2", which stopped being the reason and was never the whole
-    one — mediapipe 0.10.x classifies up to 3.12 and no further."""
+    one — mediapipe 0.10.x classifies up to 3.12 and no further.
+
+    v3.74 — this used to require `numpy` and `<2` to be ADJACENT, and
+    README.md is bilingual. v3.64 corrected the English quickstart and
+    left the Chinese one, which reads `mediapipe 把 numpy 钉死在 <2`:
+    the same false claim, with three characters between the package
+    name and the bound, so the pattern did not match and the gate built
+    to catch exactly this said nothing for ten versions.
+
+    A claim is not made adjacently in every language. Look for the
+    package and the bound in the same line, in either order.
+    """
     lo, _ = _pyproject_band()
+    lo_s = ".".join(map(str, lo))
     stale = []
+    bound = re.compile(r"<\s*=?\s*(\d[\d.]*)")
     for rel in ("README.md", "modelscope/README.md", "README-PYPI.md",
-                "docs/USER-GUIDE.md", "CONTRIBUTING.md"):
+                "docs/USER-GUIDE.md", "CONTRIBUTING.md", "ROADMAP.md"):
         p = ROOT / rel
         if not p.exists():
             continue
         for i, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1):
-            for m in re.finditer(r"numpy\s*<\s*([\d.]+)", line):
+            if "numpy" not in line.lower():
+                continue
+            for m in bound.finditer(line):
                 if _ver(m.group(1)) <= lo:
                     stale.append(f"{rel}:{i}: {line.strip()}")
-    assert not stale, ("these still tell the reader numpy is capped below "
-                       f"the version the project now requires: {stale}")
+                    break
+    assert not stale, (
+        f"these tell the reader numpy is capped at or below {lo_s}, which "
+        f"is the floor the project now requires: {stale}")

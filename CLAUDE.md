@@ -483,6 +483,22 @@ cap were the packages the public demo ran uncapped.**  When a guard is
 written after being burned by one instance, ask what the instance is an
 instance *of* before naming it in the assertion.
 
+**What CI installs is not what a user installs** (v3.74).  All four lanes
+pinned `torch==2.4.1` — a 2024 release — while `pyproject.toml` allows
+`>=2.2,<3` and a resolve today gives 2.11, so the lane named "install +
+import smoke" proved a two-year-old install works.  It resolves freely now;
+the behaviour lanes stay pinned so a red run means the code changed, not the
+index.  Python 3.11 was worse: advertised in `requires-python`, the PyPI
+classifiers, the README badge, `README-PYPI.md` and both quickstarts, and the
+matrix had never run it.  `tests/test_ci_tests_what_ships.py` holds both.
+
+**A claim is not made adjacently in every language.**  The v3.68 gate looked
+for `numpy` and `<2` next to each other; the Chinese README says
+`mediapipe 把 numpy 钉死在 <2`, three characters in between, so the gate built
+to catch exactly that claim missed it for ten versions while the English half
+had been correct since v3.64.  **README.md is bilingual — fixing a claim means
+fixing it twice.**
+
 **`.gitignore`'s bare `output/` has eaten two load-bearing directories** —
 `tests/fixtures/present_run/output` (v3.51) and `samples/output` (v3.63, which
 made the 示例数据 button return 500 for every visitor).  It has glob exceptions

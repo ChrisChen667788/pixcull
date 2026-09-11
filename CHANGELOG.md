@@ -59,7 +59,7 @@ without installing anything.
 
 ---
 
-## v2.94 – v3.66
+## v2.94 – v3.68
 
 The same hole as the one below, dug a second time. v3.53 found that
 **What's new** had stopped at v2.45 while eighty-five releases shipped, and
@@ -74,6 +74,10 @@ beside it now asserting the guard can still see the newest release in the log,
 which is the thing that was actually false.
 
 One line each, exactly as the release was titled at the time.
+
+**v3.68** — the parity gate named one package, so it protected one package
+
+**v3.67** — the README named a command that has never existed
 
 **v3.66** — three things flagged for a human, and two of the three questions
 were wrong

@@ -35,7 +35,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.12"]
+        python-version: ["3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
 
@@ -45,7 +45,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
 
-      - name: Install (CPU-pinned torch family + project)
+      - name: Install the way a user does (resolver picks the versions)
         env:
           # Make PyTorch's CPU index the preferred source for any
           # torch-family package. Without this, pip resolves
@@ -55,12 +55,25 @@ jobs:
           PIP_EXTRA_INDEX_URL: https://download.pytorch.org/whl/cpu
         run: |
           python -m pip install --upgrade pip
-          # Pin a matched torch + torchvision CPU pair so the
-          # editable-install step below doesn't upgrade one half of
-          # the pair against the other.
+          # v3.74 — NOT pinned. This lane's whole job is to prove that
+          # `pip install pixcull` works, and it was proving that
+          # `pip install torch==2.4.1` works: every lane pinned that
+          # pair, torch 2.4.1 is from 2024, and pyproject allows
+          # `>=2.2,<3`, so a person installing today gets 2.11 and no
+          # lane had ever exercised it.
+          #
+          # torch and torchvision still go in together, in one command,
+          # from the CPU index — that was the real reason for the
+          # original pin (so the editable install below cannot upgrade
+          # one half of the pair against the other) and it does not
+          # require freezing a version.
+          #
+          # The other three lanes stay pinned on purpose: a fixed pair
+          # makes a red run mean "the code changed", not "the index
+          # did". This is the lane where the opposite is what we want.
           pip install --index-url https://download.pytorch.org/whl/cpu \
                       --extra-index-url https://pypi.org/simple \
-                      "torch==2.4.1" "torchvision==0.19.1"
+                      torch torchvision
           pip install -e ".[dev]"
 
       - name: Resolved versions

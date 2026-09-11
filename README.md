@@ -62,6 +62,24 @@
 
 ## What's new
 
+**v3.74** — The lane called "install + import smoke" was rehearsing an install
+nobody performs. Every CI lane pinned `torch==2.4.1`, a 2024 release, while
+`pyproject.toml` allows `>=2.2,<3` and a machine resolving today gets 2.11 —
+so the seven minor versions a real user lands on were exercised by nothing.
+The smoke lane resolves freely now; the three behaviour lanes stay pinned on
+purpose, because there a red run should mean the code changed, not the index.
+
+Python 3.11 was the sharper half. It is in `requires-python`, in the PyPI
+classifiers, in the README badge, in `README-PYPI.md` and in both quickstarts,
+and the matrix had only ever run 3.12. Advertised in five places, tested in
+none.
+
+**v3.73** — The design system was going to learn the light theme. Measuring
+first found that fifteen of its sixteen role tokens had the wrong value for the
+*dark* theme too — it still held the warm surfaces from before v2.21, while the
+product had moved to neutral. Adding a second theme to a file that described the
+first one wrongly would have doubled the error.
+
 **v3.72** — The light theme was painting champagne gold where the design
 system says deep bronze. Sixty-two colour literals sat in rules that run in
 both themes, so a hardcoded dark-theme value reached white paper; the shipped
@@ -96,26 +114,6 @@ else, while `PIXCULL_VLM_MODEL`, `PIXCULL_VLM_API_KEY` and
 `PIXCULL_VLM_WORKERS` all existed — so that name is both the obvious guess and
 one character from a real one. It is real now, and any `PIXCULL_*` name the
 product does not read is reported at startup with the nearest match.
-
-**v3.68** — Two files pin the dependencies a user can install from, and a
-gate exists so they cannot disagree. It spelled `numpy` as a literal, so it
-had been enforcing parity for the one dependency somebody had already been
-bitten by, out of sixteen. Three had drifted — `torch`, `torchvision` and
-`transformers` each carry a major ceiling here and carried none in the hosted
-Studio's requirements.
-
-Those three are not a random three: they are the ones whose ceiling was
-earned. Every dependency painful enough to cap was a dependency the public
-demo was running uncapped — the one install a visitor cannot inspect, pin or
-fix had the least protection of any install.
-
-**v3.67** — The README told people to run a `deliver` command. There has
-never been one; what ships is `pixcull view-folder`. It was
-written into the quickstart twelve versions ago, went out on PyPI, and the
-gate built to catch exactly this could not see it — it reads one section of
-one file, and the instruction was three sections away. Every `pixcull …`
-invocation in every document is checked against the CLI's own command tree
-now, which found a second one: a flag on `export` that does not exist either.
 
 Earlier releases are in [`CHANGELOG.md`](CHANGELOG.md).
 
@@ -1395,7 +1393,7 @@ pixcull m3 label --folder <photos> --limit 150
 git clone https://github.com/ChrisChen667788/pixcull.git
 cd pixcull
 
-# 2. Python 3.11 或 3.12 (mediapipe 把 numpy 钉死在 <2,所以 3.12 是上限)
+# 2. Python 3.11 或 3.12 (mediapipe 0.10.x 没有 3.12 以上的 wheel)
 python3.12 -m venv .venv
 source .venv/bin/activate
 
