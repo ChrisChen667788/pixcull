@@ -31,6 +31,6 @@
 22-transparency-tools.png	stale	2026-06-19	The transparency panel gathering the glass box, attribution and the audit trail.
 23-video-timeline.png	stale	2026-07-30	The video timeline with shot boundaries and audio events marked along it.
 24-review-sheet.png	stale	2026-08-16	The printable review sheet a photographer marks up away from the screen.
-24-transcript-edit.png	stale	2026-08-02	Edit-by-text: cutting a clip by deleting words from its transcript.
+24-transcript-edit.png	manual-verified	2026-09-11	Edit-by-text, re-shot in v3.77 from real footage with its own audio. Its own capture script: scripts/brand/capture_transcript_edit.py, fed by make_demo_clip.py. Faces frosted; 31 frames eye-checked at full size and no face is legible.
 25-client-proof-sheet.png	stale	2026-09-01	Client proof sheet, re-shot from the owner's own Canon set.
 26-blind-label-sheet.png	stale	2026-09-01	Blind labelling sheet, same re-shoot.

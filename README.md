@@ -624,9 +624,12 @@ character — Paraformer does, Whisper does not — because interpolating inside
 segment invents precision the model never gave and lands cuts on the wrong
 frames. The panel says which mode it is in.
 
-> This capture is synthetic end to end: an ffmpeg test pattern with macOS TTS
-> speaking four on-set directions. Re-take it with
-> `scripts/brand/capture_transcript_edit.py`.
+> Shot from real footage with its own audio (v3.77). It used to be an ffmpeg
+> test pattern with synthesised speech, which read as a rendering fault on the
+> page. The faces are frosted, not avoided: speech runs across almost the whole
+> clip, so trimming past the moment the subject turns to camera would take the
+> audio with it. Rebuild the clip with `scripts/brand/make_demo_clip.py`, then
+> re-take the shot with `scripts/brand/capture_transcript_edit.py`.
 
 ### Lightbox with V20 advice + sticky decision toolbar
 
@@ -1299,8 +1302,10 @@ CMX-3600 EDL 进 Premiere / Resolve,或者按**出片**直接得到剪好的 mp4
 片段时直接返回"只有一个人"),**分不出时明说分不出**,不会伪造一个 0 号
 说话人。
 
-> 上图全程为合成素材:ffmpeg 测试图 + macOS TTS 念四句现场指令,不涉及任何
-> 真实拍摄素材。重拍用 `scripts/brand/capture_transcript_edit.py`。
+> 上图取自真实素材及其原声(v3.77)。此前是 ffmpeg 测试图 + 合成语音,在页面上
+> 看起来像渲染出错。人脸是**遮**掉而不是**避**开的:人声几乎铺满整段,裁掉正脸
+> 那一段就把声音一起裁掉了。用 `scripts/brand/make_demo_clip.py` 重建片段,再用
+> `scripts/brand/capture_transcript_edit.py` 重拍。
 
 ### v2.9 · 智能透明 + 内容优先观看
 

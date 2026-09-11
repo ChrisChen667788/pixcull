@@ -116,11 +116,31 @@ before the run** (all 20 sampled originals carried it; `gps_lat` is
 empty on all 200 rows), and the originals were copied to a neutral
 `/tmp` path first so no drive name can appear on screen.
 
-**`24-transcript-edit.png` is STILL synthetic** — ffmpeg test pattern
-plus macOS TTS, and the README says so at the image.  Replacing it needs
-footage with speech in it; the owner's `winter-sled.mp4` working copy is
-no longer on this machine and the Canon clips on the card are ambient
-only.  Declared, not quietly left.
+**`24-transcript-edit.png` is real footage now** (v3.77), built by
+`scripts/brand/make_demo_clip.py` from the owner's own sledding clip with
+its own audio.  It was an ffmpeg test pattern for fourteen months and read
+as a rendering fault on the front page.
+
+Three things that cost time and are worth not repeating:
+
+* **Faces are frosted, not avoided.**  Speech runs 0.5s–18.7s of a 20.7s
+  clip, so trimming past the moment the subject turns to camera takes the
+  audio with it, and across the whole sledding set there is no clip where
+  the subject stays turned away.
+* **Screen at full size.**  A 640 px pass found a 29-second "face-free"
+  run in another clip; at 3840×2160 that run had bystanders with legible
+  faces.  Same lesson as the aerials, learned again.
+* **Do not verify a blur by re-running the face detector on it.**  It
+  reported a face on 569 of 620 frosted frames — correctly, in its own
+  terms, because a smooth oval in skin tones is what it looks for.  The
+  check that means something is geometric: every box found in the
+  original must lie inside the region that got frosted, and the script
+  refuses to write the clip otherwise.
+
+**The GoPro folder holds two different shoots.**  `GH0107xx` is a wedding
+and its audio is private conversation — a transcript of it would be
+readable text on a public page.  `GX01077x` is the sledding trip.  Only
+the second is publishable.
 
 **24 is shot from the owner's own reviewed frames** (owner-authorised
 2026-08-16, "用我刚标注的这组真实照片截图…有人像人脸的那几张就不要了").
