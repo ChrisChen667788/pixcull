@@ -71,6 +71,8 @@ GATES: list[tuple[str, str]] = [
      "no retired palette survives in a public surface"),
     ("tests/test_pypi_quickstart_runs.py",
      "the PyPI quickstart is a sequence that works"),
+    ("tests/test_screenshots_are_dispositioned.py",
+     "every screenshot is regenerated or written down as stale"),
     ("tests/test_readme_image_sources.py",
      "every README image resolves and renders on GitHub"),
     ("tests/test_sample_run_never_went_to_the_cloud.py",
