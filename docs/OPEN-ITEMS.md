@@ -67,26 +67,41 @@ a result, not a failure.
 
 ---
 
-## The attribution heatmap has a backend and no front
+## ~~The attribution heatmap has a backend and no front~~ — answered in v3.78: the backend was the wrong shape
 
-Found 2026-09-11, v3.75/v3.76.
+Recorded 2026-09-11 as an unfinished feature. Measured a day later,
+before wiring it up, and that description was wrong in the direction
+that mattered.
 
-`pixcull/scoring/attribution.py` computes an integrated-gradients
-saliency map per rubric axis, caches it as a PNG, and has tests. Nothing
-serves it: there is no HTTP route, no key handler, and no UI. It was
-advertised since v0.13 in the shortcut sheet, the feature tour, a
-first-run toast, and — in full, step by step — in both READMEs, next to
-a screenshot captioned as showing it.
+**Every axis produced a byte-identical PNG.** `_get_axis_head` looked in
+the repo-root `models/`; the per-axis models moved into the package in
+v3.44 and live at `pixcull/models/`, so the lookup missed every time and
+all six axes silently took an identity fallback that ignores the axis.
+Same sha256 for composition, light, subject and technical.
 
-v3.75 removed the in-product advertisements. v3.76 removed the README
-sections and retired the screenshot. **The code is still there and still
-works**, so this is not a deletion, it is an unfinished feature that had
-been described as a finished one.
+**Fixing the path would not have been enough.** Having found the joblib
+it loads the estimator, discards it, and looks for a `.coef.npy`
+surrogate nothing has ever exported — identity again.
 
-Wiring it is a real piece of work — a route that serves the cached PNG,
-a key handler, an overlay in the lightbox, and a way to pick the axis —
-and it needs visual verification. Recorded here rather than done in a
-version that was already carrying three fixes.
+**And a correct implementation would still have been wrong.** The axis
+rescorers are sklearn pipelines over 29 named tabular metrics —
+`horizon_tilt_deg`, `rule_of_thirds_offset`, `face_count`,
+`laplacian_global`. They never see pixels. Integrated Gradients over a
+CNN cannot explain a model that does not consume the CNN; it would point
+at image regions the scorer never examined, persuasively, in a product
+whose distinguishing claim is that it tells you why.
+
+So it is removed rather than repaired, and
+`tests/test_attribution.py` holds the rule.
+
+**What a real version looks like.** Those 29 columns are readable on
+their own — a horizon tilt is a number in degrees — and the product
+already surfaces them as the cull-reason taxonomy and the per-axis
+driver line. Attributing an axis score to the features it actually
+consumes is the shape this should take: for a tree model that is a
+per-prediction contribution per column, which is exact rather than
+approximate. Not scheduled; written down so the next attempt starts
+from the right model.
 
 ---
 

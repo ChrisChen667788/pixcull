@@ -503,6 +503,17 @@ cap were the packages the public demo ran uncapped.**  When a guard is
 written after being burned by one instance, ask what the instance is an
 instance *of* before naming it in the assertion.
 
+**The per-axis attribution heatmap was removed in v3.78, not deferred.**
+It produced the same PNG for all six axes (the per-axis heads moved into
+the package in v3.44 and its lookup did not follow), and it could not have
+worked anyway: the axis rescorers are sklearn pipelines over **29 tabular
+metrics** and never see pixels, so Integrated Gradients over a CNN explains
+a different model.  Its ten tests all passed the whole time — axis list,
+sha determinism, cache paths, colour ramp — and not one compared two axes'
+output.  **Plumbing tested, claim not.**  `tests/test_attribution.py` now
+holds the rule, with an explicit exemption for the composition classifier's
+saliency map, which computes a feature rather than explaining a score.
+
 **What CI installs is not what a user installs** (v3.74).  All four lanes
 pinned `torch==2.4.1` — a 2024 release — while `pyproject.toml` allows
 `>=2.2,<3` and a resolve today gives 2.11, so the lane named "install +

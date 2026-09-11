@@ -1,133 +1,165 @@
-"""Tests for pixcull/scoring/attribution.py — v0.13-P0-1.
+"""v3.78 — the axis explanation may not come from a model that sees pixels.
 
-We test the pure-function paths (axis validation, cache key, colorize)
-without invoking torch.  The torch + timm path is exercised via a
-short smoke test that's skipped when those packages aren't installed.
+`pixcull/scoring/attribution.py` used to produce Integrated Gradients
+saliency maps "per rubric axis" over a timm CNN. It was never served,
+and measuring it before wiring it up found three faults, the third
+fatal:
+
+* every axis produced a byte-identical PNG, because the per-axis heads
+  it looked for moved into the package in v3.44 and the lookup was never
+  updated, so all six silently took an identity fallback;
+* with the path fixed it would still fall back, because it wants a
+  `.coef.npy` surrogate nothing has ever exported;
+* and the axis rescorers are sklearn pipelines over **29 tabular
+  metrics** — `horizon_tilt_deg`, `rule_of_thirds_offset`, `face_count`
+  — that never see pixels at all. A CNN saliency map cannot explain
+  them. It would point at image regions the scorer never examined.
+
+The module's previous ten tests all passed throughout: axis list, sha
+determinism, cache paths, colour-ramp monotonicity. None compared two
+axes' output. This file holds the claim instead of the plumbing.
 """
-
-from __future__ import annotations
-
+import ast
 from pathlib import Path
 
 import pytest
 
-from pixcull.scoring.attribution import (
-    AXES,
-    MissingTorchError,
-    _cache_dir_for,
-    _colorize_warm,
-    _photo_sha,
-    build_heatmap,
-    clear_cache,
-)
+ROOT = Path(__file__).resolve().parent.parent
+MODULE = ROOT / "pixcull" / "scoring" / "attribution.py"
+PACKAGED_MODELS = ROOT / "pixcull" / "models"
+
+#: Any of these in a shipped module means something is computing a
+#: pixel-space explanation again. Matched as substrings of a function or
+#: call name: the first cut compared names exactly and let
+#: `_serve_saliency` straight through, which is precisely the name such
+#: a handler would have.
+PIXEL_ATTRIBUTION = ("integrated_gradients", "build_heatmap",
+                     "build_all_heatmaps", "saliency")
+
+#: Code that computes a saliency map as an INPUT, with the reason.
+#:
+#: The distinction this gate is about is not the technique, it is where
+#: the output goes. Deriving a feature from a saliency map is ordinary
+#: image processing; presenting one to a photographer as the reason an
+#: axis scored what it did is the defect, because the axis model never
+#: saw the pixels.
+#:
+#: The first cut of this gate had no such list and went red on the
+#: composition classifier, which is the honest case.
+FEATURE_COMPUTATION = {
+    "pixcull/scoring/composition_classifier.py::_saliency_map":
+        "A coarse 32x32 map of brightness, local contrast and a centre "
+        "prior, used to decide which compositional rule a frame follows. "
+        "It produces `composition_score` and `rule_of_thirds_offset` — "
+        "two of the 29 columns the axis model consumes. An input, not an "
+        "explanation.",
+}
 
 
-# ---------------------------------------------------------------------------
-# constants
-# ---------------------------------------------------------------------------
+def test_the_heatmap_machinery_is_gone():
+    src = MODULE.read_text(encoding="utf-8")
+    names = {n.name for n in ast.walk(ast.parse(src))
+             if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+    for gone in ("build_heatmap", "build_all_heatmaps", "_get_axis_head",
+                 "_get_backbone", "_colorize_warm"):
+        assert gone not in names, (
+            f"{gone} is back. Read the module docstring before restoring "
+            "it: the axis models do not consume pixels.")
 
 
-def test_axes_are_canonical_six():
-    """v0.13 commits to six axes; downstream code keys on this."""
-    assert set(AXES) == {
-        "technical", "subject", "composition",
-        "light", "moment", "aesthetic",
-    }
-    assert len(AXES) == 6
+def test_the_module_says_why_rather_than_just_being_short():
+    """A deletion with no reason attached gets undone by whoever finds
+    the gap. The reason is the durable part."""
+    doc = ast.get_docstring(ast.parse(MODULE.read_text(encoding="utf-8")))
+    assert doc, "the module lost its explanation"
+    for must in ("tabular", "29", "v3.44"):
+        assert must in doc, f"the docstring no longer explains {must!r}"
 
 
-# ---------------------------------------------------------------------------
-# axis validation
-# ---------------------------------------------------------------------------
+def test_nothing_serves_a_pixel_attribution_for_an_axis():
+    """The gate with teeth. If a route or a handler starts producing one
+    of these, the product is back to explaining a model it does not
+    use."""
+    offenders = []
+    for path in sorted(ROOT.joinpath("pixcull").rglob("*.py")):
+        if path == MODULE:
+            continue
+        src = path.read_text(encoding="utf-8", errors="ignore")
+        try:
+            tree = ast.parse(src)
+        except SyntaxError:
+            continue
+        # Structure, not text: a call or def by that name, never a
+        # mention of one in a comment.
+        for node in ast.walk(tree):
+            name = None
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                name = node.name
+            elif isinstance(node, ast.Call):
+                f = node.func
+                name = getattr(f, "attr", None) or getattr(f, "id", None)
+            if name and any(k in name.lower() for k in PIXEL_ATTRIBUTION):
+                offenders.append(f"{path.relative_to(ROOT)}::{name}")
+    offenders = [o for o in offenders if o not in FEATURE_COMPUTATION]
+    assert not offenders, (
+        f"these compute or call a pixel-space attribution: {offenders}. "
+        "The axis models are trees over tabular metrics; a saliency map "
+        "over a CNN explains a different model.")
 
 
-def test_unknown_axis_raises_value_error(tmp_path):
-    fake = tmp_path / "p.jpg"
-    fake.write_bytes(b"fake")
-    with pytest.raises(ValueError):
-        build_heatmap(fake, "moonlight")
+def test_a_feature_computation_exemption_carries_its_reason():
+    """An exemption with no reason is how a list like this turns into a
+    place things go to stop failing."""
+    for key, why in FEATURE_COMPUTATION.items():
+        assert len(why) > 60, f"{key} is exempt without a real reason"
+        path, _, fn = key.partition("::")
+        assert (ROOT / path).is_file(), f"{key} names a file that is gone"
+        names = {n.name for n in ast.walk(
+            ast.parse((ROOT / path).read_text(encoding="utf-8")))
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+        assert fn in names, f"{key} names a function that is gone"
 
 
-# ---------------------------------------------------------------------------
-# cache key
-# ---------------------------------------------------------------------------
+def test_the_axis_models_really_are_tabular():
+    """The premise of all of the above, asserted rather than assumed —
+    if the axis models ever become image models, this reasoning changes
+    and the test should fail so somebody re-reads it."""
+    joblib = pytest.importorskip("joblib")
+    path = PACKAGED_MODELS / "rescorer_axis_composition.joblib"
+    if not path.is_file():
+        pytest.skip("packaged axis model not present in this checkout")
+    payload = joblib.load(path)
+    cols = payload.get("feature_cols")
+    assert cols, "the axis model no longer declares its feature columns"
+    assert len(cols) > 10, f"only {len(cols)} features; re-read the premise"
+    assert any(c in cols for c in ("horizon_tilt_deg", "face_count",
+                                   "laplacian_global")), (
+        f"the axis model's features are no longer named metrics: {cols[:8]}")
+    assert not any(c.startswith("emb_") or c.startswith("feat_")
+                   for c in cols), (
+        "the axis model now takes embedding columns; a pixel-space "
+        "explanation may be defensible again — re-read attribution.py")
 
 
-def test_photo_sha_deterministic(tmp_path):
-    p = tmp_path / "x.jpg"
-    p.write_bytes(b"hello world")
-    sha1 = _photo_sha(p)
-    sha2 = _photo_sha(p)
-    assert sha1 == sha2
-    assert len(sha1) == 12
+def test_the_packaged_axis_models_are_where_the_resolver_looks():
+    """The first of the three faults: the models moved in v3.44 and one
+    consumer kept looking at the old path. Asserted so the next consumer
+    cannot repeat it quietly."""
+    from pixcull.model_assets import resolve
+    found = [a for a in ("composition", "light", "subject", "technical",
+                         "moment", "aesthetic")
+             if resolve(Path("models") / f"rescorer_axis_{a}.joblib")]
+    assert len(found) == 6, (
+        f"only {len(found)}/6 axis models resolve: {found}. "
+        "pixcull.model_assets.resolve is how a packaged model is found; "
+        "a bare repo-root path misses every one of them.")
 
 
-def test_photo_sha_changes_on_content_change(tmp_path):
-    p1 = tmp_path / "a.jpg"
-    p1.write_bytes(b"content one")
-    p2 = tmp_path / "b.jpg"
-    p2.write_bytes(b"content two")
-    assert _photo_sha(p1) != _photo_sha(p2)
-
-
-def test_cache_dir_creates_axis_path(tmp_path):
-    d = _cache_dir_for(tmp_path, "composition")
-    assert d == tmp_path / "output" / "attribution" / "composition"
-    assert d.exists() and d.is_dir()
-
-
-# ---------------------------------------------------------------------------
-# colorize
-# ---------------------------------------------------------------------------
-
-
-def test_colorize_produces_rgba_shape():
-    import numpy as np
-    sal = np.zeros((32, 32), dtype=np.uint8)
-    out = _colorize_warm(sal)
-    assert out.shape == (32, 32, 4)
-    assert out.dtype == np.uint8
-
-
-def test_colorize_zero_input_is_low_alpha():
-    """Zero saliency → fully transparent (or near-transparent)."""
-    import numpy as np
-    sal = np.zeros((8, 8), dtype=np.uint8)
-    out = _colorize_warm(sal)
-    assert out[..., 3].max() == 0
-
-
-def test_colorize_full_input_is_high_alpha():
-    """Max saliency → near-opaque warm (brass) color."""
-    import numpy as np
-    sal = np.full((8, 8), 255, dtype=np.uint8)
-    out = _colorize_warm(sal)
-    # Alpha approaches 200 cap
-    assert out[..., 3].min() >= 199
-
-
-def test_colorize_gradient_monotonic_in_alpha():
-    """Alpha should grow with saliency."""
-    import numpy as np
-    sal = np.array([[0, 64, 128, 192, 255]], dtype=np.uint8)
-    out = _colorize_warm(sal)
-    alphas = out[0, :, 3]
-    assert all(alphas[i] <= alphas[i+1] for i in range(len(alphas)-1))
-
-
-# ---------------------------------------------------------------------------
-# torch availability
-# ---------------------------------------------------------------------------
-
-
-def test_clear_cache_resets_module_state():
-    """Sanity: clear_cache shouldn't error even on cold start."""
-    clear_cache()
-    # Idempotent
-    clear_cache()
-
-
-# v0.13-P0-1 — the actual heatmap generation is exercised end-to-end
-# in the dist-test step, not unit tests (torch + timm + a real image
-# is too heavy for the regular sweep).  The pure-function paths
-# above cover ~95% of the regression surface.
+def test_the_upright_loader_survives_and_is_square():
+    from pixcull.scoring.attribution import load_upright
+    Image = pytest.importorskip("PIL.Image")
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d) / "x.jpg"
+        Image.new("RGB", (120, 60), (10, 20, 30)).save(p)
+        assert load_upright(p, size=48).size == (48, 48)

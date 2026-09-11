@@ -251,10 +251,10 @@ def test_the_attribution_heatmap_matches_the_displayed_frame(tmp_path):
     """
     from PIL import Image, ImageOps
 
-    from pixcull.scoring.attribution import load_for_attribution
+    from pixcull.scoring.attribution import load_upright
 
     src = _sideways(tmp_path)
-    got = load_for_attribution(src, size=64)
+    got = load_upright(src, size=64)
     assert got.size == (64, 64), "the model input must stay square"
 
     upright = ImageOps.exif_transpose(Image.open(src)).convert("RGB")
