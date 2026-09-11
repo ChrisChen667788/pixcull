@@ -59,7 +59,7 @@ without installing anything.
 
 ---
 
-## v2.94 – v3.72
+## v2.94 – v3.76
 
 The same hole as the one below, dug a second time. v3.53 found that
 **What's new** had stopped at v2.45 while eighty-five releases shipped, and
@@ -74,6 +74,14 @@ beside it now asserting the guard can still see the newest release in the log,
 which is the thing that was actually false.
 
 One line each, exactly as the release was titled at the time.
+
+**v3.76** — three places the product showed you something that had stopped being true
+
+**v3.75** — four things the product told you it would do
+
+**v3.74** — the install-smoke lane was rehearsing an install nobody performs
+
+**v3.73** — Phase A.1, and the file it was going to extend was wrong
 
 **v3.72** — the unmigrated literals were light-theme bugs, not cosmetic debt
 
