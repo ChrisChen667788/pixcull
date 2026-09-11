@@ -50,6 +50,14 @@ class BlockPlan:
     est_calls: int = 0
     est_units: float = 0.0
     ceiling_units: float = 0.0
+    #: v3.79 — the other limit. `ceiling_units` is what the owner set;
+    #: this is what the API budget will actually enforce, and when the
+    #: owner sets no ceiling it is the only thing standing between the
+    #: block and a run that stops halfway.
+    daily_cap_units: float | None = None
+    #: Which limit the estimate was measured against: "ceiling",
+    #: "daily-cap", or None when nothing bound it.
+    bound_by: str | None = None
     refused: str | None = None
     per_measurement: list[dict] = field(default_factory=list)
 
@@ -101,16 +109,32 @@ def declared_dimension_ok(m: Measurement) -> bool:
 
 
 def plan(measurements, frames: int, *, ceiling_units: float,
-         estimate_cost) -> BlockPlan:
+         estimate_cost, daily_cap_units: float | None = None) -> BlockPlan:
     """Estimate the whole block and refuse BEFORE the first call.
 
     Bounded up front, not tracked as it goes — so the failure mode is a
     refusal at the start rather than a stop halfway through with half an
     arm, which is a result nobody can use and money nobody gets back.
+
+    **v3.79 — "no ceiling" was not the same as "unbounded".** An owner
+    who sets `ceiling_units=inf`, meaning run the block to completion, is
+    still behind `llm_budget`'s daily cap, which is set by default and
+    stops calls *as they happen*. So the exact failure this function
+    exists to prevent — a stop halfway through, half an arm, nothing
+    usable — was reachable by setting no ceiling at all, and it arrived
+    silently, because a call that cannot be afforded is declined
+    downstream rather than refused here.
+
+    Pass `daily_cap_units` and the estimate is measured against whichever
+    limit is smaller, and the refusal says which one it was. Leave it
+    None and the plan records that it could not see the downstream limit
+    rather than implying there is none.
     """
     ms = list(measurements)
     p = BlockPlan(measurements=ms, frames=int(frames),
-                  ceiling_units=float(ceiling_units))
+                  ceiling_units=float(ceiling_units),
+                  daily_cap_units=(None if daily_cap_units is None
+                                   else float(daily_cap_units)))
     if not ms:
         p.refused = "nothing to measure"
         return p
@@ -134,10 +158,33 @@ def plan(measurements, frames: int, *, ceiling_units: float,
             "calls": calls, "units": round(units, 4), "note": m.note,
         })
     p.est_units = round(total_units, 4)
-    if p.est_units > p.ceiling_units:
-        p.refused = (
-            f"the block would cost about {p.est_units} units against a "
-            f"ceiling of {p.ceiling_units}. Raise the ceiling or cut the "
-            f"frame count — a run that stops halfway leaves half an arm, "
-            f"which is not a result.")
+
+    # Whichever limit binds first is the one worth naming. An owner who
+    # raised the ceiling to infinity and still gets refused needs to be
+    # told it was the daily cap, not left to re-read their own setting.
+    limits = [("ceiling", p.ceiling_units)]
+    if p.daily_cap_units is not None:
+        limits.append(("daily-cap", p.daily_cap_units))
+    name, limit = min(limits, key=lambda kv: kv[1])
+    p.bound_by = name
+
+    if p.est_units > limit:
+        if name == "daily-cap":
+            p.refused = (
+                f"the block would cost about {p.est_units} units and the "
+                f"daily API cap is {limit}. The ceiling is "
+                f"{p.ceiling_units}, so it is the cap that binds: raise "
+                f"PIXCULL_LLM_BUDGET_YUAN, or split the block across "
+                f"days deliberately. Left alone this does not refuse — it "
+                f"stops partway through, which leaves half an arm.")
+        else:
+            p.refused = (
+                f"the block would cost about {p.est_units} units against a "
+                f"ceiling of {p.ceiling_units}. Raise the ceiling or cut the "
+                f"frame count — a run that stops halfway leaves half an arm, "
+                f"which is not a result.")
+    elif p.daily_cap_units is None:
+        # Not a refusal. A plan that was never measured against the limit
+        # that will actually stop it should not read like one that was.
+        p.bound_by = None
     return p

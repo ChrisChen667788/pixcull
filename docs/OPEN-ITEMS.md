@@ -12,22 +12,60 @@ is not engineering.
 
 ## The four asks
 
-### 1. One API spend ceiling — unblocks 8 measurements
+### 1. ~~One API spend ceiling~~ — answered 2026-09-12: no ceiling, run to completion
 
-v2.91, v3.3, v3.4, v3.5, v3.6, v3.11, v3.17, v3.18.
+The owner's decision, and v3.79 made it mean what it says.
 
-All eight wait on the same decision. `pixcull/scoring/measurement_plan.py`
-estimates the whole block, refuses before the first call if it would exceed the
-ceiling, and prices the three-calls-per-frame arms as three so the refusal lands
-early rather than at 300% of the estimate.
+`plan()` refused only against `ceiling_units`, so an infinite ceiling
+never refused — and the block is still behind `llm_budget`'s daily cap,
+which carries a default and declines calls one at a time as they happen.
+The exact failure this planner exists to prevent, a stop halfway through
+leaving half an arm, was reachable by setting no ceiling at all, and it
+arrived silently.
 
-> **v2.91 was outside this until v3.36.** It had waited since the v2.77–v2.95
-> block on the same single thing, kept its own harness because the planner did
-> not exist yet, and was listed separately in the v3.1–v3.27 close. An owner who
-> set a ceiling and ran "the block" would still have had one measurement sitting
-> outside it, waiting on a decision they had already made. It is in the planner
-> now; the run still goes through `prompt_ab.plan`, which enforces the
-> arms-differ-only-in-the-prompt rule this planner deliberately relaxes.
+It takes `daily_cap_units` now, measures against whichever limit is
+smaller, and the refusal names which one bound it and which knob to
+turn. A plan given no daily cap records `bound_by=None` rather than
+implying nothing bound it.
+
+**Still to do before the block runs:** raise `PIXCULL_LLM_BUDGET_YUAN`
+past the block's estimate, or split it across days deliberately. The
+estimate depends on the pricing function the caller supplies; at 200
+frames the eight measurements come to about 2,400 calls.
+
+---
+
+### 2. ~~A correction set with the shoot type recorded~~ — answered 2026-09-12
+
+**158 blind corrections, two verticals, 79 each against a minimum of 30.**
+`readiness()` reports `ready: True` and `corrections_to_unblock: 0`.
+Unblocks v2.83, v3.8 and v3.9.
+
+Blind, and that is the point. Every previous label set this project
+produced was circular — the model's verdict was on screen while the
+person labelled, so `source: "auto"`, the label equalled the decision,
+and accuracy computed from it was exactly 100%. These came from
+`pixcull m3 label`: photograph, serial number, two buttons, nothing
+else. Labelled first, scored second, joined third.
+
+**The first honest number this project has had.** Against the rule stack
+on the same 158 frames:
+
+| vertical | frames | agreement |
+|---|---|---|
+| landscape | 79 | 68% |
+| portrait | 79 | 78% |
+| both | 158 | **73%** |
+
+And the disagreement is one-directional: **27 frames the machine kept
+and the photographer culled, and zero the other way.** The rule stack is
+systematically more permissive than the person it is for. That is a
+finding about the product, not about the labels.
+
+Artefacts are local and outside the repository:
+`~/pixcull_label_run/{blind_2026-09-12/,scored/,corrections_2026-09-12.jsonl}`.
+
+---
 
 ### 2. A correction set with the shoot type recorded — unblocks 3
 

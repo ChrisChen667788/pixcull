@@ -112,3 +112,79 @@ def test_this_module_does_not_run_anything():
     src = inspect.getsource(measurement_plan)
     for caller in ("requests", "urllib", "openai", "judge.score", "subprocess"):
         assert caller not in src
+
+
+# ── v3.79 — "no ceiling" was not the same as "unbounded" ──────────────
+
+def test_no_ceiling_still_refuses_when_the_daily_cap_would_stop_it():
+    """The owner's decision was "no ceiling, run it to completion". That
+    setting did not make the block unbounded — `llm_budget` declines
+    calls against a daily cap that defaults to 10, one call at a time,
+    as they happen.
+
+    So the exact failure this planner exists to prevent — a stop halfway
+    through, half an arm, nothing usable — was reachable by setting no
+    ceiling at all, and it arrived silently."""
+    # Derive the cap from the estimate rather than writing a number:
+    # the suite's `_est` is on its own scale, and a hard-coded 10.0 here
+    # tested nothing but that scale. The claim is about the
+    # relationship — a cap below the estimate must refuse.
+    unbounded = plan(WAITING, 200, ceiling_units=float("inf"),
+                     estimate_cost=_est)
+    cap = unbounded.est_units / 2
+    got = plan(WAITING, 200, ceiling_units=float("inf"),
+               estimate_cost=_est, daily_cap_units=cap)
+    assert got.refused, (
+        "an infinite ceiling behind a daily cap the block exceeds must "
+        "refuse before the first call")
+    assert got.bound_by == "daily-cap"
+    assert "daily" in got.refused.lower()
+    assert "PIXCULL_LLM_BUDGET_YUAN" in got.refused, (
+        "the refusal has to name the knob, or the owner re-reads their "
+        "own ceiling and finds nothing wrong with it")
+
+
+def test_the_refusal_names_whichever_limit_actually_binds():
+    """Two limits, and being told about the wrong one sends the reader
+    to the wrong setting."""
+    tight_ceiling = plan(WAITING, 200, ceiling_units=0.5,
+                         estimate_cost=_est, daily_cap_units=1e9)
+    assert tight_ceiling.bound_by == "ceiling"
+    assert "ceiling" in (tight_ceiling.refused or "")
+    assert "daily" not in (tight_ceiling.refused or "").lower()
+
+    tight_cap = plan(WAITING, 200, ceiling_units=1e9,
+                     estimate_cost=_est, daily_cap_units=0.5)
+    assert tight_cap.bound_by == "daily-cap"
+    assert "daily" in (tight_cap.refused or "").lower()
+
+
+def test_a_block_inside_both_limits_is_not_refused():
+    got = plan(WAITING, 200, ceiling_units=float("inf"),
+               estimate_cost=_est, daily_cap_units=1e9)
+    assert got.refused is None
+
+
+def test_a_plan_that_never_saw_the_daily_cap_says_so():
+    """Not a refusal — a plan measured against only half the limits must
+    not read like one measured against all of them. `bound_by` is None
+    rather than "ceiling", so a caller cannot mistake "nothing bound it"
+    for "checked and fine"."""
+    got = plan(WAITING, 100, ceiling_units=float("inf"), estimate_cost=_est)
+    assert got.refused is None
+    assert got.bound_by is None, (
+        "with no daily cap supplied the plan has not been measured "
+        "against the limit that will actually stop it")
+    assert got.daily_cap_units is None
+
+
+def test_the_daily_cap_default_is_what_the_budget_module_says():
+    """The number in the refusal has to be the number that will stop the
+    run. Read from the module rather than repeated here, because a
+    second copy of a limit is how the two come to disagree."""
+    from pixcull.llm_budget import cap_yuan
+    cap = cap_yuan()
+    assert cap > 0, "the daily cap reads as zero; every call would decline"
+    got = plan(WAITING, 200, ceiling_units=float("inf"),
+               estimate_cost=_est, daily_cap_units=cap)
+    assert got.daily_cap_units == cap

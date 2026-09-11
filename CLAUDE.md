@@ -503,6 +503,27 @@ cap were the packages the public demo ran uncapped.**  When a guard is
 written after being burned by one instance, ask what the instance is an
 instance *of* before naming it in the assertion.
 
+**The first non-circular accuracy number, 2026-09-12: 73%** (landscape 68%,
+portrait 78%, n=158).  Every earlier label set was circular — the model's
+verdict was on screen while the owner labelled, so `source: "auto"` and
+accuracy came out at exactly 100%.  These are blind: `pixcull m3 label`
+shows a photograph, a serial and two buttons, **labelled first, scored
+second, joined third**, and that order is what makes them usable.
+**The disagreement is one-directional — 27 frames the machine kept and the
+owner culled, zero the other way** — so the rule stack is systematically
+more permissive than the person it is for.  Corrections live outside the
+repo at `~/pixcull_label_run/corrections_2026-09-12.jsonl`.
+
+**"No ceiling" did not mean unbounded** (v3.79).  `plan()` refused only
+against `ceiling_units`, and the block sits behind `llm_budget`'s daily cap
+(which carries a default) that declines calls one at a time as they happen — so the
+halfway stop the planner exists to prevent was reachable by setting no
+ceiling at all, silently.  It takes `daily_cap_units` now and names which
+limit bound it.  **`audit_labels` has the same shape of hole and still does:**
+it reads JSONL, the blind sheet writes one object with a `verdicts` map, and
+handed the blind file it returns an empty inventory that reads exactly like
+"audited, nothing wrong".  Use `load_blind_sheet` to bridge.
+
 **The per-axis attribution heatmap was removed in v3.78, not deferred.**
 It produced the same PNG for all six axes (the per-axis heads moved into
 the package in v3.44 and its lookup did not follow), and it could not have
