@@ -64,8 +64,9 @@
 
 **v3.74** — The lane called "install + import smoke" was rehearsing an install
 nobody performs. Every CI lane pinned `torch==2.4.1`, a 2024 release, while
-`pyproject.toml` allows `>=2.2,<3` and a machine resolving today gets 2.11 —
-so the seven minor versions a real user lands on were exercised by nothing.
+`pyproject.toml` allows `>=2.2,<3` and the runner, now that it resolves like a
+user, lands on 2.14 — so the ten minor versions in between were exercised by
+nothing.
 The smoke lane resolves freely now; the three behaviour lanes stay pinned on
 purpose, because there a red run should mean the code changed, not the index.
 
