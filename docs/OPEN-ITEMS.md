@@ -149,6 +149,49 @@ from the right model.
 
 ---
 
+## A contiguous stretch of one shoot: 149 frames in, 149 keeps out
+
+v3.81 could not test redundancy because its sample was spread evenly
+across each shoot, so near-duplicates were rarely drawn together. Redone
+on 149 **consecutive** frames of the Zhangye take:
+
+    ✓ Done. Keep=149 Maybe=0 Cull=0
+
+with **28 near-duplicate clusters covering 127 of the 149 frames**, the
+largest holding 30, 82% of frames within 0.97 cosine of another, and
+`is_burst_peak` False on 99. The product worked out which frame won each
+burst and kept every loser.
+
+**Why, and why it is not an ordering mistake.** The decision is made per
+frame inside the scoring loop and is final before any cross-frame column
+exists: `df["decision"]` is assigned two lines before `df["score_final"]`,
+and `rank_burst_peaks` needs `score_final`, so it runs thirteen lines
+after the decision and feeds nothing. A burst is cross-frame by
+definition. The architecture decides each frame alone and learns which
+were siblings afterwards — which is also why `demote_mediocre_bursts`
+rebuilds its own time-bucket grouping instead of reusing the clusters,
+and why its scope is still `stilllife` alone.
+
+**What v3.82 changed, and what it deliberately did not.** The run says so
+now:
+
+    100 of those keeps are not the best frame of their burst (27 bursts
+    found). Nothing removes them: burst ranking happens after the
+    decision, and the whole-burst demotion covers still life only.
+
+Whether to cull non-peak members is an owner decision, not an
+engineering one, and there is a real argument against: on events and
+portraits a photographer often wants several frames of one moment, which
+is why the existing demotion stayed narrow. Doing it would mean moving
+the decision out of the per-frame loop, which is a change to the hot path
+and wants a measured before/after.
+
+**The ask, if it is wanted:** should a frame the tool has already ranked
+as not the best of its burst be culled by default, kept, or demoted to
+`maybe`? Per vertical, since that is where the argument differs.
+
+---
+
 ## Nothing the product measures separates this photographer's keeps from their culls
 
 Measured 2026-09-12 on the first blind correction set, 158 frames, and

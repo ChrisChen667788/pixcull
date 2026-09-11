@@ -503,6 +503,17 @@ cap were the packages the public demo ran uncapped.**  When a guard is
 written after being burned by one instance, ask what the instance is an
 instance *of* before naming it in the assertion.
 
+**On a contiguous 149-frame stretch the stack kept all 149** (v3.82), with 28
+near-duplicate clusters covering 127 of them and `is_burst_peak` False on 99.
+**The decision is per-frame and final before any cross-frame column exists** —
+`df["decision"]` is written two lines before `df["score_final"]`, which
+`rank_burst_peaks` needs — so burst ranking happens 13 lines late and feeds
+nothing, and whole-burst demotion covers `stilllife` only.  Not swappable:
+moving it means taking the decision out of the scoring loop.  The run summary
+names the unremoved bursts now; whether to cull them is an owner decision and
+is on the open-items page.  **Sample contiguously when testing redundancy** —
+v3.81's even spread across a shoot could not draw near-duplicates together.
+
 **Nothing the rubric measures separates this owner's keeps from their culls**
 (v3.81).  The 28 frames they culled and the stack kept score HIGHER on every
 axis than the 114 both kept — composition +0.20, moment +0.49, sharpness

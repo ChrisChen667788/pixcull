@@ -381,6 +381,59 @@ def _auto_index_library(output: Path) -> None:
         console.print(f"[yellow]auto-index skipped: {exc}[/]")
 
 
+def _report_unculled_bursts(df_export, console) -> None:
+    """Say when a run kept frames it had already ranked as not the best.
+
+    v3.82 — measured on a contiguous 149-frame stretch of one real
+    shoot: `Keep=149 Maybe=0 Cull=0`, with 28 near-duplicate clusters
+    covering 127 of those frames, the largest holding 30, and
+    `is_burst_peak` False on 99 of them. The product worked out which
+    frame won each burst and kept every loser anyway.
+
+    It is not an ordering mistake that can be swapped around. The
+    decision is made per frame inside the scoring loop and is final
+    before any cross-frame column exists on the dataframe —
+    `df["score_final"]` is written two lines AFTER `df["decision"]`, and
+    `rank_burst_peaks` needs it. A burst is cross-frame by definition, so
+    the architecture decides each frame alone and only afterwards learns
+    which frames were siblings. That is why `demote_mediocre_bursts` had
+    to rebuild its own time-bucket grouping rather than reuse the
+    clusters, and why its scope is still only `stilllife`.
+
+    Whether non-peak burst members SHOULD be culled is a product
+    decision, and there is a real argument on the other side: on events
+    and portraits a photographer often wants several frames of the same
+    moment, which is exactly why the existing demotion stayed narrow.
+
+    What is not defensible is silence. A photographer handed
+    "Keep=149 Maybe=0" on a shoot the tool itself found 28 bursts in
+    should be told so, so the number reads as "nothing was removed"
+    rather than "everything here is a select".
+    """
+    cols = getattr(df_export, "columns", [])
+    if "is_burst_peak" not in cols or "cluster_id" not in cols:
+        return
+    try:
+        kept = df_export[df_export["decision"].astype(str) == "keep"]
+        if kept.empty:
+            return
+        peak = kept["is_burst_peak"].astype(str).str.lower()
+        non_peak = int((peak == "false").sum())
+        clusters = kept["cluster_id"].astype(str)
+        sizes = clusters[~clusters.isin(("", "-1", "nan", "None"))].value_counts()
+        bursts = int((sizes > 1).sum())
+    except Exception:          # noqa: BLE001 — a summary must never fail a run
+        return
+    if not non_peak or not bursts:
+        return
+    console.print(
+        f"[yellow]{non_peak}[/] of those keeps are not the best frame of "
+        f"their burst ([yellow]{bursts}[/] bursts found). Nothing removes "
+        f"them: burst ranking happens after the decision, and the "
+        f"whole-burst demotion covers still life only."
+    )
+
+
 def run_pipeline(
     folder: Path,
     output: Path,
@@ -917,6 +970,7 @@ def run_pipeline(
         f"Maybe=[bold]{counts.get('maybe', 0)}[/] "
         f"Cull=[bold]{counts.get('cull', 0)}[/][/]"
     )
+    _report_unculled_bursts(df_export, console)
     console.print(f"[cyan]CSV:[/] {csv_path}")
     # After the CSV: _run_path_map reads its ``path`` column to resolve
     # each photo, so this has to follow the export, not precede it.
