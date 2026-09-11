@@ -1125,6 +1125,46 @@ def grant_consent(*, endpoint: str = BASE_URL) -> Path:
     return p
 
 
+def decline_consent() -> Path:
+    """Record a refusal, so it survives the run that made it.
+
+    v3.75 — declining used to write nothing. The CLI printed "Staying
+    on-device for this and every future run until you say otherwise" and
+    then, on the next run, asked again: `has_consent()` reads only
+    `granted`, so a refusal was indistinguishable from never having been
+    asked.
+
+    That sentence is a promise about a privacy setting. Re-asking breaks
+    it twice over — the setting did not stick, and every repetition of
+    the prompt is another chance to answer it wrongly.
+
+    Stored as the same file with `granted: false`, so one path holds the
+    whole answer and `revoke_consent` keeps working on either.
+    """
+    p = consent_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps({
+        "granted": False,
+        "version": CONSENT_VERSION,
+        "declined_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }, indent=2), encoding="utf-8")
+    return p
+
+
+def consent_answered() -> bool:
+    """Whether the question has been put and answered, either way.
+
+    `has_consent()` answers "may we upload"; this answers "do we need to
+    ask". They are different questions and conflating them is what made
+    a refusal evaporate.
+    """
+    try:
+        d = json.loads(consent_path().read_text("utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    return "granted" in d and int(d.get("version", 0)) == CONSENT_VERSION
+
+
 def revoke_consent() -> bool:
     try:
         consent_path().unlink()

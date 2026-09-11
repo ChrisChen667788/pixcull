@@ -7386,7 +7386,6 @@
           <div class="shortcut-row"><span class="keys">拖动图片</span><span class="desc">在 1:1 模式下平移</span></div>
           <div class="shortcut-row"><span class="keys">滚轮</span><span class="desc">以光标为中心放大/缩小</span></div>
           <!-- v0.13.4 — surface v0.11-v0.13 new keys -->
-          <div class="shortcut-row"><span class="keys"><kbd>A</kbd></span><span class="desc"><span style="color:var(--accent)">v0.13</span> · 6 轴 AI attribution heatmap</span></div>
           <div class="shortcut-row"><span class="keys"><kbd>H</kbd></span><span class="desc"><span style="color:var(--accent)">v0.12</span> · EXIF / 直方图 overlay</span></div>
           <div class="shortcut-row"><span class="keys"><kbd>\</kbd></span><span class="desc"><span style="color:var(--accent)">v0.12</span> · 一键打开同 burst 组 A/B 比较</span></div>
           <div class="shortcut-row"><span class="keys">底部 1px 条</span><span class="desc"><span style="color:var(--accent)">v0.11</span> · 拖动 scrub 所有可见照片(DaVinci-style)</span></div>
@@ -7432,7 +7431,6 @@
           <div class="shortcut-row"><span class="keys" data-i18n="tour.row.keys">⌨️ 键盘选片</span><span class="desc"><kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> 标 keep/maybe/cull;放大窗开 <b>⏩自动</b> 后标完自动推进 — 200 张不碰鼠标</span></div>
           <div class="shortcut-row"><span class="keys" data-i18n="tour.row.burst">⧉ 连拍折叠</span><span class="desc">工具栏"⧉ 折叠成堆"把每个连拍组收成最佳 1 张;点卡片角 <b>⧉N</b> 展开并排比较(<kbd>G</kbd> 跳组)</span></div>
           <div class="shortcut-row"><span class="keys" data-i18n="tour.row.personal">🎯 个性化</span><span class="desc">每次纠正都在教 PixCull 你的口味;满 50 张后新批次自动按你的标准校准(<code>pixcull personalize</code> 查看/还原)</span></div>
-          <div class="shortcut-row"><span class="keys" data-i18n="tour.row.heatmap">🔥 归因热力图</span><span class="desc">放大窗按 <kbd>A</kbd> 选任意评分轴 — 看 AI 这一分到底在看照片的哪里</span></div>
           <div class="shortcut-row"><span class="keys" data-i18n="tour.row.sheet">📇 联系表导出</span><span class="desc"><code>pixcull contact-sheet &lt;run&gt;</code> 一键生成可交付客户的精选样片 PDF</span></div>
         </div>
       </div>
@@ -19131,12 +19129,14 @@
         "<div style='font-weight:600;color:#d5b584;margin-bottom:6px;" +
         "font-size:11px;letter-spacing:0.04em;text-transform:uppercase'>" +
         "✨ 这是你第一次打开 lightbox</div>" +
-        "<div>三个 PixCull 专属键位:</div>" +
+        // v3.75 — was "三个". The third key had never had a keydown
+        // handler; see tests/test_advertised_keys_have_handlers.py.
+        // Kept short deliberately: this comment ships inside the built
+        // 900 KB artifact, and spelling the old claim out here would
+        // leave the phrase in the page for a future text-matching gate
+        // to find and be satisfied by.
+        "<div>两个 PixCull 专属键位:</div>" +
         "<div style='margin-top:8px;display:flex;justify-content:center;gap:18px;flex-wrap:wrap'>" +
-        "<span><kbd style='background:rgba(213,181,132,0.20);padding:3px 8px;" +
-        "border-radius:4px;font-family:ui-monospace,Menlo;color:#fff;" +
-        "border:1px solid rgba(213,181,132,0.40);font-size:11px'>A</kbd> " +
-        "<span style='color:#aaa;font-size:11.5px'>AI heatmap</span></span>" +
         "<span><kbd style='background:rgba(213,181,132,0.20);padding:3px 8px;" +
         "border-radius:4px;font-family:ui-monospace,Menlo;color:#fff;" +
         "border:1px solid rgba(213,181,132,0.40);font-size:11px'>H</kbd> " +

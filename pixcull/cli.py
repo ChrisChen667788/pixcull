@@ -137,8 +137,10 @@ def run(
     # prevent, so ask once, record it, and make declining a first-class
     # outcome rather than an error.
     if vlm_mode not in ("off", "local") and not vlm_mode.startswith("local"):
-        from pixcull.scoring.m3 import CONSENT_NOTICE, grant_consent, has_consent
-        if not has_consent():
+        from pixcull.scoring.m3 import (CONSENT_NOTICE, consent_answered,
+                                        decline_consent, grant_consent,
+                                        has_consent)
+        if not consent_answered():
             console.print(CONSENT_NOTICE)
             if not sys.stdin.isatty():
                 console.print(
@@ -152,9 +154,17 @@ def run(
                 console.print("[dim]Recorded. "
                               "`pixcull m3 consent --revoke` undoes it.[/dim]")
             else:
+                # v3.75 — write it down. This sentence promises the answer
+                # persists, and until now nothing recorded it.
+                decline_consent()
                 console.print("[green]Staying on-device[/green] for this and "
-                              "every future run until you say otherwise.")
+                              "every future run until you say otherwise. "
+                              "[dim]`pixcull m3 consent --grant` changes "
+                              "it.[/dim]")
                 vlm_mode = "off"
+        if not has_consent():
+            # Answered, and the answer was no.
+            vlm_mode = "off"
         if vlm_mode != "off":
             console.print("[dim]Judging with MiniMax M3 — photos are "
                           "uploaded. `--vlm-mode off` keeps a run local.[/dim]")
@@ -263,7 +273,7 @@ def import_catalog(
         help="A Lightroom Classic .lrcat file. Opened read-only."),
     dry_run: bool = typer.Option(
         True, "--dry-run/--write",
-        help="Default is a dry run: report what would be imported and "
+        help="Default is a dry run: report what would be imported and change nothing. --write is NOT implemented and exits 2."
              "change nothing."),
 ) -> None:
     """v3.35 — read picks and ratings out of a Lightroom catalogue.
@@ -302,11 +312,19 @@ def import_catalog(
                   "not imported: an untouched frame is not a judgement.[/dim]")
     if dry_run:
         console.print("[dim]--dry-run (default). Nothing was written. "
-                      "Re-run with --write once the numbers look right.[/dim]")
+                      "--write is not implemented yet, so this is "
+                      "currently the only mode.[/dim]")
         return
-    console.print("[yellow]--write is not implemented yet.[/yellow] The "
-                  "reader has to be confirmed against a real catalogue "
-                  "before anything imports from one.")
+    # v3.75 — this used to print the line and fall off the end, exiting
+    # 0. The dry-run branch above says "re-run with --write once the
+    # numbers look right", so the product sent the user to a flag that
+    # does nothing and then reported success. Exit non-zero: a script
+    # that chains on it must not proceed as though labels were imported.
+    console.print("[yellow]--write is not implemented.[/yellow] The reader "
+                  "has to be confirmed against a real catalogue before "
+                  "anything imports from one — see docs/OPEN-ITEMS.md "
+                  "ask 4. Nothing was written.")
+    raise typer.Exit(code=2)
 
 
 def _write_session_provenance(run_dir: Path, out_dir: Path) -> Path | None:
@@ -674,10 +692,22 @@ def contact_sheet(
     photos with the chosen decision.
     """
     from pixcull.report.contact_sheet import contact_sheet_from_run
-    n_pages, n_photos = contact_sheet_from_run(
-        run_dir, out, decision=decision, cols=cols, rows_per_page=rows,
-        title=title, images_dir=images_dir,
-        studio=studio, date=date, with_cover=not no_cover)
+    # v3.75 — every sibling command (export, proof-sheet, view-folder)
+    # catches this and says one sentence. This one let the
+    # FileNotFoundError reach Rich's traceback renderer, so pointing at
+    # the source folder instead of the run's --output folder — the
+    # obvious mistake — produced a call stack with internal paths in it
+    # and no hint of what to do.
+    try:
+        n_pages, n_photos = contact_sheet_from_run(
+            run_dir, out, decision=decision, cols=cols, rows_per_page=rows,
+            title=title, images_dir=images_dir,
+            studio=studio, date=date, with_cover=not no_cover)
+    except FileNotFoundError:
+        console.print(
+            f"[red]no scores.csv in {run_dir}[/red] — point this at a run's "
+            "output dir (the one `pixcull run --output` created).")
+        raise typer.Exit(code=2)
     typer.echo(
         f"✓ {out}  ·  {n_photos} {decision} photo(s)  ·  {n_pages} page(s)")
 

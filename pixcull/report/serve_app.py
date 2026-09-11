@@ -3311,6 +3311,45 @@ def _resolve_image_source(run: dict, filename: str) -> Path | None:
     return _scores_path_map(Path(run["output_dir"])).get(filename)
 
 
+def _resolve_scored_path(raw: str, output_dir: Path, filename: str) -> Path | None:
+    """A `path` column entry, resolved without depending on the CWD.
+
+    v3.75 — this used to be `Path(raw).is_file()`, which asks the
+    question relative to wherever the process happens to be. `pixcull
+    run photos/` writes what it was given, and typer does not
+    absolutise an argument, so an ordinary relative invocation puts
+    relative paths in scores.csv. Serving that run from any other
+    directory resolved 0 of N images and reported them as "originals
+    moved or unreadable" — a wrong diagnosis pointing at the
+    photographer's disk instead of at the caller's CWD.
+
+    `_run_path_map` in the CLI already had a sibling-`input/` fallback
+    and was immune; `proof-sheet` and `view-folder` go through here and
+    were not. Twin paths, one of them hardened.
+
+    Order: the literal path (absolute ones, and relative ones that
+    happen to resolve), then the run's own sibling input directory,
+    then the output dir itself.
+    """
+    p = Path(raw)
+    if p.is_file():
+        # Absolute on the way out, always. Returning the relative path
+        # verbatim only moves the problem: the caller caches it, the
+        # next caller has a different working directory, and the same
+        # "originals moved" message appears one layer further down.
+        return p if p.is_absolute() else p.resolve()
+    if p.is_absolute():
+        return None
+    for base in (output_dir.parent / "input", output_dir.parent, output_dir):
+        for cand in (base / raw, base / filename):
+            try:
+                if cand.is_file():
+                    return cand.resolve()
+            except OSError:
+                continue
+    return None
+
+
 def _scores_path_map(output_dir: Path) -> dict[str, Path]:
     """``filename -> path`` from scores.csv, for runs with no manifest.
 
@@ -3342,8 +3381,8 @@ def _scores_path_map(output_dir: Path) -> dict[str, Path]:
             for row in rows:
                     fn, raw = row.get("filename"), row.get("path")
                     if fn and raw:
-                        p = Path(raw)
-                        if p.is_file():
+                        p = _resolve_scored_path(raw, output_dir, fn)
+                        if p is not None:
                             out[fn] = p
         except (OSError, ValueError):
             return {}

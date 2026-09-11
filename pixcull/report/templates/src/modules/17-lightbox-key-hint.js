@@ -28,12 +28,14 @@
         "<div style='font-weight:600;color:#d5b584;margin-bottom:6px;" +
         "font-size:11px;letter-spacing:0.04em;text-transform:uppercase'>" +
         "✨ 这是你第一次打开 lightbox</div>" +
-        "<div>三个 PixCull 专属键位:</div>" +
+        // v3.75 — was "三个". The third key had never had a keydown
+        // handler; see tests/test_advertised_keys_have_handlers.py.
+        // Kept short deliberately: this comment ships inside the built
+        // 900 KB artifact, and spelling the old claim out here would
+        // leave the phrase in the page for a future text-matching gate
+        // to find and be satisfied by.
+        "<div>两个 PixCull 专属键位:</div>" +
         "<div style='margin-top:8px;display:flex;justify-content:center;gap:18px;flex-wrap:wrap'>" +
-        "<span><kbd style='background:rgba(213,181,132,0.20);padding:3px 8px;" +
-        "border-radius:4px;font-family:ui-monospace,Menlo;color:#fff;" +
-        "border:1px solid rgba(213,181,132,0.40);font-size:11px'>A</kbd> " +
-        "<span style='color:#aaa;font-size:11.5px'>AI heatmap</span></span>" +
         "<span><kbd style='background:rgba(213,181,132,0.20);padding:3px 8px;" +
         "border-radius:4px;font-family:ui-monospace,Menlo;color:#fff;" +
         "border:1px solid rgba(213,181,132,0.40);font-size:11px'>H</kbd> " +
