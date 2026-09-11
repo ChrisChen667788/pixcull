@@ -59,7 +59,7 @@ without installing anything.
 
 ---
 
-## v2.94 – v3.68
+## v2.94 – v3.72
 
 The same hole as the one below, dug a second time. v3.53 found that
 **What's new** had stopped at v2.45 while eighty-five releases shipped, and
@@ -74,6 +74,14 @@ beside it now asserting the guard can still see the newest release in the log,
 which is the thing that was actually false.
 
 One line each, exactly as the release was titled at the time.
+
+**v3.72** — the unmigrated literals were light-theme bugs, not cosmetic debt
+
+**v3.71** — the migration counter counted the one thing nobody can migrate
+
+**v3.70** — the checks that only ever ran too late, and a sweep with a hole in it
+
+**v3.69** — a setting that decides whether photographs upload, and did nothing
 
 **v3.68** — the parity gate named one package, so it protected one package
 
