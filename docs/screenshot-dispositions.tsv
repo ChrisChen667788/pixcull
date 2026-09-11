@@ -1,0 +1,36 @@
+# v3.76 — every committed screenshot, and whether anything regenerates it.
+#
+# docs/screenshots holds 27 images; scripts/brand/capture_screenshots.sh
+# produces 12. The other 15 are frozen at whatever the UI looked like on
+# the day somebody took them, and nothing says which day that was or
+# whether the product still behaves that way.
+#
+# That is how 17-attribution-heatmap.png survived: it is captioned in
+# both READMEs as showing an attribution overlay and a 6-axis chip strip,
+# the overlay was never implemented, and the chip strip it does show is
+# not in the page any more. Four months on the front door.
+#
+# disposition ∈ scripted | manual-verified | stale | retired
+#   scripted         the capture script produces it; re-shot every time
+#   manual-verified  not scripted, but a human confirmed the UI still
+#                    looks like this, on the date given
+#   stale            nobody has confirmed it since it was taken
+#   retired          the UI it shows is gone; the image must not be
+#                    referenced from a README
+#
+# filename	disposition	last confirmed	note
+04-ab-compare.png	stale	2026-05-20	Free-pick A/B compare. Not scripted; the lightbox has changed several times since.
+14-marquee-select.png	stale	2026-05-28	Marquee drag-select and the bulk action toolbar it pops up along the bottom.
+15-bias-dashboard.png	stale	2026-05-28	The bias dashboard: per-scene keep rates and where the model leans.
+16-confidence-modal.png	retired	2026-05-28	Shot when the popover fired on score_final 0.45-0.55. v3.76 made it fire on decision=maybe instead, so this shows a state that can no longer occur.
+17-attribution-heatmap.png	retired	2026-05-28	Captioned as an attribution heatmap overlay plus a 6-axis chip strip. The overlay never existed (v3.75 removed the key that claimed it); the chip strip is not in the current page.
+18-video-review.png	stale	2026-05-29	The video review page: candidate list, transport controls, per-shot scores.
+19-video-grade.png	stale	2026-05-29	The video grade page: LUT picker and before/after on a graded clip.
+20-scenes-navigator.png	stale	2026-06-18	The scenes navigator, naming each stretch of the shoot from what is in it.
+21-verdict-glassbox.png	stale	2026-06-18	The verdict glass box: the six axes and what each contributed to one decision.
+22-transparency-tools.png	stale	2026-06-19	The transparency panel gathering the glass box, attribution and the audit trail.
+23-video-timeline.png	stale	2026-07-30	The video timeline with shot boundaries and audio events marked along it.
+24-review-sheet.png	stale	2026-08-16	The printable review sheet a photographer marks up away from the screen.
+24-transcript-edit.png	stale	2026-08-02	Edit-by-text: cutting a clip by deleting words from its transcript.
+25-client-proof-sheet.png	stale	2026-09-01	Client proof sheet, re-shot from the owner's own Canon set.
+26-blind-label-sheet.png	stale	2026-09-01	Blind labelling sheet, same re-shoot.

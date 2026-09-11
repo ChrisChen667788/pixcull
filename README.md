@@ -748,23 +748,17 @@ rate 38% (全局 22%) — 模型可能过严").  24h cache; `?force=1` to rebuil
 `/admin/bias.md` for markdown export.  Shown empty because the
 real demo run hasn't accumulated annotations yet.
 
-### Confidence-weighted modal (v0.13-P0-3)
+### Confidence popover
 
-![Maybe-band card hover popover — model 不确定 with top reasons](docs/screenshots/16-confidence-modal.png)
+Cards the pipeline left undecided — `decision = maybe` — hover-surface a
+small popover explaining "62% sure · top reason: 同组邻居高 0.04 · 最弱轴
+· light 2.5★".  Dismissable per-run via "不再显示".
 
-Cards in the maybe-band (`0.45 ≤ score_final ≤ 0.55`) hover-surface
-a small popover explaining "62% sure · top reason: 同组邻居高 0.04 ·
-最弱轴 · light 2.5★".  Dismissable per-run via "不再显示".
-
-### Per-axis attribution heatmap (v0.13-P0-1)
-
-![Lightbox with composition-axis attribution heatmap overlay + 6-axis chip strip](docs/screenshots/17-attribution-heatmap.png)
-
-Press `A` in the lightbox → 6-axis chip strip (技术/主体/构图/光线/
-时刻/美感) appears, click any axis → that axis's Integrated-Gradients
-heatmap (over the timm `mobilenetv3_small_100` backbone) overlays
-the photo at 0.5 alpha.  Espresso→brass warm colorize matches the
-editorial brand.  Per-axis cache at `output/attribution/<axis>/<sha>.png`.
+It used to fire on a hard-coded `0.45 ≤ score_final ≤ 0.55`, which under
+the standard preset sits entirely below the cull threshold: it appeared
+on frames that had been decided and never on the ones that had not.
+Thresholds move with the strictness preset and again with the genre, so
+it asks the decision now (v3.76).
 
 ### Every surface at a glance
 
@@ -1249,22 +1243,15 @@ aperture 分桶,红色高亮偏离均值 > 1.5σ 的桶("rescorer 在 *夜景人
 `?force=1` 强制刷新;`/admin/bias.md` 导出 markdown 给客户。
 真机 demo run 还没积累标注,因此显示 empty-state。
 
-### 置信度弹窗(v0.13-P0-3)
+### 置信度弹窗
 
-![maybe 边缘卡 hover popover · 62% sure + top reasons](docs/screenshots/16-confidence-modal.png)
-
-`score_final ∈ [0.45, 0.55]` 的临界 maybe 卡,鼠标悬停弹出小 popover:
+判决为 `maybe`(流水线没拿定主意)的卡,鼠标悬停弹出小 popover:
 "62% sure · 同组邻居高 0.04 · 最弱轴 · light 2.5★"。可"不再显示"
-per-run 关闭(v0.13-P0-3)。
+per-run 关闭。
 
-### 像素级 attribution heatmap(v0.13-P0-1)
-
-![Lightbox 内构图轴 attribution heatmap 叠加 + 6 轴选择条](docs/screenshots/17-attribution-heatmap.png)
-
-Lightbox 按 `A` 弹出 6 轴选择条(技术 / 主体 / 构图 / 光线 / 时刻
-/ 美感),点任意轴 → 该轴的 Integrated Gradients 显著度图叠加在
-原图上(0.5 alpha),espresso→brass 暖色渐变配色。Heatmap 缓存到
-`output/attribution/<axis>/<sha>.png`,后续打开秒级出图。
+它原本触发于写死的 `score_final ∈ [0.45, 0.55]`,而在 standard 预设下
+这个区间整个落在废弃线以下:它出现在已经判定的照片上,从不出现在真正
+未决的照片上。阈值随严格度预设和题材变动,所以现在直接问判决(v3.76)。
 
 ### 🎬 视频审片 · 时间线 scrubber V2(v2.0-P0-4)
 

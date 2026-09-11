@@ -393,7 +393,14 @@ def _export_xmp(run_dir: Path, target: str) -> tuple[int, int, dict]:
         build_iptc_fields_from_row, decision_to_xmp, write_xmp,
     )
 
+    from pixcull.annotations import decision_for, decision_overrides
+
     path_map = _run_path_map(run_dir)
+    # v3.76 — a correction made in the review page has to reach the file
+    # on disk. This read scores.csv raw, so an hour of re-deciding was
+    # discarded at the one moment it was for: the pipeline said cull,
+    # the photographer said keep, and Lightroom was handed cull.
+    overrides = decision_overrides(run_dir)
     xmp_dir = run_dir / "xmp"
     if target == "collected":
         xmp_dir.mkdir(parents=True, exist_ok=True)
@@ -405,7 +412,7 @@ def _export_xmp(run_dir: Path, target: str) -> tuple[int, int, dict]:
             fn = row.get("filename") or ""
             if not fn:
                 continue
-            decision = (row.get("decision") or "").strip()
+            decision = decision_for(row, overrides)
             stars, label = decision_to_xmp(decision)
             iptc = build_iptc_fields_from_row(row, run_id=run_dir.parent.name)
 

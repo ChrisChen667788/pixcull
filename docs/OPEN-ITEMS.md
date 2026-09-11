@@ -67,6 +67,29 @@ a result, not a failure.
 
 ---
 
+## The attribution heatmap has a backend and no front
+
+Found 2026-09-11, v3.75/v3.76.
+
+`pixcull/scoring/attribution.py` computes an integrated-gradients
+saliency map per rubric axis, caches it as a PNG, and has tests. Nothing
+serves it: there is no HTTP route, no key handler, and no UI. It was
+advertised since v0.13 in the shortcut sheet, the feature tour, a
+first-run toast, and — in full, step by step — in both READMEs, next to
+a screenshot captioned as showing it.
+
+v3.75 removed the in-product advertisements. v3.76 removed the README
+sections and retired the screenshot. **The code is still there and still
+works**, so this is not a deletion, it is an unfinished feature that had
+been described as a finished one.
+
+Wiring it is a real piece of work — a route that serves the cached PNG,
+a key handler, an overlay in the lightbox, and a way to pick the axis —
+and it needs visual verification. Recorded here rather than done in a
+version that was already carrying three fixes.
+
+---
+
 ## Three gaps that are NOT waiting on a person
 
 Recorded because "waiting on the owner" is a comfortable place to put something

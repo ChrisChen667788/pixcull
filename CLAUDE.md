@@ -499,6 +499,23 @@ to catch exactly that claim missed it for ten versions while the English half
 had been correct since v3.64.  **README.md is bilingual — fixing a claim means
 fixing it twice.**
 
+**A correction the photographer makes does not go into `scores.csv`** — it
+is appended to `annotations.jsonl`, and the CSV keeps the machine's verdict.
+So every reader of that CSV is answering "the machine's answer or the
+person's?", and **fourteen call sites parse the corrections file themselves**
+(ten in `serve_app`).  v3.76 gave it one implementation,
+`pixcull.annotations.decision_overrides`, plus `OVERRIDE_EXEMPT` for readers
+that genuinely want the untouched verdict.  The XMP exporter and the contact
+sheet were reading the CSV raw: the pipeline said cull, the photographer said
+keep, and Lightroom was handed cull.
+
+**Screenshots: the capture script produces 12 of the 27 committed.**  The
+other 15 are frozen at the day they were taken and
+`docs/screenshot-dispositions.tsv` now says which, with a date.  A `retired`
+row may not be referenced from a README — that is how a picture captioned as
+an attribution overlay stayed on the front door for four months showing a UI
+that had been removed.
+
 **`.gitignore`'s bare `output/` has eaten two load-bearing directories** —
 `tests/fixtures/present_run/output` (v3.51) and `samples/output` (v3.63, which
 made the 示例数据 button return 500 for every visitor).  It has glob exceptions

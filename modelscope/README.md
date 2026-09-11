@@ -242,21 +242,15 @@ aperture 分桶。红色高亮偏离均值 > 1.5σ 的桶,提示
 `/admin/bias.md` 导出 markdown 给客户做透明审计交付。
 真机 demo run 还没积累标注,故显示 empty-state。
 
-### 置信度弹窗(v0.13-P0-3)
+### 置信度弹窗
 
-![maybe 临界卡 hover · 62% sure + top reasons](docs/screenshots/16-confidence-modal.png)
-
-`score_final ∈ [0.45, 0.55]` 临界卡,鼠标悬停弹出小 popover:
+判决为 `maybe` 的卡,鼠标悬停弹出小 popover:
 "62% sure · 同组邻居高 0.04 · 最弱轴 · light 2.5★"。
 可"不再显示"per-run 关闭。
 
-### 像素级 attribution heatmap(v0.13-P0-1)
-
-![Lightbox 内构图轴 attribution 叠加 + 6 轴选择条](docs/screenshots/17-attribution-heatmap.png)
-
-Lightbox 按 `A` 弹 6 轴选择条 → 点轴名 → 该轴的 Integrated
-Gradients 显著度图叠在原图(0.5 alpha,espresso→brass 暖色渐变)。
-Heatmap PNG 缓存到 `output/attribution/<axis>/<sha>.png`。
+它原本触发于写死的 `score_final ∈ [0.45, 0.55]`,而这个区间在 standard
+预设下整个落在废弃线以下 —— 出现在已判定的照片上,从不出现在真正未决的
+照片上(v3.76 改为直接问判决)。
 
 ### 🎬 视频审片 · 时间线 scrubber V2(v2.0-P0-4)
 

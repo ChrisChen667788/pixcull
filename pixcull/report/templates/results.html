@@ -18550,9 +18550,22 @@
     if (dismissed) return;
 
     function _isUncertain(row) {
-      const s = row && row.score_final;
-      if (typeof s !== "number") return false;
-      return s >= 0.45 && s <= 0.55;
+      // v3.76 — ask the decision, not the score.
+      //
+      // This used to be `score_final >= 0.45 && <= 0.55`, hard-coded.
+      // The standard preset culls below 0.575 and keeps above 0.65, so
+      // that band sits ENTIRELY inside the cull zone: every frame the
+      // popover called uncertain had been decided, confidently, and
+      // every genuinely undecided frame got nothing. On the shipped
+      // sample run it matched 0 of 32 frames while one frame was
+      // `maybe`.
+      //
+      // A band cannot be right anyway. Thresholds move with the
+      // strictness preset AND with the per-genre vertical, so any
+      // number written here is wrong for most runs by construction.
+      // `decision` is what the pipeline concluded after all of that,
+      // which is the thing this popover is about.
+      return !!row && row.decision === "maybe";
     }
 
     function _explainRow(row) {

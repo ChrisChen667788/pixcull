@@ -141,7 +141,7 @@ burst / cull reason / Active Learning 过滤
 
 ### 鼠标悬停 maybe 边缘卡
 
-`score_final` 在 0.45~0.55 之间的卡(model 不确定区),悬停弹出小 popover:
+判决为 `maybe` 的卡(流水线没拿定主意的那些),悬停弹出小 popover:
 
 ![confidence modal](screenshots/16-confidence-modal.png)
 

@@ -251,9 +251,16 @@ def contact_sheet_from_run(
 
     with open(csv_path, encoding="utf-8") as fh:
         rows = list(csv.DictReader(fh))
+    # v3.76 — a contact sheet is handed to a client, so it has to show
+    # the photographer's selects, not the machine's first guess at them.
+    # This filtered on the raw CSV verdict, so a frame rescued in the
+    # review page was still missing from the sheet.
+    from pixcull.annotations import decision_for, decision_overrides
+    overrides = decision_overrides(csv_path.parent)
     if decision and decision.lower() != "all":
+        want = decision.lower()
         rows = [r for r in rows
-                if (r.get("decision") or "").strip().lower() == decision.lower()]
+                if decision_for(r, overrides).lower() == want]
 
     img_dir = Path(images_dir) if images_dir else (csv_path.parent / "thumbs")
     items: list[tuple] = []
