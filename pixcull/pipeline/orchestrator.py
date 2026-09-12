@@ -18,7 +18,6 @@ from pixcull.detectors.duplicate import cluster_bursts, demote_mediocre_bursts
 from pixcull.io.loader import list_images
 from pixcull.pipeline.burst_peak import (
     annotate_burst_peak_reasons,
-    demote_non_peak_bursts,
     rank_burst_peaks,
 )
 from pixcull.pipeline.face_clustering import cluster_faces_across_rows
@@ -806,11 +805,10 @@ def run_pipeline(
     # "动作差异最大 +2.1σ") to each cluster's winner.  Pure post-hoc
     # commentary; does NOT change is_burst_peak.
     df = annotate_burst_peak_reasons(df)
-    # v3.83 — and now act on it. Until this line the product ranked each
-    # burst, wrote the answer to a column, and handed the photographer
-    # every frame that lost. Measured on a contiguous 149-frame stretch:
-    # 149 keeps out, 28 clusters, 99 frames marked non-peak.
-    df = demote_non_peak_bursts(df)
+    # v3.85 — v3.83 demoted the losers to `maybe` here. Reverted: the
+    # owner blind-labelled the same 149 frames and would have kept 87 of
+    # the 100 it demoted. See tests/test_burst_losers_stay_keeps.py for
+    # the measurement and what would have to be true to try again.
 
     # V1.2: rescorer columns — always emitted when mode != off so downstream
     # tooling (scripts/pick_next_to_label.py, the review viewer, future

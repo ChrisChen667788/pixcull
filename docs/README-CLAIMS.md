@@ -22,7 +22,7 @@ takes who has read the README and nothing else.
 | 3 | Advice envelope: verdict, strengths cited to canon, weaknesses, suggestions | `scoring/photo_advice.py`; canon in `scoring/rubric.py` | yes |
 | 4 | InsightFace ArcFace → DBSCAN → cross-run face library | `pipeline/face_clustering.py`, `pipeline/face_library.py`; embedder prefers ArcFace and falls back to CLIP | needs `pixcull[face]` for detection (mediapipe); without it no faces are found and the rest is a no-op. The `.tflite`/`.task` files do ship in the wheel. |
 | 5 | GPS clustering, haversine DBSCAN, ~100 m | `pipeline/location_clustering.py` | yes, when the frames carry EXIF GPS |
-| 6 | Burst-peak ranking, losers demoted to `maybe` | `pipeline/burst_peak.py` (`rank_burst_peaks` then `demote_non_peak_bursts`) | yes — and it reaches the verdict since v3.83. Before that the ranking was computed thirteen lines after the decision was already final, so a contiguous 149-frame shoot returned 149 keeps with 99 frames marked non-peak. |
+| 6 | Burst-peak ranking | `pipeline/burst_peak.py` (`rank_burst_peaks`) | reported, not acted on. v3.83 demoted the losers to `maybe`; v3.85 reverted it after the owner blind-labelled the same 149 frames and would have kept 87 of the 100 demoted. The ranking still cannot reach the verdict anyway — it is computed thirteen lines after `df["decision"]` is final. |
 | 7 | Cull-reason taxonomy, seven reasons, filter pill | `report/serve_app.py` (`CULL_REASONS`), pill in `results.js` | yes |
 | 8 | Similar-photos: composite signature, top-5, Shift+click pins | `report/serve_app.py::_serve_api_v1_similar`, served at `/api/v1/runs/<id>/similar/<filename>` | yes |
 | 9 | Free-pick A/B compare, synced 1:1 zoom | `results.js` `_cmpZoomToggleSynced` (P-UX-7) | yes |

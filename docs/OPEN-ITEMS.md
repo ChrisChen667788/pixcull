@@ -276,6 +276,40 @@ now produce byte-identical groupings.
 
 ---
 
+## ~~Should a burst loser default to `maybe`~~ — answered 2026-09-13: no
+
+Asked in v3.82 as a two-sided question and decided by the owner in
+v3.83: demote them. Shipped, then tested, then reverted in v3.85.
+
+The test was the owner blind-labelling the same 149 frames — photograph,
+serial number, two buttons, no verdict on screen:
+
+| | frames |
+|---|---|
+| demoted to `maybe` by v3.83 | 100 |
+| the photographer kept | 87 |
+| the photographer culled | 13 |
+
+A hundred frames moved into review to catch thirteen. Within bursts the
+ranking is 6-3 better than chance over the nine clusters where anything
+was culled at all, which from nine is not evidence either way.
+
+**The reasoning was sound and the assumption under it was never tested.**
+The product does rank each burst, and it did hand over every loser as a
+`keep`. What nobody had checked was whether losing a burst predicts
+being unwanted. For this photographer, on this evidence, it does not.
+
+`rank_burst_peaks` stays — the ranking is reported in the review page
+and the CSV, and README claim 6 is about it. What is gone is letting it
+reach the verdict.
+
+`tests/test_burst_losers_stay_keeps.py` holds the revert structurally —
+any function that reads `is_burst_peak` and writes a `decision` fails
+it, under any name — and names what new evidence would justify a second
+attempt, so the next one starts from more than an argument.
+
+---
+
 ## The four-block singleton measurement, and what it did not settle
 
 Recorded 2026-09-13. Four contiguous blocks, blind-labelled by the

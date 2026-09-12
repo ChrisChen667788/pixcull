@@ -81,6 +81,8 @@ GATES: list[tuple[str, str]] = [
     # from a runner.
     ("tests/test_preflight_covers.py",
      "this list still covers every bookkeeping gate in the suite"),
+    ("tests/test_burst_losers_stay_keeps.py",
+     "the reverted burst demotion has not come back under a new name"),
     ("tests/test_demo_clip_is_safe_to_publish.py",
      "the demo clip's faces are covered and its metadata is stripped"),
     ("tests/test_screenshots_are_dispositioned.py",

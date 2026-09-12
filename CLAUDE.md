@@ -607,6 +607,13 @@ produces plausible wrong numbers with no error — I got 44 singletons where the
 run had 74 and nearly shipped the conclusion.  **Any analysis of `cluster_id`
 must read `burst_embeddings.npz`.**
 
+**A burst loser is not evidence of an unwanted frame** (v3.83 shipped it,
+v3.85 reverted it).  Of 100 frames demoted to `maybe` for losing their burst,
+the owner's blind labels kept 87.  `rank_burst_peaks` is reported, never acted
+on; `tests/test_burst_losers_stay_keeps.py` fails any function that reads
+`is_burst_peak` and writes a `decision`, under any name, and names the evidence
+bar for trying again.
+
 **The decision is made per frame, inside the loop, and is final there**
 (v3.83).  Every cross-frame column — `cluster_id`, `is_burst_peak`,
 `score_final` itself — is written to the dataframe *after* `df["decision"]`.

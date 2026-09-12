@@ -195,13 +195,11 @@ PixCull is the alternative that flips all three:
 5. **GPS location clustering.** Haversine DBSCAN groups photos by
    capture spot (~100 m radius). "Pick one per location" surfaces
    the best frame from each.
-6. **Burst-peak ranking, and the losers come back as `maybe`.**
-   Sub-second bursts get a calibrated peak pick (best focus, expression,
-   action moment). Since v3.83 the frames that lost their burst stop
-   being `keep` — they become `maybe`, so they land in front of you
-   instead of padding the selects. Never `cull`: the second expression
-   is often the one you wanted, and a similarity score does not get to
-   throw it away.
+6. **Burst-peak ranking.** Sub-second bursts get a calibrated peak
+   pick (best focus, expression, action moment). The ranking is
+   reported, not acted on: v3.83 demoted the losers to `maybe` and
+   v3.85 took it back out, because on 149 blind-labelled frames the
+   photographer would have kept 87 of the 100 it demoted.
 7. **Cull-reason taxonomy.** When you cull, optionally tag *why* —
    `focus_miss`, `eyes_closed`, `motion_blur`, `framing`,
    `duplicate`, `exposure`, `other`. Powers a filter pill and
@@ -1104,10 +1102,10 @@ PixCull 把这三件事全部翻过来:
    跨 run 的人脸库,识别同一个新娘 / 孩子 / 宠物 跨越所有拍摄。
 5. **GPS 位置聚类。** Haversine DBSCAN 按拍摄地点 (~100 m 半径) 分组。
    "每个地点选一张" 凸显每个地点的最佳。
-6. **连拍峰值排序,输的那些回到 `maybe`。** 亚秒级的连拍组自动选峰值帧
-   (最佳对焦、表情、动作瞬间)。v3.83 起,同组里没选上的帧不再是 `keep`,
-   而是降为 `maybe` —— 它们会出现在你面前,而不是混在精选里充数。不会
-   判 `cull`:第二个表情往往才是你要的那张,相似度分数没有资格替你丢掉它。
+6. **连拍峰值排序。** 亚秒级的连拍组自动选峰值帧(最佳对焦、表情、
+   动作瞬间)。**只报告,不据此判决**:v3.83 曾把同组里输的那些降为
+   `maybe`,v3.85 撤回了 —— 149 张盲标数据显示,被降级的 100 张里
+   摄影师会留下 87 张。
 7. **Cull 原因分类。** Cull 时可选标 *为什么*:`focus_miss` (焦点不准)、
    `eyes_closed` (闭眼)、`motion_blur` (模糊抖动)、`framing` (构图差)、
    `duplicate` (与更佳重复)、`exposure` (曝光问题)、`other`。驱动一个
