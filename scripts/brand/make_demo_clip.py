@@ -123,6 +123,13 @@ def _fill_gaps(per_frame: list[list[tuple]]) -> list[list[tuple]]:
         nxt[i] = last
 
     def _first(i):
+        # v3.87 — `[0]` is the whole multi-face story: a gap between two
+        # frames that each held two faces is filled with ONE box, and
+        # the second person is unfrosted for the length of the gap.
+        # Nothing downstream could see that, because the containment
+        # check only looks at frames that HAVE a detection. `main()`
+        # refuses the clip when this arises rather than covering one
+        # face and reporting success.
         return per_frame[i][0]
 
     filled: list[list[tuple]] = []
@@ -173,6 +180,57 @@ def _frost(img, boxes, w: int, h: int):
         region.paste(blurred, (0, 0), mask)
         img.paste(region, (x0, y0))
     return img
+
+
+def _coverage_report(per_frame: list[list[tuple]],
+                     filled: list[list[tuple]],
+                     escaped: list[int]) -> list[str]:
+    """What the containment check knows, and the much larger part it does not.
+
+    v3.77 printed one line — `containment: 0 detected face(s) fell
+    outside the frosted region` — and that line was read, by its author,
+    as "no face escaped". It is not the same statement, and v3.87
+    measured the gap on the clip that line cleared:
+
+    * On **145 of 620 frames the detector found nothing at all**. The
+      containment loop iterates over what was found, so on those frames
+      it has nothing to iterate and passes. The frames where a face is
+      hardest to find are exactly the frames where it is least likely to
+      be frosted, and they are the ones the check is blind to.
+
+    * Worse, and this is the part that makes the whole approach a proxy
+      rather than a test: on frame 101 the detector returned **two boxes,
+      both on the subject's coat** — one over a shoulder, one over a
+      pocket — and none on her face, which is in profile at the top of
+      the frame and entirely legible. Both boxes were inside the frosted
+      region, so containment was 100%, the script printed its clean line,
+      and the face shipped unfrosted. Two false positives satisfied the
+      guard completely.
+
+    Neither a second detector nor a lower confidence closes this. Both
+    on-disk models were tried on that frame: BlazeFace short-range finds
+    the coat, FaceLandmarker finds nothing at all.
+
+    So the numbers below are diagnostics, not a certificate. The gate on
+    publication is a person looking at the frames that will actually
+    appear on screen — `docs/demo-clip-frames.tsv` and the refusal in
+    `capture_video_shots.py`.
+    """
+    n = len(per_frame)
+    unseen = sum(1 for b in per_frame if not b)
+    interpolated = sum(1 for i in range(n) if not per_frame[i] and filled[i])
+    bare = sum(1 for b in filled if not b)
+    return [
+        f"[clip] detector returned a box on {n - unseen}/{n} frames; "
+        f"{interpolated} more got an interpolated box; {bare} frames "
+        f"carry no frosted region at all",
+        f"[clip] containment: {len(escaped)} of the boxes it did return "
+        f"fell outside the frosted region"
+        + (f" — {escaped[:8]}" if escaped else ""),
+        "[clip] this does NOT say the faces are covered: it says the "
+        "boxes are. A face the detector missed, and a box it put on a "
+        "coat, both pass. Screen the frames you will publish by eye.",
+    ]
 
 
 def main() -> int:
@@ -238,15 +296,11 @@ def main() -> int:
         for f in sorted(done.glob("*.png")):
             shutil.copy2(f, args.keep_frames / f.name)
 
-    # Verification, and NOT by re-running the detector on the output.
-    # That was the first thing I tried and it reported a face on 569 of
-    # 620 frosted frames — correctly, in its own terms: a smooth oval in
-    # skin tones is exactly what it looks for, so it fires on the
-    # treatment. It cannot tell "a face" from "a blurred face".
-    #
-    # The question that matters is geometric: is every box the detector
-    # found in the ORIGINAL inside the region that got frosted? That is
-    # checkable exactly, and it is what "covered" means.
+    # Containment: is every box the detector found in the ORIGINAL inside
+    # the region that got frosted? Exactly checkable, and it catches one
+    # real failure — a gap fill that drifts off a face the detector did
+    # see. Keep it. It is not a clearance, and v3.87 measured how far
+    # short it falls; `_coverage_report` says the rest.
     escaped = []
     for i, (found, drawn) in enumerate(zip(per_frame, filled)):
         for fb in found:
@@ -260,11 +314,20 @@ def main() -> int:
                     break
             if not ok:
                 escaped.append(i)
-    print(f"[clip] containment: {len(escaped)} detected face(s) fell outside "
-          f"the frosted region{' — ' + str(escaped[:8]) if escaped else ''}")
+    for line in _coverage_report(per_frame, filled, escaped):
+        print(line)
     if escaped:
-        print("[clip] REFUSING to write: a face the detector found is not "
+        print("[clip] REFUSING to write: a box the detector found is not "
               "covered.", file=sys.stderr)
+        return 1
+    crowded = sum(1 for b in per_frame if len(b) > 1)
+    gaps = sum(1 for i, b in enumerate(per_frame) if not b and filled[i])
+    if crowded and gaps:
+        print(f"[clip] REFUSING to write: {crowded} frame(s) hold more than "
+              f"one detection and {gaps} frame(s) are gap-filled. The fill "
+              f"carries one box, so on those frames everyone but the first "
+              f"person is uncovered. Cut to a stretch with one subject, or "
+              f"frost by hand.", file=sys.stderr)
         return 1
 
     args.out.parent.mkdir(parents=True, exist_ok=True)

@@ -22,9 +22,25 @@ screen by eye at >=1400 px" — and the shortcut reproduced it anyway.
 reported a face on 569 of 620 frosted frames, correctly in its own
 terms: a smooth oval in skin tones is what it looks for, so it fires on
 the treatment. It cannot tell a face from a blurred face. The check that
-means something is geometric — every box found in the original has to
-lie inside the region that got frosted — and the script refuses to write
-the clip when one does not.
+replaced it is geometric — every box found in the original has to lie
+inside the region that got frosted — and the script refuses to write the
+clip when one does not.
+
+**v3.87 — and that check is not a clearance, which this file used to be
+named as if it were.** It was called
+`test_demo_clip_is_safe_to_publish.py`, and it was green, and neither
+fact establishes that the clip is safe to publish. Containment says
+every box the detector RETURNED is covered. It says nothing about the
+145 of 620 frames where the detector returned nothing, and nothing about
+frame 101, where it returned two boxes, both on the subject's coat and
+neither on her face — which is in profile, unfrosted and entirely
+legible — and containment passed at 100%. Two false positives satisfied
+the check completely. Both models on this machine miss that face.
+
+So the rules below are rules about the builder, not a verdict on the
+footage. The verdict on the footage is a person's, recorded in
+`docs/demo-clip-frames.tsv` and enforced at capture time by
+`tests/test_capture_video_gate.py`.
 """
 import ast
 import re
@@ -116,6 +132,61 @@ def test_the_dilation_is_enough_to_cover_and_not_so_much_it_takes_over():
     assert 0.12 <= val <= 0.35, (
         f"DILATE is {val}; below ~0.12 the treatment misses a turned chin, "
         "above ~0.35 it becomes the subject of the picture")
+
+
+def test_the_script_does_not_report_containment_as_a_clearance():
+    """v3.87 — the line it printed was read as "no face escaped".
+
+    It said `containment: 0 detected face(s) fell outside the frosted
+    region`, which is true and much weaker. The report has to name what
+    it cannot see — the frames with no detection at all — in the same
+    breath, or the number gets read as the stronger claim again.
+    """
+    # Parsed, not grepped, and CALLED, not merely defined — leaving the
+    # function in the file while main() prints the old one-liner is the
+    # exact shape this version exists to stop. (It is also what the first
+    # cut of this test allowed: it accepted `phrase.split()[0]`, so the
+    # word "frames" appearing anywhere satisfied a check about a
+    # sentence. Caught by mutating the script and watching it stay green.)
+    tree = ast.parse(_src())
+    main = next((n for n in tree.body
+                 if isinstance(n, ast.FunctionDef) and n.name == "main"), None)
+    assert main is not None, "main() is gone"
+    called = {n.func.id for n in ast.walk(main)
+              if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)}
+    assert "_coverage_report" in called, (
+        "main() no longer prints the coverage report; it is back to one "
+        "number that reads as a clearance")
+
+    report = next((n for n in tree.body
+                   if isinstance(n, ast.FunctionDef)
+                   and n.name == "_coverage_report"), None)
+    assert report is not None, "_coverage_report is gone"
+    # Join the literals so an f-string split across source lines still
+    # reads as one sentence.
+    said = "".join(n.value for n in ast.walk(report)
+                   if isinstance(n, ast.Constant) and isinstance(n.value, str))
+    for phrase in ("does NOT say the faces are covered",
+                   "carry no frosted region at all",
+                   "of the boxes it did return"):
+        assert phrase in said, (
+            f"the report no longer says {phrase!r} — the number on its own "
+            f"is what got misread")
+
+
+def test_it_refuses_a_gap_fill_it_cannot_track():
+    """The fill carries one box (`per_frame[i][0]`). With two faces on
+    screen and a gap between detections, everyone but the first is
+    uncovered for the length of the gap, and containment cannot see it
+    because it only looks at frames that HAVE a detection."""
+    code = _code()
+    assert "crowded" in code and "gaps" in code, (
+        "the multi-face gap-fill refusal is gone")
+    import re as _re
+    m = _re.search(r"if crowded and gaps:(.*?)\n    args\.out", code, _re.S)
+    assert m and _re.search(r"return\s+1", m.group(1)), (
+        "a clip with two faces and a gap-filled frame no longer stops "
+        "the write")
 
 
 def test_the_shot_says_who_checked_it_and_when():

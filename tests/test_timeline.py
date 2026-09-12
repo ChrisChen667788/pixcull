@@ -48,6 +48,45 @@ def _build_video_run(root: Path, rid="vidrun"):
           "why": "精彩瞬间", "best_frame_id": "frame_000001"}]))
 
 
+def _build_scan_run(root: Path, rid="scanrun"):
+    """A run as `pixcull run` writes it: scores.csv under output/.
+
+    The fixture below calls itself a photo run and writes scores.csv in
+    the run root, which is the layout `pixcull video` produces.  Both
+    layouts exist on disk and `_reload_run_from_disk` has accepted both
+    since v2.35.2; the timeline read only ever handled the video one,
+    and the only fixture standing over it had the video shape too, so
+    the ordinary case returned nothing and nothing said so (v3.87).
+    """
+    out = root / rid / "output"
+    out.mkdir(parents=True)
+    with open(out / "scores.csv", "w", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=["path", "filename", "datetime",
+                                           "decision", "score_final"])
+        w.writeheader()
+        for i, minute in enumerate(("10:00", "10:00", "11:30"), start=1):
+            w.writerow({"path": f"/shoots/day1/IMG_{i}.jpg",
+                        "filename": f"IMG_{i}.jpg",
+                        "datetime": f"2026:05:29 {minute}:0{i}",
+                        "decision": "keep", "score_final": "0.80"})
+
+
+def _build_video_run_scores(root: Path, rid="vidrun"):
+    """The scores.csv `pixcull video` writes: one row per extracted frame."""
+    d = root / rid
+    fdir = d / "video_frames" / "clipA"
+    fdir.mkdir(parents=True, exist_ok=True)
+    with open(d / "scores.csv", "w", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=["path", "filename", "datetime",
+                                           "decision", "score_final"])
+        w.writeheader()
+        for i in (1, 2, 3):
+            w.writerow({"path": str(fdir / f"frame_00000{i}.jpg"),
+                        "filename": f"frame_00000{i}.jpg",
+                        "datetime": "", "decision": "keep",
+                        "score_final": "0.70"})
+
+
 def _build_photo_run(root: Path, rid="photorun"):
     d = root / rid
     d.mkdir(parents=True)
@@ -89,6 +128,60 @@ def test_photo_timeline_items(srv_mod, tmp_path, monkeypatch):
     assert all(it["kind"] == "photo" for it in items)
     assert items[0]["t"] is not None
     assert items[0]["decision"] == "keep"
+
+
+def test_photo_timeline_items_reads_the_scan_layout(srv_mod, tmp_path,
+                                                    monkeypatch):
+    """`pixcull run`'s own layout must not come back empty (v3.87).
+
+    Before the fix this returned [], so the 照片+视频时间线 link on every
+    ordinary results page opened a timeline with no photographs on it —
+    the one case the page exists for.
+    """
+    monkeypatch.setattr(srv_mod, "_DEMO_ROOT", tmp_path)
+    _build_scan_run(tmp_path, "s1")
+    items = srv_mod._photo_timeline_items("s1")
+    assert [it["filename"] for it in items] == ["IMG_1.jpg", "IMG_2.jpg",
+                                                "IMG_3.jpg"]
+    assert all(it["t"] is not None for it in items)
+
+
+def test_extracted_video_frames_are_not_photographs(srv_mod, tmp_path,
+                                                    monkeypatch):
+    """A video run's frames are the video, not N photographs (v3.87).
+
+    The `# Skip the synthetic video frames of a video run.` comment has
+    been over this loop since v2.31 with no code under it, so a 34-frame
+    clip arrived as 34 undated photographs and the page's tally said 35
+    时间点 where there was one.
+    """
+    monkeypatch.setattr(srv_mod, "_DEMO_ROOT", tmp_path)
+    _build_video_run_scores(tmp_path, "v2")
+    assert srv_mod._photo_timeline_items("v2") == []
+
+
+def test_frame_skip_is_structural_not_by_filename(srv_mod, tmp_path,
+                                                  monkeypatch):
+    """Photographs are kept even when they look like extracted frames.
+
+    Matching `frame_%06d.jpg`, or the substring `video_frames`, would
+    delete the work of anyone who names files that way.  The test is
+    whether the row's own path lies under THIS run's `video_frames/`.
+    """
+    monkeypatch.setattr(srv_mod, "_DEMO_ROOT", tmp_path)
+    d = tmp_path / "v3" / "output"
+    d.mkdir(parents=True)
+    with open(d / "scores.csv", "w", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=["path", "filename", "datetime",
+                                           "decision", "score_final"])
+        w.writeheader()
+        # someone else's video_frames directory, and a frame-shaped name
+        w.writerow({"path": "/shoots/video_frames/frame_000001.jpg",
+                    "filename": "frame_000001.jpg",
+                    "datetime": "2026:05:29 10:00:00",
+                    "decision": "keep", "score_final": "0.80"})
+    items = srv_mod._photo_timeline_items("v3")
+    assert [it["filename"] for it in items] == ["frame_000001.jpg"]
 
 
 def test_video_timeline_items(srv_mod, tmp_path, monkeypatch):

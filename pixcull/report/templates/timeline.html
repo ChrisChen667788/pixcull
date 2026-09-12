@@ -64,6 +64,16 @@ function render(d){
   $('meta').textContent=d.photo_count+' 张照片 · '+d.video_count+' 段视频';
   $('tally').textContent='共 '+items.length+' 个时间点';
   // Group consecutive photos in the same minute into one strip row.
+  // v3.87 — it used to gather every consecutive photo regardless of
+  // time and label the row with the first one's timestamp, so the
+  // 32-photo sample set (2022-10-29 to 2023-10-03) rendered as one
+  // row reading "2022-10-29 12:52:13 · 32 张照片". A timeline that
+  // puts a year of photographs at one instant.
+  const minuteKey=(it)=>{
+    if(it.iso) return String(it.iso).replace('T',' ').slice(0,16);
+    if(it.t) return 'e'+Math.floor(it.t/60);
+    return '';           // undated frames keep grouping together
+  };
   let html=''; let i=0;
   while(i<items.length){
     const it=items[i];
@@ -76,8 +86,9 @@ function render(d){
       i++;
     } else {
       // gather a run of photos
-      const start=i; const photos=[];
-      while(i<items.length && items[i].kind==='photo'){ photos.push(items[i]); i++; }
+      const k=minuteKey(items[i]); const photos=[];
+      while(i<items.length && items[i].kind==='photo'
+            && minuteKey(items[i])===k){ photos.push(items[i]); i++; }
       const t0=fmt(photos[0].iso,photos[0].t);
       html+='<div class="row"><div class="time">'+t0+'</div><div class="body">'+
         '<div class="count">'+photos.length+' 张照片</div><div class="photos">'+

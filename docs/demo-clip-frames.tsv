@@ -1,0 +1,50 @@
+# v3.87 — the frames a person has looked at, at full size, and cleared
+# for publication.  `scripts/brand/capture_video_shots.py` refuses to
+# write a screenshot containing a frame that is not on this list.
+#
+# It exists because no face detector on this machine can certify the
+# demo footage.  `make_demo_clip.py`'s containment check was read as
+# "no face escaped" and does not say that: on one frame of the v3.77
+# clip the detector returned two boxes, both on the subject's coat and
+# neither on her face, containment passed at 100%, and the face was
+# legible and unfrosted.  Both on-disk models miss that face entirely —
+# BlazeFace finds the coat, FaceLandmarker finds nothing.  So the gate
+# is a person, and this file is the record of what they looked at.
+#
+# The key is the sha256 of the frame JPEG, not its name: a re-cut clip
+# renumbers its frames, and `frame_000019` before and after a re-cut are
+# different pictures.  Re-cut the clip and this list must be redone.
+#
+# Screening standard (CLAUDE.md): by eye at >= 1400 px, plus a
+# native-resolution look wherever a human figure appears.
+# `face_count == 0` is not evidence of no face.
+#
+# sha256[:16]	frame_id	screened	note
+f47085242dd6d251	frame_000001	2026-09-13	winter-sled.mp4 · 主体自始至终背对镜头;拉雪橇的人头也转开
+0ec0343e103a3241	frame_000002	2026-09-13	winter-sled.mp4 · 主体自始至终背对镜头;拉雪橇的人头也转开
+cfca5629bafb6619	frame_000003	2026-09-13	winter-sled.mp4 · 主体自始至终背对镜头;拉雪橇的人头也转开
+e4e14b0a754b82b2	frame_000004	2026-09-13	winter-sled.mp4 · 主体自始至终背对镜头;拉雪橇的人头也转开
+ba1eceb63556cbcb	frame_000005	2026-09-13	winter-sled.mp4 · 主体自始至终背对镜头;拉雪橇的人头也转开
+e3610bee9e6d9e0c	frame_000006	2026-09-13	winter-sled.mp4 · 主体自始至终背对镜头;拉雪橇的人头也转开
+5ea505285d003322	frame_000007	2026-09-13	winter-sled.mp4 · 主体自始至终背对镜头;拉雪橇的人头也转开
+761a13f76b16b6fc	frame_000008	2026-09-13	winter-sled.mp4 · 主体自始至终背对镜头;拉雪橇的人头也转开
+548d66fa6ab6413c	frame_000009	2026-09-13	winter-sled.mp4 · 主体自始至终背对镜头;拉雪橇的人头也转开
+025b6af82901f4aa	frame_000010	2026-09-13	winter-sled.mp4 · 主体自始至终背对镜头;拉雪橇的人头也转开
+71d3865d2e2d1d8b	frame_000011	2026-09-13	winter-sled.mp4 · 主体自始至终背对镜头;拉雪橇的人头也转开
+62b593c3d1e615bd	frame_000012	2026-09-13	winter-sled.mp4 · 主体自始至终背对镜头;拉雪橇的人头也转开
+5c97276b26f2bf9c	frame_000013	2026-09-13	winter-sled.mp4 · 主体自始至终背对镜头;拉雪橇的人头也转开
+c29738a5d8f28223	frame_000014	2026-09-13	winter-sled.mp4 · 主体自始至终背对镜头;拉雪橇的人头也转开
+10cbeae356cc2e3d	frame_000015	2026-09-13	winter-sled.mp4 · 主体自始至终背对镜头;拉雪橇的人头也转开
+82b689005f7feb8d	frame_000017	2026-09-13	winter-sled.mp4 · 主体自始至终背对镜头;拉雪橇的人头也转开
+12bc9d3c3348a584	frame_000018	2026-09-13	winter-sled.mp4 · 主体自始至终背对镜头;拉雪橇的人头也转开
+11fa6401820f2c75	frame_000019	2026-09-13	winter-sled.mp4 · 主体自始至终背对镜头;拉雪橇的人头也转开
+75e9a27359e755d7	frame_000020	2026-09-13	winter-sled.mp4 · 主体自始至终背对镜头;拉雪橇的人头也转开
+b4c861e1c49625c7	frame_000021	2026-09-13	winter-sled.mp4 · 主体自始至终背对镜头;拉雪橇的人头也转开
+f165e7e974601573	frame_000022	2026-09-13	winter-sled.mp4 · 主体自始至终背对镜头;拉雪橇的人头也转开
+5886ca081a5ed256	frame_000023	2026-09-13	winter-sled.mp4 · 主体自始至终背对镜头;拉雪橇的人头也转开
+6a72bde5ad1f6a74	frame_000024	2026-09-13	winter-sled.mp4 · 主体自始至终背对镜头;拉雪橇的人头也转开
+60ecad9e9845c161	frame_000025	2026-09-13	winter-sled.mp4 · 主体自始至终背对镜头;拉雪橇的人头也转开
+64c7b9fd6931a120	frame_000026	2026-09-13	winter-sled.mp4 · 主体自始至终背对镜头;拉雪橇的人头也转开
+b50f74b6335603e3	frame_000027	2026-09-13	winter-sled.mp4 · 主体自始至终背对镜头;拉雪橇的人头也转开
+9e9aef8eefeca8a8	frame_000028	2026-09-13	winter-sled.mp4 · 主体自始至终背对镜头;拉雪橇的人头也转开
+2b7a8b0e4b3d1d79	frame_000029	2026-09-13	winter-sled.mp4 · 主体自始至终背对镜头;拉雪橇的人头也转开

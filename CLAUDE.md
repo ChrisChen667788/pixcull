@@ -116,6 +116,26 @@ before the run** (all 20 sampled originals carried it; `gps_lat` is
 empty on all 200 rows), and the originals were copied to a neutral
 `/tmp` path first so no drive name can appear on screen.
 
+**The face guard on the demo clip certifies far less than its line says**
+(v3.87).  `make_demo_clip.py` printed `containment: 0 detected face(s) fell
+outside the frosted region` and that was read as "no face escaped".  It is
+not the same statement, and the gap was measured on the clip that line
+cleared: on **145 of 620 frames the detector returned nothing**, so there was
+nothing to contain and the frame passed; and on **frame 101 it returned two
+boxes, both on the subject's coat and neither on her face** — in profile,
+unfrosted, entirely legible — with containment at 100%.  Two false positives
+satisfied the guard completely.  Neither model on this machine finds that
+face: BlazeFace short-range finds the coat, FaceLandmarker finds nothing.
+**No detector on this machine can certify that footage.**  The guard now
+reports what it knows and refuses a multi-face gap fill (the fill carries one
+box, so everyone but the first person is uncovered across a gap).  What may
+be photographed is decided by `docs/demo-clip-frames.tsv` — frames a person
+looked at at full size, keyed by the sha256 of the frame itself, because a
+re-cut clip renumbers its frames.  `tests/test_capture_video_gate.py` fails
+if a shot stops calling the gate, calls it after `screenshot()`, or lets a
+missing ledger allow everything.  **Do not shoot anything new from
+`sled.mp4`.**
+
 **`24-transcript-edit.png` is real footage now** (v3.77), built by
 `scripts/brand/make_demo_clip.py` from the owner's own sledding clip with
 its own audio.  It was an ffmpeg test pattern for fourteen months and read
@@ -133,14 +153,16 @@ Three things that cost time and are worth not repeating:
 * **Do not verify a blur by re-running the face detector on it.**  It
   reported a face on 569 of 620 frosted frames — correctly, in its own
   terms, because a smooth oval in skin tones is what it looks for.  The
-  check that means something is geometric: every box found in the
-  original must lie inside the region that got frosted, and the script
-  refuses to write the clip otherwise.
+  geometric check that replaced it — every box found in the original
+  must lie inside the region that got frosted — is a real check and
+  **still not a clearance**; v3.87 above is what it cannot see.
 
 **The GoPro folder holds two different shoots.**  `GH0107xx` is a wedding
 and its audio is private conversation — a transcript of it would be
-readable text on a public page.  `GX01077x` is the sledding trip.  Only
-the second is publishable.
+readable text on a public page.  `GX0107xx` (768 through 775) is the
+sledding trip.  Only the second is publishable, and **only its video** —
+its audio is conversation too, which is why `winter-sled.mp4` is silent
+and only `24` uses a clip with sound.
 
 **24 is shot from the owner's own reviewed frames** (owner-authorised
 2026-08-16, "用我刚标注的这组真实照片截图…有人像人脸的那几张就不要了").
@@ -149,13 +171,20 @@ trusting `face_count`.  That column said 0 on a frame containing a
 plainly visible face: a woman lying on snow in a 5280×3956 aerial, far
 too small for the detector but perfectly resolvable to a reader.  A
 300 px contact sheet missed her too.  **Screen candidates by eye at
-≥1400 px; `face_count == 0` is not evidence of no face.**  **18 / 19 / 23 are shot from the owner's own GoPro
-footage** (owner-authorised 2026-07-30): winter sledding, subject filmed
-from behind throughout, no resolvable faces, GPMF carries no GPS
-samples, and the working copy is re-encoded with `-map_metadata -1`
-under a neutral name (`winter-sled.mp4`) so no drive name or original
-path can appear on screen.  The earlier 18/19 used a stock clip whose
-reel-candidate thumbnails had to be blurred to mush.  The deferred baby
+≥1400 px; `face_count == 0` is not evidence of no face.**
+
+**18 / 19 / 23 are scripted since v3.87** —
+`scripts/brand/capture_video_shots.py`, from a 7.2 s cut of the owner's
+own GoPro sledding footage (`GX010768`, two segments joined so the
+stretch where a helper turns to camera and the stretch with a passer-by
+are both out).  **It needs no frosting at all** — that is the point: no
+screenshot now depends on an anonymiser that cannot be verified.  Audio
+stripped, `-map_metadata -1`, neutral name `winter-sled.mp4`.  All 29
+extracted frames were screened by eye at 1450 px plus native-resolution
+zooms on every head; one (`frame_000016`) is excluded and the other 28
+are in `docs/demo-clip-frames.tsv`.
+
+The deferred baby
 face-Close-ups shot is still outstanding (feature verified; headless
 capture is killed by this host — capture locally via
 `scripts/brand/capture_real_screenshots.sh`).  The
@@ -624,6 +653,21 @@ thirteen lines downstream of the verdict it should have informed: **149
 contiguous frames in, 149 keeps out, 99 of them marked non-peak.**  Demotion
 is `keep -> maybe` only, never `cull` — the frame that lost its burst is often
 the one the photographer wanted.
+
+**The joint photo+video timeline was wrong in both directions at once**
+(v3.87).  `_photo_timeline_items` read `<run>/scores.csv` only — the layout
+`pixcull video` writes — while `pixcull run` writes `<run>/output/scores.csv`,
+which `_reload_run_from_disk` has accepted since v2.35.2.  So the page named
+after photographs returned **none** for every ordinary run, and the 照片+视频
+时间线 link on the results page opened an empty axis.  The one layout it did
+read is the video run, whose rows the comment on the next line says it skips:
+it never did, so a 34-frame clip arrived as 34 undated photographs and the
+tally read 35 time points where there was one.  The template had the same
+shape of bug — its comment says "group consecutive photos in the same minute"
+and it grouped every consecutive photo regardless, so the 32-frame sample set
+(2022-10-29 to 2023-10-03) rendered as one row at one instant.  All three in
+`tests/test_timeline.py`, and **the fixture that stood over it had the video
+shape while calling itself a photo run**, which is why nothing saw it.
 
 **`.gitignore`'s bare `output/` has eaten two load-bearing directories** —
 `tests/fixtures/present_run/output` (v3.51) and `samples/output` (v3.63, which

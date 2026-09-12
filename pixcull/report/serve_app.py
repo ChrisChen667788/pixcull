@@ -1395,19 +1395,56 @@ def build_joint_timeline(photos: list[dict], videos: list[dict]) -> list[dict]:
     return with_t + without_t
 
 
+def _is_extracted_frame(path_str: str, frames_root: Path) -> bool:
+    """True if this scores.csv row is a frame `pixcull video` extracted.
+
+    Structural, not by filename: the row's own `path` has to live under
+    this run's `video_frames/`.  A photographer whose shoot folder is
+    called `video_frames` keeps their photographs.
+    """
+    if not path_str:
+        return False
+    try:
+        Path(path_str).resolve().relative_to(frames_root.resolve())
+    except (ValueError, OSError, RuntimeError):
+        return False
+    return True
+
+
 def _photo_timeline_items(run_id: str, *, limit: int = 800) -> list[dict]:
-    """Photo rows for a run from scores.csv → timeline items."""
+    """Photo rows for a run from scores.csv → timeline items.
+
+    v3.87 — this read was wrong in both directions at once.
+
+    Two commands write a run and they write it differently: `pixcull
+    run` puts scores.csv under `<run>/output/`, `pixcull video` puts it
+    in the run root (`_reload_run_from_disk` has accepted either since
+    v2.35.2).  This function only ever looked in the run root, so for
+    every ordinary photo run — the thing the page is named after — it
+    returned nothing, and the 照片+视频时间线 link on the results page
+    opened a timeline with no photographs on it.
+
+    The one layout it did read is the video run, whose rows it says on
+    the next line it skips.  It never skipped them: 34 extracted frames
+    came back as 34 photographs with no capture time, the header
+    counted them, and the tally said 35 时间点 where there was 1.
+    """
     import csv as _csv
     run_dir = _run_dir(run_id)
-    scores = run_dir / "scores.csv"
-    if not scores.exists():
+    scores = run_dir / "output" / "scores.csv"
+    if not scores.is_file():
+        scores = run_dir / "scores.csv"
+    if not scores.is_file():
         return []
+    frames_root = run_dir / "video_frames"
     out: list[dict] = []
     try:
         with open(scores, newline="") as fh:
             for row in _csv.DictReader(fh):
                 fn = row.get("filename", "")
                 # Skip the synthetic video frames of a video run.
+                if _is_extracted_frame(row.get("path", ""), frames_root):
+                    continue
                 t = _parse_capture_dt(row.get("datetime", ""))
                 sf = row.get("score_final")
                 try:
