@@ -234,6 +234,33 @@ fixes it.** A dimension the rubric does not have cannot be weighted.
 
 ---
 
+## One burst boundary moved between two runs of the same folder
+
+Found 2026-09-12 while A/B-ing v3.83.
+
+The very first run on a 149-frame folder split frames `3J0A5214`–`5219`
+into a 6-frame cluster and a 2-frame cluster. Three later runs — one
+with the detector cache disabled, one from a stashed baseline — merged
+them into one 8-frame cluster. 26 of the 28 clusters were identical
+every time; this one boundary was not.
+
+**Not a threshold case.** Landscape clusters on `time_gap_s: 5.0` and
+`sim_thr: 0.94`; the pair is 2 seconds apart with cosine 0.9539. Both
+conditions are comfortably inside, so it should merge every time. The
+embeddings are byte-identical across runs (max elementwise difference
+0.0) and `score_final` never moved.
+
+I could not reproduce the split, so I cannot name the cause. It is
+recorded rather than guessed at.
+
+**Why it matters more now.** Before v3.83 `cluster_id` only steered a
+column nobody's verdict depended on. It steers `is_burst_peak`, which
+now decides `keep` versus `maybe`. One unstable boundary in twenty-eight
+is one frame's verdict, which is small — and it is the difference
+between a tool that gives the same answer twice and one that does not.
+
+---
+
 ## Three gaps that are NOT waiting on a person
 
 Recorded because "waiting on the owner" is a comfortable place to put something

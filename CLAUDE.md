@@ -591,6 +591,17 @@ row may not be referenced from a README — that is how a picture captioned as
 an attribution overlay stayed on the front door for four months showing a UI
 that had been removed.
 
+**The decision is made per frame, inside the loop, and is final there**
+(v3.83).  Every cross-frame column — `cluster_id`, `is_burst_peak`,
+`score_final` itself — is written to the dataframe *after* `df["decision"]`.
+So anything about a burst, a duplicate or a neighbour can only be acted on as
+a post-pass.  That is why `demote_mediocre_bursts` builds its own time-bucket
+grouping instead of reusing `cluster_bursts`, and why the burst ranking sat
+thirteen lines downstream of the verdict it should have informed: **149
+contiguous frames in, 149 keeps out, 99 of them marked non-peak.**  Demotion
+is `keep -> maybe` only, never `cull` — the frame that lost its burst is often
+the one the photographer wanted.
+
 **`.gitignore`'s bare `output/` has eaten two load-bearing directories** —
 `tests/fixtures/present_run/output` (v3.51) and `samples/output` (v3.63, which
 made the 示例数据 button return 500 for every visitor).  It has glob exceptions
