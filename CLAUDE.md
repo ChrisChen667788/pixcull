@@ -591,6 +591,22 @@ row may not be referenced from a README — that is how a picture captioned as
 an attribution overlay stayed on the front door for four months showing a UI
 that had been removed.
 
+**Burst clustering was nondeterministic, and its evidence was not on disk**
+(v3.84).  EXIF time is second-resolution and a burst is several frames a second,
+so tied timestamps are normal; `cluster_bursts` sorted on time alone with a
+stable sort, so ties kept the parallel pass's completion order, and since only
+adjacent rows are compared the row at a tie boundary decided whether two groups
+merged.  Same folder, two runs: `Keep=97 Maybe=53` then `Keep=95 Maybe=55`.
+Tie-break is `(datetime, filename)` now — the filename is the camera's shutter
+counter.
+
+**`embeddings.npz` is NOT the clustering input.**  It holds 512-d CLIP vectors
+for semantic search; `cluster_bursts` groups on the 768-d DINOv2 `embedding`
+column, now written to `burst_embeddings.npz`.  Feeding one to the other
+produces plausible wrong numbers with no error — I got 44 singletons where the
+run had 74 and nearly shipped the conclusion.  **Any analysis of `cluster_id`
+must read `burst_embeddings.npz`.**
+
 **The decision is made per frame, inside the loop, and is final there**
 (v3.83).  Every cross-frame column — `cluster_id`, `is_burst_peak`,
 `score_final` itself — is written to the dataframe *after* `df["decision"]`.

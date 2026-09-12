@@ -234,30 +234,74 @@ fixes it.** A dimension the rubric does not have cannot be weighted.
 
 ---
 
-## One burst boundary moved between two runs of the same folder
+## ~~One burst boundary moved between two runs~~ — answered in v3.84
 
-Found 2026-09-12 while A/B-ing v3.83.
+Recorded 2026-09-12 as "I could not reproduce the split, so I cannot
+name the cause". Found 2026-09-13 while trying to reproduce the
+pipeline's clustering from its own artefacts, which turned out to be
+impossible for two separate reasons.
 
-The very first run on a 149-frame folder split frames `3J0A5214`–`5219`
-into a 6-frame cluster and a 2-frame cluster. Three later runs — one
-with the detector cache disabled, one from a stashed baseline — merged
-them into one 8-frame cluster. 26 of the 28 clusters were identical
-every time; this one boundary was not.
+**The verdicts were not stable.** Two consecutive runs of one 150-frame
+folder, no code change: `Keep=97 Maybe=53` and `Keep=95 Maybe=55`.
 
-**Not a threshold case.** Landscape clusters on `time_gap_s: 5.0` and
-`sim_thr: 0.94`; the pair is 2 seconds apart with cosine 0.9539. Both
-conditions are comfortably inside, so it should merge every time. The
-embeddings are byte-identical across runs (max elementwise difference
-0.0) and `score_final` never moved.
+**Why.** EXIF time is second-resolution and a burst is several frames a
+second, so tied timestamps are the normal case rather than an edge.
+`cluster_bursts` sorted on time alone with a stable sort, so a tie kept
+whatever order the rows arrived in — and they arrive from a parallel
+scoring pass, in completion order. Only adjacent rows are compared and
+the chain is transitive, so the row that happens to sit at a tie
+boundary decides whether two groups merge. On four real frames at
+16:25:12/:12/:13/:13, every adjacent pair above threshold, two of the
+four possible orderings merge and two split.
 
-I could not reproduce the split, so I cannot name the cause. It is
-recorded rather than guessed at.
+Since v3.83 `cluster_id` decides `keep` versus `maybe`, so this reached
+the verdict.
 
-**Why it matters more now.** Before v3.83 `cluster_id` only steered a
-column nobody's verdict depended on. It steers `is_burst_peak`, which
-now decides `keep` versus `maybe`. One unstable boundary in twenty-eight
-is one frame's verdict, which is small — and it is the difference
-between a tool that gives the same answer twice and one that does not.
+**And the evidence was not on disk.** `embeddings.npz` holds 512-d CLIP
+vectors for semantic search; clustering groups on the 768-d DINOv2
+vector, which was discarded with the dataframe. Reaching for the file on
+disk gets the wrong model at the wrong dimensionality, and cosine
+similarity does not complain — it returns plausible numbers. I did that,
+got 44 singletons where the run had 74, drew a conclusion about a scene
+misclassification, and had to withdraw it.
+
+Fixed both: tie-break on the filename, which is the camera's shutter
+counter and the only real order on the dataframe; and
+`burst_embeddings.npz`, so the grouping can be checked rather than
+trusted.
+
+Measured over four contiguous blocks, 599 frames: 11 verdicts moved
+(1.8%), `score_final` unchanged on every frame, and two consecutive runs
+now produce byte-identical groupings.
+
+---
+
+## The four-block singleton measurement, and what it did not settle
+
+Recorded 2026-09-13. Four contiguous blocks, blind-labelled by the
+owner, testing whether a frame with no near-duplicate is culled more
+often:
+
+| block | overall cull | singleton | in-burst | OR |
+|---|---|---|---|---|
+| landscape, Zhangye | 20.8% | 50.0% | 15.7% | 5.24 |
+| event, iron-flower | 60.7% | 67.6% | 41.0% | 2.95 |
+| portrait, mid-shoot | 10.0% | 9.5% | 10.5% | 0.90 |
+| portrait, opening | 11.4% | 26.7% | 7.6% | 4.39 |
+
+Three of four replicate; heterogeneity I² = 58%, so the exception is not
+sampling noise. Two candidate explanations were tested and eliminated:
+**genre** (two blocks from the same shoot, same model, disagree) and
+**overall cull rate** (10.0% versus 11.4%, effectively identical,
+opposite results).
+
+A third — that a scene misclassification widened the clustering window
+and diluted the singleton group — is **still open**. The test of it was
+invalid, because it fed CLIP vectors to a function that groups on
+DINOv2. It can be redone now that the right vectors are on disk.
+
+**Not shipped as a rule.** Three-of-four with an unexplained exception is
+a rule that fails when nobody is looking.
 
 ---
 

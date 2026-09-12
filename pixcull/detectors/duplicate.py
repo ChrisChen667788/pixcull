@@ -80,7 +80,33 @@ def cluster_bursts(
             return time_gap_s, sim_thr
         return float(cfg.get("time_gap_s", time_gap_s)), float(cfg.get("sim_thr", sim_thr))
 
-    df = df.sort_values(time_col, na_position="last").reset_index(drop=True)
+    # v3.84 — sort by (time, filename), not time alone.
+    #
+    # EXIF time is second-resolution and a burst is two to ten frames a
+    # second, so ties are the normal case, not an edge. `sort_values` is
+    # stable, so a tie kept whatever order the rows arrived in — and
+    # they arrive from a parallel scoring pass, in completion order.
+    #
+    # Only adjacent rows are compared, and the chain is transitive, so
+    # the row that happens to sit at a tie boundary decides whether two
+    # groups merge. Measured on four real frames at 16:25:12/12/13/13:
+    # of the four possible tie orderings, two produce one cluster and
+    # two produce two. Which one you got depended on which worker
+    # finished first.
+    #
+    # That made `cluster_id` nondeterministic, and since v3.83 it decides
+    # `keep` versus `maybe`, so the same folder could come back with
+    # different verdicts. It is also why the boundary that moved between
+    # runs in v3.83 could not be reproduced: nothing recorded the order.
+    #
+    # The filename is the camera's own shutter counter, which is the
+    # real order the frames were taken in and the only tie-break on the
+    # dataframe that means anything.
+    sort_cols = [time_col]
+    if "filename" in df.columns:
+        sort_cols.append("filename")
+    df = df.sort_values(sort_cols, na_position="last",
+                        kind="mergesort").reset_index(drop=True)
     cids: list[int] = [0]
     for i in range(1, len(df)):
         prev, cur = df.iloc[i - 1], df.iloc[i]

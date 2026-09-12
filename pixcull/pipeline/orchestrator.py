@@ -315,6 +315,76 @@ def _write_clip_cache(df: pd.DataFrame, output: Path) -> int:
         return 0
 
 
+def _write_burst_cache(df: pd.DataFrame, output: Path) -> int:
+    """Write ``output/burst_embeddings.npz`` — the vectors that decided the
+    burst clusters.
+
+    v3.84 — `cluster_id` in `scores.csv` could not be reproduced from
+    anything the run wrote down. `embeddings.npz` holds the CLIP vectors
+    (512-d, for semantic search); `cluster_bursts` groups on the DINOv2
+    vector (768-d, from the duplicate detector), and that one was
+    discarded with the dataframe.
+
+    So the clusters were unauditable, and worse than unauditable: an
+    analysis that reached for `embeddings.npz` got vectors of the wrong
+    model at the wrong dimensionality, and cosine similarity does not
+    complain. It returns plausible numbers. I did exactly that while
+    testing whether a scene misclassification explained a null result,
+    got 44 singletons where the run had 74, and nearly reported the
+    conclusion.
+
+    `is_burst_peak` rests on these clusters, and since v3.83 so does
+    `keep` versus `maybe`. A verdict nothing can recompute is a verdict
+    nothing can check.
+
+    Best-effort, like the CLIP cache: a failure here must not fail a cull
+    that otherwise worked. But unlike that one it is not a by-product —
+    it is the evidence for a decision, so it says so when it is skipped.
+    """
+    if "embedding" not in df.columns:
+        return 0
+    try:
+        import numpy as np
+
+        names, vecs = [], []
+        for fn, emb in zip(df["filename"], df["embedding"], strict=True):
+            if emb is None or not hasattr(emb, "shape"):
+                continue
+            arr = np.asarray(emb, dtype=np.float32).reshape(-1)
+            if arr.size == 0 or not np.isfinite(arr).all():
+                continue
+            names.append(str(fn))
+            vecs.append(arr)
+        if not vecs:
+            return 0
+        if len({v.shape[0] for v in vecs}) != 1:
+            console.print("[yellow]burst cache skipped: ragged vector dims[/]")
+            return 0
+
+        arr = np.stack(vecs, axis=0)
+        # NOT normalised here. `cluster_bursts` computes its own cosine,
+        # and a reproduction has to start from what it started from —
+        # normalising would make the stored vector a different object
+        # from the one that made the decision.
+        cache_path = output / "burst_embeddings.npz"
+        tmp = cache_path.with_suffix(cache_path.suffix + ".tmp")
+        output.mkdir(parents=True, exist_ok=True)
+        with open(tmp, "wb") as fh:
+            np.savez(fh, filenames=np.array(names), vectors=arr,
+                     model=np.array("dinov2-base"),
+                     emb_col=np.array("embedding"))
+        tmp.rename(cache_path)
+        console.print(f"[cyan]Burst cache:[/] {len(names)} vectors "
+                      f"→ {cache_path.name} [dim](what cluster_id was "
+                      f"computed from)[/dim]")
+        return len(names)
+    except Exception as exc:  # noqa: BLE001 — never fail the run for this
+        console.print(f"[yellow]burst cache skipped: {exc}[/] "
+                      "[dim]cluster_id will not be reproducible for this "
+                      "run[/dim]")
+        return 0
+
+
 def _auto_index_library(output: Path) -> None:
     """File this run into the cross-run library index (``/library``).
 
@@ -918,6 +988,7 @@ def run_pipeline(
     # silently skipped runs with no cache — which is every fresh run.
     # Now the cache is a by-product of culling, at zero extra inference.
     _write_clip_cache(df, output)
+    _write_burst_cache(df, output)
 
     # v3.19 — a contracted count, applied to the decisions and to
     # nothing else.
