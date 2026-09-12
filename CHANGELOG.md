@@ -75,6 +75,14 @@ which is the thing that was actually false.
 
 One line each, exactly as the release was titled at the time.
 
+**v3.77** — the demo clip is real footage, and the faces in it are frosted
+
+**v3.80** — the catalogue reader could not read a catalogue
+
+**v3.79** — "no ceiling" was not the same as "unbounded"
+
+**v3.78** — the attribution backend was the wrong shape, not unfinished
+
 **v3.76** — three places the product showed you something that had stopped being true
 
 **v3.75** — four things the product told you it would do

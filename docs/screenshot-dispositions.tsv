@@ -20,13 +20,11 @@
 #
 # filename	disposition	last confirmed	note
 04-ab-compare.png	stale	2026-05-20	Free-pick A/B compare. Not scripted; the lightbox has changed several times since.
-14-marquee-select.png	stale	2026-05-28	Marquee drag-select and the bulk action toolbar it pops up along the bottom.
-15-bias-dashboard.png	stale	2026-05-28	The bias dashboard: per-scene keep rates and where the model leans.
+14-marquee-select.png	stale	2026-05-28	Marquee drag-select and the bulk toolbar it pops up. Scripting it failed in v3.86: the handler returns unless the drag starts in grid empty space, and two attempts at a start point selected nothing. Faking the CSS class would photograph selected-looking cards with no toolbar, which is a picture of the feature rather than the feature.
 16-confidence-modal.png	retired	2026-05-28	Shot when the popover fired on score_final 0.45-0.55. v3.76 made it fire on decision=maybe instead, so this shows a state that can no longer occur.
 17-attribution-heatmap.png	retired	2026-05-28	Captioned as an attribution heatmap overlay plus a 6-axis chip strip. The overlay never existed (v3.75 removed the key that claimed it); the chip strip is not in the current page.
 18-video-review.png	stale	2026-05-29	The video review page: candidate list, transport controls, per-shot scores.
 19-video-grade.png	stale	2026-05-29	The video grade page: LUT picker and before/after on a graded clip.
-20-scenes-navigator.png	stale	2026-06-18	The scenes navigator, naming each stretch of the shoot from what is in it.
 21-verdict-glassbox.png	stale	2026-06-18	The verdict glass box: the six axes and what each contributed to one decision.
 22-transparency-tools.png	stale	2026-06-19	The transparency panel gathering the glass box, attribution and the audit trail.
 23-video-timeline.png	stale	2026-07-30	The video timeline with shot boundaries and audio events marked along it.

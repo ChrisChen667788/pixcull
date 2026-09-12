@@ -150,6 +150,24 @@ TARGETS = [
     (f"/results/{RUN}", (820, 1180),
         [("click", ".card")],
         "13-lightbox-ipad.png", False),
+    # v3.86 — six shots that nothing regenerated. They were taken by
+    # hand between May and July, frozen at whatever the UI looked like
+    # that day, and docs/screenshot-dispositions.tsv had to carry them
+    # as `stale` because no script could re-take them. Scripted now, so
+    # the next UI change re-shoots them with everything else.
+    ("/admin/bias",     (1440, 900), None,                        "15-bias-dashboard.png", False),
+    # `sceneNav` ships `hidden` and is populated from
+    # /api/v1/runs/<id>/scenes when the 🎬 时序场景 toggle goes on, so a
+    # capture that only scrolls to it photographs the grid and captions
+    # it as the navigator — which is how 17 spent four months on the
+    # front page showing a UI that did not exist.
+    (f"/results/{RUN}", (1440, 900),
+        [("evaluate",
+          "[...document.querySelectorAll('button,label,a,span')]"
+          ".filter(e => e.textContent.trim().includes('时序场景'))"
+          ".slice(-1)[0]?.click()"),
+         ("wait", "1200")],
+        "20-scenes-navigator.png", False),
 ]
 
 # Optional: share portfolio page (v0.9-P0-5)
