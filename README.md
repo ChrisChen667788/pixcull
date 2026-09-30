@@ -62,6 +62,20 @@
 
 ## What's new
 
+**v3.88** — The scheduled test run had been red for nine days, on a model
+three nodes long. CI resolves `onnx` and `onnxruntime` independently, and on
+21 September it paired `onnx` 1.23, which writes IR version 14, with
+`onnxruntime` 1.30, which reads up to 13. One test had pinned the IR version
+by hand and its sibling had not. Test models are built in one place now, and
+a test fails any that are built anywhere else.
+
+The same refusal had a shape in the product. The audio tagger counted a model
+as available once the file, its labels and the runtime were present, and never
+asked whether the runtime would open it — so a model exported by a newer
+`onnx` failed in the middle of tagging instead of falling back to the DSP
+detectors. It decides by loading the model now, and says once why it fell
+back.
+
 **v3.87** — The three video screenshots are scripted now, and getting
 them there turned up two things worth more than the pictures.
 
@@ -119,17 +133,6 @@ are written out so the grouping can be checked rather than trusted.
 this demoted them to `maybe`. Reverted two versions later when the labels
 came back — kept here because the reasoning was sound and the assumption
 under it had never been tested.
-
-**v3.82** — A contiguous stretch of one shoot, 149 frames, and the tool kept
-all 149. It had found 28 near-duplicate clusters covering 127 of them and
-marked 99 as not the best frame of their burst — then kept those too.
-
-The decision is made one frame at a time and is final before the tool knows
-which frames were siblings, so the burst ranking arrives thirteen lines too
-late to matter. Whether those frames *should* be culled is a real question
-with two sides, so nothing was changed about what gets kept. What changed is
-that the run says it: a shoot that returns everything no longer reads as a
-shoot where everything was a select.
 
 Earlier releases are in [`CHANGELOG.md`](CHANGELOG.md).
 

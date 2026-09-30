@@ -12,7 +12,8 @@ available offline default.
   (e.g. a YAMNet/PANNs export) when one is present + ``onnxruntime`` is
   installed.  Per-frame class probabilities are mapped to our kinds
   (laughter / applause / music) via a sidecar ``<model>.labels.json``
-  and merged into segments.  Absent model ⇒ ``available() is False``.
+  and merged into segments.  Absent model, or one this ``onnxruntime``
+  cannot load ⇒ ``available() is False``.
 * :func:`get_tagger` returns the learned tagger when usable, else the
   heuristic one — so behaviour is **byte-identical to v2.0 when no model
   is installed** (no regression).
@@ -25,6 +26,7 @@ unit-tested without any model; only ``session.run`` needs a real ONNX.
 from __future__ import annotations
 
 import json
+import logging
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -40,6 +42,11 @@ from pixcull.scoring.audio_events import (
     analyze_audio,
     audio_moment_boost,  # re-exported for callers
 )
+
+logger = logging.getLogger(__name__)
+# Model paths already reported as unloadable, so a broken install warns once
+# per process rather than once per clip.
+_UNLOADABLE_WARNED: set[str] = set()
 
 # Where an optional audio-event model is looked up (first hit wins).
 _MODEL_SEARCH = [
@@ -207,7 +214,8 @@ class OnnxTagger:
     ``model_path`` points to an ONNX whose input is a batch of mono audio
     frames ``[N, frame_samples]`` and output is ``[N, n_classes]`` probs;
     ``<model_path>.labels.json`` lists the class names.  Missing model or
-    ``onnxruntime`` ⇒ :meth:`available` is ``False``.
+    ``onnxruntime``, or a model the installed runtime refuses to load ⇒
+    :meth:`available` is ``False``.
     """
     model_path: str
     name: str = "onnx"
@@ -233,6 +241,20 @@ class OnnxTagger:
         try:
             import onnxruntime  # noqa: F401
         except Exception:
+            return False
+        # A file on disk is not a usable model.  onnxruntime refuses a model
+        # whose IR version is newer than it supports — which is what any
+        # recent `onnx` writes by default — and that refusal used to surface
+        # in the middle of tag() instead of falling back to the DSP tagger.
+        try:
+            _load_session(str(self.model_path))
+        except Exception as exc:
+            if str(self.model_path) not in _UNLOADABLE_WARNED:
+                _UNLOADABLE_WARNED.add(str(self.model_path))
+                logger.warning(
+                    "audio model %s cannot be loaded by this onnxruntime "
+                    "(%s); using the DSP tagger instead",
+                    self.model_path, str(exc).splitlines()[0][:200])
             return False
         return True
 

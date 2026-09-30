@@ -75,6 +75,8 @@ which is the thing that was actually false.
 
 One line each, exactly as the release was titled at the time.
 
+**v3.82** — 149 frames in, 149 keeps out
+
 **v3.81** — nothing the rubric measures separates this owner's keeps from their culls
 
 **v3.77** — the demo clip is real footage, and the faces in it are frosted

@@ -6,10 +6,13 @@ this repo.  Read it before each session.
 
 ## Golden rules
 
-1. **Always `git -C ~/Downloads/zero-basics-python/2/pixcull-restored …`.**
+1. **Always `git -C ~/Downloads/zero-basics-python/2/pixcull …`.**
    The cwd can drift up to the parent `zero-basics-python` course repo
    (a *different* git repo on branch `master`).  Never run bare `git`
    from an ambiguous cwd — always pass `-C <this repo's abspath>`.
+   `pixcull-restored` beside it is a stale 2.75 checkout; only its
+   `pixcull/.venv` is still used (`make` expects `pixcull/.venv` inside
+   this repo, so call that interpreter directly).
 2. **Test gate before every commit:**
    `python -m pytest tests/ --ignore=tests/test_v1_1_scripts.py`
    (must be green; **5 skips expected** — 2 face-fixture + 3 zeroconf).
@@ -586,6 +589,14 @@ sha determinism, cache paths, colour ramp — and not one compared two axes'
 output.  **Plumbing tested, claim not.**  `tests/test_attribution.py` now
 holds the rule, with an explicit exemption for the composition classifier's
 saliency map, which computes a feature rather than explaining a score.
+
+**`onnx` writes an IR version `onnxruntime` may not read** (v3.88).  CI
+resolves both freely, and `helper.make_model` stamps the installed `onnx`'s
+IR — 14 from `onnx` 1.23 against a runtime that reads 13, red for nine days.
+Build test models with `tests._onnx_models.build_model`;
+`tests/test_onnx_test_models.py` fails a bare `make_model` anywhere in
+`tests/`.  The product side: `OnnxTagger.available()` loads the model, since a
+file on disk is not a usable model.
 
 **What CI installs is not what a user installs** (v3.74).  All four lanes
 pinned `torch==2.4.1` — a 2024 release — while `pyproject.toml` allows

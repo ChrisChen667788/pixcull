@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 
 from pixcull.scoring import audio_tagger as T
+from tests._onnx_models import build_model
 
 SR = 16000
 
@@ -156,6 +157,47 @@ def test_onnx_tagger_unavailable_without_model(tmp_path):
     assert tg.tag(_laughter(), SR) == []
 
 
+def _unloadable_model(tmp_path):
+    """A model with labels on disk that no onnxruntime will load — the shape
+    of an audio model exported by an ``onnx`` newer than the runtime."""
+    onnx = pytest.importorskip("onnx")
+    pytest.importorskip("onnxruntime")
+    from onnx import TensorProto, helper
+    g = helper.make_graph(
+        [helper.make_node("Identity", ["x"], ["y"])], "future",
+        [helper.make_tensor_value_info("x", TensorProto.FLOAT, [None])],
+        [helper.make_tensor_value_info("y", TensorProto.FLOAT, [None])])
+    m = build_model(g)
+    m.ir_version = 99
+    mp = tmp_path / "audio_tagger.onnx"
+    onnx.save(m, str(mp))
+    (tmp_path / "audio_tagger.onnx.labels.json").write_text(
+        json.dumps(["speech", "laughter", "music"]))
+    return mp
+
+
+def test_unloadable_model_is_not_available(tmp_path, caplog):
+    """v3.88 — a file on disk is not a usable model.  ``available()`` used to
+    say yes on file + labels + importable runtime, so the refusal surfaced
+    inside ``tag()`` as an exception instead of a DSP fallback."""
+    mp = _unloadable_model(tmp_path)
+    tg = T.OnnxTagger(model_path=str(mp))
+    with caplog.at_level("WARNING", logger=T.__name__):
+        assert tg.available() is False
+        assert tg.available() is False
+    assert tg.tag(_laughter(), SR) == []
+    warned = [r for r in caplog.records if "cannot be loaded" in r.getMessage()]
+    assert len(warned) == 1, "a broken install warns once, not per clip"
+
+
+def test_get_tagger_skips_an_unloadable_model(tmp_path, monkeypatch):
+    mp = _unloadable_model(tmp_path)
+    monkeypatch.setattr(T, "find_model", lambda: str(mp))
+    assert isinstance(T.get_tagger(), T.HeuristicTagger)
+    evs = T.tag_audio(_laughter(), SR)
+    assert any(e.kind == "laughter" for e in evs)
+
+
 def test_get_tagger_falls_back_to_heuristic(monkeypatch):
     # No model on the search path ⇒ heuristic.
     monkeypatch.setattr(T, "find_model", lambda: None)
@@ -199,8 +241,7 @@ def test_onnx_tagger_end_to_end(tmp_path):
         [helper.make_tensor_value_info("X", TensorProto.FLOAT, ["N", frame_len])],
         [helper.make_tensor_value_info("Y", TensorProto.FLOAT, ["N", 3])],
         initializer=[W, B])
-    model = helper.make_model(graph, opset_imports=[helper.make_opsetid("", 13)])
-    model.ir_version = 9
+    model = build_model(graph)
     mp = tmp_path / "audio_tagger.onnx"
     onnx.save(model, str(mp))
     (tmp_path / "audio_tagger.onnx.labels.json").write_text(
