@@ -166,3 +166,39 @@ def test_a_title_cannot_inject_markup():
 def test_a_webhook_is_optional_and_absent_when_unset():
     html = render_gallery(build_items(_rows("a.jpg")), title="T")
     assert 'WEBHOOK = ""' in html
+
+
+# -------------------------------------------------------- watermark fonts
+
+
+def test_every_cjk_font_is_tried_before_any_latin_only_font(monkeypatch):
+    """PR #4 review — Pillow opens a missing Windows path by *name*: a Mac
+    loads "C:/Windows/Fonts/arial.ttf" happily as Arial, which carries zero
+    CJK glyphs.  With Latin-only fallbacks placed early in the lookup the
+    loop stopped there and every Chinese watermark downstream rendered
+    tofu.  The rule this pins is positional and permanent: no Latin-only
+    font may ever be attempted before a CJK-capable one."""
+    from pixcull.export import proof_sheet
+    import PIL.ImageFont as ImageFont
+
+    tried: list[str] = []
+
+    def _never(path, size, *a, **k):
+        tried.append(path)
+        raise OSError(path)
+
+    monkeypatch.setattr(ImageFont, "truetype", _never)
+    proof_sheet._watermark_font(20)
+
+    latin_only = {"C:/Windows/Fonts/arial.ttf",
+                  "/System/Library/Fonts/Supplemental/Arial.ttf",
+                  "/System/Library/Fonts/Helvetica.ttc",
+                  "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"}
+    assert tried, "the lookup never reached ImageFont.truetype"
+    cjk_tried_first = False
+    for path in tried:
+        if path in latin_only:
+            assert cjk_tried_first, f"Latin-only {path!r} tried before any CJK font"
+        else:
+            cjk_tried_first = True
+    assert cjk_tried_first, "no CJK-capable font in the lookup at all"
