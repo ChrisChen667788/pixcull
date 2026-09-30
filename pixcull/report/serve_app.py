@@ -10006,11 +10006,25 @@ class _Handler(BaseHTTPRequestHandler):
         except OSError as exc:
             _dbg("browse/iterdir", exc, str(target))
 
+        # Windows has no "/Volumes" and no useful "~"-only escape hatch:
+        # the picker's quick links above the listing are POSIX-centric, so
+        # a Windows user who starts in their home folder cannot reach
+        # another drive at all. Report the drive letters that actually
+        # exist and let the client render them. Empty on POSIX, where the
+        # static links already cover the places people go.
+        roots = []
+        if os.name == "nt":
+            for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
+                root = f"{letter}:/"
+                if os.path.isdir(root):
+                    roots.append({"label": f"{letter}:", "path": root})
+
         body = json.dumps({
             "path": str(target),
             "parent": str(target.parent) if target.parent != target else None,
             "n_images_here": n_imgs_here,
             "entries": entries,
+            "roots": roots,
         }, ensure_ascii=False).encode("utf-8")
         self._send_json(200, body)
 
