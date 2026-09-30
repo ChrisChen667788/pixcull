@@ -251,23 +251,41 @@ def _watermark_font(px: int):
 
     PIL's default bitmap font is about 11px. Tiled across a 1024px proof
     it produced marks a client could see and not read, which is not a
-    watermark — it is texture. Sized to the image, with the plain default
-    as the last resort so a machine with no fonts still exports.
+    watermark — it is texture. Sized to the image, and looked up on the
+    system **first**: the bundled default carries no CJK glyphs, so a
+    Chinese/Japanese/Korean title rendered through it came out as tofu
+    boxes. The bundled default is kept as the last resort so a machine
+    with no fonts still exports.
+
+    (Bug: this function used to return ``ImageFont.load_default()`` on
+    its first line, which made the whole system-font loop below dead code
+    — every CJK watermark was tofu. The Windows path was missing too.)
     """
     from PIL import ImageFont
-    try:
-        return ImageFont.load_default(size=px)
-    except TypeError:
-        pass
-    for path in ("/System/Library/Fonts/Supplemental/Arial.ttf",
+    # CJK-capable system fonts first, then the plain Latin ones. Paths for
+    # Windows / macOS / Linux, most likely first on a photo-editing box.
+    for path in ("C:/Windows/Fonts/msyh.ttc",                     # 微软雅黑
+                 "C:/Windows/Fonts/msyhbd.ttc",                   # 微软雅黑 Bold
+                 "C:/Windows/Fonts/simhei.ttf",                   # 黑体
+                 "C:/Windows/Fonts/simsun.ttc",                   # 宋体
+                 "C:/Windows/Fonts/arial.ttf",
+                 "/System/Library/Fonts/PingFang.ttc",            # 苹方
+                 "/System/Library/Fonts/Hiragino Sans GB.ttc",
+                 "/System/Library/Fonts/Supplemental/Arial.ttf",
                  "/System/Library/Fonts/Helvetica.ttc",
+                 "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+                 "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+                 "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
                  "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"):
         try:
             return ImageFont.truetype(path, px)
         except Exception:  # noqa: BLE001
             continue
-    from PIL import ImageFont as _IF
-    return _IF.load_default()
+    try:
+        return ImageFont.load_default(size=px)
+    except TypeError:
+        pass
+    return ImageFont.load_default()
 
 
 def _burn_index(im, ImageDraw, n: int) -> None:
