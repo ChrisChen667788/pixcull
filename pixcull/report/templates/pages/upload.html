@@ -790,7 +790,10 @@
               <a data-go="~/Pictures">Pictures</a>
               <a data-go="~/Desktop">Desktop</a>
               <a data-go="~/Downloads">Downloads</a>
-              <a data-go="/Volumes">Volumes</a>
+              <a data-go="/Volumes" id="quickVolumes">Volumes</a>
+              <!-- Windows drive letters come from /browse's "roots"
+                   (POSIX has no drive letters, so this stays empty). -->
+              <span id="browserRoots"></span>
             </span>
             <span class="close" id="browserClose" title="关闭 (Esc)">×</span>
           </div>
@@ -1489,6 +1492,29 @@
   const browserHereCount = document.getElementById("browserHereCount");
   let browserCurrent = "";
 
+  // Windows: offer the drive letters the server actually found, and drop
+  // the macOS-only "Volumes" shortcut. On POSIX `roots` is empty and the
+  // static quick links stand unchanged.
+  let rootsPainted = false;
+  function paintRoots(data) {
+    const box = document.getElementById("browserRoots");
+    const vols = document.getElementById("quickVolumes");
+    const roots = (data && data.roots) || [];
+    if (!box) return;
+    if (!roots.length) {
+      if (vols) vols.style.display = "";
+      return;
+    }
+    if (vols) vols.style.display = "none";
+    if (rootsPainted) return;
+    rootsPainted = true;
+    box.innerHTML = roots.map(r =>
+      `<a data-go="${r.path}">${r.label}</a>`).join("");
+    box.querySelectorAll("a").forEach(a => {
+      a.addEventListener("click", () => loadBrowser(a.dataset.go));
+    });
+  }
+
   async function loadBrowser(path) {
     browserBody.textContent = "加载中…";
     try {
@@ -1504,6 +1530,7 @@
       }
       browserCurrent = data.path;
       browserPath.textContent = data.path;
+      paintRoots(data);
       browserHereCount.textContent =
         data.n_images_here ? `当前层 ${data.n_images_here} 张` : "(当前层无图)";
       const rows = [];
