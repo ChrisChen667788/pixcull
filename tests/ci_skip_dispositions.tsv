@@ -29,3 +29,4 @@ smoke fixture missing	deliberate	Guards against a half-deleted fixture tree rath
 not defined in	deliberate	A theme token that a given theme legitimately does not define.
 shot detection extra not installed	covered-elsewhere	README claim 17. The test is marked slow, so it was deselected rather than skipped and never reached this ledger at all; v3.61 added a lane that runs -m slow and installs pixcull[shots].
 not compiled into this ffmpeg	deliberate	A codec the runner's ffmpeg build lacks. The test asserts the fallback, which is the part that matters.
+CLIP is not in the local hub cache	covered-elsewhere	The socket-level offline test needs CLIP already on disk. The weekly real-model lane downloads it and then runs this test by name; tests/test_runs_without_network.py fails if the lane stops doing so.

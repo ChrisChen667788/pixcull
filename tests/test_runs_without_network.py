@@ -126,6 +126,53 @@ def test_a_model_that_is_genuinely_absent_reports_the_network_error():
     assert "not in the local cache" in str(err.value.__cause__)
 
 
+def test_an_explicit_network_allowed_does_not_collide():
+    """``local_files_only=False`` plus the wrapper's own ``True`` was a
+    TypeError, caught as a cache miss; offline it surfaced as a network
+    error caused by a TypeError."""
+    from pixcull.model_assets import from_pretrained
+    fake = _Recorder(on_disk=True, network=True)
+    assert from_pretrained(fake, "m", local_files_only=False) == "from disk"
+    assert fake.calls == [True]
+
+
+@pytest.mark.parametrize("exc", [MemoryError("out of memory loading weights"),
+                                 TypeError("unexpected keyword")])
+def test_a_load_failure_that_is_not_a_miss_is_not_retried_online(exc):
+    """The model is on disk and could not be loaded. Going to the network
+    cannot fix that, and with no network it would be reported as one."""
+    from pixcull.model_assets import from_pretrained
+    calls = []
+
+    class OnDiskButUnloadable:
+        @staticmethod
+        def from_pretrained(name, **kw):
+            calls.append(bool(kw.get("local_files_only")))
+            if kw.get("local_files_only"):
+                raise exc
+            raise OSError("could not reach the hub")
+
+    with pytest.raises(type(exc)):
+        from_pretrained(OnDiskButUnloadable, "some/model")
+    assert calls == [True], "the network was asked about a local failure"
+
+
+#: The effect test below needs CLIP on disk, which the hermetic CI run does
+#: not have. Naming it "covered elsewhere" is only true if somewhere runs it.
+EFFECT_TEST = ("tests/test_runs_without_network.py::"
+               "test_loading_a_cached_model_opens_no_socket")
+
+
+def test_the_real_model_lane_runs_the_effect_test():
+    workflow = (ROOT / ".github" / "workflows" / "tests.yml").read_text("utf-8")
+    lane = workflow[workflow.index("real-model integration"):]
+    assert EFFECT_TEST in lane, (
+        "the socket-level offline test skips without cached CLIP; the weekly "
+        "real-model lane downloads CLIP and must run it by name")
+    assert lane.index("test_build_search_real_clip_end_to_end") \
+        < lane.index(EFFECT_TEST), "it must run after CLIP has been downloaded"
+
+
 @pytest.mark.skipif(not is_cached(CLIP), reason="CLIP is not in the local "
                     "hub cache on this machine")
 def test_loading_a_cached_model_opens_no_socket(monkeypatch):

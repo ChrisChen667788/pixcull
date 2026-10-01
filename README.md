@@ -1039,11 +1039,13 @@ disclosure policy. TL;DR: trusted local user, untrusted image input
 straight to DeepSeek with *your* token (we never proxy).
 
 **Working without a network.** The models download once, on first use,
-into the usual caches. After that, a run with no MiniMax key (or with
-`--vlm-mode off`) opens no network connection. Since v3.89 a cached model is
+into the usual caches. After that, `pixcull run` with no MiniMax key (or
+with `--vlm-mode off`) opens no network connection. Since v3.89 a cached model is
 read from disk before the hub is asked; measured on 32 photos with the socket
 layer blocked, loopback included, the run made no connection attempt where it
 had made 48. A test holds the model-loading half of that the same way.
+The one exception is a paid licence, which checks in at most once a day with
+its token and nothing else; with no licence installed that check is skipped.
 To prepare a machine that will be offline from the start, run it once where
 there is a network, or copy `~/.cache/huggingface/hub` across.
 
@@ -1578,10 +1580,11 @@ TL;DR:可信本地用户,不可信图像输入 (Pillow 钉在 ≥ 10.2);无遥
 测;可选的 DeepSeek 调用走的是 *你的* token,我们绝不代理转发。
 
 **断网使用。** 模型在第一次用到时下载一次,放进常规缓存。之后,没有配置
-MiniMax key(或加了 `--vlm-mode off`)的运行不会打开任何网络连接。从 v3.89
+MiniMax key(或加了 `--vlm-mode off`)的 `pixcull run` 不会打开任何网络连接。从 v3.89
 起,已缓存的模型先从本地读取,不再先去问 Hub;把 socket 层连同本机回环一起堵上
 跑 32 张照片,联网尝试从 48 次降到 0 次。模型加载这一半由一道同样堵住 socket
-的测试守着。要给一台从一开始
+的测试守着。唯一的例外是付费 license:它每天最多联网核对一次,只带 token,
+不带别的;没装 license 时这一步直接跳过。要给一台从一开始
 就离线的机器做准备,先在有网的地方跑一次,或者把 `~/.cache/huggingface/hub`
 拷过去。
 

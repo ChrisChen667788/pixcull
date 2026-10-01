@@ -364,3 +364,7 @@ jobs:
           # nothing else was running it; saying "covered elsewhere" in
           # the ledger is only true if somewhere covers it.
           pytest -q -m slow tests/test_e2e_smoke.py
+          # v3.89 — with CLIP now on disk, loading it must open no socket.
+          # Skips in the hermetic run for want of the weights; this is the
+          # lane the skip ledger points at.
+          pytest -q tests/test_runs_without_network.py::test_loading_a_cached_model_opens_no_socket

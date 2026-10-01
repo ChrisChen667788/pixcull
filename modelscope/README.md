@@ -476,6 +476,13 @@ python scripts/serve_demo.py
 把一个 JPG / RAW / HEIC 的文件夹拖到上传页;
 首次约 30 秒预热模型 (Apple Silicon),之后每张 ~1 秒 (M2 Pro 实测)。
 
+**断网使用。** 模型在第一次用到时下载一次。之后,没有配置 MiniMax key(或加了
+`--vlm-mode off`)的 `pixcull run` 不会打开任何网络连接:从 v3.89 起,已缓存的
+模型先从本地读取,不再先去问 Hub。把 socket 层连同本机回环一起堵上跑 32 张
+照片,联网尝试从 48 次降到 0 次。唯一的例外是付费 license,每天最多联网核对
+一次,只带 token。要给一台从一开始就离线的机器做准备,先在有网的地方跑一次,
+或者把 `~/.cache/huggingface/hub` 拷过去。
+
 ## 在线体验
 
 ModelScope Studio 在线 demo(v2.8 · 编辑暖 OKLCH 配色),不必先安装即可:

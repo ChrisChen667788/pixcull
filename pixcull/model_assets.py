@@ -48,6 +48,13 @@ def resolve(path: Path | str | None) -> Path | None:
 # produced no `model_<axis>_stars`. Resolve one file at a time.
 
 
+#: Failures of the local load that say nothing about whether the model is
+#: cached. Deliberately a short deny-list rather than an allow-list of
+#: cache-miss types: a first run on a cold cache must reach the network
+#: whatever shape `transformers` gives the miss in a given version.
+_NOT_A_CACHE_MISS = (MemoryError, TypeError)
+
+
 def from_pretrained(cls, name: str, **kwargs):
     """``cls.from_pretrained(name)``, reading the copy on disk first.
 
@@ -86,8 +93,16 @@ def from_pretrained(cls, name: str, **kwargs):
     os.environ.setdefault("DISABLE_SAFETENSORS_CONVERSION", "1")
     if kwargs.get("local_files_only"):
         return cls.from_pretrained(name, **kwargs)
+    # An explicit ``local_files_only=False`` would collide with the one
+    # passed below, raise TypeError, and be caught as a cache miss.
+    kwargs = {k: v for k, v in kwargs.items() if k != "local_files_only"}
     try:
         return cls.from_pretrained(name, local_files_only=True, **kwargs)
+    except _NOT_A_CACHE_MISS:
+        # The model is on disk and loading it failed for a reason the
+        # network cannot fix. Retrying online would, with no network,
+        # report "could not reach the hub" for a machine out of memory.
+        raise
     except Exception as not_on_disk:    # noqa: BLE001 — any cache-miss shape
         try:
             return cls.from_pretrained(name, **kwargs)
