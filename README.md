@@ -62,6 +62,20 @@
 
 ## What's new
 
+**v3.90** — A run that had already died was reported as still running.
+When every frame failed for one reason — 23 connect timeouts, in issue #3 —
+the reasons went to the terminal and were kept nowhere, the pipeline returned
+normally with nothing analysed, the server recorded that as done, and the
+results page answered `425 results not ready — pipeline may still be
+running. Refresh in a few seconds.` It had finished two minutes earlier, and
+refreshing could never have helped.
+
+The reasons are kept now, grouped by kind and written beside the run. A run
+that produces nothing is recorded as failed, with the most common cause in
+the message the upload page already shows. And 425 is answered only while the
+analysis is actually running — on all eleven routes that used to send it,
+which now ask one function instead of each deciding alone.
+
 **v3.89** — With every model already on disk, an offline run still asked
 the network first and waited to be refused: 48 connection attempts on 32
 photos, one per model load in each worker. Where a network drops packets
@@ -129,19 +143,6 @@ review to catch thirteen. The ranking stays and is reported; what is gone
 is letting it reach the verdict. A test fails any function that reads
 `is_burst_peak` and writes a `decision`, under any name, and records what
 new evidence would justify a second attempt.
-
-**v3.84** — The same folder came back with different verdicts:
-`Keep=97 Maybe=53`, then `Keep=95 Maybe=55`, no code change between. EXIF
-time is second-resolution and a burst is several frames a second, so tied
-timestamps are normal; ties kept the parallel pass's completion order,
-and since only adjacent rows are compared the row at a tie boundary
-decided whether two groups merged.
-
-The vectors that decided it were not on disk either — `embeddings.npz`
-holds CLIP at 512 dimensions for semantic search, while clustering groups
-on DINOv2 at 768. Feeding one to the other returns plausible numbers with
-no error. Both fixed: tie-break on the filename, and the burst vectors
-are written out so the grouping can be checked rather than trusted.
 
 Earlier releases are in [`CHANGELOG.md`](CHANGELOG.md).
 

@@ -161,6 +161,35 @@ def _worker_init() -> None:
     _ = _detectors()
 
 
+#: Key marking a worker result as "this frame failed, and here is why".
+#: v3.90 — a failed frame used to come back as ``None``, the same value as a
+#: frame the cache legitimately has nothing for, with the reason printed to
+#: stderr and kept nowhere. A run where every frame failed for one cause
+#: (issue #3: 23 connect timeouts) then looked exactly like an empty folder.
+_FAILED = "__pixcull_failed__"
+
+
+def _failure(path_str: str, exc: BaseException) -> dict:
+    return {_FAILED: True, "path": path_str,
+            "error": f"{type(exc).__name__}: {exc}"}
+
+
+def _route(r: dict | None, out: list[dict],
+           failures: list[dict] | None) -> dict | None:
+    """Put one worker result where it belongs and return the row, if it is
+    one. Both the pool path and the serial path go through this — the
+    most-repeated defect in this repository is a capability wired into one
+    of the two and not the other."""
+    if r is None:
+        return None
+    if r.get(_FAILED):
+        if failures is not None:
+            failures.append({"path": r["path"], "error": r["error"]})
+        return None
+    out.append(r)
+    return r
+
+
 def _analyze_path(path_str: str) -> dict | None:
     """Worker-side wrapper. Takes a string instead of a Path because
     string is the safest pickle-roundtrip type (a Path subclass like
@@ -176,11 +205,10 @@ def _analyze_path(path_str: str) -> dict | None:
         return analyze_one_cached(Path(path_str), analyze_one)
     except Exception as exc:  # noqa: BLE001
         # Match the serial worker's exception-tolerance: skip the bad
-        # frame, keep the pool alive. The orchestrator currently
-        # checks ``if r:`` so None is the right signal.
+        # frame, keep the pool alive — and say why, so the caller can.
         print(f"[parallel] {path_str}: {type(exc).__name__}: {exc}",
               file=sys.stderr)
-        return None
+        return _failure(path_str, exc)
 
 
 def parallel_analyze(
@@ -189,6 +217,7 @@ def parallel_analyze(
     workers: int | None = None,
     progress_cb: Callable[[int, int, str], None] | None = None,
     desc: str = "analyzing",
+    failures: list[dict] | None = None,
 ) -> list[dict]:
     """Run ``analyze_one`` over ``paths`` in a worker pool.
 
@@ -196,6 +225,10 @@ def parallel_analyze(
     minus the None entries (corrupt / unloadable images). Order is
     NOT preserved — callers needing deterministic order should sort
     by ``filename`` (or some stable key) after the call.
+
+    ``failures``, when given, receives one ``{"path", "error"}`` per frame
+    whose analysis raised, so the caller can say why a run came back short
+    instead of only that it did.
 
     Falls back to serial execution when ``workers == 1`` so test
     fixtures and tiny batches don't pay the pool-startup cost.
@@ -215,9 +248,7 @@ def parallel_analyze(
         out: list[dict] = []
         # Serial fallback goes through the same wrapper as the pool.
         for i, ps in enumerate(path_strs, start=1):
-            r = _analyze_one_safe(ps, analyze_one)
-            if r is not None:
-                out.append(r)
+            _route(_analyze_one_safe(ps, analyze_one), out, failures)
             if progress_cb is not None:
                 progress_cb(i, n, f"{desc} {i}/{n}: {Path(ps).name}")
         return out
@@ -237,12 +268,9 @@ def parallel_analyze(
         # but matters only for sub-100ms tasks.
         for r in pool.imap_unordered(_analyze_path, path_strs, chunksize=1):
             done += 1
-            if r is not None:
-                out_records.append(r)
+            row = _route(r, out_records, failures)
             if progress_cb is not None:
-                fn = ""
-                if r is not None:
-                    fn = r.get("filename", "")
+                fn = row.get("filename", "") if row is not None else ""
                 progress_cb(done, n, f"{desc} {done}/{n}: {fn}")
     elapsed = time.time() - t0
     rate = n / elapsed if elapsed > 0 else 0
@@ -265,7 +293,7 @@ def _analyze_one_safe(path_str: str, analyze_one) -> dict | None:
     except Exception as exc:  # noqa: BLE001
         print(f"[serial] {path_str}: {type(exc).__name__}: {exc}",
               file=sys.stderr)
-        return None
+        return _failure(path_str, exc)
 
 
 __all__ = ["parallel_analyze", "_default_workers"]

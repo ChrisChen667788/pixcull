@@ -1591,6 +1591,20 @@ def _analyze_in_background(
             meta_mode=meta_mode,
             vertical=run.get("vertical"),
         )
+        # v3.90 — returning is not succeeding. run_pipeline returns normally
+        # when no frame could be analysed, and this used to record that as
+        # "done / 完成": the upload page then linked to results that did not
+        # exist, and the results route answered 425 "still running".
+        if not (output_dir / "scores.csv").is_file():
+            from pixcull.pipeline.run_failures import (
+                no_results_message, read_failure_summary)
+            _set_run(
+                run_id,
+                state="error",
+                finished_at=time.time(),
+                message=no_results_message(read_failure_summary(output_dir)),
+            )
+            return
         _set_run(
             run_id,
             state="done",
@@ -3184,6 +3198,50 @@ def _enumerate_runs() -> list[dict]:
     return out
 
 
+def _no_results_status(run_id: str) -> tuple[int, str]:
+    """The status and message for "this run exists and has no results".
+
+    v3.90 — every route that needs a run's results used to answer 425
+    "results not ready" whenever ``scores.csv`` was missing. That is true
+    only while this process is running the analysis. For a run that has
+    already died (issue #3) or was left behind by a restart it is advice
+    that can never work, on every route at once — so the decision lives
+    here, and ``tests/test_dead_run_is_legible.py`` fails a route that
+    answers 425 on its own.
+    """
+    live = _get_run(run_id) or {}
+    if live.get("state") in ("queued", "running"):
+        return (425, "results not ready — the analysis is still running. "
+                     "Refresh in a few seconds.")
+    run = live or _reload_run_from_disk(run_id) or {}
+    return (500, _why_no_results(run, live))
+
+
+def _why_no_results(run: dict, live: dict) -> str:
+    """Say why a run that is not running has nothing to show.
+
+    Three cases, in the order they can be told apart: the pipeline recorded
+    why frames failed; the pipeline thread recorded an error; neither — a
+    run directory from before a restart, whose analysis this process never
+    saw finish.
+    """
+    from pixcull.pipeline.run_failures import (
+        no_results_message, read_failure_summary)
+    summary = None
+    if run.get("output_dir"):
+        summary = read_failure_summary(Path(run["output_dir"]))
+    if summary is not None:
+        return no_results_message(summary)
+    if live.get("state") == "error" and live.get("message"):
+        return str(live["message"])
+    if live.get("state"):
+        return ("this run finished without producing results — "
+                "no analysable images were found in the folder.")
+    return ("this run has no results and is not running — the analysis "
+            "did not finish (the server may have been restarted). "
+            "Run it again.")
+
+
 def _reload_run_from_disk(run_id: str) -> dict | None:
     """Reconstruct minimal run metadata when a thumbnail is requested
     after a server restart. Reads ``output/manifest.json`` if present
@@ -4035,7 +4093,7 @@ class _Handler(BaseHTTPRequestHandler):
             run = _get_run(run_id) or _reload_run_from_disk(run_id)
             if run is None:
                 self.send_error(404, "no such run"); return True
-            self.send_error(425, "results not ready"); return True
+            self.send_error(*_no_results_status(run_id)); return True
         rows, _summary = result
 
         from urllib.parse import parse_qs
@@ -4583,7 +4641,7 @@ class _Handler(BaseHTTPRequestHandler):
             run = _get_run(run_id) or _reload_run_from_disk(run_id)
             if run is None:
                 self.send_error(404, "no such run"); return True
-            self.send_error(425, "results not ready"); return True
+            self.send_error(*_no_results_status(run_id)); return True
         rows, _ = result
         fn = unquote(filename)
         target = next((r for r in rows if r.get("filename") == fn), None)
@@ -4841,7 +4899,7 @@ class _Handler(BaseHTTPRequestHandler):
             return True
         result = _build_results(run_id)
         if result is None:
-            self._reject_upload(425, "results not ready"); return True
+            self._reject_upload(*_no_results_status(run_id)); return True
         rows, _summary = result
 
         rating_to_decision = {
@@ -5402,7 +5460,7 @@ class _Handler(BaseHTTPRequestHandler):
             run = _get_run(run_id) or _reload_run_from_disk(run_id)
             if run is None:
                 self.send_error(404, "no such run"); return True
-            self.send_error(425, "results not ready"); return True
+            self.send_error(*_no_results_status(run_id)); return True
         rows, _ = result
         fn = unquote(filename)
         match = next((r for r in rows if r.get("filename") == fn), None)
@@ -10096,12 +10154,9 @@ class _Handler(BaseHTTPRequestHandler):
                     "no such run — run_id may be wrong or expired",
                 )
                 return
-            # Run exists but no scores.csv yet — pipeline still running
-            self.send_error(
-                425,  # Too Early — semantically correct for "not done yet"
-                "results not ready — pipeline may still be running. "
-                "Refresh in a few seconds.",
-            )
+            # Run exists but there is no scores.csv: still running, or
+            # finished with nothing — _no_results_status tells them apart.
+            self.send_error(*_no_results_status(run_id))
             return
         rows, summary = result
         # V22.1 — assemble per-cluster summary + per-run labels for the
@@ -10215,7 +10270,7 @@ class _Handler(BaseHTTPRequestHandler):
             if run is None:
                 self.send_error(404, "no such run")
                 return
-            self.send_error(425, "results not ready — pipeline still running")
+            self.send_error(*_no_results_status(run_id))
             return
         rows, summary = result
         decisions: dict[str, str] = {}
@@ -10265,7 +10320,7 @@ class _Handler(BaseHTTPRequestHandler):
             if run is None:
                 self.send_error(404, "no such run")
                 return
-            self.send_error(425, "results not ready")
+            self.send_error(*_no_results_status(run_id))
             return
         rows, _summary = result
         info = _build_locations_info(rows, run_id)
@@ -10632,7 +10687,7 @@ class _Handler(BaseHTTPRequestHandler):
             return
         result = _build_results(run_id)
         if result is None:
-            self.send_error(425, "results not ready")
+            self.send_error(*_no_results_status(run_id))
             return
         rows, _summary = result
         n = int(self.headers.get("Content-Length") or "0")
@@ -10765,7 +10820,7 @@ class _Handler(BaseHTTPRequestHandler):
             if run is None:
                 self.send_error(404, "no such run")
                 return
-            self.send_error(425, "results not ready")
+            self.send_error(*_no_results_status(run_id))
             return
         rows, _summary = result
         info = _build_face_clusters_info(run_id, rows)
@@ -11418,7 +11473,7 @@ class _Handler(BaseHTTPRequestHandler):
             if run is None:
                 self.send_error(404, "no such run")
                 return
-            self.send_error(425, "results not ready")
+            self.send_error(*_no_results_status(run_id))
             return
         rows, _summary = result
 
@@ -13676,7 +13731,7 @@ class _Handler(BaseHTTPRequestHandler):
 
         result = _build_results(run_id)
         if result is None:
-            self.send_error(425, "results not ready")
+            self.send_error(*_no_results_status(run_id))
             return
         rows, _summary = result
 

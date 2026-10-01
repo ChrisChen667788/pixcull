@@ -23,6 +23,11 @@ from pixcull.pipeline.burst_peak import (
 from pixcull.pipeline.face_clustering import cluster_faces_across_rows
 from pixcull.pipeline.location_clustering import cluster_locations_across_rows
 from pixcull.pipeline.parallel import parallel_analyze
+from pixcull.pipeline.run_failures import (
+    no_results_message,
+    summarize_failures,
+    write_failure_summary,
+)
 from pixcull.pipeline.worker import analyze_one
 from pixcull.scoring.decision import Decision, decide
 from pixcull.scoring.fusion import fuse_score
@@ -578,15 +583,25 @@ def run_pipeline(
     # min(4, cpu-1); override with PIXCULL_WORKERS env var. On a 10-core
     # M1 Max this brings a 1000-image batch from ~33 min serial to
     # ~8 min with 4 workers.
+    failures: list[dict] = []
     records = parallel_analyze(
-        paths, progress_cb=progress_cb, desc="分析中",
+        paths, progress_cb=progress_cb, desc="分析中", failures=failures,
     )
+    failure_summary = summarize_failures(failures, total=total,
+                                         analyzed=len(records))
+    write_failure_summary(output, failure_summary)
     # Tqdm progress in CLI mode (parallel_analyze prints its own
     # one-line summary on completion; tqdm is purely for the bar UX
     # in the serial code path. We leave a single-line completion
     # message here so CLI users still get a "done" signal.)
     if total > 0:
         console.print(f"[cyan]Analyzed {len(records)}/{total} images[/]")
+    if failure_summary is not None:
+        top = failure_summary["errors"][0]
+        console.print(
+            f"[yellow]{failure_summary['failed']} of {total} could not be "
+            f"analysed. Most common cause ({top['count']}×): "
+            f"{top['error']}[/]")
     # Apply scene_override after the parallel pass — single-process
     # mutation, no race.
     if scene_override:
@@ -617,7 +632,7 @@ def run_pipeline(
     if df.empty:
         console.print("[red]No analyzable images.[/]")
         if progress_cb is not None:
-            progress_cb(total, total, "没有可分析的图片")
+            progress_cb(total, total, no_results_message(failure_summary))
         return output
 
     if progress_cb is not None:

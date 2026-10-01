@@ -596,6 +596,16 @@ output.  **Plumbing tested, claim not.**  `tests/test_attribution.py` now
 holds the rule, with an explicit exemption for the composition classifier's
 saliency map, which computes a feature rather than explaining a score.
 
+**425 means the analysis is running, and nothing else** (v3.90, issue #3).
+`run_pipeline` returns normally when no frame could be analysed, so "it
+returned" is not "it worked": `_analyze_in_background` records `error` when
+there is no `scores.csv`, and every route that needs results asks
+`_no_results_status(run_id)` — eleven of them used to send their own 425.
+Per-frame failures are collected by `parallel_analyze(failures=…)` on both
+the pool and the serial path and summarised into
+`<run>/analysis_failures.json` (`pixcull/pipeline/run_failures.py`), which a
+later successful run into the same directory removes.
+
 **A cached model is read from disk before the hub is asked** (v3.89, issue
 #3).  v3.64 went online first and fell back to the disk, so an offline run
 worked and paid one connection attempt per model load per worker — 48 on 32
