@@ -95,6 +95,13 @@ def test_both_paths_route_through_the_same_function():
 
     assert len(calls(fns["parallel_analyze"], "_route")) == 2, (
         "the serial loop and the pool loop must each route their result")
+    # Two calls could be satisfied by a dummy beside a loop that appends
+    # for itself, so: nothing in parallel_analyze appends. Rows and
+    # failures reach their lists through _route and no other way.
+    appends = [c.lineno for c in ast.walk(fns["parallel_analyze"])
+               if isinstance(c, ast.Call) and isinstance(c.func, ast.Attribute)
+               and c.func.attr in ("append", "extend")]
+    assert not appends, f"parallel_analyze fills a list itself: {appends}"
     for wrapper in ("_analyze_path", "_analyze_one_safe"):
         handlers = [h for h in ast.walk(fns[wrapper])
                     if isinstance(h, ast.ExceptHandler)]
@@ -276,26 +283,74 @@ def test_a_run_left_by_a_restart_is_not_too_early(monkeypatch, SA, tmp_path):
     assert code == 500 and "not running" in msg
 
 
-def test_no_route_answers_too_early_on_its_own():
-    """Ten routes each sent 425 whenever results were missing. One function
-    decides now; a route that brings back its own literal is the defect
-    returning for that route alone."""
-    tree = ast.parse(SERVE_APP.read_text("utf-8"))
-    offenders = []
+#: A 425 that is not about a run's results. Semantic search answers it when
+#: there are no reachable photographs to build an embeddings cache from —
+#: a different precondition, untouched by v3.90. Listed by message so that
+#: adding a third needs a line here and a reason.
+OTHER_425 = ("no reachable photos to build embeddings cache",)
+
+
+def _literal_425_calls(tree: ast.AST) -> list[tuple[str, int, list]]:
+    """Every call, by any method, that passes a literal 425 — outside the
+    one function allowed to decide."""
+    found = []
     for fn in ast.walk(tree):
         if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
         if fn.name == "_no_results_status":
             continue
         for c in ast.walk(fn):
-            if not (isinstance(c, ast.Call) and isinstance(c.func, ast.Attribute)
-                    and c.func.attr in ("send_error", "_reject_upload")):
+            if not isinstance(c, ast.Call):
                 continue
             consts = [a.value for a in c.args if isinstance(a, ast.Constant)]
-            if 425 in consts and any(
-                    isinstance(v, str) and "results not ready" in v
-                    for v in consts):
-                offenders.append(f"{fn.name}:{c.lineno}")
+            consts += [k.value.value for k in c.keywords
+                       if isinstance(k.value, ast.Constant)]
+            if 425 in consts:
+                found.append((fn.name, c.lineno, consts))
+    return found
+
+
+def test_no_route_answers_too_early_on_its_own():
+    """Eleven routes each sent 425 whenever results were missing. One
+    function decides now; a route that brings back its own is the defect
+    returning for that route alone.
+
+    Any call passing a literal 425 counts — ``send_error``,
+    ``_reject_upload``, ``_send_json``, ``send_response`` — not only the two
+    helpers the eleven happened to use.
+    """
+    tree = ast.parse(SERVE_APP.read_text("utf-8"))
+    offenders = [
+        f"{name}:{line}" for name, line, consts in _literal_425_calls(tree)
+        if not any(isinstance(v, str) and any(o in v for o in OTHER_425)
+                   for v in consts)]
     assert not offenders, (
         "use self.send_error(*_no_results_status(run_id)) — a bare 425 "
         f"tells a dead run to wait: {offenders}")
+
+
+def test_the_425_scan_sees_every_way_of_sending_one():
+    probe = ast.parse(
+        "class H:\n"
+        "    def a(self): self.send_error(425, 'results not ready')\n"
+        "    def b(self): self._reject_upload(425, 'x')\n"
+        "    def c(self): self._send_json(425, {'error': 'x'})\n"
+        "    def d(self): self.send_response(425)\n"
+        "    def e(self): self._send_json({'error': 'x'}, status=425)\n"
+        "    def f(self): self.send_error(404, 'no such run')\n"
+        "def _no_results_status(run_id): return (425, 'still running')\n")
+    assert sorted(n for n, _l, _c in _literal_425_calls(probe)) == list("abcde")
+
+
+def test_the_summary_does_not_carry_the_shoot_directory():
+    """The summary is read back into the status message and the 500 body.
+    It names the failure and the file, not where the shoot lives."""
+    folder = str(Path.home() / "Clients" / "Chen-Wedding")
+    s = RF.summarize_failures(
+        [{"path": f"{folder}/DSCF7587.JPG",
+          "error": f"FileNotFoundError: [Errno 2] No such file: "
+                   f"'{folder}/DSCF7587.JPG'"}], total=1, analyzed=0)
+    err = s["errors"][0]["error"]
+    assert "Chen-Wedding" not in err and str(Path.home()) not in err
+    assert "DSCF7587.JPG" in err and err.startswith("FileNotFoundError")
+    assert "Chen-Wedding" not in RF.no_results_message(s)

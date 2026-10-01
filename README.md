@@ -72,9 +72,9 @@ refreshing could never have helped.
 
 The reasons are kept now, grouped by kind and written beside the run. A run
 that produces nothing is recorded as failed, with the most common cause in
-the message the upload page already shows. And 425 is answered only while the
-analysis is actually running — on all eleven routes that used to send it,
-which now ask one function instead of each deciding alone.
+the message the upload page already shows. And the eleven routes that need a
+run's results answer 425 only while the analysis is actually running; they
+ask one function now instead of each deciding alone.
 
 **v3.89** — With every model already on disk, an offline run still asked
 the network first and waited to be refused: 48 connection attempts on 32

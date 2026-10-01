@@ -18,12 +18,29 @@ that reports on the run can say what happened to it.
 from __future__ import annotations
 
 import json
+import os
 from collections import Counter
 from pathlib import Path
 
 FILENAME = "analysis_failures.json"
 _MAX_KINDS = 5
 _MAX_MESSAGE = 300
+
+
+def _without_directories(error: str, path: str) -> str:
+    """The error text with the failing file's own directory, and the home
+    directory, taken out.
+
+    An exception message usually quotes the path it failed on. The summary
+    is read back into the status message and the 500 body, so it is kept
+    to what the reader needs — the kind of failure and the file's name —
+    and not where on this disk the shoot lives.
+    """
+    parent = str(Path(path).parent)
+    if parent not in ("", "."):
+        error = error.replace(parent + os.sep, "").replace(parent + "/", "")
+    home = str(Path.home())
+    return error.replace(home, "~") if home not in ("", "/") else error
 
 
 def summarize_failures(failures: list[dict], *, total: int,
@@ -42,7 +59,8 @@ def summarize_failures(failures: list[dict], *, total: int,
     for kind, count in Counter(kinds).most_common(_MAX_KINDS):
         f = first[kind]
         errors.append({
-            "error": f["error"][:_MAX_MESSAGE],
+            "error": _without_directories(
+                f["error"], f["path"])[:_MAX_MESSAGE],
             "count": count,
             # The name only: the summary is read back into a web page.
             "example": Path(f["path"]).name,
