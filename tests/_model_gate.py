@@ -52,6 +52,34 @@ def _hub_cache_dirs() -> list[Path]:
     return out
 
 
+#: Set to "1" by the lane that exists to run the real-model tests. There,
+#: missing weights are a failure.
+REQUIRE_ENV = "PIXCULL_REQUIRE_MODELS"
+
+
+def absent(reason: str):
+    """Skip because the weights are not here — or fail, where that is the
+    one thing the run is for.
+
+    v3.91.1. The weekly "real-model integration" lane was named "downloads
+    CLIP + BLIP" and downloaded nothing. Every test in it is gated on the
+    weights already being cached, a fresh runner has none, so every test
+    skipped and the lane went green: five skips, no tests, each week since
+    this gate was written. Three rows of the skip ledger called those tests
+    "covered elsewhere" and pointed here.
+
+    A skip is right on a laptop that has not downloaded a model. It is the
+    wrong answer in the only place that promises to run them.
+    """
+    if os.environ.get(REQUIRE_ENV) == "1":
+        pytest.fail(
+            f"{reason}\n{REQUIRE_ENV}=1: this run exists to exercise the "
+            f"real models, so their absence is a failure and not a skip. "
+            f"The lane must download them before the tests start.",
+            pytrace=False)
+    pytest.skip(reason)
+
+
 def is_cached(repo_id: str) -> bool:
     """True when ``repo_id`` has a non-empty snapshot on this machine.
 
@@ -82,7 +110,7 @@ def require_model(repo_id: str, loader, *, what: str):
     not an environment excuse.
     """
     if not is_cached(repo_id):
-        pytest.skip(
+        absent(
             f"{what} weights not cached locally ({repo_id}); "
             f"run the feature once to populate ~/.cache/huggingface")
 
@@ -168,7 +196,7 @@ def require_paraformer():
                                "declare it — see pixcull[asr]")
     missing = [r for r in PARAFORMER_REPOS if not is_modelscope_cached(r)]
     if missing:
-        pytest.skip("Paraformer weights not cached locally "
+        absent("Paraformer weights not cached locally "
                     f"({len(missing)}/{len(PARAFORMER_REPOS)} missing); "
                     "run `pixcull transcribe -e paraformer` once, or set "
                     "MODELSCOPE_CACHE to the drive holding them")

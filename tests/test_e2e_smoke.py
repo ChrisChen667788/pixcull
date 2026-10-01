@@ -256,9 +256,9 @@ def test_full_journey_including_run(tmp_path):
     the other real-model tests — if CLIP is cached it MUST run, and a
     failure is a failure rather than a skip (see tests/_model_gate.py).
     """
-    from tests._model_gate import CLIP_REPO, is_cached
+    from tests._model_gate import CLIP_REPO, absent, is_cached
     if not is_cached(CLIP_REPO):
-        pytest.skip(f"pipeline weights not cached ({CLIP_REPO})")
+        absent(f"pipeline weights not cached ({CLIP_REPO})")
 
     from PIL import Image
     import numpy as np

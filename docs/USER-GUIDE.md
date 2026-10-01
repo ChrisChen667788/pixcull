@@ -347,6 +347,7 @@ PixCull 读取下面这些环境变量,**只有这些**。设了别的名字,程
 | `PIXCULL_RAW_TRANSCODER` | RAW transcoder backend |
 | `PIXCULL_REEL_CAPTION` | reel captioning on/off |
 | `PIXCULL_REEL_VLM` | reel VLM backend (ModelScope Studio) |
+| `PIXCULL_REQUIRE_MODELS` | tests: missing model weights fail instead of skipping (CI real-model lane) |
 | `PIXCULL_RESOLUTION_ROUTER` | resolution routing strategy |
 | `PIXCULL_SENTRY_DSN` ⚠ | Sentry DSN for error reporting |
 | `PIXCULL_SIGN_IDENTITY` | codesign identity (release only) |

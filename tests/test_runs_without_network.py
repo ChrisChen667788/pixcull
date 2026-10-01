@@ -28,7 +28,7 @@ from pathlib import Path
 
 import pytest
 
-from tests._model_gate import is_cached
+from tests._model_gate import absent, is_cached
 
 ROOT = Path(__file__).resolve().parent.parent
 PACKAGE = ROOT / "pixcull"
@@ -173,8 +173,6 @@ def test_the_real_model_lane_runs_the_effect_test():
         < lane.index(EFFECT_TEST), "it must run after CLIP has been downloaded"
 
 
-@pytest.mark.skipif(not is_cached(CLIP), reason="CLIP is not in the local "
-                    "hub cache on this machine")
 def test_loading_a_cached_model_opens_no_socket(monkeypatch):
     """Asserted against the socket layer, not against the call order.
 
@@ -182,6 +180,8 @@ def test_loading_a_cached_model_opens_no_socket(monkeypatch):
     hub, and a probe that let 127.0.0.1 through measured an online run
     and reported it as offline.
     """
+    if not is_cached(CLIP):
+        absent("CLIP is not in the local hub cache on this machine")
     transformers = pytest.importorskip("transformers")
     from pixcull.model_assets import from_pretrained
 

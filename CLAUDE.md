@@ -596,6 +596,18 @@ output.  **Plumbing tested, claim not.**  `tests/test_attribution.py` now
 holds the rule, with an explicit exemption for the composition classifier's
 saliency map, which computes a feature rather than explaining a score.
 
+**A green lane is not a lane that ran** (v3.91.1).  The weekly real-model
+lane was green on five skips and no tests for as long as anyone looked:
+its tests are gated on cached weights and nothing downloaded them.  It
+downloads first now, and `PIXCULL_REQUIRE_MODELS=1` (set only there) makes
+`tests._model_gate.absent()` fail where a laptop would skip.  New
+weight-gated tests call `absent(reason)`, never a bare `pytest.skip`.
+**After changing what a CI lane runs, read that lane's log** — `gh run
+view --job <id> --log` — and look for the test names, not the colour.
+And a test that guards against skips must not be able to skip: a
+`pytest.skip` raised inside `pytest.raises(pytest.fail.Exception)`
+propagates and reports the *test* as skipped.
+
 **425 means the analysis is running, and nothing else** (v3.90, issue #3).
 `run_pipeline` returns normally when no frame could be analysed, so "it
 returned" is not "it worked": `_analyze_in_background` records `error` when

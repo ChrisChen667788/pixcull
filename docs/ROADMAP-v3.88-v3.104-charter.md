@@ -93,6 +93,21 @@ contrast. Each needs its own read. The PR description puts "Closes #3"
 under the overlay fix; #3 is the offline issue, which that commit does not
 touch, so merging the PR as described would close the wrong one.
 
+### v3.91.1 — the lane that runs the real models had run nothing
+
+Not planned; found on the way. After v3.89 was pushed the weekly
+"real-model integration" lane was dispatched by hand, to see the new
+offline test run where the skip ledger said it would. The lane went
+green. Its log was five `SKIPPED` lines and no test: nothing in it
+downloads the weights its tests wait for, and it has read that way on
+every scheduled run looked at. v3.61 had written, in that lane's own
+comment, that "covered elsewhere" is only true if somewhere covers it —
+and checked that the lane named the test.
+
+**Measure, met:** the lane downloads CLIP, BLIP and DINOv2 before
+testing, missing weights fail there instead of skipping, and its log
+shows tests that ran.
+
 ### v3.92 — `pixcull video` has never listened to the audio
 
 Found while fixing v3.88. `run_audio_analysis` was added in v2.0-P1-3 on

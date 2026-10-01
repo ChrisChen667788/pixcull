@@ -172,9 +172,9 @@ def test_vlm_caption_real_model(tmp_path, monkeypatch):
     C.reset()
     # v2.40 — skip only when the VLM weights aren't cached; if they are,
     # a failure to load is a failure, not a skip.
-    from tests._model_gate import VLM_REPO, is_cached
+    from tests._model_gate import VLM_REPO, absent, is_cached
     if not is_cached(VLM_REPO):
-        pytest.skip(f"captioning VLM not cached locally ({VLM_REPO})")
+        absent(f"captioning VLM not cached locally ({VLM_REPO})")
     assert C._try_vlm() is not None, (
         f"VLM is cached at {VLM_REPO} but _try_vlm() returned None — "
         f"that is a real failure, not an unavailable model")
