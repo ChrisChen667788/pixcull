@@ -1,5 +1,13 @@
 # What is still open, and who it is waiting on
 
+> **2026-10-01 — read `ROADMAP-v3.88-v3.104-charter.md` first.** This page
+> sorted work into "waiting on a person" and "not waiting on a person",
+> and for seventeen days after v3.87 the second list moved no more than
+> the first: CI red twice, two issues unanswered, three measurements the
+> correction set had unblocked still unmeasured. The charter schedules
+> those. Several rows below are closed in the code and still read open
+> here; v3.104 is the pass that reconciles them.
+
 Written 2026-09-08, before starting the next block. Two blocks of work have
 closed since the last time anyone counted, and the open items were spread across
 three documents in two different shapes. This page is the count.

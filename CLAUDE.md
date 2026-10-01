@@ -601,6 +601,8 @@ saliency map, which computes a feature rather than explaining a score.
 returned" is not "it worked": `_analyze_in_background` records `error` when
 there is no `scores.csv`, and every route that needs results asks
 `_no_results_status(run_id)` — eleven of them used to send their own 425.
+(Semantic search still sends a 425 of its own for a different reason, no
+photographs to build an embeddings cache from; the gate lists it by name.)
 Per-frame failures are collected by `parallel_analyze(failures=…)` on both
 the pool and the serial path and summarised into
 `<run>/analysis_failures.json` (`pixcull/pipeline/run_failures.py`), which a
@@ -747,7 +749,17 @@ permanently saying the scores were hidden).
 `workflow_dispatch` + opt-in; a tag push used to upload, which burns a version
 number irreversibly.
 
-**Next block: `docs/ROADMAP-v3.1-v3.27-charter.md`** — twenty-seven versions read
+**Current block: `docs/ROADMAP-v3.88-v3.104-charter.md`** (written
+2026-10-01).  v3.88–v3.90 are shipped; v3.91 (issue #2, Windows drives)
+needs a decision on the reporter's PR; v3.92 is the one to read before
+touching video — `run_audio_analysis` has never had a caller, so
+`pixcull video` has never produced `audio_events.json` and the learned
+audio tagger has never run in the product, while `README-PYPI.md` lists
+audio events as a feature.  The measurements the 2026-09-12 correction
+set unblocked (v3.29's second half, v2.83, v3.8) are scheduled there as
+v3.96–v3.99 and are plain engineering, not owner asks.
+
+**Earlier block: `docs/ROADMAP-v3.1-v3.27-charter.md`** — twenty-seven versions read
 out of the same 46-entry competitive research at the level of PixCull's own core
 (decision, rubric, judge, critique, personalisation, sequence, ingestion,
 compute, packaging).  24 proposals went through an adversarial refute pass; 21
