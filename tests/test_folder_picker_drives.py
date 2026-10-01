@@ -49,6 +49,66 @@ def test_a_windows_machine_with_one_drive_still_gets_it():
         {"label": "C:", "path": "C:/"}]
 
 
+def test_the_logical_drive_list_is_asked_before_any_drive_is_touched():
+    """``os.listdrives`` reads a list; ``isdir`` is a stat, and on a mapped
+    drive whose server is away a stat waits ten seconds or more. With the
+    list available, nothing may be probed."""
+    probed = []
+    roots = SA._drive_roots(
+        "nt", isdir=lambda p: probed.append(p) or True,
+        listdrives=lambda: ["C:\\", "E:\\", "Z:\\"])
+    assert roots == [{"label": "C:", "path": "C:/"},
+                     {"label": "E:", "path": "E:/"},
+                     {"label": "Z:", "path": "Z:/"}]
+    assert probed == [], f"drives were stat-ed although a list existed: {probed}"
+
+
+def test_odd_entries_in_the_drive_list_are_left_out():
+    roots = SA._drive_roots("nt", isdir=lambda p: False, listdrives=lambda: [
+        "d:\\", "C:\\", "\\\\?\\Volume{0}\\", "", "C:\\"])
+    assert [r["label"] for r in roots] == ["C:", "D:"]
+
+
+def test_a_failing_drive_list_falls_back_to_probing():
+    def _broken():
+        raise OSError("listdrives failed")
+    roots = SA._drive_roots("nt", isdir=lambda p: p == "D:/",
+                            listdrives=_broken)
+    assert roots == [{"label": "D:", "path": "D:/"}]
+
+
+def test_python_311_has_no_drive_list_and_probes(monkeypatch):
+    import os
+    monkeypatch.delattr(os, "listdrives", raising=False)
+    assert SA._drive_roots("nt", isdir=lambda p: p == "C:/") == [
+        {"label": "C:", "path": "C:/"}]
+
+
+def test_the_drive_list_is_not_rebuilt_on_every_click(monkeypatch):
+    """The picker asks on every navigation. One enumeration per window."""
+    calls = []
+    monkeypatch.setattr(SA, "_drive_roots",
+                        lambda: calls.append(1) or [{"label": "C:",
+                                                     "path": "C:/"}])
+    monkeypatch.setitem(SA._DRIVE_ROOTS_CACHE, "roots", None)
+    first = SA._drive_roots_cached(now=1000.0)
+    again = SA._drive_roots_cached(now=1000.0 + SA._DRIVE_ROOTS_TTL_S - 1)
+    assert first == again and len(calls) == 1
+    SA._drive_roots_cached(now=1000.0 + SA._DRIVE_ROOTS_TTL_S + 1)
+    assert len(calls) == 2, "a drive plugged in later must show up"
+
+
+def test_an_empty_answer_is_cached_too(monkeypatch):
+    """Off Windows the answer is ``[]``, and ``[]`` is falsy: caching on
+    truthiness would re-enumerate on every request."""
+    calls = []
+    monkeypatch.setattr(SA, "_drive_roots", lambda: calls.append(1) or [])
+    monkeypatch.setitem(SA._DRIVE_ROOTS_CACHE, "roots", None)
+    SA._drive_roots_cached(now=50.0)
+    SA._drive_roots_cached(now=51.0)
+    assert len(calls) == 1
+
+
 def test_the_default_asks_this_machine():
     """No arguments: whatever this OS is. Off Windows that is nothing."""
     import os
@@ -81,12 +141,15 @@ def test_browse_reports_the_roots_the_helper_found(live, tmp_path,
     """The wiring: what the helper returns is what the page receives."""
     fake = [{"label": "E:", "path": "E:/"}]
     monkeypatch.setattr(SA, "_drive_roots", lambda: fake)
+    monkeypatch.setitem(SA._DRIVE_ROOTS_CACHE, "roots", None)
     data = _browse(live, str(tmp_path))
     assert data["roots"] == fake
     assert Path(data["path"]) == tmp_path.resolve()
 
 
-def test_browse_still_answers_as_before_off_windows(live, tmp_path):
+def test_browse_still_answers_as_before_off_windows(live, tmp_path,
+                                                   monkeypatch):
+    monkeypatch.setitem(SA._DRIVE_ROOTS_CACHE, "roots", None)
     (tmp_path / "shoot").mkdir()
     data = _browse(live, str(tmp_path))
     assert data["roots"] == []
@@ -95,14 +158,16 @@ def test_browse_still_answers_as_before_off_windows(live, tmp_path):
 
 
 def _js_code(js: str) -> str:
-    """The script with ``//`` comments removed.
+    """The script with ``//`` and ``/* */`` comments removed.
 
     The first version of the test below searched the raw text, and
     commenting out the call it was looking for left it passing — the
-    comment still contained the words. A check that its own subject can
+    comment still contained the words. The second stripped ``//`` and not
+    ``/* */``, which a reviewer found. A check that its own subject can
     satisfy from inside a comment is not checking the code.
     """
     out = []
+    js = re.sub(r"/\*.*?\*/", "", js, flags=re.S)       # block comments first
     for line in js.splitlines():
         code = line.split("//", 1)[0] if "://" not in line else line
         if code.strip():
@@ -132,3 +197,7 @@ def test_a_commented_out_call_does_not_count():
     assert "paintRoots(data)" not in _js_code("  // paintRoots(data);\n")
     assert "paintRoots(data)" in _js_code("  paintRoots(data); // why\n")
     assert "https://x" in _js_code('  fetch("https://x");\n')
+    assert "paintRoots(data)" not in _js_code("/* paintRoots(data); */\n")
+    assert "paintRoots(data)" not in _js_code(
+        "/*\n  paintRoots(data);\n*/\nother();\n")
+    assert "other()" in _js_code("/*\n  paintRoots(data);\n*/\nother();\n")

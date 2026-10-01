@@ -3198,22 +3198,60 @@ def _enumerate_runs() -> list[dict]:
     return out
 
 
-def _drive_roots(os_name: str | None = None, isdir=None) -> list[dict]:
+def _drive_roots(os_name: str | None = None, isdir=None,
+                 listdrives=None) -> list[dict]:
     """The drive letters that exist, for the folder picker. Empty off
     Windows.
 
-    The enumeration is gxfc9867's (issue #2, PR #4); it lives in a function
-    of its own so it can be tested from a machine that has no drive
-    letters. ``os_name`` and ``isdir`` are injectable for that reason only —
-    setting ``os.name`` itself to ``"nt"`` on POSIX breaks ``pathlib``.
+    The idea and the first implementation are gxfc9867's (issue #2, PR
+    #4). It lives in a function of its own so it can be tested from a
+    machine that has no drive letters; ``os_name``, ``isdir`` and
+    ``listdrives`` are injectable for that reason only — setting
+    ``os.name`` itself to ``"nt"`` on POSIX breaks ``pathlib``.
+
+    ``os.listdrives`` (Python 3.12+) is asked first because it reads the
+    list of logical drives and touches none of them. Probing each letter
+    with ``isdir`` is a ``stat``, and on a mapped network drive whose
+    server is away that waits for the redirector to time out — ten
+    seconds or more, per dead drive, every time the picker opens. A
+    photographer with a NAS at home and the laptop elsewhere is exactly
+    that case. The probe stays as the fallback for 3.11.
     """
     os_name = os.name if os_name is None else os_name
     if os_name != "nt":
         return []
+    if listdrives is None:
+        listdrives = getattr(os, "listdrives", None)
+    if listdrives is not None:
+        try:
+            letters = sorted({str(d)[0].upper() for d in listdrives()
+                              if len(str(d)) >= 2 and str(d)[1] == ":"
+                              and str(d)[0].isalpha()})
+            return [{"label": f"{c}:", "path": f"{c}:/"} for c in letters]
+        except OSError as exc:
+            _dbg("browse/listdrives", exc)
     isdir = os.path.isdir if isdir is None else isdir
     return [{"label": f"{letter}:", "path": f"{letter}:/"}
             for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
             if isdir(f"{letter}:/")]
+
+
+#: How long a drive list is reused. The picker asks on every navigation;
+#: the answer changes when a card reader is plugged in, not between two
+#: clicks. Short enough that a new drive shows up without a restart.
+_DRIVE_ROOTS_TTL_S = 30.0
+_DRIVE_ROOTS_CACHE: dict = {"at": 0.0, "roots": None}
+
+
+def _drive_roots_cached(now: float | None = None) -> list[dict]:
+    """``_drive_roots()``, at most once per ``_DRIVE_ROOTS_TTL_S``."""
+    now = time.monotonic() if now is None else now
+    cached = _DRIVE_ROOTS_CACHE["roots"]
+    if cached is not None and now - _DRIVE_ROOTS_CACHE["at"] < _DRIVE_ROOTS_TTL_S:
+        return cached
+    roots = _drive_roots()
+    _DRIVE_ROOTS_CACHE.update(at=now, roots=roots)
+    return roots
 
 
 def _no_results_status(run_id: str) -> tuple[int, str]:
@@ -10088,7 +10126,7 @@ class _Handler(BaseHTTPRequestHandler):
         # another drive at all. Report the drive letters that actually
         # exist and let the client render them. Empty on POSIX, where the
         # static links already cover the places people go.
-        roots = _drive_roots()
+        roots = _drive_roots_cached()
 
         body = json.dumps({
             "path": str(target),
