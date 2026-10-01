@@ -62,6 +62,20 @@
 
 ## What's new
 
+**v3.89** — With every model already on disk, an offline run still asked
+the network first and waited to be refused: 48 connection attempts on 32
+photos, one per model load in each worker. Where a network drops packets
+rather than refusing them, each attempt waits out the operating system's
+connect timeout, which is how a Windows user measured 149 seconds and no
+results (issue #3). The disk comes first now, and the network is for a model
+that is not there — which also means a model cannot change between two runs
+of the same folder because the hub published a new revision.
+
+Loading an older checkpoint also started a background request asking the hub
+to convert it, whatever `local_files_only` said. That is switched off.
+Measured with the socket layer blocked, loopback included: 48 attempts
+before, none after, and every verdict the same.
+
 **v3.88** — The scheduled test run had been red for nine days, on a model
 three nodes long. CI resolves `onnx` and `onnxruntime` independently, and on
 21 September it paired `onnx` 1.23, which writes IR version 14, with
@@ -128,11 +142,6 @@ holds CLIP at 512 dimensions for semantic search, while clustering groups
 on DINOv2 at 768. Feeding one to the other returns plausible numbers with
 no error. Both fixed: tie-break on the filename, and the burst vectors
 are written out so the grouping can be checked rather than trusted.
-
-**v3.83** — Bursts are ranked and every loser was handed over as a keep;
-this demoted them to `maybe`. Reverted two versions later when the labels
-came back — kept here because the reasoning was sound and the assumption
-under it had never been tested.
 
 Earlier releases are in [`CHANGELOG.md`](CHANGELOG.md).
 
@@ -1028,6 +1037,15 @@ disclosure policy. TL;DR: trusted local user, untrusted image input
 (Pillow is pinned ≥ 10.2), no telemetry, optional DeepSeek calls go
 straight to DeepSeek with *your* token (we never proxy).
 
+**Working without a network.** The models download once, on first use,
+into the usual caches. After that, a run with no MiniMax key (or with
+`--vlm-mode off`) opens no network connection. Since v3.89 a cached model is
+read from disk before the hub is asked; measured on 32 photos with the socket
+layer blocked, loopback included, the run made no connection attempt where it
+had made 48. A test holds the model-loading half of that the same way.
+To prepare a machine that will be offline from the start, run it once where
+there is a network, or copy `~/.cache/huggingface/hub` across.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). PRs welcome; bug reports
@@ -1557,6 +1575,14 @@ PixCull 默认本地优先。`serve_demo.py` 只绑定 `127.0.0.1`;LAN 部
 完整威胁模型和漏洞披露政策见 [SECURITY.md](SECURITY.md)。
 TL;DR:可信本地用户,不可信图像输入 (Pillow 钉在 ≥ 10.2);无遥
 测;可选的 DeepSeek 调用走的是 *你的* token,我们绝不代理转发。
+
+**断网使用。** 模型在第一次用到时下载一次,放进常规缓存。之后,没有配置
+MiniMax key(或加了 `--vlm-mode off`)的运行不会打开任何网络连接。从 v3.89
+起,已缓存的模型先从本地读取,不再先去问 Hub;把 socket 层连同本机回环一起堵上
+跑 32 张照片,联网尝试从 48 次降到 0 次。模型加载这一半由一道同样堵住 socket
+的测试守着。要给一台从一开始
+就离线的机器做准备,先在有网的地方跑一次,或者把 `~/.cache/huggingface/hub`
+拷过去。
 
 ## 参与贡献
 

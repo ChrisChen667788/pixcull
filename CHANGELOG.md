@@ -75,6 +75,8 @@ which is the thing that was actually false.
 
 One line each, exactly as the release was titled at the time.
 
+**v3.83** — the product ranked every burst and kept every loser
+
 **v3.82** — 149 frames in, 149 keeps out
 
 **v3.81** — nothing the rubric measures separates this owner's keeps from their culls

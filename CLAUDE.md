@@ -16,6 +16,12 @@ this repo.  Read it before each session.
 2. **Test gate before every commit:**
    `python -m pytest tests/ --ignore=tests/test_v1_1_scripts.py`
    (must be green; **5 skips expected** — 2 face-fixture + 3 zeroconf).
+   On the `pixcull` checkout as of v3.89 the local count is **14**, all
+   environmental: 2 face-fixture, 4 Paraformer weights, 3
+   `rescorer_v1.joblib` absent from the repo-root `models/`, 5 `exiftool`
+   not installed (CI installs it).  zeroconf is installed here now.  A
+   different number means a skip appeared or vanished — name it before
+   committing.
    Locally also `--ignore` `test_lightbox_stability.py` and
    `test_visual_smoke.py` (headless capture is killed by this host).
    **Stop any `pixcull m3 open` / `serve` first** (`pkill -f 'pixcull m3
@@ -589,6 +595,17 @@ sha determinism, cache paths, colour ramp — and not one compared two axes'
 output.  **Plumbing tested, claim not.**  `tests/test_attribution.py` now
 holds the rule, with an explicit exemption for the composition classifier's
 saliency map, which computes a feature rather than explaining a score.
+
+**A cached model is read from disk before the hub is asked** (v3.89, issue
+#3).  v3.64 went online first and fell back to the disk, so an offline run
+worked and paid one connection attempt per model load per worker — 48 on 32
+photos, each an OS connect timeout where the network drops rather than
+refuses.  `model_assets.from_pretrained` is local-first now and sets
+`DISABLE_SAFETENSORS_CONVERSION`, because loading a cached `.bin` checkpoint
+starts a background hub request that `local_files_only` does not stop.
+**When probing for network use, block loopback too:** this machine reaches
+the hub through a proxy on 127.0.0.1, and a probe that let loopback through
+measured an online run as offline.
 
 **`onnx` writes an IR version `onnxruntime` may not read** (v3.88).  CI
 resolves both freely, and `helper.make_model` stamps the installed `onnx`'s

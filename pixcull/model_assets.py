@@ -16,6 +16,7 @@ shipped.
 """
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 #: The copies that ship in the wheel.
@@ -48,7 +49,7 @@ def resolve(path: Path | str | None) -> Path | None:
 
 
 def from_pretrained(cls, name: str, **kwargs):
-    """``cls.from_pretrained(name)``, but working when there is no network.
+    """``cls.from_pretrained(name)``, reading the copy on disk first.
 
     v3.64 — the product's first claim is that it runs on your machine.
     It did not. `transformers` contacts the hub before it will use a
@@ -58,22 +59,40 @@ def from_pretrained(cls, name: str, **kwargs):
 
         OSError: Can't load processor for 'openai/clip-vit-base-patch32'
 
-    and the run ended `Analyzed 0/32 images`. A photographer on a plane,
-    or on a shoot with no signal — the situation local-first exists for —
-    got nothing, with the model on their disk the whole time.
+    and the run ended `Analyzed 0/32 images`. v3.64 made it fall back to
+    the disk after the network attempt failed.
 
-    Setting ``HF_HUB_OFFLINE=1`` fixes it, which is the tell: the files
-    are there and usable, and only the lookup was failing. So try the
-    normal path first, because it is the one that picks up an updated
-    model, and fall back to the copy on disk rather than to an error.
+    v3.89 — that still paid for the attempt, every time. Blocking the
+    socket layer on a warm cache and running 32 photos: 48 connection
+    attempts, all from here, CLIP and DINOv2 in each of four workers. A
+    refused connection fails at once; an unanswered one waits for the OS
+    connect timeout, about 21 s on Windows, which is issue #3: 149 s for
+    nothing on a machine with every model on disk.
+
+    So the disk comes first and the network is for a model that is not
+    there. Reading the cache first also means a model cannot change
+    between two runs of the same folder because the hub published a new
+    revision — the verdict follows the model, and v3.84 spent a release
+    making verdicts reproducible. To update a cached model, delete it from
+    the hub cache (or ``huggingface-cli download <name>``) and run again.
     """
-    try:
+    # Loading a cached `.bin` checkpoint makes `transformers` start a
+    # background thread that asks the hub to convert the repo to
+    # safetensors "for next time" — `local_files_only` does not stop it,
+    # only offline mode or this flag does. A local-first tool should not
+    # be triggering conversion jobs on someone else's servers, and on a
+    # machine with no network it is one more connection that times out.
+    # setdefault: an explicit value in the user's environment wins.
+    os.environ.setdefault("DISABLE_SAFETENSORS_CONVERSION", "1")
+    if kwargs.get("local_files_only"):
         return cls.from_pretrained(name, **kwargs)
-    except Exception as first:          # noqa: BLE001 — any network shape
+    try:
+        return cls.from_pretrained(name, local_files_only=True, **kwargs)
+    except Exception as not_on_disk:    # noqa: BLE001 — any cache-miss shape
         try:
-            return cls.from_pretrained(name, local_files_only=True, **kwargs)
-        except Exception:               # noqa: BLE001
-            # Genuinely not on disk. The first error describes what the
-            # user has to fix (no network, and nothing cached), so it is
-            # the one worth showing.
-            raise first
+            return cls.from_pretrained(name, **kwargs)
+        except Exception as network:    # noqa: BLE001
+            # Not cached and not downloadable. The network error names
+            # what the user has to fix, so it is the one raised; the cache
+            # miss rides along as the cause.
+            raise network from not_on_disk

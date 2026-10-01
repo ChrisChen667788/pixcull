@@ -58,6 +58,16 @@ tasks:
 **[github.com/ChrisChen667788/pixcull](https://github.com/ChrisChen667788/pixcull)**
 
 ## 最近更新
+- **v3.89**:模型都已经在硬盘上,离线运行仍然先去问网络、等着被拒:32 张照片
+  48 次连接尝试,每个 worker 每加载一个模型一次。网络如果是丢包而不是拒绝,
+  每次都要等满操作系统的连接超时 —— 一位 Windows 用户就这样测出 149 秒、一张
+  没分析出来(issue #3)。现在先读本地,网络只留给本地没有的模型;这也意味着
+  同一个文件夹跑两次,模型不会因为 Hub 发了新版本而在中间变掉。
+
+  加载较老的 `.bin` 权重时,transformers 还会在后台请 Hub 把它转成
+  safetensors,`local_files_only` 拦不住。这一项已关掉。把 socket 层连同本机
+  回环一起堵上实测:修前 48 次,修后 0 次,所有判决不变。
+
 - **v3.88**:定时测试红了九天,红在一个只有三个节点的模型上。CI 分别解析
   `onnx` 和 `onnxruntime`,9 月 21 日它装上了写 IR 14 的 `onnx` 1.23,配上
   最多只读到 IR 13 的 `onnxruntime` 1.30。两个测试里一个手动钉了 IR 版本,
@@ -105,14 +115,6 @@ tasks:
   决定分簇的向量也不在盘上:`embeddings.npz` 存的是 512 维 CLIP(给语义搜索),
   聚类用的是 768 维 DINOv2。喂错了不会报错,只会给出看起来合理的数字。两处都修
   了:并列按文件名破除,连拍向量单独落盘,让分簇可以被检验而不是被相信。
-
-- **v3.83**:按 owner 的决定,同组里没选上的帧现在降为 `maybe`。同样那 149 帧:
-  `keep 149` 变成 `keep 49 · maybe 100`。**不判 `cull`** —— 一张输掉连拍的照片
-  常常正是摄影师想要的(第二个表情、宾客的反应),相似度分数没有资格替人丢掉它。
-
-  与收起改动的基线逐列对照:`cluster_id`、`is_burst_peak`、`score_final` 三列
-  零差异,只有判决动了 100 条,零提升。在随机散样上几乎不动(5 帧 / 0 帧)——
-  一个针对冗余的修复本就该只在冗余处生效。
 
 更早的版本记录在 [`CHANGELOG.md`](https://github.com/ChrisChen667788/pixcull/blob/main/modelscope/CHANGELOG.md)。
 
