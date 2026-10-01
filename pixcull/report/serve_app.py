@@ -3198,6 +3198,24 @@ def _enumerate_runs() -> list[dict]:
     return out
 
 
+def _drive_roots(os_name: str | None = None, isdir=None) -> list[dict]:
+    """The drive letters that exist, for the folder picker. Empty off
+    Windows.
+
+    The enumeration is gxfc9867's (issue #2, PR #4); it lives in a function
+    of its own so it can be tested from a machine that has no drive
+    letters. ``os_name`` and ``isdir`` are injectable for that reason only —
+    setting ``os.name`` itself to ``"nt"`` on POSIX breaks ``pathlib``.
+    """
+    os_name = os.name if os_name is None else os_name
+    if os_name != "nt":
+        return []
+    isdir = os.path.isdir if isdir is None else isdir
+    return [{"label": f"{letter}:", "path": f"{letter}:/"}
+            for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+            if isdir(f"{letter}:/")]
+
+
 def _no_results_status(run_id: str) -> tuple[int, str]:
     """The status and message for "this run exists and has no results".
 
@@ -10070,12 +10088,7 @@ class _Handler(BaseHTTPRequestHandler):
         # another drive at all. Report the drive letters that actually
         # exist and let the client render them. Empty on POSIX, where the
         # static links already cover the places people go.
-        roots = []
-        if os.name == "nt":
-            for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
-                root = f"{letter}:/"
-                if os.path.isdir(root):
-                    roots.append({"label": f"{letter}:", "path": root})
+        roots = _drive_roots()
 
         body = json.dumps({
             "path": str(target),

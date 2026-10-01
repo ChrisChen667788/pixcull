@@ -75,13 +75,23 @@ the reporter verified `{"path": "F:/"}` — so the defect is that the page
 offers no way to ask. The reporter attached a working patch (drive
 letters A–K, shown by user agent) and offered a PR.
 
-**Measure:** on Windows the browser lists the drives that exist and
-navigates into one; on macOS and Linux nothing changes. The server
-should enumerate real drives rather than the page guessing eleven
-letters, so the list is true on a machine with two.
+**Shipped 2026-10-02, and the decision made itself.** While this charter
+was being written the reporter opened PR #4, four commits that each stand
+alone. The second is this fix, and it already does what the measure below
+asked for: `/browse` reports the drives that exist rather than the page
+guessing eleven letters. It was cherry-picked with its author intact.
 
-**Decision needed first:** take the reporter's PR, or implement here and
-credit them. It is their fix either way.
+**Measure, met:** on Windows the browser lists the drives that exist and
+navigates into one — verified by the author on a real machine with nine;
+on macOS and Linux nothing changes. Added here: the enumeration in a
+function that can be tested without drive letters, the wiring through
+`/browse`, and a real-browser pass with two pretend drives.
+
+**Still open on that PR:** three more commits — CJK watermark fonts, a
+client review sheet with ratings and a viewer, and light-theme overlay
+contrast. Each needs its own read. The PR description puts "Closes #3"
+under the overlay fix; #3 is the offline issue, which that commit does not
+touch, so merging the PR as described would close the wrong one.
 
 ### v3.92 — `pixcull video` has never listened to the audio
 

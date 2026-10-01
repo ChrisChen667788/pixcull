@@ -62,6 +62,18 @@
 
 ## What's new
 
+**v3.91** — On Windows the folder picker could not leave the `C:` drive.
+Its quick links were `~`, Pictures, Desktop, Downloads and `/Volumes`, and a
+shoot is usually not on `C:`. The server has always accepted any path, so
+the whole defect was that the page gave no way to ask. It lists the drives
+that exist now — whatever the machine has, not a fixed set of letters — and
+hides the macOS-only shortcut when there are some.
+
+Reported, diagnosed and fixed by [@gxfc9867](https://github.com/gxfc9867) in
+issue #2 and PR #4, verified on a real Windows machine; the commit is theirs.
+What was added here is the part that can be checked from a machine with no
+drive letters, and a pass in a real browser with two pretend ones.
+
 **v3.90** — A run that had already died was reported as still running.
 When every frame failed for one reason — 23 connect timeouts, in issue #3 —
 the reasons went to the terminal and were kept nowhere, the pipeline returned
@@ -136,13 +148,6 @@ scrolled the element into view and photographed the grid, because the
 navigator ships hidden and is populated when its toggle is clicked — a
 picture of the wrong thing under the right caption, which is the defect
 the ledger exists for.
-
-**v3.85** — Reverting v3.83. Blind-labelled on the same 149 frames, the
-photographer kept 87 of the 100 it demoted: a hundred frames moved into
-review to catch thirteen. The ranking stays and is reported; what is gone
-is letting it reach the verdict. A test fails any function that reads
-`is_burst_peak` and writes a `decision`, under any name, and records what
-new evidence would justify a second attempt.
 
 Earlier releases are in [`CHANGELOG.md`](CHANGELOG.md).
 

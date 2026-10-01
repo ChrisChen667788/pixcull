@@ -75,6 +75,8 @@ which is the thing that was actually false.
 
 One line each, exactly as the release was titled at the time.
 
+**v3.85** — reverting v3.83: a burst loser is not an unwanted frame
+
 **v3.84** — the same folder came back with different verdicts
 
 **v3.83** — the product ranked every burst and kept every loser
