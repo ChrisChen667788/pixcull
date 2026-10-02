@@ -201,3 +201,24 @@ def test_the_lane_has_ffmpeg_for_the_journey():
     steps = _lane()["steps"]
     ffmpeg = _step_index(steps, "apt-get install -y -qq ffmpeg")
     assert ffmpeg < _step_index(steps, LANE_TESTS[0])
+
+
+def test_the_lane_resolves_torch_the_way_a_user_does():
+    """The first run that reached a model failed on the lane's own pin:
+    `torch==2.4.1` under a transformers that needs 2.5, so PyTorch was
+    "not found" and CLIPModel could not be built. A lane whose job is to
+    catch dependency drift cannot hold one dependency still."""
+    import re
+    # Commands only. The step's own comment quotes the old pin, and the
+    # first version of this test read that comment as a pin.
+    code = "\n".join(
+        line for s in _lane()["steps"]
+        for line in (s.get("run") or "").splitlines()
+        if not line.lstrip().startswith("#"))
+    pins = re.findall(r"\b(torch\w*)\s*==\s*([\d.]+)", code)
+    assert not pins, f"the real-model lane pins {pins}"
+    assert re.search(r"pip install[^\n]*\n?[^\n]*\n?[^\n]*\btorch torchvision\b",
+                     code), (
+        "torch and torchvision must still be installed by one command, "
+        "or they can resolve to a CPU/CUDA mismatch")
+

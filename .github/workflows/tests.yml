@@ -68,9 +68,10 @@ jobs:
           # one half of the pair against the other) and it does not
           # require freezing a version.
           #
-          # The other three lanes stay pinned on purpose: a fixed pair
-          # makes a red run mean "the code changed", not "the index
-          # did". This is the lane where the opposite is what we want.
+          # The hermetic and browser lanes stay pinned on purpose: a
+          # fixed pair makes a red run mean "the code changed", not "the
+          # index did". This is a lane where the opposite is what we
+          # want; since v3.91.1 the weekly real-model lane is the other.
           pip install --index-url https://download.pytorch.org/whl/cpu \
                       --extra-index-url https://pypi.org/simple \
                       torch torchvision
@@ -350,10 +351,28 @@ jobs:
           PIP_EXTRA_INDEX_URL: https://download.pytorch.org/whl/cpu
         run: |
           python -m pip install --upgrade pip
+          # v3.91.1 — NOT pinned, for the same reason as the smoke lane
+          # and a sharper one. This lane's stated job is to catch
+          # dependency drift, and it pinned `torch==2.4.1` while
+          # transformers floated: transformers 5.18 needs torch >= 2.5,
+          # so on the first run that actually reached a model it printed
+          # "Disabling PyTorch because PyTorch >= 2.5 is required but
+          # found 2.4.1" and CLIPModel could not be constructed. The pin
+          # had made the lane incapable of the one thing it is for, and
+          # the skips had hidden that too. The pair still goes in
+          # together, from the CPU index.
           pip install --index-url https://download.pytorch.org/whl/cpu \
                       --extra-index-url https://pypi.org/simple \
-                      "torch==2.4.1" "torchvision==0.19.1"
+                      torch torchvision
           pip install -e ".[dev]"
+      - name: Resolved versions
+        run: |
+          python - <<'PY'
+          import torch, torchvision, transformers
+          print("torch", torch.__version__, "torchvision",
+                torchvision.__version__, "transformers",
+                transformers.__version__)
+          PY
       # v3.91.1 — this lane was called "downloads CLIP + BLIP" and nothing
       # in it downloaded anything. Every test here is gated on the weights
       # already being cached; a fresh runner has none; so all of them
