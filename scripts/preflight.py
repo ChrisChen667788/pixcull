@@ -95,6 +95,8 @@ GATES: list[tuple[str, str]] = [
      "the ModelScope card is generated, not hand-copied"),
     ("tests/test_vertical_axis_prior.py",
      "the per-vertical priors match what the README lists"),
+    ("tests/test_audio_claim_matches_wiring.py",
+     "the public pages claim audio events only while something runs them"),
 ]
 
 

@@ -9,6 +9,81 @@ The most recent releases stay in the README under **What's new**.
 
 ---
 
+## Upgrading from 3.53.1 — read this first
+
+3.53.1 was the last version on PyPI, and 3.92.0 is the next one.
+Thirty-six versions sit between them. Most of what they changed is a
+thing that was broken and now works, and needs nothing from you. Six of
+them change what the same command does on the same machine.
+
+**The dependency floor moved: numpy 2, torch 2.5.** `numpy` went from
+`>=1.26,<2` to `>=2.0,<2.5`, `torch` from `>=2.2` to `>=2.5`,
+`torchvision` from `>=0.17` to `>=0.20`. An environment that pins
+`numpy<2` or a torch below 2.5 will fail to resolve, and the upgrade
+aborts without installing anything; anything else in that environment
+that still needs numpy 1.x has to move with it or live somewhere else.
+3.53.1 printed a startup warning telling you to run
+`pip install 'numpy<2'` — that advice is now the wrong way round, and
+the warning fires outside 2.0–2.4 instead. `opencv-python` gained a
+ceiling (`<6`), and the `mediapipe` extra is capped below 1.0, because
+1.0.1 aborts the process rather than raising. The torch floor is
+transformers' doing: below the torch it wants, it does not fail to
+import, it reports that PyTorch was not found.
+
+**A cached model is read from disk, and the hub is not asked.** With no
+network, 3.53.1 failed every frame — `Analyzed 0/32` — with the weights
+sitting on your own disk, because the loader contacted the hub first.
+It reads the disk first now and goes to the network only for a model
+that is not there: on a machine that has run PixCull once, a run opens
+no connection for its models. `HF_HUB_OFFLINE=1`, the workaround, is no
+longer needed. The other side of the same change: PixCull will not
+notice a newer revision of a model you already have. The first run on a
+new machine still downloads.
+
+**`PIXCULL_VLM_MODE` is read now.** In 3.53.1 it was not read at all —
+only the `--vlm-mode` flag was — so `PIXCULL_VLM_MODE=off` in a shell
+profile changed nothing, and with a MiniMax key present and consent
+recorded the run uploaded anyway. It is honoured now and means what the
+flag means. `pixcull run` also names, on stderr, any `PIXCULL_*`
+variable in your environment that it does not read, which is new output
+for anything that parses stderr. And declining the upload prompt is
+remembered (`~/.pixcull/cloud_consent.json`); it used to ask again on
+the next run, after saying it would not.
+
+**`pixcull export` and `pixcull contact-sheet` follow your corrections.**
+A verdict you change in the review page is stored in
+`annotations.jsonl`, and `scores.csv` keeps the machine's answer. Both
+commands read the CSV alone: a frame you rescued from `cull` was still
+exported as a cull and left off the sheet. They apply your corrections
+now, so re-exporting a shoot you have reviewed gives different files —
+the ones you meant. There is no flag for the old output.
+
+**Burst grouping is repeatable, so the first run after upgrading may
+differ.** Frames with the same EXIF second were grouped in whatever
+order the workers finished, and the same folder could come back
+`Keep=97 Maybe=53` on one run and `Keep=95 Maybe=55` on the next. The
+order is fixed now. A burst-heavy shoot may therefore not reproduce the
+numbers you saw last time — it never reliably did — and will reproduce
+them from here on. A run also writes `burst_embeddings.npz`.
+
+**A learned profile is applied more cautiously.** If you have run
+`pixcull personalize learn`, the axis weights taken from your profile
+are different: a keep-versus-cull gap under 0.25 stars is ignored, and
+when the evidence against an axis is as strong as the evidence for one,
+nothing is weighted. A profile built from weak signal used to become a
+strong opinion — in one measured case, zero weight on composition. The
+same folder with the same profile can score differently.
+
+Two smaller ones, for scripts. The review server answers **500** with
+the reason, not 425, for a run that finished with no results, and marks
+it `error` rather than `done`; 425 now means only that the analysis is
+still running, so a client that polls on 425 stops when a run dies.
+What failed is in `analysis_failures.json` in the run directory. And
+`pixcull import-catalog --write`, which is not implemented, exits 2
+where it used to exit 0.
+
+---
+
 ## Upgrading from 2.47.0 — read this first
 
 2.47.0 was the last version on PyPI, and 3.53.1 is the next one. A
