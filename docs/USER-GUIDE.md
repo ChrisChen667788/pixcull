@@ -315,7 +315,7 @@ PixCull 读取下面这些环境变量,**只有这些**。设了别的名字,程
 | `PIXCULL_API_KEY` | API key for the containerised server |
 | `PIXCULL_APPCAST_URL` | Sparkle appcast URL for the desktop app |
 | `PIXCULL_ASPECT_GUARD` | aspect-ratio guard in near-duplicate matching |
-| `PIXCULL_AUDIO_MODEL` | audio tagger model id |
+| `PIXCULL_AUDIO_MODEL` | path to an audio event model (.onnx) for `pixcull video` |
 | `PIXCULL_AUDIO_SYNC` | enable audio-to-moment sync |
 | `PIXCULL_AXIS_GROUPS` | axis grouping strategy |
 | `PIXCULL_BURST_MULTI_IMAGE` | send a whole burst to the judge in one call |

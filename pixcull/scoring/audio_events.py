@@ -334,17 +334,32 @@ def extract_audio(
     return pcm, sr
 
 
+#: The name of the DSP detectors as a tagger. Defined here, not in
+#: ``audio_tagger`` (which imports this module), so both can name it.
+HEURISTIC_TAGGER = "heuristic-dsp"
+
+
 @dataclass
 class AudioResult:
     events: list[AudioEvent]
     beats_s: list[float]
     tempo_bpm: float
     has_audio: bool
+    #: v3.93 — what produced ``events``. ``None`` means nothing listened
+    #: for events at all, which is not the same as "listened and heard
+    #: none"; ``note`` says which, in a sentence a person can act on.
+    tagger: str | None = HEURISTIC_TAGGER
+    note: str | None = None
+    #: The same thing as ``note`` for a program: one of ``NOT_LISTENED``.
+    reason: str | None = None
 
     def to_dict(self) -> dict:
         return {
             "schema_version": 1,
             "has_audio": self.has_audio,
+            "tagger": self.tagger,
+            "reason": self.reason,
+            "note": self.note,
             "tempo_bpm": self.tempo_bpm,
             "events": [e.to_dict() for e in self.events],
             "beats_s": self.beats_s,
@@ -373,20 +388,102 @@ def analyze_audio_file(path: Path, *, ffmpeg: str | None = None) -> AudioResult:
     return analyze_audio(samples, sr)
 
 
-def run_audio_analysis(output_dir: Path, *, write: bool = True) -> AudioResult:
-    """Read the run's source video, detect audio events, write
-    ``audio_events.json``."""
+#: Why nothing listened for events, as ``reason`` -> the sentence in
+#: ``note``. The review page keys its own wording on the reason.
+NOT_LISTENED = {
+    "no-model": (
+        "no audio event model is installed, so laughter / applause / music "
+        "were not listened for. `pixcull models pull audio-tagger` (16 MB) "
+        "adds them."),
+    "model-failed": (
+        "the audio event model failed on this clip, so no events were "
+        "recorded."),
+    "no-source": (
+        "the source video is no longer where this run recorded it, so "
+        "there was nothing to listen to."),
+    "no-track": "the video has no audio track.",
+    "undecodable": (
+        "ffmpeg could not decode an audio track from the source video."),
+}
+
+
+def _silent(reason: str) -> AudioResult:
+    return AudioResult([], [], 0.0, has_audio=False, tagger=None,
+                       reason=reason, note=NOT_LISTENED[reason])
+
+
+def run_audio_analysis(output_dir: Path, *, write: bool = True,
+                       tagger=None) -> AudioResult:
+    """Listen to the run's source video and write ``audio_events.json``.
+
+    v3.93 — this function had no caller from the day it was written
+    (v2.0-P1-3). Three readers were built on its output — the reel
+    detector's ``why``, the review page's event lane, the lightbox
+    scrubber — and `pixcull video` never produced the file they read.
+
+    **Events come from the learned tagger or not at all.** The DSP
+    detectors above are what ``get_tagger`` falls back to, and wiring
+    that fallback into the product would have put them in front of
+    everyone who has not pulled the optional model. On this project's
+    own evaluation (``docs/AUDIO-TAGGER-EVAL.md``, 64 real clips) they
+    found none of 20 applause clips and were right about laughter 12%
+    of the time. The readers print what they are given — "现场笑声" in a
+    reel caption, a green bar under the frames it was "heard" at — so a
+    detector that is wrong seven times in eight becomes a product that
+    says so with confidence. Without the model the file records that
+    nothing listened, and says how to change that.
+
+    The tempo and beat grid still come from the DSP path: they are a
+    different measurement (onset autocorrelation with its own strength
+    floor) and no learned model here replaces them.
+
+    ``tagger`` is for tests; ``None`` asks ``get_tagger`` for the learned
+    one.
+    """
     from pixcull.scoring.temporal import _resolve_frames_dir
     output_dir = Path(output_dir)
     frames_dir = _resolve_frames_dir(output_dir, None)
     manifest = json.loads((frames_dir / "manifest.json").read_text("utf-8"))
     source = manifest.get("source_path")
     if not source or not Path(source).exists():
-        result = AudioResult([], [], 0.0, has_audio=False)
+        result = _silent("no-source")
+    elif manifest.get("audio_track_count") == 0:
+        result = _silent("no-track")
     else:
-        result = analyze_audio_file(Path(source))
+        samples, sr = extract_audio(Path(source))
+        if len(samples) == 0:
+            result = _silent("undecodable")
+        else:
+            result = analyze_audio(samples, sr)
+            _tag_events(result, samples, sr, tagger)
     if write:
         (output_dir / "audio_events.json").write_text(
             json.dumps(result.to_dict(), indent=2, ensure_ascii=False),
             encoding="utf-8")
     return result
+
+
+def _tag_events(result: AudioResult, samples: np.ndarray, sr: int,
+                tagger) -> None:
+    """Replace the DSP events on ``result`` with the learned tagger's, or
+    with nothing — see :func:`run_audio_analysis` for why not the DSP's."""
+    if tagger is None:
+        # Imported here: audio_tagger imports this module.
+        from pixcull.scoring.audio_tagger import get_tagger
+        tagger = get_tagger()
+    if getattr(tagger, "name", HEURISTIC_TAGGER) == HEURISTIC_TAGGER:
+        result.events, result.tagger = [], None
+        result.reason, result.note = "no-model", NOT_LISTENED["no-model"]
+        return
+    try:
+        events = list(tagger.tag(samples, sr))
+    except Exception as exc:  # noqa: BLE001 — a model failing must not cost the reel
+        why = (str(exc).splitlines() or [""])[0][:160]
+        result.events, result.tagger = [], None
+        result.reason = "model-failed"
+        result.note = (f"{NOT_LISTENED['model-failed']} "
+                       f"({type(exc).__name__}: {why})")
+        return
+    events.sort(key=lambda e: e.start_s)
+    result.events, result.tagger = events, tagger.name
+    result.reason = result.note = None

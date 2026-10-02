@@ -92,3 +92,19 @@ python scripts/eval_audio_tagger.py --calibrate \
   --model ~/.pixcull/models/audio_tagger.onnx \
   --write-thresholds ~/.pixcull/models/audio_tagger.onnx.thresholds.json
 ```
+
+## v3.93 — what the product does with these numbers
+
+Until v3.93 nothing in the product ran either tagger: `pixcull video`
+never called the audio pass. It does now, and the table at the top of
+this file decided how. "The DSP path stays as the always-available
+offline fallback" was written when the fallback had no audience. Wired
+in, it would have been what every install without the optional model
+ran — applause F1 0.00, laughter precision 0.12 — feeding a reel caption
+and a timeline lane that print what they are given.
+
+So the product publishes the learned tagger's events or none. Without
+the model, `audio_events.json` records `"tagger": null` and
+`"reason": "no-model"`, and the command says how to get one. The DSP
+detectors remain in `scoring/audio_events.py` for this evaluation and
+for the tempo and beat grid, which are a different measurement.

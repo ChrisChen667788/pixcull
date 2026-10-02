@@ -63,7 +63,9 @@ interactive review workspace: keyboard-first grid, ⌘K palette, per-axis
 - **Burst & near-dup folding** — stacks collapse to the peak frame with a
   one-key compare.
 - **Video too** — temporal scoring and reel-candidate detection with the
-  same glass-box treatment.
+  same glass-box treatment. With the optional audio model
+  (`pixcull models pull audio-tagger`, 16 MB) it also marks laughter,
+  applause and music on the timeline; without it, it says it did not listen.
 - **13 UI languages**, dark/light studio-neutral themes, WCAG-conscious.
 - **You choose where it runs** — with a MiniMax key configured, cloud judging is the default and your photos are uploaded to MiniMax (it asks once, and declining keeps you on-device); with no key, a bare `pixcull run` never leaves the machine. `--vlm-mode off` forces the on-device path outright. No telemetry either way.
 - **Cloud judging needs a funded MiniMax account.** It is their API and their bill, paid with your own key. Without balance the API returns 402 and PixCull falls back to the on-device rule stack, so nothing breaks; it just stops being the thing the first bullet describes. `pixcull m3 doctor` tells you which of those you are in, and distinguishes 'no balance' from 'bad key' — they look identical otherwise.

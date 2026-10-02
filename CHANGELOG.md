@@ -150,6 +150,8 @@ which is the thing that was actually false.
 
 One line each, exactly as the release was titled at the time.
 
+**v3.88** — the scheduled run was red for nine days on a three-node model
+
 **v3.87** — the face guard passed a frame where the face was never found
 
 **v3.86** — two of the fifteen unregenerated screenshots are scripted now

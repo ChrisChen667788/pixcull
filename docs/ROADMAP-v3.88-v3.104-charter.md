@@ -165,6 +165,27 @@ without one the DSP detectors do. A wiring gate fails if
 wiring it is declined, the PyPI line is removed instead — one of the two
 has to stop being false.
 
+**Shipped, with one clause of that measure re-derived.** The PyPI line
+came out for the 3.92.0 upload and went back, conditioned, with the
+wiring. On a ten-second clip of a synthesised chord progression the
+installed model marks music from 0.0 to 9.6 s, the file is written, and
+all seven reel candidates' reasons carry it.
+
+"Without one the DSP detectors do" was wrong, and this charter wrote it.
+`docs/AUDIO-TAGGER-EVAL.md` is the only audio measurement the project
+has: on 64 real clips the DSP detectors found none of 20 applause clips
+and were right about laughter 12% of the time (macro-F1 0.075, against
+0.933 for the learned model at its calibrated thresholds). The model is
+optional, so the DSP path is what most installs would have run, and the
+readers print what they are given. Events come from the learned tagger
+or the file records that nothing listened, with one of five reasons the
+review page has words for. The DSP tempo and beat grid are still
+written; nothing reads them yet.
+
+Still unwired and now written down: `audio_moment_boost`, which would
+feed events into the moment axis. That changes reel ranking and wants a
+measurement before it wants a caller.
+
 **And the delivery-audit page looks for a script that is not there.**
 Reported by gxfc9867 in PR #4. `serve_app.py` resolves
 `Path(__file__).parent / "cli_audit.py"`; the script is
@@ -177,6 +198,44 @@ and never called, this one is called and was never shipped.
 **Measure:** the page renders from an installed wheel, and the packaging
 test fails if a module `serve_app` loads by path is not in the wheel.
 
+**Shipped, first half.** The audit is `pixcull.report.cli_audit`, run by
+module name; the route is exercised through the real handler and a real
+subprocess, and the audit is run with a copy of the package alone on the
+path. The second half — a gate over everything the package loads by path
+— is v3.93.1, because looking for it found five more.
+
+### v3.93.1 — what else the wheel does not carry
+
+Not planned; found by sweeping for v3.93's defect class instead of its
+instance. Four search angles over the package, each finding re-checked
+against the published 3.92.0 wheel by a second reader told to refute it.
+Nine findings stood, one was refuted (`composition_classifier`'s model
+path has no caller in the pipeline). Beyond the audit script:
+
+* **Face detection cannot work from a wheel.** `detectors/face.py` loads
+  two MediaPipe model files from `pixcull/detectors/_models/`. They are
+  tracked in git and the build allowlist has no pattern for them, so the
+  wheel has neither. `_lazy_init` returns False and `analyze` returns an
+  empty result — "silently no-op", in its own comment. `pip install
+  'pixcull[face]'` installs MediaPipe and still detects no face:
+  `face_count`, blink, closed-eyes and face-blur are absent on every
+  installed copy. The largest of the five and the least visible.
+* **`/retrain` fails on every installed copy.** It imports
+  `build_axis_training_set` and `train_axis_rescorers` from `scripts/`.
+  The auto-retrain after ten corrections reaches the same worker.
+* **The vendored font and the PWA icons are 404.** `/docs/brand/*`
+  resolves against the repository root; from a wheel that is
+  `site-packages/docs/`. Pages fall back to system fonts.
+* **User LUTs have nowhere to go.** `color_grade.LUTS_DIR` is the
+  repository's `luts/`; from a wheel it is `site-packages/luts`.
+* **The sample-data button answers 500.** It says "samples/ not bundled
+  with this build", which is accurate, under a button that is still shown.
+
+**Measure:** each of the five either works from a wheel or says, where
+the user is, that it needs a checkout; and a packaging test fails when a
+file the package opens relative to itself is missing from the built
+wheel — the test v3.93 was chartered to leave behind.
+
 ### v3.94 — Python 3.13 is refused at install
 
 `requires-python = ">=3.11,<3.13"`. The ceiling exists because
@@ -188,14 +247,19 @@ installs and passes the hermetic suite. **May close as measured and
 declined** if a hard dependency has no 3.13 wheel — in which case the
 ceiling stays and the README says why, which it does not today.
 
-### After v3.94 — the first release since 3.53.1
+### The first release since 3.53.1 — done at v3.92, not after v3.94
 
-Not a code change. v3.54 onward on GitHub as a tagged release,
-which is reversible, and PyPI as a deliberate second step, which is not.
-Issue #3 is not fixed for the person who reported it until `pip install
-pixcull` installs the fix.
+Planned for after v3.94; the owner asked for it on 2026-10-02 so that
+issue #3's fix would reach `pip install`. `v3.92.0` is tagged, on GitHub
+as a release with its wheel and sdist, and on PyPI. Before the upload
+the PyPI page lost a sentence that was not true (audio events) and
+`CHANGELOG.md` gained "Upgrading from 3.53.1": twenty candidate changes
+drawn from thirty-six versions of history, each checked against the code
+at the tag and at HEAD.
 
-**Owner:** say go for the tag; `gh secret set PYPI_API_TOKEN` for PyPI.
+What that release does not contain is v3.93 and v3.93.1 — so on PyPI
+today the delivery-audit page is still 500 and face detection still
+cannot run. The next upload is the owner's call.
 
 ---
 

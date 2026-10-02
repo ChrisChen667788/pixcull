@@ -97,6 +97,11 @@ def _pkg_root() -> Path:
     return Path(_pixcull_pkg.__file__).resolve().parent
 
 
+#: The delivery audit, run as a subprocess by ``/admin/delivery/<run>``.
+#: A module name, so it resolves wherever the package is installed.
+_DELIVERY_AUDIT_MODULE = "pixcull.report.cli_audit"
+
+
 def _repo_root() -> Path | None:
     """The git checkout root, or None when running from a wheel.
     Detected by the presence of pyproject.toml one level above this
@@ -13540,7 +13545,7 @@ class _Handler(BaseHTTPRequestHandler):
         return True
 
     # P-PRO-7.1 — full delivery audit page.  Subprocess-runs
-    # ``scripts/cli_audit.py`` on the run's scores.csv + image input
+    # ``pixcull.report.cli_audit`` on the run's scores.csv + image input
     # dir, then wraps the resulting Markdown report in a minimal
     # HTML chrome so the photographer can read it in the browser
     # without dropping to a terminal.  ``?format=md`` returns the
@@ -13567,10 +13572,11 @@ class _Handler(BaseHTTPRequestHandler):
         # Image root: prefer input/ for upload-mode runs; scan-mode
         # runs carry absolute paths in scores.csv so leave None.
         input_dir = out_dir.parent / "input"
-        cli_path = Path(__file__).resolve().parent / "cli_audit.py"
-
+        # v3.93 — by module name. This built a path to "cli_audit.py"
+        # beside this file, where it had not been since the server moved
+        # into the package; the script was in scripts/, outside the wheel.
         cmd = [
-            sys.executable, str(cli_path),
+            sys.executable, "-m", _DELIVERY_AUDIT_MODULE,
             "--scores-csv", str(scores_csv),
             "--mandatory-preset", preset,
         ]
@@ -14391,7 +14397,7 @@ def _render_delivery_audit_html(run_id: str, md: str, preset: str) -> str:
         "<a href='/admin'>← 返回 admin</a>"
         "</header>"
         f"<main>{body}</main>"
-        "<footer>P-PRO-7.1 · 数据来源:scripts/cli_audit.py · 包含 P-CORE-2 / "
+        "<footer>P-PRO-7.1 · 数据来源:pixcull.report.cli_audit · 包含 P-CORE-2 / "
         "P-AI-4 / P-PRO-4 / P-PRO-6 / P-PRO-7 五段审计</footer>"
         "</body></html>"
     )

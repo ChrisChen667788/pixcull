@@ -62,6 +62,32 @@
 
 ## What's new
 
+**v3.93** — `pixcull video` never listened to the video. The function that
+reads a clip's audio was written for the first video release and nothing
+called it. The reel caption, the review page's event lane and the lightbox
+scrubber were all built to read `audio_events.json`, and no run had ever
+written one. It runs now, between scoring and the reel detector;
+`--no-audio` skips it.
+
+Wiring it the obvious way would have been worse than leaving it out.
+Laughter, applause and music come from an optional model
+(`pixcull models pull audio-tagger`, 16 MB), and without it the code falls
+back to hand-tuned signal detectors. This project measured those on 64 real
+clips: none of 20 applause clips found, laughter right 12% of the time. The
+readers print what they are handed, so the fallback would have written
+"laughter" into reel captions on most installs. Without the model, a run
+records that nothing listened and how to change that, and the review page
+tells "heard nothing" apart from "did not listen".
+
+The delivery-audit page has answered 500 on every installed copy since
+v2.31. It ran a script from `scripts/`, which the wheel does not carry, and
+the test for that script ran it from the checkout. The audit is part of the
+package now, and a test runs it with nothing else on the path. Moving it put
+it in front of a gate it had been outside of, which failed at once: the
+client PDF's cover count and its five best frames came from the machine's
+verdicts, so a frame the photographer had culled could lead it. They follow
+the corrections now.
+
 **v3.92** — The oldest torch this package promised was one it could not
 use. `pyproject.toml` said `torch>=2.2` beside a transformers that decides
 for itself which torch it will accept: 5.18 wants 2.5, and below that it does
@@ -129,20 +155,6 @@ Loading an older checkpoint also started a background request asking the hub
 to convert it, whatever `local_files_only` said. That is switched off.
 Measured with the socket layer blocked, loopback included: 48 attempts
 before, none after, and every verdict the same.
-
-**v3.88** — The scheduled test run had been red for nine days, on a model
-three nodes long. CI resolves `onnx` and `onnxruntime` independently, and on
-21 September it paired `onnx` 1.23, which writes IR version 14, with
-`onnxruntime` 1.30, which reads up to 13. One test had pinned the IR version
-by hand and its sibling had not. Test models are built in one place now, and
-a test fails any that are built anywhere else.
-
-The same refusal had a shape in the product. The audio tagger counted a model
-as available once the file, its labels and the runtime were present, and never
-asked whether the runtime would open it — so a model exported by a newer
-`onnx` failed in the middle of tagging instead of falling back to the DSP
-detectors. It decides by loading the model now, and says once why it fell
-back.
 
 Earlier releases are in [`CHANGELOG.md`](CHANGELOG.md).
 

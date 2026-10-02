@@ -50,6 +50,10 @@ MUST_HAVE_CODE = (
     "pixcull/scoring/transcribe.py",
     "pixcull/report/serve_app.py",
     "pixcull/pipeline/orchestrator.py",
+    # v3.93 — the review server runs this as a subprocess for the
+    # delivery-audit page. It lived in scripts/, which is not shipped, and
+    # the page answered 500 on every installed copy.
+    "pixcull/report/cli_audit.py",
 )
 # Runtime data that is loaded from disk — the reason the allowlist exists.
 MUST_HAVE_DATA = (

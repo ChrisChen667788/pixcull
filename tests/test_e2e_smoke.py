@@ -454,3 +454,48 @@ def test_video_journey_with_real_transcription(video_run):
         assert "no speech" in (r.stdout + r.stderr)
     else:
         assert (run_dir / "transcript.json").is_file()
+
+
+@pytest.mark.slow
+def test_video_journey_listens_to_the_clip(tmp_path):
+    """v3.93 — the whole `pixcull video`, not `--extract-only`.
+
+    Every other journey here stops after extraction, which is why a
+    command that never ran its audio pass had a green journey. This one
+    runs the stages a user gets — score, audio, temporal, reel — and
+    asks for the file three readers were built on and nothing wrote.
+
+    The lane this runs in has no audio event model, so the honest answer
+    there is "did not listen, and here is how"; a laptop that has pulled
+    the model gets a tagger name instead. Either is the pass running. A
+    missing file is not.
+    """
+    from tests._model_gate import CLIP_REPO, absent, is_cached
+    if not is_cached(CLIP_REPO):
+        absent(f"pipeline weights not cached ({CLIP_REPO})")
+
+    src = _tiny_video(tmp_path / "clip.mp4")
+    out = tmp_path / "vrun"
+    r = _cli("video", str(src), "-o", str(out), "--interval-s", "1.0",
+             env_extra={"PIXCULL_NO_AUTO_INDEX": "1",
+                        "PIXCULL_LIBRARY_DIR": str(tmp_path / "lib")},
+             timeout=1800)
+    assert r.returncode == 0, f"`pixcull video` failed:\n{r.stdout[-3000:]}"
+
+    audio = out / "audio_events.json"
+    assert audio.is_file(), (
+        "`pixcull video` wrote no audio_events.json — the audio pass did "
+        f"not run:\n{r.stdout[-1500:]}")
+    d = json.loads(audio.read_text("utf-8"))
+    assert d["has_audio"] is True, (
+        f"the clip has a sine track and the pass found no audio: {d}")
+    assert d["tagger"] or d["reason"] == "no-model", (
+        f"neither a tagger nor the reason there was none: {d}")
+    if not d["tagger"]:
+        assert d["events"] == [], (
+            "events were recorded with no model installed — the DSP "
+            f"detectors are not to be published: {d['events']}")
+        assert "pixcull models pull audio-tagger" in r.stdout
+    # …and the stages after it still ran.
+    assert (out / "temporal.json").is_file()
+    assert (out / "reel_candidates.json").is_file()

@@ -934,6 +934,37 @@ def transcribe_engines() -> None:
                       "`pixcull transcribe` will exit 3 until one is")
 
 
+def _video_audio_stage(output: Path) -> None:
+    """Listen to the clip and say what was found — or why nothing was.
+
+    v3.93 — `pixcull video` never ran this. The reel detector, the review
+    page and the lightbox scrubber all read ``audio_events.json``, and
+    nothing wrote it.
+
+    A failure here is reported and the command goes on: the audio is one
+    input to the reel caption, not a reason to lose the temporal pass.
+    """
+    from pixcull.scoring.audio_events import run_audio_analysis
+
+    console.print("[bold]Audio (laughter / applause / music)…[/bold]")
+    try:
+        audio = run_audio_analysis(output)
+    except Exception as exc:  # noqa: BLE001
+        console.print(f"[yellow]⚠ Audio analysis failed and was skipped: "
+                      f"{type(exc).__name__}: {exc}[/yellow]")
+        return
+    if audio.tagger is None:
+        console.print(f"[yellow]Audio → audio_events.json, no events: "
+                      f"{audio.note}[/yellow]")
+        return
+    counts = {k: sum(1 for e in audio.events if e.kind == k)
+              for k in ("laughter", "applause", "music")}
+    heard = " · ".join(f"{n} {k}" for k, n in counts.items() if n) \
+        or "none heard"
+    console.print(f"[green]✓ Audio → audio_events.json[/green]  "
+                  f"({heard}; tagger: {audio.tagger})")
+
+
 @app.command()
 def video(
     path: Path = typer.Argument(
@@ -989,20 +1020,27 @@ def video(
         False, "--no-reel",
         help="Skip the v2.0-P0-3 reel-candidate detector.",
     ),
+    no_audio: bool = typer.Option(
+        False, "--no-audio",
+        help="Skip listening to the clip's audio (laughter / applause / "
+             "music events, written to audio_events.json).",
+    ),
     reel_max: int = typer.Option(
         20, "--reel-max",
         help="Max reel candidates to emit (default 10–20).",
     ),
 ) -> None:
-    """v2.0 — Import a video: extract → score → temporal → reel candidates.
+    """v2.0 — Import a video: extract → score → audio → temporal → reel.
 
     The extracted ``video_frames/<id>/`` folder is scored by the same
     pipeline as a photo shoot, so the video becomes one PixCull "run"
-    (a dense burst group).  After scoring, a temporal pass adds
-    ``score_temporal`` per frame + per-window scores (``temporal.json``),
-    then a reel-candidate detector emits the best diverse clips
+    (a dense burst group).  After scoring, the clip's audio is listened
+    to (``audio_events.json``), a temporal pass adds ``score_temporal``
+    per frame + per-window scores (``temporal.json``), then a
+    reel-candidate detector emits the best diverse clips
     (``reel_candidates.json``).  Use ``--extract-only`` to stop after
-    frame extraction, ``--no-temporal`` / ``--no-reel`` to skip a stage.
+    frame extraction, ``--no-audio`` / ``--no-temporal`` / ``--no-reel``
+    to skip a stage.
     """
     from pixcull.io.video import import_video, FFmpegError
 
@@ -1049,6 +1087,14 @@ def video(
         rescorer_mode=rescorer_mode,
     )
     console.print(f"[green]✓ Run complete → {output}[/green]")
+
+    # v3.93 — before the temporal gate, not after it: the audio does not
+    # depend on the temporal pass, and the reel detector below reads
+    # audio_events.json, so it has to exist by then.
+    if no_audio:
+        console.print("[dim]--no-audio set; not listening to the clip.[/dim]")
+    else:
+        _video_audio_stage(output)
 
     if no_temporal:
         console.print("[dim]--no-temporal set; skipping temporal pass.[/dim]")

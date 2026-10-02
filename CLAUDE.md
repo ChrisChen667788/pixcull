@@ -767,19 +767,45 @@ at before believing the work is nearly done.**
 `el.hidden = true` is inert (v3.64, the client-present bar that was on screen
 permanently saying the scores were hidden).
 
-`pixcull 3.53.1` is on PyPI, the first release since 2.47.0.  Publishing is
-`workflow_dispatch` + opt-in; a tag push used to upload, which burns a version
-number irreversibly.
+**Audio events come from the learned tagger or not at all** (v3.93).
+`run_audio_analysis` had no caller for five months; `pixcull video` runs it
+now, between scoring and the reel detector.  `get_tagger()` falls back to
+the DSP detectors when the optional model is missing, and that fallback is
+deliberately **not** what the product publishes: `docs/AUDIO-TAGGER-EVAL.md`
+has them finding 0 of 20 applause clips and right about laughter 12% of the
+time, and the readers (reel `why`, review lane, lightbox) print what they
+are handed.  No model means `tagger: null` plus one of five `reason` codes
+in `audio_events.json`; the review page has wording for each
+(`tests/test_video_listens_to_the_clip.py` holds the pair together and runs
+the page's function under node).  A public page that names laughter or
+applause must name `audio-tagger` in the same paragraph.
+`audio_moment_boost` is still uncalled — wiring it changes reel ranking and
+needs a measurement first.
+
+**The wheel carries the package and nothing else** (v3.93).  The
+delivery-audit page ran `scripts/cli_audit.py` by a path beside
+`serve_app.py`; right when the server lived in `scripts/`, 500 on every
+installed copy since v2.31, and its smoke test ran the script from the
+checkout the whole time.  It is `pixcull.report.cli_audit` now.  **Sweeping
+for the class found five more, v3.93.1 in the charter — the worst is that
+`detectors/_models/*` (the MediaPipe face models) is tracked and not in the
+build allowlist, so `pixcull[face]` detects no face from a wheel.**  When a
+feature needs a file, ask whether `[tool.hatch.build] include` has a pattern
+for it; `Path(__file__)…parent.parent.parent` is a checkout path.
+
+`pixcull 3.92.0` is on PyPI (2026-10-02), the first release since 3.53.1;
+`CHANGELOG.md` opens with what changes for someone upgrading.  Publishing is
+`workflow_dispatch` + opt-in from the tag (`gh workflow run release.yml
+--ref vX.Y.Z -f publish_pypi=true`); a tag push builds and makes the GitHub
+Release only.  PyPI's `/pypi/pixcull/json` lags the upload by minutes —
+check `/pypi/pixcull/<version>/json`.
 
 **Current block: `docs/ROADMAP-v3.88-v3.104-charter.md`** (written
-2026-10-01).  v3.88–v3.92 are shipped; PR #4 has three commits waiting on
-their author; v3.93 is the one to read before
-touching video — `run_audio_analysis` has never had a caller, so
-`pixcull video` has never produced `audio_events.json` and the learned
-audio tagger has never run in the product, while `README-PYPI.md` lists
-audio events as a feature.  The measurements the 2026-09-12 correction
-set unblocked (v3.29's second half, v2.83, v3.8) are scheduled there as
-v3.96–v3.99 and are plain engineering, not owner asks.
+2026-10-01).  v3.88–v3.93 are shipped; PR #4 has three commits waiting on
+their author; v3.93.1 is next and is the wheel list above.  The
+measurements the 2026-09-12 correction set unblocked (v3.29's second half,
+v2.83, v3.8) are scheduled there as v3.96–v3.99 and are plain engineering,
+not owner asks.
 
 **Earlier block: `docs/ROADMAP-v3.1-v3.27-charter.md`** — twenty-seven versions read
 out of the same 46-entry competitive research at the level of PixCull's own core

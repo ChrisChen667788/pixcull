@@ -11,6 +11,13 @@ Found while fixing an unrelated test in v3.88, and due to be wired in
 v3.93. This release goes to PyPI before that, so the sentence came out
 rather than be published again. The rule it leaves behind: the claim and
 the call arrive together, in either order, or neither is there.
+
+v3.93 — the call arrived, and with a condition the old sentence did not
+have. Events come from an optional model; without it the product records
+that it did not listen (``tests/test_video_listens_to_the_clip.py`` says
+why the DSP detectors are not a substitute). So the claim is true for
+someone who has pulled the model and false for someone who has not, and
+a public page that names the feature has to name the model beside it.
 """
 from __future__ import annotations
 
@@ -26,6 +33,11 @@ PUBLIC = ("README-PYPI.md", "README.md", "modelscope/README.md")
 #: release notes that say the feature was *missing* talk about "the audio
 #: pass", not "audio events".
 CLAIM = re.compile(r"audio events?\s*\(|音频事件", re.I)
+#: The kinds, however the sentence is built — v3.93's wording does not
+#: say "audio events" at all.
+KINDS = re.compile(r"\blaughter\b|\bapplause\b|笑声|掌声", re.I)
+#: What a reader has to be told they need.
+MODEL = "audio-tagger"
 
 
 def _callers_of(name: str) -> list[str]:
@@ -55,6 +67,43 @@ def test_audio_events_are_claimed_only_if_something_produces_them():
         "nothing in the package calls run_audio_analysis, so no run has "
         f"ever produced audio_events.json: {claims}. Wire the pass into "
         "`pixcull video`, or take the claim out.")
+
+
+def _paragraphs(text: str) -> list[tuple[int, str]]:
+    """``(first line number, text)`` for each blank-line-separated block."""
+    out, start, buf = [], 1, []
+    for i, line in enumerate(text.splitlines() + [""], 1):
+        if line.strip():
+            if not buf:
+                start = i
+            buf.append(line)
+        elif buf:
+            out.append((start, "\n".join(buf)))
+            buf = []
+    return out
+
+
+def test_wherever_the_kinds_are_named_the_model_is_named_too():
+    """A default install has no audio model and detects nothing. A page
+    that lists laughter and applause without saying what they need is
+    describing somebody else's install."""
+    bare = [f"{rel}:{line}" for rel in PUBLIC
+            for line, para in _paragraphs((ROOT / rel).read_text("utf-8"))
+            if KINDS.search(para) and MODEL not in para]
+    assert not bare, (
+        f"these paragraphs name audio event kinds without naming the "
+        f"optional model that produces them (`pixcull models pull "
+        f"{MODEL}`): {bare}")
+
+
+def test_the_paragraph_scan_sees_a_bare_claim_and_a_qualified_one():
+    text = ("Video — marks laughter and applause.\n\n"
+            "Video — with `pixcull models pull audio-tagger` it marks\n"
+            "laughter and applause.\n\n"
+            "视频 —— 标出笑声和掌声。\n")
+    hits = [line for line, para in _paragraphs(text)
+            if KINDS.search(para) and MODEL not in para]
+    assert hits == [1, 6]
 
 
 def test_the_scan_tells_a_call_from_a_mention(tmp_path, monkeypatch):

@@ -38,6 +38,7 @@ import numpy as np
 
 from pixcull.scoring.audio_events import (
     DEFAULT_SR,
+    HEURISTIC_TAGGER,
     AudioEvent,
     analyze_audio,
     audio_moment_boost,  # re-exported for callers
@@ -191,7 +192,7 @@ def best_threshold(truth, scorer, *, grid) -> tuple[float, float]:
 
 class HeuristicTagger:
     """The v2.0 DSP detectors behind the tagger interface (default)."""
-    name = "heuristic-dsp"
+    name = HEURISTIC_TAGGER
 
     def available(self) -> bool:
         return True
