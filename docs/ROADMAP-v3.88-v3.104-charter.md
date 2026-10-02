@@ -125,9 +125,28 @@ It took two tries. The first run that reached a model died on the lane's
 own pin: `torch==2.4.1` under a transformers that will not use a torch
 older than 2.5. The skips had been hiding that too.
 
-### v3.92 — `pixcull video` has never listened to the audio
+### v3.92 — the oldest torch we promised was one we could not use
 
-Found while fixing v3.88. `run_audio_analysis` was added in v2.0-P1-3 on
+Not planned; found when v3.91.1 made the real-model lane run.
+`pyproject.toml` declared `torch>=2.2,<3` beside `transformers>=4.40,<6`.
+transformers raises its own torch requirement as it goes — 5.6 wants
+2.4, 5.18 wants 2.5 — and below it does not fail: it disables PyTorch and
+every model class then says "PyTorch was not found", with torch
+installed. A fresh install never sees it. An environment that upgrades
+one and not the other does, and the Dockerfile pinned 2.4.1 beside an
+unpinned transformers.
+
+**Measure, met:** the floor is 2.5 in the package, the image and the
+Studio; the hermetic and browser lanes are pinned to exactly the floor,
+so the oldest torch promised is one that is run; and
+`tests/test_torch_floor.py` asks transformers whether it will use the
+torch it finds. That last one is the point — the bar will move again,
+and it will move in that lane first.
+
+### v3.93 — two things the package describes and cannot reach
+
+**`pixcull video` has never listened to the audio.** Found while fixing
+v3.88. `run_audio_analysis` was added in v2.0-P1-3 on
 2026-05-29 and **nothing in the package has ever called it**.
 `audio_events.json` has two readers — the reel caption and the review
 page — and no writer. The learned tagger of v2.1 and v2.2 ("auto-promotes
@@ -146,21 +165,20 @@ without one the DSP detectors do. A wiring gate fails if
 wiring it is declined, the PyPI line is removed instead — one of the two
 has to stop being false.
 
-### v3.93 — what `pip` is told is wrong at both ends
+**And the delivery-audit page looks for a script that is not there.**
+Reported by gxfc9867 in PR #4. `serve_app.py` resolves
+`Path(__file__).parent / "cli_audit.py"`; the script is
+`scripts/cli_audit.py`, which is not in the package at all. The path it
+builds does not exist in a checkout either — the reporter saw the page
+answer 500 — and from `pip install` there is nothing it could find.
+The same shape as the audio pass, from the other side: that one was built
+and never called, this one is called and was never shipped.
 
-**The torch floor admits a combination that cannot load a model.**
-`pyproject.toml` declares `torch>=2.2,<3` beside `transformers>=4.40,<6`.
-transformers 5.18 refuses a torch older than 2.5 and says so as "PyTorch
-was not found", with torch installed. A fresh install resolves the newest
-of both and works; an environment that upgrades transformers and keeps
-torch 2.2–2.4 does not, and v3.90 would report it as every frame failing
-on `ImportError`. Found when v3.91.1 made the real-model lane run.
+**Measure:** the page renders from an installed wheel, and the packaging
+test fails if a module `serve_app` loads by path is not in the wheel.
 
-**Measure:** the floor is the oldest torch the newest allowed
-transformers accepts, the two pinned lanes and the install manifests
-move with it, and a test holds the pair.
+### v3.94 — Python 3.13 is refused at install
 
-**And Python 3.13 is refused at install.**
 `requires-python = ">=3.11,<3.13"`. The ceiling exists because
 `serve_app.py` parses multipart uploads with `cgi.FieldStorage` in two
 places and 3.13 removed the module. 3.13 has been out for two years.
@@ -170,9 +188,9 @@ installs and passes the hermetic suite. **May close as measured and
 declined** if a hard dependency has no 3.13 wheel — in which case the
 ceiling stays and the README says why, which it does not today.
 
-### v3.94 — the first release since 3.53.1
+### After v3.94 — the first release since 3.53.1
 
-Not a code change. v3.54 through v3.93 on GitHub as a tagged release,
+Not a code change. v3.54 onward on GitHub as a tagged release,
 which is reversible, and PyPI as a deliberate second step, which is not.
 Issue #3 is not fixed for the person who reported it until `pip install
 pixcull` installs the fix.

@@ -27,8 +27,8 @@ rawpy>=0.19
 # ceiling existed, so the one install a visitor cannot inspect was the
 # one install with no protection. Kept in step by
 # tests/test_dependency_pins_agree.py — do not edit one file alone.
-torch>=2.2,<3
-torchvision>=0.17,<1
+torch>=2.5,<3
+torchvision>=0.20,<1
 transformers>=4.40,<6
 safetensors>=0.4
 

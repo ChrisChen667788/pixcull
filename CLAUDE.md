@@ -596,6 +596,16 @@ output.  **Plumbing tested, claim not.**  `tests/test_attribution.py` now
 holds the rule, with an explicit exemption for the composition classifier's
 saliency map, which computes a feature rather than explaining a score.
 
+**transformers decides which torch it will use, and moves that bar**
+(v3.92).  5.6 wants 2.4, 5.18 wants 2.5; below the bar it does not fail to
+import — it disables PyTorch and every model class says "PyTorch was not
+found", with torch installed.  The floor in `pyproject.toml` is 2.5, the
+hermetic and browser lanes are pinned to exactly that floor (so the oldest
+torch promised is one that is run), the smoke and real-model lanes float,
+and the Dockerfile and the Studio follow.  `tests/test_torch_floor.py` holds
+all of it and asserts `is_torch_available()`; when that goes red in the
+pinned lane, raise the floor everywhere at once.
+
 **A green lane is not a lane that ran** (v3.91.1).  The weekly real-model
 lane was green on five skips and no tests for as long as anyone looked:
 its tests are gated on cached weights and nothing downloaded them.  It
@@ -762,8 +772,8 @@ permanently saying the scores were hidden).
 number irreversibly.
 
 **Current block: `docs/ROADMAP-v3.88-v3.104-charter.md`** (written
-2026-10-01).  v3.88–v3.90 are shipped; v3.91 (issue #2, Windows drives)
-needs a decision on the reporter's PR; v3.92 is the one to read before
+2026-10-01).  v3.88–v3.92 are shipped; PR #4 has three commits waiting on
+their author; v3.93 is the one to read before
 touching video — `run_audio_analysis` has never had a caller, so
 `pixcull video` has never produced `audio_events.json` and the learned
 audio tagger has never run in the product, while `README-PYPI.md` lists

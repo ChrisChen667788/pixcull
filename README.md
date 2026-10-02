@@ -62,6 +62,21 @@
 
 ## What's new
 
+**v3.92** — The oldest torch this package promised was one it could not
+use. `pyproject.toml` said `torch>=2.2` beside a transformers that decides
+for itself which torch it will accept: 5.18 wants 2.5, and below that it does
+not fail to import. It disables PyTorch, and every model then reports
+"PyTorch was not found" — with torch installed. A fresh install resolves the
+newest of both and never sees it. An environment that upgrades one and not
+the other does, and so would an image built from the Dockerfile, which pinned
+2.4.1.
+
+The floor is 2.5 now, in the package, the image and the ModelScope Studio.
+The two CI lanes that hold torch still are pinned to exactly that floor, so
+the oldest version promised is one that is run, and a test asks transformers
+whether it will use the torch it finds — which is where this shows next time,
+instead of in someone's terminal.
+
 **v3.91.1** — The weekly lane that tests against the real models had been
 running nothing. Its step was named "downloads CLIP + BLIP" and downloaded
 nothing: every test in it waits for the weights to be cached already, a fresh
@@ -128,31 +143,6 @@ asked whether the runtime would open it — so a model exported by a newer
 `onnx` failed in the middle of tagging instead of falling back to the DSP
 detectors. It decides by loading the model now, and says once why it fell
 back.
-
-**v3.87** — The three video screenshots are scripted now, and getting
-them there turned up two things worth more than the pictures.
-
-The joint photo + video timeline was reading the wrong file. `pixcull run`
-writes `scores.csv` under `output/`; `pixcull video` writes it in the run
-root; this page only ever looked in the root. So the page named after
-photographs showed none of them, for every ordinary run. The one layout it
-did read is the video run — whose rows the comment above the loop says it
-skips, and never did: a 34-frame clip came back as 34 photographs with no
-capture time, counted in the header, tallied as 35 time points where there
-was one. Consecutive photos were also grouped into a single row whatever
-their timestamps, so a year of work rendered as one instant.
-
-The face guard on the demo clip certifies less than it sounds like. Its line
-reads "containment: 0 detected face(s) fell outside the frosted region", and
-it was read as "no face escaped". On 145 of its 620 frames the detector
-returned nothing, so there was nothing to contain and the frame passed. On
-frame 101 it returned two boxes, both on the subject's coat and neither on
-her face — in profile, unfrosted, entirely legible — and containment passed
-at 100%. Two false positives satisfied the check completely, and neither
-model on this machine finds that face at all. So the guard says what it
-actually knows now, and what may be photographed is a list of frames a
-person has looked at at full size, keyed by content hash. The screenshots
-are re-shot from a stretch that needs no frosting at all.
 
 Earlier releases are in [`CHANGELOG.md`](CHANGELOG.md).
 

@@ -75,6 +75,8 @@ which is the thing that was actually false.
 
 One line each, exactly as the release was titled at the time.
 
+**v3.87** — the face guard passed a frame where the face was never found
+
 **v3.86** — two of the fifteen unregenerated screenshots are scripted now
 
 **v3.85** — reverting v3.83: a burst loser is not an unwanted frame

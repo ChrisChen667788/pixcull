@@ -1,6 +1,6 @@
 [project]
 name = "pixcull"
-version = "3.91.1"
+version = "3.92.0"
 description = "AI photo culling for professional photographers — MiniMax M3 judges the frame while reading the on-device measurements, 6-axis rubric, XMP/IPTC export, Lightroom & Capture One ready."
 # v2.23 — dedicated PyPI readme: the repo README leans on relative-path
 # screenshots and GitHub-only markup that render broken on pypi.org.
@@ -74,8 +74,8 @@ dependencies = [
     # search until `_feature_tensor` shimmed both shapes. Cap the majors
     # so a future 6.x / torch 3.x can't drift in untested; bump
     # deliberately once the real-model CI lane is green on the new major.
-    "torch>=2.2,<3",
-    "torchvision>=0.17,<1",
+    "torch>=2.5,<3",
+    "torchvision>=0.20,<1",
     "transformers>=4.40,<6",
     "safetensors>=0.4",
     # subject segmentation (U^2-Net)

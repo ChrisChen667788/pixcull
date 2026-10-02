@@ -58,9 +58,10 @@ jobs:
           # v3.74 — NOT pinned. This lane's whole job is to prove that
           # `pip install pixcull` works, and it was proving that
           # `pip install torch==2.4.1` works: every lane pinned that
-          # pair, torch 2.4.1 is from 2024, and pyproject allows
-          # `>=2.2,<3`, so a person installing today gets 2.11 and no
-          # lane had ever exercised it.
+          # pair, torch 2.4.1 is from 2024, and pyproject allowed
+          # `>=2.2,<3`, so a person installing today gets the newest and
+          # no lane had ever exercised it. (v3.92: the floor is 2.5 and
+          # the pinned lanes run exactly that; see tests/test_torch_floor.py.)
           #
           # torch and torchvision still go in together, in one command,
           # from the CPU index — that was the real reason for the
@@ -70,8 +71,11 @@ jobs:
           #
           # The hermetic and browser lanes stay pinned on purpose: a
           # fixed pair makes a red run mean "the code changed", not "the
-          # index did". This is a lane where the opposite is what we
-          # want; since v3.91.1 the weekly real-model lane is the other.
+          # index did" — and since v3.92 the pair they are pinned to is
+          # the declared floor, so the oldest torch we promise is one
+          # that is actually run. This is a lane where the opposite is
+          # what we want; since v3.91.1 the weekly real-model lane is
+          # the other.
           pip install --index-url https://download.pytorch.org/whl/cpu \
                       --extra-index-url https://pypi.org/simple \
                       torch torchvision
@@ -124,7 +128,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install --index-url https://download.pytorch.org/whl/cpu \
                       --extra-index-url https://pypi.org/simple \
-                      "torch==2.4.1" "torchvision==0.19.1"
+                      "torch==2.5.1" "torchvision==0.20.1"
           pip install -e ".[dev]"
           pip install playwright
           python -m playwright install --with-deps chromium
@@ -181,7 +185,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install --index-url https://download.pytorch.org/whl/cpu \
                       --extra-index-url https://pypi.org/simple \
-                      "torch==2.4.1" "torchvision==0.19.1"
+                      "torch==2.5.1" "torchvision==0.20.1"
           pip install -e ".[dev]"
           # v3.50 — the face extra. Claim 4 of eighteen in the README is
           # InsightFace embeddings into DBSCAN into a cross-run face
