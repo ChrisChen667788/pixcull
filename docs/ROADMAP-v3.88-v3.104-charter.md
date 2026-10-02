@@ -87,11 +87,23 @@ on macOS and Linux nothing changes. Added here: the enumeration in a
 function that can be tested without drive letters, the wiring through
 `/browse`, and a real-browser pass with two pretend drives.
 
-**Still open on that PR:** three more commits — CJK watermark fonts, a
-client review sheet with ratings and a viewer, and light-theme overlay
-contrast. Each needs its own read. The PR description puts "Closes #3"
-under the overlay fix; #3 is the offline issue, which that commit does not
-touch, so merging the PR as described would close the wrong one.
+**Still open on that PR:** three more commits, each read by a reviewer and
+a skeptic, none mergeable as written.
+
+* *CJK watermark fonts.* The list tries `C:/Windows/Fonts/arial.ttf`
+  before any CJK font, and on a Mac with Arial installed Pillow resolves
+  that path by name — so the watermark is Arial, which has no CJK glyphs,
+  and the tofu the commit fixes is still there. Reproduced here.
+* *Client review sheet.* The copy list now reads `1. DSCF1234 ★★★` and
+  `parse_picks` was not taught it: every line comes back with two "could
+  not read" warnings. Reproduced here. Two touch targets are 40 and 42 px
+  against the 44 it claims.
+* *Light-theme overlays.* The drag properties sit in `results.css` with
+  no selector around them, so `touch-action: none` applies to nothing and
+  the toggle cannot be dragged by touch.
+
+None of the three brings a test, and the description puts "Closes #3"
+under the overlay fix; #3 is the offline issue.
 
 ### v3.91.1 — the lane that runs the real models had run nothing
 
@@ -106,7 +118,12 @@ and checked that the lane named the test.
 
 **Measure, met:** the lane downloads CLIP, BLIP and DINOv2 before
 testing, missing weights fail there instead of skipping, and its log
-shows tests that ran.
+shows tests that ran — five passed and one deliberate skip, on torch
+2.14 and transformers 5.18, against a hub it reached for real.
+
+It took two tries. The first run that reached a model died on the lane's
+own pin: `torch==2.4.1` under a transformers that will not use a torch
+older than 2.5. The skips had been hiding that too.
 
 ### v3.92 — `pixcull video` has never listened to the audio
 
@@ -129,8 +146,21 @@ without one the DSP detectors do. A wiring gate fails if
 wiring it is declined, the PyPI line is removed instead — one of the two
 has to stop being false.
 
-### v3.93 — Python 3.13 is refused at install
+### v3.93 — what `pip` is told is wrong at both ends
 
+**The torch floor admits a combination that cannot load a model.**
+`pyproject.toml` declares `torch>=2.2,<3` beside `transformers>=4.40,<6`.
+transformers 5.18 refuses a torch older than 2.5 and says so as "PyTorch
+was not found", with torch installed. A fresh install resolves the newest
+of both and works; an environment that upgrades transformers and keeps
+torch 2.2–2.4 does not, and v3.90 would report it as every frame failing
+on `ImportError`. Found when v3.91.1 made the real-model lane run.
+
+**Measure:** the floor is the oldest torch the newest allowed
+transformers accepts, the two pinned lanes and the install manifests
+move with it, and a test holds the pair.
+
+**And Python 3.13 is refused at install.**
 `requires-python = ">=3.11,<3.13"`. The ceiling exists because
 `serve_app.py` parses multipart uploads with `cgi.FieldStorage` in two
 places and 3.13 removed the module. 3.13 has been out for two years.
