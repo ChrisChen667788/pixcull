@@ -413,7 +413,8 @@ def _silent(reason: str) -> AudioResult:
 
 
 def run_audio_analysis(output_dir: Path, *, write: bool = True,
-                       tagger=None) -> AudioResult:
+                       tagger=None, frames_dir: Path | None = None
+                       ) -> AudioResult:
     """Listen to the run's source video and write ``audio_events.json``.
 
     v3.93 — this function had no caller from the day it was written
@@ -438,11 +439,14 @@ def run_audio_analysis(output_dir: Path, *, write: bool = True,
     floor) and no learned model here replaces them.
 
     ``tagger`` is for tests; ``None`` asks ``get_tagger`` for the learned
-    one.
+    one. ``frames_dir`` is the clip's ``video_frames/<id>/``; without it
+    the directory is found by looking, which only works while the output
+    holds one clip — `pixcull video` knows which one it just extracted
+    and says so.
     """
     from pixcull.scoring.temporal import _resolve_frames_dir
     output_dir = Path(output_dir)
-    frames_dir = _resolve_frames_dir(output_dir, None)
+    frames_dir = _resolve_frames_dir(output_dir, frames_dir)
     manifest = json.loads((frames_dir / "manifest.json").read_text("utf-8"))
     source = manifest.get("source_path")
     if not source or not Path(source).exists():

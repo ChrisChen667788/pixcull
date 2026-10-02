@@ -1,6 +1,6 @@
 """P-PRO-6 — ICC profile / color-space extraction helpers.
 
-Used by the unified CLI audit (scripts/cli_audit.py) to flag color
+Used by the unified CLI audit (pixcull.report.cli_audit) to flag color
 space inconsistency across a delivery folder.  Photographers often
 end up with mixed sRGB + Display P3 + Adobe RGB in the same album
 when frames came from different sources (Lr export, direct Canon

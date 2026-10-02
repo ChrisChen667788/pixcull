@@ -1281,6 +1281,52 @@ def _rebuild_reel_profile() -> int:
     return int(prof.get("n") or 0)
 
 
+def _read_audio_events(run_dir: Path) -> dict | None:
+    """``audio_events.json`` for a run, or None when there is none to read."""
+    try:
+        ap = Path(run_dir) / "audio_events.json"
+        if ap.exists():
+            got = json.loads(ap.read_text("utf-8"))
+            return got if isinstance(got, dict) else None
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+#: v3.93 — why an audio lane is empty, per ``reason`` in audio_events.json
+#: (``pixcull.scoring.audio_events.NOT_LISTENED``; the two are held
+#: together by tests/test_video_listens_to_the_clip.py). Worded once, here,
+#: and sent to both pages that draw the lane — the review page and the
+#: lightbox scrubber read the same file through two different payloads,
+#: and the first version of this explained it on one of them.
+_AUDIO_NOTE_ZH = {
+    "no-model": "这段视频有声音,但没有安装音频事件模型,所以没有检测笑声 / 掌声 / "
+                "音乐。运行 pixcull models pull audio-tagger(16 MB)后重新导入即可。",
+    "model-failed": "音频事件模型在这段视频上运行失败,没有记录任何事件。",
+    "no-source": "原视频已不在这次运行记录的位置,没有可听的声音。",
+    "no-track": "这段视频没有音轨。",
+    "undecodable": "ffmpeg 无法从原视频解码出音轨。",
+}
+
+
+def _audio_note(audio: dict | None) -> str:
+    """One sentence for an audio lane with nothing drawn on it.
+
+    An empty lane used to mean three different things and look the same
+    for all of them: the run predates the audio pass, nothing listened,
+    or something listened and heard nothing. Empty string when the lane
+    has events on it and speaks for itself.
+    """
+    if not audio:
+        return "这次运行没有做音频分析(没有 audio_events.json)。"
+    if audio.get("events"):
+        return ""
+    if audio.get("tagger"):
+        return (f"已听过这段音频(模型:{audio['tagger']}),"
+                "没有听到笑声、掌声或音乐。")
+    return _AUDIO_NOTE_ZH.get(str(audio.get("reason")), "")
+
+
 def _build_video_payload(run_id: str) -> dict | None:
     """v2.2-P0-2 — per-frame temporal scores + reel candidates keyed by
     *filename*, so the results.html lightbox can render a video-mode
@@ -1312,18 +1358,12 @@ def _build_video_payload(run_id: str) -> dict | None:
     if not frames:
         return None
     # v2.19-P2 — audio events for the lightbox scrubber's bottom lane.
-    audio_events = []
-    try:
-        ap = run_dir / "audio_events.json"
-        if ap.exists():
-            _aud = json.loads(ap.read_text("utf-8"))
-            audio_events = [
-                {"kind": e.get("kind"), "start_s": e.get("start_s"),
-                 "end_s": e.get("end_s"), "confidence": e.get("confidence")}
-                for e in (_aud.get("events") or [])
-            ]
-    except (OSError, ValueError):
-        audio_events = []
+    _aud = _read_audio_events(run_dir)
+    audio_events = [
+        {"kind": e.get("kind"), "start_s": e.get("start_s"),
+         "end_s": e.get("end_s"), "confidence": e.get("confidence")}
+        for e in ((_aud or {}).get("events") or [])
+    ]
     reel = []
     reel_path = run_dir / "reel_candidates.json"
     if reel_path.exists():
@@ -1342,7 +1382,8 @@ def _build_video_payload(run_id: str) -> dict | None:
                 })
         except (OSError, ValueError):
             pass
-    return {"frames": frames, "reel": reel, "audio": audio_events}
+    return {"frames": frames, "reel": reel, "audio": audio_events,
+            "audio_note": _audio_note(_aud)}
 
 
 def _render_video_review_html(rid: str) -> str:
@@ -9016,13 +9057,7 @@ class _Handler(BaseHTTPRequestHandler):
         # them (laughter / applause / music from audio_events.json); the
         # review timeline draws them as a bottom-lane overlay. None when
         # absent — the UI hides the lane.
-        audio = None
-        try:
-            ap = run_dir / "audio_events.json"
-            if ap.exists():
-                audio = json.loads(ap.read_text("utf-8"))
-        except (OSError, ValueError):
-            audio = None
+        audio = _read_audio_events(run_dir)
         reel = []
         reel_path = run_dir / "reel_candidates.json"
         if reel_path.exists():
@@ -9082,6 +9117,7 @@ class _Handler(BaseHTTPRequestHandler):
             "temporal": temporal,
             "reel": reel,
             "audio": audio,
+            "audio_note": _audio_note(audio),
             "grades": grades,
             "gps": gps_payload,
             "transcript": transcript,
@@ -13598,7 +13634,7 @@ class _Handler(BaseHTTPRequestHandler):
                 cmd, capture_output=True, text=True, timeout=90,
                 env={**os.environ, "PYTHONPATH":
                      str(_repo_root() or _pkg_root().parent) +
-                     ":" + os.environ.get("PYTHONPATH", "")},
+                     os.pathsep + os.environ.get("PYTHONPATH", "")},
             )
         except subprocess.TimeoutExpired:
             self._reject_upload(504, "audit timed out (>90s)")

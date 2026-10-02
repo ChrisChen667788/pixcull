@@ -768,16 +768,20 @@ at before believing the work is nearly done.**
 permanently saying the scores were hidden).
 
 **Audio events come from the learned tagger or not at all** (v3.93).
-`run_audio_analysis` had no caller for five months; `pixcull video` runs it
+`run_audio_analysis` had no caller for four months; `pixcull video` runs it
 now, between scoring and the reel detector.  `get_tagger()` falls back to
 the DSP detectors when the optional model is missing, and that fallback is
 deliberately **not** what the product publishes: `docs/AUDIO-TAGGER-EVAL.md`
 has them finding 0 of 20 applause clips and right about laughter 12% of the
 time, and the readers (reel `why`, review lane, lightbox) print what they
 are handed.  No model means `tagger: null` plus one of five `reason` codes
-in `audio_events.json`; the review page has wording for each
-(`tests/test_video_listens_to_the_clip.py` holds the pair together and runs
-the page's function under node).  A public page that names laughter or
+in `audio_events.json`.  Why a lane is empty is worded once, in
+`serve_app._audio_note`, and sent as `audio_note` in **both** payloads that
+carry the file — the review page's and the lightbox's; the first cut put the
+wording in one page's JavaScript and the other page said nothing.  **A file
+that gains a writer gains a stale copy:** `--no-audio` and a failed pass
+remove an `audio_events.json` an earlier run left, or the reel captions this
+clip with the last one's laughter.  A public page that names laughter or
 applause must name `audio-tagger` in the same paragraph.
 `audio_moment_boost` is still uncalled — wiring it changes reel ranking and
 needs a measurement first.

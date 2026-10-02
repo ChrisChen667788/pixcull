@@ -168,3 +168,18 @@ def test_the_old_path_still_answers():
     assert len(shim.splitlines()) < 30, (
         "scripts/cli_audit.py is a shim; an implementation growing back "
         "there is one the wheel will not carry")
+
+
+def test_the_subprocess_path_is_joined_with_this_platforms_separator():
+    """Found in review. The handler put the package on ``PYTHONPATH`` with
+    a literal ``":"``. On Windows that is one malformed entry, not two —
+    and run by module name, the audit now depends on that entry in a
+    checkout that is not installed."""
+    import inspect
+    src = inspect.getsource(SA._Handler._serve_delivery_audit)
+    code = "\n".join(l.split("#", 1)[0] for l in src.splitlines())
+    env = code[code.index('"PYTHONPATH"'):]
+    env = env[:env.index("}")]
+    assert "os.pathsep" in env, env
+    assert '":"' not in env and "':'" not in env, (
+        f"PYTHONPATH is joined with a literal colon: {env}")

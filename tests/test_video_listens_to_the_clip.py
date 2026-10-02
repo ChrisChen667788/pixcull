@@ -19,7 +19,16 @@ listened, and why.
 
 Held here: the command calls the pass and survives its failure; events
 are the learned tagger's and never the DSP's; every way of not listening
-is recorded as a reason, and the review page has words for each one.
+is recorded as a reason; and both pages that draw the audio lane are sent
+one sentence saying why it is empty.
+
+The review of this version found the rest. A file that has three readers
+and now a writer is also a file an earlier run can leave behind:
+``--no-audio`` and a failed pass both left the last run's events for this
+run's reel to caption. The pass located its clip by looking for the one
+directory under ``video_frames/``, and failed as soon as there were two.
+And the explanation for an empty lane had been written into one of the
+two pages that draw it.
 """
 from __future__ import annotations
 
@@ -35,12 +44,15 @@ import numpy as np
 import pytest
 from typer.testing import CliRunner
 
+from pixcull.report import serve_app as SA
 from pixcull.scoring import audio_events as A
 from pixcull.scoring.audio_events import AudioEvent
 from pixcull.scoring.audio_tagger import HeuristicTagger
 
 ROOT = Path(__file__).resolve().parent.parent
-PAGE = ROOT / "pixcull" / "report" / "templates" / "video_review.html"
+TEMPLATES = ROOT / "pixcull" / "report" / "templates"
+PAGE = TEMPLATES / "video_review.html"
+SCRUBBER = TEMPLATES / "src" / "modules" / "05-video-scrub.js"
 SR = A.DEFAULT_SR
 
 
@@ -234,90 +246,149 @@ def test_every_reason_carries_a_sentence():
     assert all(len(s) > 20 for s in A.NOT_LISTENED.values())
 
 
-# -- the page has words for each ---------------------------------------------
+# -- an empty lane says why, on both pages -----------------------------------
 
-def _js(html: str) -> str:
-    """The page's script with comments removed — a reason named only in a
-    comment is not a reason the page handles."""
-    js = re.sub(r"/\*.*?\*/", "", html, flags=re.S)
+def _audio(**kw) -> dict:
+    return {"has_audio": True, "events": [], "tagger": None, "reason": None,
+            **kw}
+
+
+def test_every_reason_has_wording_and_none_is_left_over():
+    """Twin path: the reasons are produced in ``audio_events`` and worded
+    in the server. A sixth reason with no wording is an empty lane with
+    no explanation — which is what every reason looked like before."""
+    assert set(SA._AUDIO_NOTE_ZH) == set(A.NOT_LISTENED)
+
+
+def test_the_states_of_an_empty_lane_are_told_apart():
+    said = {
+        "no file": SA._audio_note(None),
+        "listened, nothing": SA._audio_note(_audio(tagger="onnx")),
+        **{r: SA._audio_note(_audio(reason=r)) for r in A.NOT_LISTENED},
+    }
+    assert all(said.values()), f"a state with nothing to say: {said}"
+    assert len(set(said.values())) == len(said), (
+        f"two different states are described by the same sentence: {said}")
+    assert "audio_events.json" in said["no file"]
+    assert "onnx" in said["listened, nothing"]
+    assert "pixcull models pull audio-tagger" in said["no-model"]
+
+
+def test_a_lane_with_events_on_it_needs_no_sentence():
+    heard = _audio(tagger="onnx", events=[{"kind": "music"}])
+    assert SA._audio_note(heard) == ""
+
+
+def test_a_reason_nobody_has_worded_says_nothing_rather_than_something_wrong():
+    assert SA._audio_note(_audio(reason="a-new-one")) == ""
+
+
+def test_a_file_that_is_not_an_object_is_not_read_as_one(tmp_path):
+    (tmp_path / "audio_events.json").write_text("[1, 2]", "utf-8")
+    assert SA._read_audio_events(tmp_path) is None
+    (tmp_path / "audio_events.json").write_text("{not json", "utf-8")
+    assert SA._read_audio_events(tmp_path) is None
+    assert SA._read_audio_events(tmp_path / "nowhere") is None
+
+
+def _video_run(root: Path, audio: dict | None, rid: str = "vidrun") -> str:
+    """A scored video run on disk, as the review server finds one."""
+    run = root / rid
+    frames = run / "video_frames" / "clip_abc"
+    frames.mkdir(parents=True)
+    listed = []
+    for i in range(3):
+        fn = f"frame_{i + 1:06d}.jpg"
+        (frames / fn).write_bytes(b"jpeg")
+        listed.append({"frame_id": fn[:-4], "timestamp_s": float(i),
+                       "filename": fn})
+    (frames / "manifest.json").write_text(json.dumps({
+        "video_id": "clip_abc", "source_name": "clip.mp4", "fps": 25.0,
+        "duration_s": 3.0, "codec": "h264", "audio_track_count": 1,
+        "frames": listed}), "utf-8")
+    (run / "temporal.json").write_text(json.dumps({
+        "frames": [{"frame_id": f["frame_id"], "timestamp_s": f["timestamp_s"],
+                    "score_temporal": 0.5, "score_final": 0.5}
+                   for f in listed], "windows": []}), "utf-8")
+    if audio is not None:
+        (run / "audio_events.json").write_text(json.dumps(audio), "utf-8")
+    return rid
+
+
+CASES = [
+    ("no file", None),
+    ("no model", _audio(reason="no-model")),
+    ("heard nothing", _audio(tagger="onnx")),
+    ("heard music", _audio(tagger="onnx", events=[
+        {"kind": "music", "start_s": 0.0, "end_s": 2.0, "confidence": 0.8}])),
+]
+
+
+@pytest.mark.parametrize("name,audio", CASES, ids=[c[0] for c in CASES])
+def test_the_lightbox_and_the_review_page_are_told_the_same_thing(
+        name, audio, tmp_path, monkeypatch):
+    """The two pages read the file through two payloads. The first version
+    of this explained an empty lane on the review page only; the lightbox
+    payload flattened the file to its events and dropped the reason."""
+    import threading
+    import urllib.request
+    from http.server import ThreadingHTTPServer
+
+    monkeypatch.setattr(SA, "_DEMO_ROOT", tmp_path)
+    rid = _video_run(tmp_path, audio)
+    expected = SA._audio_note(audio)
+
+    lightbox = SA._build_video_payload(rid)
+    assert lightbox is not None, "the fixture is not a video run to the server"
+    assert lightbox["audio_note"] == expected
+
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), SA._Handler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        url = f"http://127.0.0.1:{srv.server_address[1]}/video/data/{rid}"
+        with opener.open(url, timeout=60) as r:
+            review = json.loads(r.read().decode("utf-8"))
+    finally:
+        srv.shutdown()
+    assert review["audio_note"] == expected
+    # The events themselves reach both, as they did before.
+    n = len((audio or {}).get("events") or [])
+    assert len(lightbox["audio"]) == n
+    assert len(((review.get("audio") or {}).get("events")) or []) == n
+
+
+def _code(js: str) -> str:
+    """Script with comments removed — a call named only in a comment is
+    not a call the page makes."""
+    js = re.sub(r"/\*.*?\*/", "", js, flags=re.S)
     return "\n".join(l.split("//", 1)[0] if "://" not in l else l
                      for l in js.splitlines())
 
 
-def _page_reasons() -> set[str]:
-    js = _js(PAGE.read_text("utf-8"))
-    block = js[js.index("const AUD_WHY={"):]
-    block = block[:block.index("};")]
-    return set(re.findall(r"^\s*'([a-z-]+)'\s*:", block, re.M))
-
-
-def test_the_review_page_explains_every_reason():
-    """Twin path: the reasons are written in Python and worded in the
-    page. A sixth reason with no wording renders as an empty lane, which
-    is what every reason looked like before."""
-    assert _page_reasons() == set(A.NOT_LISTENED)
-
-
-def test_the_review_page_writes_the_note_from_every_payload():
-    js = _js(PAGE.read_text("utf-8"))
-    assert re.search(r"^\s*audioNote\(d\.audio\);", js, re.M), (
-        "the page must write the note from every /video payload")
+def test_both_pages_show_the_sentence_they_are_sent():
+    page = _code(PAGE.read_text("utf-8"))
+    assert re.search(r"^\s*audioNote\(d\.audio_note\);", page, re.M), (
+        "the review page must show audio_note from every /video/data payload")
     assert 'id="audNote"' in PAGE.read_text("utf-8")
+    fn = page[page.index("function audioNote("):]
+    fn = fn[:fn.index("function seekEvt(")]
+    assert "textContent" in fn and "innerHTML" not in fn, (
+        "the sentence carries a tagger name read from a file; it is text")
+
+    scrub = _code(SCRUBBER.read_text("utf-8"))
+    assert re.search(r"if \(V\.audio_note\)\s*\{[^}]*textContent[^}]*"
+                     r"hidden = false", scrub), (
+        "the lightbox scrubber must show audio_note too")
+    built = (TEMPLATES / "results.html").read_text("utf-8")
+    assert "V.audio_note" in built, (
+        "results.html is a built artifact; run scripts/build_results_html.py")
 
 
-def _note_source() -> str:
-    """The three definitions the note needs, lifted out of the page."""
-    js = PAGE.read_text("utf-8")
-    why = js[js.index("const AUD_WHY={"):]
-    why = why[:why.index("};") + 2]
-    esc = js[js.index("function esc(x){"):]
-    esc = esc[:esc.index("); }") + 4]
-    fn = js[js.index("function audioNoteText("):]
-    fn = fn[:fn.index("function audioNote(")]
-    return "\n".join((esc, why, fn))
-
-
-@pytest.mark.skipif(not shutil.which("node"), reason="node not installed")
-def test_the_page_tells_the_states_of_an_empty_lane_apart():
-    """Run, not read. The first version asserted that ``a.tagger`` appears
-    in the function, and a function rewritten to ``if(false) return …``
-    still contained it."""
-    cases = {
-        "no file": None,
-        "heard something": {"events": [{"kind": "music"}], "tagger": "onnx"},
-        "listened, nothing": {"events": [], "tagger": "onnx"},
-        "tagger name is escaped": {"events": [], "tagger": "<b>x</b>"},
-        "unknown reason": {"events": [], "tagger": None, "reason": "new"},
-        **{r: {"events": [], "tagger": None, "reason": r}
-           for r in A.NOT_LISTENED},
-    }
-    script = (_note_source() + "\nconst C=" + json.dumps(cases) + ";\n"
-              "const out={};for(const k in C) out[k]=audioNoteText(C[k]);\n"
-              "console.log(JSON.stringify(out));")
-    proc = subprocess.run(["node", "-e", script], capture_output=True,
-                          text=True, timeout=60)
-    assert proc.returncode == 0, proc.stderr
-    got = json.loads(proc.stdout)
-
-    assert got["heard something"] == "", "the lane itself says it"
-    assert "audio_events.json" in got["no file"]
-    assert "onnx" in got["listened, nothing"]
-    assert "&lt;b&gt;" in got["tagger name is escaped"]
-    assert "<b>" not in got["tagger name is escaped"]
-    assert got["unknown reason"] == ""
-    for reason in A.NOT_LISTENED:
-        assert got[reason], f"no wording for {reason}"
-    said = [got[k] for k in ("no file", "listened, nothing", *A.NOT_LISTENED)]
-    assert len(set(said)) == len(said), (
-        "two different states of the lane are described with the same "
-        f"sentence: {said}")
-    assert "pixcull models pull audio-tagger" in got["no-model"]
-
-
-def test_a_reason_in_a_comment_is_not_a_reason_the_page_handles():
-    assert "'no-model'" not in _js("// 'no-model': 'x',\n")
-    assert "'no-model'" not in _js("/* 'no-model': 'x', */\n")
-    assert "'no-model'" in _js("  'no-model':'x', // why\n")
+def test_a_call_in_a_comment_is_not_a_call():
+    assert "audioNote(d.audio_note)" not in _code("// audioNote(d.audio_note);\n")
+    assert "audioNote(d.audio_note)" not in _code("/* audioNote(d.audio_note); */")
+    assert "audioNote(d.audio_note)" in _code("  audioNote(d.audio_note); // x\n")
 
 
 # -- the command -------------------------------------------------------------
@@ -368,7 +439,8 @@ def staged(monkeypatch, tmp_path):
         return CliRunner().invoke(
             app, ["video", str(src), "-o", str(tmp_path / "out"), *flags])
 
-    return SimpleNamespace(invoke=invoke, calls=calls, audio=audio)
+    return SimpleNamespace(invoke=invoke, calls=calls, audio=audio,
+                           out=tmp_path / "out", frames_dir=result.frames_dir)
 
 
 def test_the_command_listens_between_scoring_and_the_reel(staged):
@@ -405,6 +477,70 @@ def test_a_failing_audio_pass_does_not_cost_the_reel(staged):
     assert "Audio analysis failed" in r.output and "disk full" in r.output
 
 
+def test_the_pass_is_told_which_clip_it_is_listening_to(staged, monkeypatch):
+    """The command knows the directory it just extracted; the pass must
+    not go looking for it."""
+    seen = {}
+    monkeypatch.setattr(
+        A, "run_audio_analysis",
+        lambda out, **k: seen.update(k) or staged.audio.result)
+    assert staged.invoke().exit_code == 0
+    assert seen.get("frames_dir") == staged.frames_dir
+
+
+def test_no_audio_does_not_leave_the_last_runs_events_for_the_reel(staged):
+    stale = staged.out / "audio_events.json"
+    staged.out.mkdir(parents=True, exist_ok=True)
+    stale.write_text('{"events": [{"kind": "laughter"}]}', "utf-8")
+    r = staged.invoke("--no-audio")
+    assert r.exit_code == 0, r.output
+    assert not stale.exists(), (
+        "the reel detector reads audio_events.json if it is there; this "
+        "run did not listen, and would have captioned with the last run's")
+    assert "earlier run" in " ".join(r.output.split())
+
+
+def test_no_audio_with_nothing_to_remove_says_nothing_about_removing(staged):
+    r = staged.invoke("--no-audio")
+    assert r.exit_code == 0 and "earlier run" not in r.output
+
+
+def test_a_failed_pass_does_not_leave_the_last_runs_events_either(staged):
+    stale = staged.out / "audio_events.json"
+    staged.out.mkdir(parents=True, exist_ok=True)
+    stale.write_text('{"events": [{"kind": "laughter"}]}', "utf-8")
+    staged.audio.boom = OSError("disk full")
+    assert staged.invoke().exit_code == 0
+    assert not stale.exists()
+    assert staged.calls[-1] == "reel", "the reel still runs, on no audio"
+
+
+def test_a_pass_that_ran_keeps_what_it_wrote(staged, monkeypatch):
+    """The other side of the two above: only a run that did not listen
+    removes the file."""
+    def _writes(out, **k):
+        (Path(out) / "audio_events.json").write_text("{}", "utf-8")
+        return staged.audio.result
+    monkeypatch.setattr(A, "run_audio_analysis", _writes)
+    staged.out.mkdir(parents=True, exist_ok=True)
+    assert staged.invoke().exit_code == 0
+    assert (staged.out / "audio_events.json").exists()
+
+
+def test_a_second_clip_in_the_same_output_is_still_listened_to(clip):
+    """`_resolve_frames_dir` finds the clip by there being exactly one.
+    Told which, the pass does not need there to be."""
+    out = _run_dir(clip.tmp, source=clip.src)
+    other = out / "video_frames" / "clip_older"
+    other.mkdir()
+    (other / "manifest.json").write_text("{}", "utf-8")
+    with pytest.raises(FileNotFoundError):
+        A.run_audio_analysis(out, tagger=_Learned())
+    res = A.run_audio_analysis(out, tagger=_Learned(),
+                               frames_dir=out / "video_frames" / "clip_abc")
+    assert res.has_audio and res.tagger == "onnx"
+
+
 def test_the_command_says_why_nothing_listened(staged):
     staged.audio.result = A.AudioResult(
         [], [], 0.0, has_audio=True, tagger=None, reason="no-model",
@@ -433,7 +569,7 @@ def _calls_in(func: str) -> list[str]:
 
 def test_the_real_command_reaches_the_real_function():
     """The recorder above replaces the function; this is the unreplaced
-    source. Parsed, because for five months the only thing that mentioned
+    source. Parsed, because for four months the only thing that mentioned
     this function in the package was its own docstring."""
     assert "_video_audio_stage" in _calls_in("video")
     assert "run_audio_analysis" in _calls_in("_video_audio_stage")

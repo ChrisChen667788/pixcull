@@ -18,6 +18,7 @@
       + "border-radius:7px;padding:4px 11px;font-size:13px;cursor:pointer}"
       + "#lbVideoBar button.on{background:#d5b584;border-color:#d5b584;color:#fff}"
       + "#lbVideoBar .vbr{margin-left:auto;color:#9aa0aa;font:11px ui-monospace,monospace}"
+      + "#lbVideoBar .vba{margin-top:4px;color:#9aa0aa;font-size:11px;line-height:1.4}"
       + "#vbTl{width:100%;height:54px;display:block;cursor:pointer;touch-action:none}";
     document.head.appendChild(st);
     const bar = document.createElement("div");
@@ -27,8 +28,13 @@
       + '<button data-vb="pause" title="暂停" class="on">❚❚</button>'
       + '<button data-vb="fwd" title="前进播放">▶▶</button>'
       + '<span class="vbr" id="vbReadout">视频时间线</span></div>'
-      + '<svg id="vbTl" viewBox="0 0 1000 60" preserveAspectRatio="none"></svg>';
+      + '<svg id="vbTl" viewBox="0 0 1000 60" preserveAspectRatio="none"></svg>'
+      + '<div class="vba" id="vbAudNote" hidden></div>';
     (document.getElementById("lightbox") || document.body).appendChild(bar);
+    // v3.93 — why the audio lane is empty, when it is. The sentence is the
+    // server's (`audio_note`), the same one the /video review page shows.
+    const audNote = bar.querySelector("#vbAudNote");
+    if (V.audio_note) { audNote.textContent = "🔈 " + V.audio_note; audNote.hidden = false; }
     const tl = bar.querySelector("#vbTl");
     const readout = bar.querySelector("#vbReadout");
     const tx = (t) => (tEnd > t0) ? (t - t0) / (tEnd - t0) * 1000 : 0;

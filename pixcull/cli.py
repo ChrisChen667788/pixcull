@@ -934,7 +934,25 @@ def transcribe_engines() -> None:
                       "`pixcull transcribe` will exit 3 until one is")
 
 
-def _video_audio_stage(output: Path) -> None:
+def _forget_earlier_audio(output: Path) -> bool:
+    """Remove an ``audio_events.json`` an earlier run left in ``output``.
+
+    The file has three readers and each reads whatever is there. When
+    this run does not listen — ``--no-audio``, or the pass failed — a
+    file from the last run would be read as this run's: another clip's
+    laughter in this clip's reel captions. True if one was removed.
+    """
+    stale = Path(output) / "audio_events.json"
+    try:
+        stale.unlink()
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return False
+    return True
+
+
+def _video_audio_stage(output: Path, frames_dir: Path | None = None) -> None:
     """Listen to the clip and say what was found — or why nothing was.
 
     v3.93 — `pixcull video` never ran this. The reel detector, the review
@@ -948,8 +966,9 @@ def _video_audio_stage(output: Path) -> None:
 
     console.print("[bold]Audio (laughter / applause / music)…[/bold]")
     try:
-        audio = run_audio_analysis(output)
+        audio = run_audio_analysis(output, frames_dir=frames_dir)
     except Exception as exc:  # noqa: BLE001
+        _forget_earlier_audio(output)
         console.print(f"[yellow]⚠ Audio analysis failed and was skipped: "
                       f"{type(exc).__name__}: {exc}[/yellow]")
         return
@@ -1092,9 +1111,12 @@ def video(
     # depend on the temporal pass, and the reel detector below reads
     # audio_events.json, so it has to exist by then.
     if no_audio:
-        console.print("[dim]--no-audio set; not listening to the clip.[/dim]")
+        removed = _forget_earlier_audio(output)
+        console.print("[dim]--no-audio set; not listening to the clip."
+                      + (" Removed the audio_events.json an earlier run "
+                         "left here." if removed else "") + "[/dim]")
     else:
-        _video_audio_stage(output)
+        _video_audio_stage(output, result.frames_dir)
 
     if no_temporal:
         console.print("[dim]--no-temporal set; skipping temporal pass.[/dim]")

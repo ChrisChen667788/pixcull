@@ -148,8 +148,8 @@ and it will move in that lane first.
 **`pixcull video` has never listened to the audio.** Found while fixing
 v3.88. `run_audio_analysis` was added in v2.0-P1-3 on
 2026-05-29 and **nothing in the package has ever called it**.
-`audio_events.json` has two readers — the reel caption and the review
-page — and no writer. The learned tagger of v2.1 and v2.2 ("auto-promotes
+`audio_events.json` has three readers — the reel caption, the review
+page's event lane and the lightbox scrubber — and no writer. The learned tagger of v2.1 and v2.2 ("auto-promotes
 from `~/.pixcull/models/`") is reachable only from its own eval script.
 `README-PYPI.md` lists "audio events (laughter / applause / music)" as
 something you get.
@@ -185,6 +185,30 @@ written; nothing reads them yet.
 Still unwired and now written down: `audio_moment_boost`, which would
 feed events into the moment axis. That changes reel ranking and wants a
 measurement before it wants a caller.
+
+**The review found what a first writer brings with it** (fixup). Five
+lenses, each finding handed to a second reader told to refute it; nine
+stood and none was refuted. The first run of that review died on a usage
+limit with nothing examined and reported zero findings, and was run
+again in full. What changed:
+
+* `--no-audio` and a failed pass left the previous run's
+  `audio_events.json` in place, and all three readers take whatever is
+  there. Neither could happen while nothing wrote the file.
+* The pass found its clip by there being exactly one directory under
+  `video_frames/`, so a second clip imported into the same output made
+  it raise — and then caption the second clip with the first one's
+  events. The command passes the directory it just extracted.
+* The explanation for an empty lane was written into the review page
+  and not the lightbox, which reads the same file through a different
+  payload. It is worded once in the server and sent to both.
+* The audit subprocess's `PYTHONPATH` was joined with a literal `":"`.
+
+Two findings were declined as stated: ledger rows for "node not
+installed" and "ffmpeg not installed". The ledger records reasons a CI
+run prints, and a row would pre-approve a skip nobody has seen; the node
+test went away with the JavaScript it ran, and the ffmpeg reason is the
+one three older files already use on a lane that installs ffmpeg first.
 
 **And the delivery-audit page looks for a script that is not there.**
 Reported by gxfc9867 in PR #4. `serve_app.py` resolves
