@@ -56,3 +56,21 @@ def test_build_resolves_all_markers():
     assert built.lstrip().startswith("<!DOCTYPE html>") or \
         built.lstrip().startswith("<!doctype html>")
     assert built.rstrip().endswith("</html>")
+
+
+def test_buckets_toggle_drag_rule_is_bound_in_both_copies():
+    """PR #4 review — the `.buckets-toggle {` selector line went missing,
+    so cursor/touch-action were bound to nothing, and the golden
+    build(src) == artifact test passed anyway: both copies were wrong the
+    same way.  This pins the RULE itself (not just equality) in the source
+    and in the committed artifact."""
+    src_css = (ROOT / "pixcull" / "report" / "templates" / "src"
+               / "results.css").read_text("utf-8")
+    artifact = (ROOT / "pixcull" / "report" / "templates"
+                / "results.html").read_text("utf-8")
+    for label, text in (("src", src_css), ("artifact", artifact)):
+        i = text.find(".buckets-toggle {")
+        assert i != -1, f"{label}: no .buckets-toggle rule block at all"
+        window = text[i:i + 900]
+        assert "cursor: grab" in window, f"{label}: grab not inside the rule"
+        assert "touch-action: none" in window, f"{label}: touch-action not inside the rule"

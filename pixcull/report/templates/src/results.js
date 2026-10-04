@@ -8252,6 +8252,185 @@
     bucketsPanel.setAttribute("aria-hidden", "true");
   }
   bucketsToggleBtn.addEventListener("click", openBucketsPanel);
+
+  /* ============================================================
+     A draggable deliverable-buckets toggle.
+     ============================================================
+     The user can drag the deliverable-buckets toggle to any spot in
+     the viewport; the spot is remembered across reloads in
+     localStorage[pixcull_buckets_pos].  A plain tap still opens the
+     panel exactly as before.
+
+       * Pointer Events (pointerdown / move / up / cancel) so mouse,
+         finger and stylus share one code path.
+       * A press only becomes a drag once the pointer has travelled
+         past _BK_DRAG_THRESHOLD, so a sloppy tap cannot lose its click.
+       * Once the drag starts the pointer is captured on the button, so
+         the gesture survives the pointer leaving the button or window.
+       * The click the browser fires at the end of a drag is swallowed in
+         the capture phase on `document` — never on the button itself,
+         where it would race the bubbling `openBucketsPanel` listener.
+       * A stored position is clamped into the viewport on restore and on
+         resize, so the toggle can never end up off-screen.
+     ============================================================ */
+  const _BK_POS_KEY = "pixcull_buckets_pos";
+  const _BK_DRAG_THRESHOLD = 5;   // px of travel before a press is a drag
+  const _BK_EDGE_GAP = 8;         // px kept clear on every viewport edge
+
+  function _bkClampPos(x, y) {
+    const w = bucketsToggleBtn.offsetWidth || 0;
+    const h = bucketsToggleBtn.offsetHeight || 0;
+    const vw = window.innerWidth || 0;
+    const vh = window.innerHeight || 0;
+    // The Math.max on the lower bound keeps the result sane when the
+    // window is smaller than the button (max would fall below min).
+    const maxX = Math.max(_BK_EDGE_GAP, vw - w - _BK_EDGE_GAP);
+    const maxY = Math.max(_BK_EDGE_GAP, vh - h - _BK_EDGE_GAP);
+    return {
+      x: Math.max(_BK_EDGE_GAP, Math.min(maxX, x)),
+      y: Math.max(_BK_EDGE_GAP, Math.min(maxY, y)),
+    };
+  }
+
+  // Pin the button with inline left/top.  `right`/`bottom` have to be
+  // released at the same time: the stylesheet positions it with
+  // `right: 14px`, and that would otherwise fight `left`.
+  function _bkApplyPos(x, y) {
+    bucketsToggleBtn.style.left = x + "px";
+    bucketsToggleBtn.style.top = y + "px";
+    bucketsToggleBtn.style.right = "auto";
+    bucketsToggleBtn.style.bottom = "auto";
+  }
+
+  function _bkReadPos() {
+    try {
+      const p = JSON.parse(localStorage.getItem(_BK_POS_KEY) || "null");
+      if (!p || typeof p.x !== "number" || typeof p.y !== "number") return null;
+      if (!isFinite(p.x) || !isFinite(p.y)) return null;
+      return { x: p.x, y: p.y };
+    } catch (_e) { return null; }
+  }
+  function _bkWritePos(x, y) {
+    try { localStorage.setItem(_BK_POS_KEY, JSON.stringify({ x: x, y: y })); }
+    catch (_e) { /* storage disabled or over quota — the drag still works */ }
+  }
+
+  // Restore once layout has run, so offsetWidth/offsetHeight are real.
+  function _bkRestorePos() {
+    const p = _bkReadPos();
+    if (!p) return;
+    const c = _bkClampPos(p.x, p.y);
+    _bkApplyPos(c.x, c.y);
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded",
+      () => requestAnimationFrame(_bkRestorePos));
+  } else {
+    requestAnimationFrame(_bkRestorePos);
+  }
+
+  let _bkDrag = null;           // set once a press has become a drag
+  let _bkPending = null;        // pressed, still inside the threshold
+  let _bkSwallowClick = false;  // a drag just ended — eat its click
+
+  bucketsToggleBtn.addEventListener("pointerdown", (e) => {
+    // Main button / first touch only; right-click and middle-click are
+    // not ours.
+    if (e.button !== undefined && e.button !== 0) return;
+    // Reset per press.  A swallowed click never arrives if the gesture
+    // ended in pointercancel, and a stale flag must not eat the next tap.
+    _bkSwallowClick = false;
+    const r = bucketsToggleBtn.getBoundingClientRect();
+    _bkPending = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      // Where inside the button the pointer landed.  Kept for the whole
+      // gesture so the button never jumps under the pointer.
+      offsetX: e.clientX - r.left,
+      offsetY: e.clientY - r.top,
+    };
+  });
+
+  bucketsToggleBtn.addEventListener("pointermove", (e) => {
+    // Both are checked: _bkPending is cleared when the drag starts, so
+    // testing it alone would drop every move after the first one.
+    if (!_bkPending && !_bkDrag) return;
+    const active = _bkDrag || _bkPending;
+    if (e.pointerId !== active.pointerId) return;
+
+    if (!_bkDrag) {
+      const dx = e.clientX - _bkPending.startX;
+      const dy = e.clientY - _bkPending.startY;
+      if (Math.hypot(dx, dy) < _BK_DRAG_THRESHOLD) return;   // still a tap
+      // Past the threshold: freeze the current box into left/top before
+      // switching coordinate systems, otherwise it snaps on the first move.
+      const r0 = bucketsToggleBtn.getBoundingClientRect();
+      _bkDrag = {
+        pointerId: e.pointerId,
+        offsetX: _bkPending.offsetX,
+        offsetY: _bkPending.offsetY,
+      };
+      _bkApplyPos(r0.left, r0.top);
+      bucketsToggleBtn.classList.add("bk-toggle-dragging");
+      try { bucketsToggleBtn.setPointerCapture(e.pointerId); } catch (_e) {}
+      _bkPending = null;
+    }
+
+    // Viewport coordinates: the button is position:fixed, so page scroll
+    // must not carry it away.
+    const c = _bkClampPos(e.clientX - _bkDrag.offsetX,
+                          e.clientY - _bkDrag.offsetY);
+    _bkApplyPos(c.x, c.y);
+    e.preventDefault();   // no scroll / text selection out of this gesture
+  });
+
+  function _bkEndDrag(e) {
+    if (_bkDrag && _bkDrag.pointerId === e.pointerId) {
+      const r = bucketsToggleBtn.getBoundingClientRect();
+      const c = _bkClampPos(r.left, r.top);
+      _bkApplyPos(c.x, c.y);
+      _bkWritePos(c.x, c.y);
+      bucketsToggleBtn.classList.remove("bk-toggle-dragging");
+      try { bucketsToggleBtn.releasePointerCapture(e.pointerId); } catch (_e) {}
+      // The browser nearly always fires a click after pointerup.  The flag
+      // is consumed there instead of being cleared on a timer, because a
+      // touch click can be delayed past any timer by double-tap zoom.
+      _bkSwallowClick = true;
+      _bkDrag = null;
+    }
+    _bkPending = null;
+  }
+  bucketsToggleBtn.addEventListener("pointerup", _bkEndDrag);
+  bucketsToggleBtn.addEventListener("pointercancel", _bkEndDrag);
+
+  // Capture phase on `document`: the button's openBucketsPanel listener
+  // bubbles, so a listener on the button could run after it and the panel
+  // would already be open.  Capturing before the target means the tail
+  // click of a drag never reaches the button, while a real tap (which never
+  // sets the flag) is untouched.
+  document.addEventListener("click", (e) => {
+    if (!_bkSwallowClick) return;
+    if (e.target !== bucketsToggleBtn &&
+        !(bucketsToggleBtn.contains && bucketsToggleBtn.contains(e.target))) return;
+    _bkSwallowClick = false;   // once per drag
+    e.stopPropagation();
+    e.preventDefault();
+  }, true);
+
+  // Shrinking the window can push a stored position off-screen; pull it
+  // back and persist the corrected spot.  Nothing is stored until the user
+  // has actually dragged, so the stylesheet default stays in charge.
+  window.addEventListener("resize", () => {
+    if (!_bkReadPos()) return;
+    const r = bucketsToggleBtn.getBoundingClientRect();
+    const c = _bkClampPos(r.left, r.top);
+    if (Math.round(c.x) !== Math.round(r.left) ||
+        Math.round(c.y) !== Math.round(r.top)) {
+      _bkApplyPos(c.x, c.y);
+      _bkWritePos(c.x, c.y);
+    }
+  });
   bucketsCloseBtn.addEventListener("click", closeBucketsPanel);
 
   // New bucket
