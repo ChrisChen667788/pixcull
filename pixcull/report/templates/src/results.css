@@ -39,6 +39,65 @@
       border-color: var(--border-hi);
       color: var(--fg-2);
     }
+
+    /* Light theme — every floating overlay below painted a literal dark
+       surface (rgba(0,0,0,…) / rgba(20,23,28,…) / a dark gradient) while
+       taking its text colour from the theme (--fg / --fg-2 / --muted).
+       On the dark palette that reads fine, which is why it survived; on
+       the light palette it is dark-on-dark — the shortcut pill, the toast
+       stack and the a11y toggle came out blank, and the onboarding tip and
+       the scene-distribution panel lost their body text.
+
+       The surfaces are re-derived from the tokens instead of the old
+       literal, so both palettes are legible without editing the dark
+       theme.  Only the surfaces change: borders here are already
+       var(--border) / var(--border-hi) and the text is already
+       var(--fg) / var(--fg-2) / var(--muted), so no colour override is
+       needed — and none is written, because a blanket `color` would also
+       flatten the semantic `.toast.success/.error/.warning` stripe and
+       the `.a11y-toggle.on` accent state. */
+    html[data-theme="light"] .toast,
+    html[data-theme="light"] .scene-distribution-panel,
+    html[data-theme="light"] .onboard-tip {
+      background: color-mix(in srgb, var(--bg-card) 96%, transparent);
+    }
+    /* The two pills keep their glass (backdrop-filter) look, so they stay
+       slightly translucent; :not(.on) preserves the a11y toggle's accent
+       state, and the hover shade stays a step brighter than the rest. */
+    html[data-theme="light"] .shortcuts-hint,
+    html[data-theme="light"] .a11y-toggle:not(.on) {
+      background: color-mix(in srgb, var(--bg-card) 88%, transparent);
+    }
+    html[data-theme="light"] .shortcuts-hint:hover {
+      background: color-mix(in srgb, var(--bg-card) 96%, transparent);
+    }
+    /* Inner chrome that was drawn in white-alpha (invisible on light):
+       the kbd caps of the shortcut pill and the onboarding tip, and the
+       onboarding tip's header rule. */
+    html[data-theme="light"] .shortcuts-hint kbd,
+    html[data-theme="light"] .onboard-tip .onb-list kbd {
+      background: var(--surface-2);
+      border-color: var(--border-hi);
+    }
+    html[data-theme="light"] .onboard-tip .onb-head {
+      border-bottom-color: var(--border);
+    }
+    .buckets-toggle {
+      cursor: grab;
+      /* The toggle is user-draggable (see the pointer-event
+         block in the buckets script).  The gesture is ours, so the
+         browser must not claim it for panning / long-press selection /
+         the iOS callout, or the drag dies on touch screens. */
+      touch-action: none;
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
+    /* Held-down feedback while the toggle is actually being dragged:
+       the grabbed hand, and no hover fade while the pointer moves. */
+    .buckets-toggle.bk-toggle-dragging {
+      cursor: grabbing;
+      transition: none;
+    }
     .theme-toggle svg {
       width: 13px; height: 13px;
       stroke: currentColor; fill: none;
