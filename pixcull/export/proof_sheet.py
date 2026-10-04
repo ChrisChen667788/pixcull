@@ -205,6 +205,7 @@ def _digest(items: list[ProofItem]) -> str:
 
 _SEP = re.compile(r"[\s,，、;;；/|]+")
 _RANGE = re.compile(r"^(\d+)\s*[-~—–至到]\s*(\d+)$")
+_NUMBERED = re.compile(r"^\s*(\d+)\.\s+\S")
 _NOISE = re.compile(r"第|张|号|图|片|no\.?|#", re.I)
 
 
@@ -220,38 +221,57 @@ def parse_picks(text: str, *, n: int) -> tuple[list[int], list[str]]:
     problems: list[str] = []
     out: list[int] = []
     seen: set[int] = set()
-    cleaned = _NOISE.sub(" ", str(text or ""))
-    for tok in _SEP.split(cleaned):
-        tok = tok.strip().strip(".。()()[]【】")
-        if not tok:
-            continue
-        m = _RANGE.match(tok)
-        if m:
-            a, b = int(m.group(1)), int(m.group(2))
-            if a > b:
-                a, b = b, a
-            span = list(range(a, b + 1))
-            if len(span) > n:
-                problems.append(f"{tok!r} spans more than the {n} sent")
-                continue
-            for v in span:
-                if 1 <= v <= n:
-                    if v not in seen:
-                        seen.add(v)
-                        out.append(v)
-                else:
-                    problems.append(f"{v} is outside 1..{n}")
-            continue
-        if tok.isdigit():
-            v = int(tok)
+    for line in str(text or "").splitlines():
+        mnum = _NUMBERED.match(line)
+        if mnum:
+            # The sheet's own copyable list format is "1. DSCF1234 ★★★"
+            # (see the copy button's generator).  A line that starts with
+            # "digits dot space" is one of those entries: the number is the
+            # pick, everything after it is the client's label, never a
+            # second request — so it must not surface as "could not read"
+            # noise when the reply is pasted back (PR #4 review).  Ordinary
+            # free text is NOT matched here and keeps the old contract:
+            # unknown words are reported, not silently dropped.
+            v = int(mnum.group(1))
             if 1 <= v <= n:
                 if v not in seen:
                     seen.add(v)
                     out.append(v)
             else:
                 problems.append(f"{v} is outside 1..{n}")
-        else:
-            problems.append(f"could not read {tok!r}")
+            continue
+        cleaned = _NOISE.sub(" ", line)
+        for tok in _SEP.split(cleaned):
+            tok = tok.strip().strip(".。()()[]【】")
+            if not tok:
+                continue
+            m = _RANGE.match(tok)
+            if m:
+                a, b = int(m.group(1)), int(m.group(2))
+                if a > b:
+                    a, b = b, a
+                span = list(range(a, b + 1))
+                if len(span) > n:
+                    problems.append(f"{tok!r} spans more than the {n} sent")
+                    continue
+                for v in span:
+                    if 1 <= v <= n:
+                        if v not in seen:
+                            seen.add(v)
+                            out.append(v)
+                    else:
+                        problems.append(f"{v} is outside 1..{n}")
+                continue
+            if tok.isdigit():
+                v = int(tok)
+                if 1 <= v <= n:
+                    if v not in seen:
+                        seen.add(v)
+                        out.append(v)
+                else:
+                    problems.append(f"{v} is outside 1..{n}")
+            else:
+                problems.append(f"could not read {tok!r}")
     return out, problems
 
 
@@ -271,6 +291,12 @@ def _watermark_font(px: int):
     — every CJK watermark was tofu. The Windows path was missing too.)
     """
     from PIL import ImageFont
+    # CJK-capable fonts for EVERY platform first; Latin-only fallbacks after.
+    # Pillow opens a font by *name* even when the given path does not exist:
+    # on a Mac, "C:/Windows/Fonts/arial.ttf" loads happily as Arial — which
+    # has no CJK glyphs.  A Latin-only font anywhere above this list's CJK
+    # entries therefore stops the loop before any real Chinese font is ever
+    # tried, and the watermark renders tofu (found on PR #4's review).
     for path in ("C:/Windows/Fonts/msyh.ttc",                     # 微软雅黑
                  "C:/Windows/Fonts/msyhbd.ttc",                   # 微软雅黑 Bold
                  "C:/Windows/Fonts/simhei.ttf",                   # 黑体
@@ -281,11 +307,6 @@ def _watermark_font(px: int):
                  "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
                  "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
                  # Latin-only last resorts, never ahead of a CJK font:
-                 # Pillow opens a font by *name* even when the path does
-                 # not exist — on a Mac "C:/Windows/Fonts/arial.ttf" loads
-                 # as Arial, which has no CJK glyphs, so a Latin-only font
-                 # placed above the CJK entries stops the loop there and
-                 # every watermark below it renders tofu (PR #4 review).
                  "C:/Windows/Fonts/arial.ttf",
                  "/System/Library/Fonts/Supplemental/Arial.ttf",
                  "/System/Library/Fonts/Helvetica.ttc",
@@ -475,9 +496,9 @@ _TEMPLATE = """<!doctype html>
  .idx, .fn { touch-action: manipulation; }
  @media (pointer: coarse) {
    button { min-height: 44px; padding: 10px 18px; }
-   .star { font-size: 28px; padding: 4px 5px; min-width: 40px; min-height: 40px; }
+   .star { font-size: 28px; padding: 4px 5px; min-width: 44px; min-height: 44px; }
    .stars { gap: 2px; }
-   .zoom { width: 42px; height: 42px; font-size: 20px; }
+   .zoom { width: 44px; height: 44px; font-size: 20px; }
    .vbtn { min-height: 48px; padding: 0 18px; }
    .vstar { width: 44px; height: 48px; font-size: 26px; }
    .vnav { width: 48px; height: 48px; font-size: 26px; }
@@ -659,6 +680,14 @@ _TEMPLATE = """<!doctype html>
       st.className = "vstar"; st.setAttribute("data-v", String(v));
       st.textContent = "☆"; st.title = v + " star" + (v > 1 ? "s" : "");
       st.setAttribute("aria-label", v + " star" + (v > 1 ? "s" : ""));
+      st.setAttribute("role", "button");
+      st.setAttribute("tabindex", "0");
+      st.addEventListener("keydown", function(ev){
+        if (ev.key === "Enter" || ev.key === " ") {
+          ev.stopPropagation(); ev.preventDefault();
+          rateAt(vIdx, v);
+        }
+      });
       st.addEventListener("click", function(ev){
         ev.stopPropagation(); ev.preventDefault(); rateAt(vIdx, v);
       });
@@ -732,6 +761,14 @@ _TEMPLATE = """<!doctype html>
       st.className = "star"; st.setAttribute("data-v", String(s));
       st.textContent = "☆";
       st.setAttribute("aria-label", "Rate " + s + " star" + (s > 1 ? "s" : ""));
+      st.setAttribute("role", "button");
+      st.setAttribute("tabindex", "0");   // keyboard path into rating (PR #4)
+      st.addEventListener("keydown", function(ev){
+        if (ev.key === "Enter" || ev.key === " ") {
+          ev.stopPropagation(); ev.preventDefault();
+          rateAt(idx, this.getAttribute("data-v"));
+        }
+      });
       st.addEventListener("click", function(ev){
         ev.stopPropagation();          // rating never picks or unpicks
         ev.preventDefault();

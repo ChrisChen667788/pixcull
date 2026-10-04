@@ -194,3 +194,14 @@ def test_an_absurd_range_is_refused_whole():
 def test_an_empty_reply_yields_nothing_and_says_nothing_wrong():
     assert parse_picks("", n=12) == ([], [])
     assert parse_picks("   ", n=12) == ([], [])
+
+
+def test_the_copyable_list_parses_back_without_noise():
+    """PR #4 review — the sheet copy button emits "1. DSCF1234 ★★★"; the
+    parser must read the number and treat the filename and the star run as
+    labels.  Before, pasting back a correct list printed two "could not
+    read" warnings per line — a wall of noise over a clean client reply."""
+    idx, problems = parse_picks(
+        "1. DSCF1234 ★★★\n2. DSCF1240 ★★★★★", n=5)
+    assert idx == [1, 2]
+    assert problems == []
