@@ -258,3 +258,34 @@ def test_the_hero_matches_its_generator():
             t.write_bytes(b)
     assert before == after, (
         "the hero SVGs do not match scripts/brand/gen_hero.py — regenerate")
+
+
+# ---------------------------------------------------------------------------
+# 2026-10-07 — the film's poster has to open something that plays.
+# ---------------------------------------------------------------------------
+
+FILM = "docs/video/pixcull-30s.mp4"
+#: Measured when the film went in. GitHub's own file page does not play a
+#: 4 MB mp4 — it says the file is too big to show — and
+#: raw.githubusercontent.com serves it as application/octet-stream with
+#: `nosniff`, so the browser downloads it. jsDelivr serves the same bytes
+#: as video/mp4; ModelScope's resolve URL is sniffed as video and plays.
+#: A relative link, the obvious thing to write, is the one that fails.
+PLAYABLE_FILM = {
+    "README.md":
+        f"https://cdn.jsdelivr.net/gh/ChrisChen667788/pixcull@main/{FILM}",
+    "modelscope/README.md":
+        f"https://www.modelscope.cn/models/haozi667788/pixcull/resolve/master/{FILM}",
+}
+
+
+def test_the_film_is_linked_where_a_browser_will_play_it():
+    assert (ROOT / FILM).is_file(), f"{FILM} is gone; the links below are dead"
+    for name, url in PLAYABLE_FILM.items():
+        text = (ROOT / name).read_text(encoding="utf-8")
+        links = re.findall(r'(?:href="|\]\()([^")\s]*pixcull-30s\.mp4)', text)
+        assert links, f"{name} no longer links the film"
+        wrong = sorted(set(l for l in links if l != url))
+        assert not wrong, (
+            f"{name} links the film somewhere a browser will not play it: "
+            f"{wrong} — use {url}")

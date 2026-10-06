@@ -60,12 +60,15 @@
 
 <!-- The film. Poster and video live in docs/video/, and docs/video/README.md
      says which file each on-screen line comes from. It is an illustration,
-     not a screen recording, and the caption says so. -->
+     not a screen recording, and the caption says so. The link goes to
+     jsDelivr's copy of the same file because GitHub will not play it: the
+     file page says it is too big to show, and raw.githubusercontent.com
+     serves it as application/octet-stream, which downloads. -->
 <p align="center">
-  <a href="docs/video/pixcull-30s.mp4"><img src="docs/video/pixcull-30s-poster.jpg"
+  <a href="https://cdn.jsdelivr.net/gh/ChrisChen667788/pixcull@main/docs/video/pixcull-30s.mp4"><img src="docs/video/pixcull-30s-poster.jpg"
      alt="Title frame of a 30-second film about PixCull: a snow peak at sunset inside amber crop brackets, beside the words Make the frame count."
      width="720" /></a><br/>
-  <sub>▶ <a href="docs/video/pixcull-30s.mp4">A 30-second film</a>, with music.
+  <sub>▶ <a href="https://cdn.jsdelivr.net/gh/ChrisChen667788/pixcull@main/docs/video/pixcull-30s.mp4">A 30-second film</a>, with music.
   It shows what PixCull does using the photographs in <code>samples/input</code>;
   it is not a recording of the app. <a href="docs/video/README.md">What each line rests on</a>.</sub>
 </p>
@@ -1130,7 +1133,7 @@ from scratch.
 </p>
 
 <p align="center">
-  <sub>▶ <a href="docs/video/pixcull-30s.mp4">30 秒介绍片</a>(有配乐,画面文字为英文)。用
+  <sub>▶ <a href="https://cdn.jsdelivr.net/gh/ChrisChen667788/pixcull@main/docs/video/pixcull-30s.mp4">30 秒介绍片</a>(有配乐,画面文字为英文)。用
   <code>samples/input</code> 里的样例照片演示功能,不是软件录屏;每句话的出处见
   <a href="docs/video/README.md">docs/video/README.md</a>。</sub>
 </p>
