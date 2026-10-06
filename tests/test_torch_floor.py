@@ -123,20 +123,68 @@ def test_torchvision_floor_is_the_one_that_ships_with_the_torch_floor():
         f"not 0.{v[1]}")
 
 
+def _configs(job: dict) -> list[dict[str, str]]:
+    """The pins each configuration of a job runs with.
+
+    v3.94 — the hermetic lane became a matrix: 3.12 on the floor, 3.13
+    floating (torchvision 0.20.1 has no cp313 wheel). Its pins moved from
+    the shell into ``matrix.include``, where a scan of the commands alone
+    found none and read the lane as unpinned.
+    """
+    base = _pins(_commands(job))
+    include = ((job.get("strategy") or {}).get("matrix") or {}).get("include")
+    if not include:
+        return [base]
+    return [{**base, **_pins(" ".join(str(v) for v in entry.values()))}
+            for entry in include]
+
+
 @pytest.mark.parametrize("job", PINNED_JOBS)
 def test_the_pinned_lanes_run_the_declared_floor(job):
     """Otherwise the oldest torch we promise is one no lane has run —
     which is how a floor of 2.2 sat beside lanes pinned at 2.4."""
     d = _declared()
-    pins = _pins(_commands(_job(job)))
-    assert set(pins) == {"torch", "torchvision"}, (
-        f"{job} must pin torch and torchvision together, found {pins}")
-    assert _minor(pins["torch"]) == _floor(d["torch"]), (
-        f"{job} pins torch {pins['torch']}; the declared floor is "
-        f"{d['torch']}")
-    assert _minor(pins["torchvision"]) == _floor(d["torchvision"]), (
-        f"{job} pins torchvision {pins['torchvision']}; the declared "
-        f"floor is {d['torchvision']}")
+    floor = {"torch": _floor(d["torch"]), "torchvision": _floor(d["torchvision"])}
+    configs = _configs(_job(job))
+    pinned = [c for c in configs if c]
+    assert pinned, f"{job} pins torch nowhere — it should run the floor"
+    for pins in pinned:
+        assert set(pins) == {"torch", "torchvision"}, (
+            f"{job} must pin torch and torchvision together, found {pins}")
+    assert any({k: _minor(v) for k, v in pins.items()} == floor
+               for pins in pinned), (
+        f"{job}: no configuration runs the declared floor "
+        f"torch {d['torch']} / torchvision {d['torchvision']}: {pinned}")
+    for pins in pinned:
+        assert _minor(pins["torch"]) >= floor["torch"], (
+            f"{job} pins torch {pins['torch']}, below the declared floor")
+
+
+def test_a_matrix_entry_either_runs_the_floor_or_floats():
+    """A third option — pinned, but to something other than the floor — is
+    a lane that tests neither the oldest promise nor what a user gets."""
+    d = _declared()
+    floor = {"torch": _floor(d["torch"]), "torchvision": _floor(d["torchvision"])}
+    for name in PINNED_JOBS:
+        for pins in _configs(_job(name)):
+            assert not pins or {k: _minor(v) for k, v in pins.items()} == floor, (
+                f"{name}: a configuration pins {pins}, neither the floor "
+                f"nor floating")
+
+
+def test_the_newest_advertised_python_runs_the_whole_suite():
+    """v3.94 — the import lane already covers every advertised Python
+    (tests/test_ci_tests_what_ships.py). An import is not the suite: 3.13
+    is advertised because the suite passes on it, so the suite runs on it."""
+    meta = tomllib.loads((ROOT / "pyproject.toml").read_text("utf-8"))["project"]
+    advertised = sorted(c.rsplit("::", 1)[1].strip() for c in meta["classifiers"]
+                        if c.startswith("Programming Language :: Python :: 3."))
+    job = _job("pytest (hermetic subset)")
+    include = job["strategy"]["matrix"]["include"]
+    run = sorted({str(e["python-version"]) for e in include})
+    newest = advertised[-1]
+    assert newest in run, (
+        f"Python {newest} is advertised and the hermetic suite runs on {run}")
 
 
 @pytest.mark.parametrize("job", FLOATING_JOBS)

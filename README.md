@@ -36,7 +36,7 @@
 <p align="center">
   <a href="https://github.com/ChrisChen667788/pixcull/actions/workflows/tests.yml"><img alt="tests" src="https://img.shields.io/github/actions/workflow/status/ChrisChen667788/pixcull/tests.yml?branch=main&label=tests&style=flat-square" /></a>
   <a href="./LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square" /></a>
-  <img alt="Python" src="https://img.shields.io/badge/python-3.11%20%7C%203.12-3776AB.svg?style=flat-square&logo=python&logoColor=white" />
+  <img alt="Python" src="https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-3776AB.svg?style=flat-square&logo=python&logoColor=white" />
   <img alt="Platform" src="https://img.shields.io/badge/macOS-Apple%20Silicon%20%26%20Intel-000.svg?style=flat-square&logo=apple" />
   <img alt="Cloud judge" src="https://img.shields.io/badge/MiniMax%20M3-cloud%20judge%20(local%20mode%20available)-dcb87e.svg?style=flat-square" />
   <a href="https://github.com/ChrisChen667788/pixcull/stargazers"><img alt="stars" src="https://img.shields.io/github/stars/ChrisChen667788/pixcull?style=flat-square" /></a>
@@ -61,6 +61,23 @@
 ---
 
 ## What's new
+
+**v3.94** — Python 3.13 installs. `requires-python` stopped at 3.12 because
+the review server parsed uploads with `cgi.FieldStorage`, and 3.13 removed the
+`cgi` module. That turned out to be the only obstacle. Measured on a 3.13
+interpreter, every dependency installs, MediaPipe included (its wheels are
+tagged for any Python 3), and with `cgi` replaced the whole suite passes. The
+parser is now `multipart`, one of the two replacements the Python
+documentation's `cgi` deprecation note gives for request bodies (the other,
+`email.message`, does not stream). Its part limit is raised from 128 to the
+server's file limit,
+because an upload may carry 500 files.
+
+CI runs the install check on 3.11, 3.12 and 3.13, and the whole suite on 3.12
+at the torch floor and on 3.13. On 3.13 the oldest torch that installs is 2.6,
+since torchvision 0.20.1 has no 3.13 wheel. The upload path had never been
+tested over HTTP. It is now, with real multipart bodies, a 3 MB file, Windows
+paths and a 200-file upload.
 
 **v3.93.2** — Three changes from [@gxfc9867](https://github.com/gxfc9867)
 (PR #4), and one brace. Chinese watermarks on a client proof sheet came out as
@@ -153,18 +170,6 @@ It fetches the weights first now, through the product's own loader, and in
 that lane a missing model fails instead of skipping. Found by reading the log
 of a green run — the one that was meant to show v3.89's offline test ran
 somewhere.
-
-**v3.91** — On Windows the folder picker could not leave the `C:` drive.
-Its quick links were `~`, Pictures, Desktop, Downloads and `/Volumes`, and a
-shoot is usually not on `C:`. The server has always accepted any path, so
-the whole defect was that the page gave no way to ask. It lists the drives
-that exist now — whatever the machine has, not a fixed set of letters — and
-hides the macOS-only shortcut when there are some.
-
-Reported, diagnosed and fixed by [@gxfc9867](https://github.com/gxfc9867) in
-issue #2 and PR #4, verified on a real Windows machine; the commit is theirs.
-What was added here is the part that can be checked from a machine with no
-drive letters, and a pass in a real browser with two pretend ones.
 
 Earlier releases are in [`CHANGELOG.md`](CHANGELOG.md).
 
@@ -878,7 +883,7 @@ culling" SaaS, the things you'll notice immediately on PixCull:
 git clone https://github.com/ChrisChen667788/pixcull.git
 cd pixcull
 
-# 2. Python 3.11 or 3.12 (mediapipe 0.10.x ships no wheel above 3.12)
+# 2. Python 3.11, 3.12 or 3.13 (on 3.13 the oldest torch that installs is 2.6)
 python3.12 -m venv .venv
 source .venv/bin/activate
 
@@ -1030,7 +1035,7 @@ pixcull/
 ├── training.csv                # sanitized rubric ground truth (130 rows)
 ├── training_axis.csv           # sanitized per-axis ground truth (3,000 rows)
 ├── ROADMAP.md                  # the next ~12 months of work
-└── pyproject.toml              # MIT, Python 3.11–3.12
+└── pyproject.toml              # MIT, Python 3.11–3.13
 ```
 
 ## Roadmap
@@ -1453,7 +1458,7 @@ pixcull m3 label --folder <photos> --limit 150
 git clone https://github.com/ChrisChen667788/pixcull.git
 cd pixcull
 
-# 2. Python 3.11 或 3.12 (mediapipe 0.10.x 没有 3.12 以上的 wheel)
+# 2. Python 3.11、3.12 或 3.13(3.13 上能装的最老 torch 是 2.6)
 python3.12 -m venv .venv
 source .venv/bin/activate
 
@@ -1576,7 +1581,7 @@ pixcull/
 ├── training.csv                # 脱敏后的 rubric ground truth (130 行)
 ├── training_axis.csv           # 脱敏后的 per-axis ground truth (3,000 行)
 ├── ROADMAP.md                  # 未来 12 个月规划
-└── pyproject.toml              # MIT,Python 3.11–3.12
+└── pyproject.toml              # MIT,Python 3.11–3.13
 ```
 
 ## 路线图

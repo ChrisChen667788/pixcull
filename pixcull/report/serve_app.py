@@ -58,7 +58,6 @@ File uploads up to 200 MB; no auth — only run on networks you trust.
 from __future__ import annotations
 
 import argparse
-import cgi  # noqa: DEP002 — deprecated but present in 3.12; we control runtime
 import io
 import importlib
 import json
@@ -95,6 +94,72 @@ def _pkg_root() -> Path:
     git checkout and from site-packages)."""
     import pixcull as _pixcull_pkg
     return Path(_pixcull_pkg.__file__).resolve().parent
+
+
+#: The largest single file the vertical sample bank accepts; bigger ones
+#: are skipped so a runaway cannot fill it.
+_VERTICAL_SAMPLE_MAX_BYTES = 32 * 1024 * 1024
+
+#: v3.94 — form fields an upload may carry besides its files. The parser
+#: refuses a body with more parts than it is told to expect; the page sends
+#: only ``files``, so this is headroom, not a field list.
+_UPLOAD_EXTRA_PARTS = 16
+
+
+def _multipart_parts(rfile, content_type: str, content_length: int,
+                     *, max_parts: int) -> list:
+    """The parts of a ``multipart/form-data`` request body, read from the
+    socket.
+
+    v3.94 — this was ``cgi.FieldStorage``. Python 3.13 removed the ``cgi``
+    module, and these two call sites were the whole reason
+    ``requires-python`` stopped at 3.12. ``multipart`` is one of the two
+    replacements the Python documentation's ``cgi`` deprecation note gives
+    for request bodies; the other, ``email.message``, does not stream. Like
+    FieldStorage it
+    keeps small parts in memory and spools anything over 64 KB to a
+    temporary file, so an 8 GB upload is never held in RAM.
+
+    Raises ``multipart.ParserLimitReached`` past ``max_parts`` — its own
+    default is 128, and an upload may carry 500 files — and
+    ``multipart.MultipartError`` (a ``ValueError``) on a body that is not
+    well-formed or ends early. Callers close the parts when done: a spooled
+    part holds an open temporary file.
+    """
+    from multipart import MultipartParser, parse_options_header
+    # A body of unknown length is read until the client closes the
+    # connection, which a keep-alive client never does: the thread waited
+    # forever (review of v3.94, on the vertical upload). Both callers refuse
+    # it first; this refuses it for any caller added later.
+    if content_length is None or content_length <= 0:
+        raise ValueError("multipart body without a Content-Length")
+    _, opts = parse_options_header(content_type)
+    boundary = opts.get("boundary")
+    if not boundary:
+        raise ValueError("multipart/form-data without a boundary")
+    # Memory: parts up to `spool` stay in memory, the rest go to disk. The
+    # parser also caps the TOTAL of in-memory parts, at 8 MB by default —
+    # independent of the part limit — so 300 photographs of 60 KB were
+    # refused, and reported as too many files (review of v3.94). Sized so
+    # the part count is always the limit that binds: at most `spool` bytes
+    # per part, `max_parts` parts.
+    spool = 64 * 1024
+    return MultipartParser(rfile, boundary, content_length=content_length,
+                           part_limit=max_parts, spool_limit=spool,
+                           memory_limit=spool * max_parts).parts()
+
+
+def _is_part_count_limit(exc: Exception) -> bool:
+    """Whether a ``ParserLimitReached`` is the part count, as opposed to a
+    header or size limit — the only one an "upload fewer files" answers."""
+    return "segment count" in str(exc)
+
+
+def _upload_basename(filename: str) -> str:
+    """The file's own name, whatever path a browser sent with it — a
+    Windows client can send ``C:\\Users\\…\\a.jpg``, which ``Path`` on macOS
+    or Linux does not split."""
+    return Path((filename or "").replace("\\", "/")).name
 
 
 #: The delivery audit, run as a subprocess by ``/admin/delivery/<run>``.
@@ -6857,19 +6922,32 @@ class _Handler(BaseHTTPRequestHandler):
             self._reject_upload(400, "expected multipart/form-data")
             return
 
+        from multipart import ParserLimitReached
         try:
-            form = cgi.FieldStorage(
-                fp=self.rfile,
-                headers=self.headers,
-                environ={
-                    "REQUEST_METHOD": "POST",
-                    "CONTENT_TYPE": ctype,
-                    "CONTENT_LENGTH": str(clen),
-                },
-            )
+            parts = _multipart_parts(
+                self.rfile, ctype, clen,
+                max_parts=max_files + _UPLOAD_EXTRA_PARTS)
+        except ParserLimitReached as exc:
+            if _is_part_count_limit(exc):
+                self._reject_upload(
+                    413,
+                    f"一次上传的文件超过上限 {max_files}。分批上传,或启动时加 "
+                    f"--max-upload-files(大于这次的文件数)。",
+                )
+            else:
+                self._reject_upload(413, f"上传超出了解析限制: {exc}")
+            return
         except Exception as exc:  # noqa: BLE001
             self._reject_upload(400, f"multipart parse failed: {exc}")
             return
+        try:
+            self._save_uploaded_photos(parts, max_files)
+        finally:
+            for part in parts:
+                part.close()
+
+    def _save_uploaded_photos(self, parts: list, max_files: int) -> None:
+        """The rest of POST /analyze, given the parsed form."""
 
         run_id = _new_run_id()
         run_root = _run_dir(run_id)
@@ -6883,31 +6961,31 @@ class _Handler(BaseHTTPRequestHandler):
         ok_exts = {".jpg", ".jpeg", ".png", ".cr3", ".cr2", ".nef", ".arw", ".dng", ".tif", ".tiff"}
         n_saved = 0
         n_skipped_ext = 0
-        if "files" in form:
-            files = form["files"]
-            items = files if isinstance(files, list) else [files]
+        items = [p for p in parts if p.name == "files"]
+        if items:
             if len(items) > max_files:
                 self._reject_upload(
                     413,
                     f"一次上传 {len(items)} 个文件超过上限 {max_files}。"
                     f"分批上传,或启动时加 --max-upload-files {len(items)+50}。",
                 )
-                # Note: we already drained the request body via FieldStorage;
-                # nothing to clean up. Run dirs were created above but are
-                # empty — leave them for /admin to sweep.
+                # The body has been read in full by the parser; nothing to
+                # clean up. Run dirs were created above but are empty —
+                # leave them for /admin to sweep.
                 return
             for item in items:
-                fn = getattr(item, "filename", None) or ""
+                fn = item.filename or ""
                 if not fn:
                     continue
                 # Strip any path components from the upload filename
-                safe_name = Path(fn).name
+                safe_name = _upload_basename(fn)
                 if Path(safe_name).suffix.lower() not in ok_exts:
                     n_skipped_ext += 1
                     continue
                 dst = input_dir / safe_name
-                with open(dst, "wb") as f:
-                    f.write(item.file.read())
+                # Copies from memory or from the spooled temporary file in
+                # chunks; a RAW file is not read into memory whole.
+                item.save_as(str(dst))
                 n_saved += 1
 
         if n_saved == 0:
@@ -12694,30 +12772,36 @@ class _Handler(BaseHTTPRequestHandler):
             self._reject_upload(400, "expected multipart/form-data")
             return
         try:
-            form = cgi.FieldStorage(
-                fp=self.rfile, headers=self.headers,
-                environ={"REQUEST_METHOD": "POST", "CONTENT_TYPE": ctype},
-                keep_blank_values=True,
-            )
-        except Exception as exc:
+            clen = int(self.headers.get("Content-Length") or -1)
+        except ValueError:
+            clen = -1
+        if clen <= 0:
+            # Read to EOF otherwise, and a keep-alive client sends none.
+            self._reject_upload(400, "upload is empty (no Content-Length)")
+            return
+        try:
+            parts = _multipart_parts(self.rfile, ctype, clen, max_parts=1024)
+        except Exception as exc:  # noqa: BLE001
             self._reject_upload(400, f"multipart parse failed: {exc}")
             return
         saved: list[dict] = []
-        for field_name in form.keys():
-            field = form[field_name]
-            for item in (field if isinstance(field, list) else [field]):
-                if not getattr(item, "filename", None):
-                    continue
-                content = item.file.read()
-                if not content:
+        try:
+            for item in parts:
+                if not item.filename or not item.size:
                     continue
                 # Cap each upload at 32 MB so a runaway can't fill the
-                # vertical bank.
-                if len(content) > 32 * 1024 * 1024:
+                # vertical bank. Checked before reading: the part is
+                # already on disk, and need not come into memory to be
+                # refused.
+                if item.size > _VERTICAL_SAMPLE_MAX_BYTES:
                     continue
+                item.file.seek(0)
                 saved.append(vmod.save_sample(
-                    key, bucket, item.filename, content,
+                    key, bucket, item.filename, item.file.read(),
                 ))
+        finally:
+            for part in parts:
+                part.close()
         body = _safe_dumps({
             "ok": True, "key": key, "bucket": bucket,
             "saved": saved,

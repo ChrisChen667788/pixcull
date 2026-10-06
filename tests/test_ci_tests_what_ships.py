@@ -157,7 +157,15 @@ def test_the_behaviour_lanes_are_still_reproducible():
     for job in ("browser", "pytest"):
         if job not in wf["jobs"]:
             continue
-        if not re.search(r"\btorch\s*==\s*[\d.]+", _shell(wf["jobs"][job])):
+        spec = wf["jobs"][job]
+        # v3.94 — the hermetic lane is a matrix and its pins live in
+        # matrix.include: 3.12 on the floor, 3.13 floating, because the
+        # floor has no 3.13 wheel. At least one configuration still pins.
+        include = ((spec.get("strategy") or {}).get("matrix") or {}).get(
+            "include") or []
+        text = _shell(spec) + " " + " ".join(
+            str(v) for entry in include for v in entry.values())
+        if not re.search(r"\btorch\s*==\s*[\d.]+", text):
             unpinned.append(job)
     assert not unpinned, (
         f"{unpinned} no longer pin torch. A behaviour lane wants a fixed "

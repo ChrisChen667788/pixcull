@@ -43,7 +43,7 @@ tasks:
 
 [![GitHub](https://img.shields.io/badge/GitHub-ChrisChen667788%2Fpixcull-181717.svg?style=flat-square&logo=github)](https://github.com/ChrisChen667788/pixcull)
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](https://github.com/ChrisChen667788/pixcull/blob/main/LICENSE)
-![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-3776AB.svg?style=flat-square&logo=python&logoColor=white)
+![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-3776AB.svg?style=flat-square&logo=python&logoColor=white)
 ![云端判图](https://img.shields.io/badge/MiniMax%20M3-云端判图%20·%20可切纯本地-dcb87e.svg?style=flat-square)
 [![v0.7](https://img.shields.io/github/v/release/ChrisChen667788/pixcull?style=flat-square&color=dcb87e)](https://github.com/ChrisChen667788/pixcull/releases/latest)
 
@@ -58,6 +58,19 @@ tasks:
 **[github.com/ChrisChen667788/pixcull](https://github.com/ChrisChen667788/pixcull)**
 
 ## 最近更新
+- **v3.94**:Python 3.13 能装了。`requires-python` 原来停在 3.12,是因为审片服务器
+  用 `cgi.FieldStorage` 解析上传,而 3.13 移除了 `cgi` 模块。实测下来这是唯一的
+  障碍:在 3.13 上所有依赖都能装上,包括 MediaPipe(它的 wheel 对任意 Python 3
+  通用);换掉 `cgi` 之后全量测试通过。解析器换成了 `multipart`,它是 Python 官方
+  文档在 `cgi` 弃用说明里给出的两个请求体解析替代之一(另一个 `email.message`
+  不支持流式);它默认最多 128 个分段,而一次上传可以有 500 个文件,所以上限
+  改成跟随服务器的文件数上限。
+
+  CI 在 3.11、3.12、3.13 上跑安装检查,在 3.12(torch 下限)和 3.13 上跑全量测试。
+  3.13 上能装的最老 torch 是 2.6,因为 torchvision 0.20.1 没有 3.13 的 wheel。
+  上传这条路径以前从没在 HTTP 层测过,现在用真实的 multipart 请求测了:3 MB 的
+  文件、Windows 路径、一次 200 个文件。
+
 - **v3.93.2**:来自 [@gxfc9867](https://github.com/gxfc9867)(PR #4)的三处改动,加一个
   括号。客户选片页上的中文水印显示成空白方块:字体查找先碰到了只含拉丁字母的字体,
   而在 Mac 上 Pillow 会按名字把 `C:/Windows/Fonts/arial.ttf` 当成 Arial 打开。现在各
@@ -123,16 +136,6 @@ tasks:
   现在它先把权重拉下来(走产品自己的加载函数),并且在这条 lane 里,缺模型算失败
   而不是跳过。是读一次绿灯运行的日志读出来的 —— 那次运行本该证明 v3.89 的断网
   测试在某处真的跑过。
-
-- **v3.91**:在 Windows 上,文件夹选择器出不了 `C:` 盘。它的快捷入口只有 `~`、
-  Pictures、Desktop、Downloads 和 `/Volumes`,而照片通常不在 `C:`。服务端一直
-  接受任意路径,所以整个缺陷只是页面没给出「去别的盘」的办法。现在它列出这台
-  机器上真实存在的盘符 —— 有几个列几个,不是一份写死的字母表 —— 并在有盘符时
-  把 macOS 专用的快捷入口收起来。
-
-  由 [@gxfc9867](https://github.com/gxfc9867) 在 issue #2 和 PR #4 里报告、定位
-  并修复,且在真实 Windows 机器上验证过;这个提交是他的。这边补上的是没有盘符
-  的机器上也能检查的那部分,以及在真实浏览器里用两个假盘符走的一遍。
 
 更早的版本记录在 [`CHANGELOG.md`](https://github.com/ChrisChen667788/pixcull/blob/main/modelscope/CHANGELOG.md)。
 

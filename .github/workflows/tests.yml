@@ -35,7 +35,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12"]
+        # v3.94 — 3.13. The cgi module the review server needed was
+        # removed in 3.13, and that was the only thing standing between
+        # the package and it (measured: every dependency installs and the
+        # suite passes). It is advertised now, so it is run.
+        python-version: ["3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
 
@@ -160,9 +164,23 @@ jobs:
           EOF
 
   pytest:
-    name: pytest (hermetic subset)
+    name: pytest (hermetic subset) · Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
     needs: import
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The declared floor, exactly, so the oldest torch promised is
+          # one this suite runs on (v3.92).
+          - python-version: "3.12"
+            torch: '"torch==2.5.1" "torchvision==0.20.1"'
+          # v3.94 — the whole suite on 3.13, not just an import. It cannot
+          # run the floor: torchvision 0.20.1 has no cp313 wheel, and the
+          # oldest pair that installs on 3.13 is torch 2.6 / torchvision
+          # 0.21. So this entry resolves the way a user on 3.13 does.
+          - python-version: "3.13"
+            torch: "torch torchvision"
     steps:
       # v3.53 — full history. The release-notes staleness gate reads the
       # version titles out of the commit log, and the default shallow
@@ -172,10 +190,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up Python 3.12
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
           cache: pip
 
       - name: Install
@@ -185,15 +203,16 @@ jobs:
           python -m pip install --upgrade pip
           pip install --index-url https://download.pytorch.org/whl/cpu \
                       --extra-index-url https://pypi.org/simple \
-                      "torch==2.5.1" "torchvision==0.20.1"
+                      ${{ matrix.torch }}
           pip install -e ".[dev]"
           # v3.50 — the face extra. Claim 4 of eighteen in the README is
           # InsightFace embeddings into DBSCAN into a cross-run face
           # library, and all of it stands on a detector that needs
           # mediapipe. Four tests skipped on every push for want of it,
           # so the identity feature was exercised nowhere automatic. The
-          # .tflite / .task weights it loads are already in the wheel;
-          # only the runtime was missing. scikit-image comes along for
+          # .tflite / .task weights come from this checkout (`-e`): they
+          # were NOT in the wheel until v3.93.1, which this lane could not
+          # see (tests/test_packaging.py checks the wheel now). scikit-image comes along for
           # the public-domain astronaut face the serve-side test uses.
           pip install -e ".[face]"
           pip install scikit-image

@@ -19,7 +19,7 @@ Faces, closed eyes and face blur are checked with MediaPipe, an optional
 extra: `pip install 'pixcull[face]'`. Without it a run says so and the
 other checks are unchanged.
 
-Python 3.11–3.12. First run downloads the optional scoring models to
+Python 3.11–3.13. First run downloads the optional scoring models to
 `~/.pixcull/models/`; the measurements they make run on-device and are
 Apple-silicon accelerated. Whether the *judge* is local or cloud is a
 separate question — see the last two bullets below.

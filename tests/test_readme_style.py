@@ -14,6 +14,8 @@ carries the ones that are not.
 import re
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parent.parent
 
 #: How many releases the README keeps. The rest live in CHANGELOG.md.

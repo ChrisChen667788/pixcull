@@ -814,11 +814,14 @@ Release only.  PyPI's `/pypi/pixcull/json` lags the upload by minutes —
 check `/pypi/pixcull/<version>/json`.
 
 **Current block: `docs/ROADMAP-v3.88-v3.104-charter.md`** (written
-2026-10-01).  v3.88–v3.93.2 are shipped; PR #4 landed in v3.93.2 (the
+2026-10-01).  v3.88–v3.94 are shipped (v3.94: Python 3.13 — `cgi` was the
+only obstacle, replaced by `multipart` with `part_limit` set to the server's
+file limit; the hermetic lane is a 3.12-floor / 3.13-floating matrix because
+torchvision 0.20.1 has no cp313 wheel); PR #4 landed in v3.93.2 (the
 contributor's three commits plus the closing brace one of them dropped —
 **CSS nesting means a missing `}` is not a parse error, it nests every later
 rule inside the open one**; `tests/test_stylesheets_are_well_formed.py`);
-v3.94 (Python 3.13) is next.  The
+v3.95 (`audit_labels` and the blind sheet) is next.  The
 measurements the 2026-09-12 correction set unblocked (v3.29's second half,
 v2.83, v3.8) are scheduled there as v3.96–v3.99 and are plain engineering,
 not owner asks.

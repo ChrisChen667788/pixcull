@@ -1,11 +1,11 @@
 [project]
 name = "pixcull"
-version = "3.93.2"
+version = "3.94.0"
 description = "AI photo culling for professional photographers — MiniMax M3 judges the frame while reading the on-device measurements, 6-axis rubric, XMP/IPTC export, Lightroom & Capture One ready."
 # v2.23 — dedicated PyPI readme: the repo README leans on relative-path
 # screenshots and GitHub-only markup that render broken on pypi.org.
 readme = "README-PYPI.md"
-requires-python = ">=3.11,<3.13"
+requires-python = ">=3.11,<3.14"
 license = "MIT"
 authors = [
     { name = "Chris Chen", email = "hello@pixcull.dev" },
@@ -28,6 +28,7 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Multimedia :: Graphics",
     "Topic :: Scientific/Engineering :: Image Processing",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
@@ -138,6 +139,13 @@ dependencies = [
     "openai>=1.40",
     # templating
     "jinja2>=3.1",
+    # v3.94 — the review server's multipart parser. It was cgi.FieldStorage,
+    # and Python 3.13 removed the cgi module; this is one of the two
+    # replacements the Python docs' cgi deprecation note gives for request
+    # bodies (the other, email.message, does not stream). Pure Python, no
+    # dependencies. Its 2.0 changed defaults (a part limit of 128), so the
+    # ceiling is the next major, which may change them again.
+    "multipart>=2.0,<3",
     # storage
     "sqlmodel>=0.0.16",
 ]

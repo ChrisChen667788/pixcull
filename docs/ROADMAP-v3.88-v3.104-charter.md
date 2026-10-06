@@ -360,6 +360,50 @@ installs and passes the hermetic suite. **May close as measured and
 declined** if a hard dependency has no 3.13 wheel — in which case the
 ceiling stays and the README says why, which it does not today.
 
+**Measured first, then shipped.** On a standalone CPython 3.13.15 with
+the ceiling lifted in a copy of the tree: every core and dev dependency
+installed, and so did the `[face]` extra — MediaPipe 0.10.35 publishes
+`py3-none` wheels, so the README's "0.10.x ships no wheel above 3.12"
+had stopped being true. Importing the package, only
+`pixcull.report.serve_app` failed (`No module named 'cgi'`), and no other
+module removed by PEP 594 is imported anywhere in it. With `cgi`
+replaced, the whole suite passed on 3.13: 3161 passed, the eight failures
+all from that copy having no git history.
+
+`multipart` 2.0.1 (MIT, no dependencies) replaces `cgi.FieldStorage` at
+both sites. Two defaults are set on purpose: the part limit of 128,
+raised to the server's file limit plus headroom (an upload may carry
+500), and spooling — parts over 64 KB go to temporary files, as before.
+Spooled parts are closed after use. The upload had never been tested
+over HTTP; `tests/test_runs_on_python_313.py` sends real bodies.
+
+The floor cannot run on 3.13: torchvision 0.20.1 has no cp313 wheel; the
+oldest pair that installs there is torch 2.6 / torchvision 0.21. So the
+hermetic lane is a matrix — 3.12 pinned at the floor, 3.13 floating — and
+`tests/test_torch_floor.py` reads pins from the matrix and requires the
+newest advertised Python to run the whole suite. `requires-python` is
+`>=3.11,<3.14`: 3.14 is not run anywhere yet, so it is not promised.
+
+Reviewed before pushing (three lenses, each finding handed to a second
+reader told to refute it; the first run died on a usage limit with
+nothing examined and was rerun in full). Four stood, none refuted:
+
+* **A blocker in the vertical upload.** It passed a missing
+  `Content-Length` to the parser as -1, which reads until the client
+  closes the connection; a keep-alive client never does, so the server
+  thread waited forever. The photo upload already refused that; the
+  vertical one does now, and `_multipart_parts` refuses an unknown length
+  for any caller. Tested over a raw socket left open.
+* The 8 MB default on in-memory parts, found by measuring before the
+  review ran: 300 photographs of 60 KB were refused and reported as too
+  many files. The cap is sized from the part limit now.
+* The test said a 3 MB RAW "must not be read back whole" and checked only
+  hashes; a handler reading it whole passed. It checks the copy now.
+* "The package the standard library's deprecation notice names" was
+  loose: the name is in the documentation's `cgi` deprecation note ("the
+  email.message module or multipart for POST and PUT"), not in the
+  module, and beside an alternative. The wording says so.
+
 ### The first release since 3.53.1 — done at v3.92, not after v3.94
 
 Planned for after v3.94; the owner asked for it on 2026-10-02 so that
