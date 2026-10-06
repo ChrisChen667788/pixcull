@@ -58,6 +58,18 @@
   It runs on your machine. The RAW files do not have to go anywhere.
 </p>
 
+<!-- The film. Poster and video live in docs/video/, and docs/video/README.md
+     says which file each on-screen line comes from. It is an illustration,
+     not a screen recording, and the caption says so. -->
+<p align="center">
+  <a href="docs/video/pixcull-30s.mp4"><img src="docs/video/pixcull-30s-poster.jpg"
+     alt="Title frame of a 30-second film about PixCull: a snow peak at sunset inside amber crop brackets, beside the words Make the frame count."
+     width="720" /></a><br/>
+  <sub>▶ <a href="docs/video/pixcull-30s.mp4">A 30-second film</a>, with music.
+  It shows what PixCull does using the photographs in <code>samples/input</code>;
+  it is not a recording of the app. <a href="docs/video/README.md">What each line rests on</a>.</sub>
+</p>
+
 ---
 
 ## What's new
@@ -1115,6 +1127,12 @@ from scratch.
 <p align="center">
   <i>专业摄影师的 AI 选片工具。<br/>
   6 维评分,XMP / IPTC / 相册一键导出,Lightroom &amp; Capture One 直通,MiniMax M3 云端判图(可切纯本地)。</i>
+</p>
+
+<p align="center">
+  <sub>▶ <a href="docs/video/pixcull-30s.mp4">30 秒介绍片</a>(有配乐,画面文字为英文)。用
+  <code>samples/input</code> 里的样例照片演示功能,不是软件录屏;每句话的出处见
+  <a href="docs/video/README.md">docs/video/README.md</a>。</sub>
 </p>
 
 ## 为什么有这个项目

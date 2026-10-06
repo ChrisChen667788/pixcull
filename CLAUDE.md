@@ -104,6 +104,15 @@ script now strips `README.md`/`*.md`/`docs/` LFS rules and pins
 `README.md text` before each upload.  Never use `--github-links` unless
 you specifically want CDN-linked images instead of ModelScope-hosted.
 
+**The 30-second film is `docs/video/pixcull-30s.mp4`** (2026-10-07), made
+outside this repo from eight `samples/input` frames with synthesised music;
+`docs/video/README.md` maps every on-screen line to the code that makes it
+true — change a feature it names and that table is what goes stale.  Both
+READMEs show its poster linked to the file; the ModelScope card links the
+modelscope.cn copy, so the sync hosts mp4 too (`ASSET_RE` in
+`scripts/sync_modelscope_readme.py`, the one pattern the upload and the
+trigger test both read).
+
 New screenshots: next free number is **27** (01–26 used; 25 =
 client-proof-sheet, 26 = blind-label-sheet — **re-shot 2026-09-02 from
 the owner's own Canon set**, replacing the synthetic-sample versions

@@ -37,6 +37,7 @@ on:
       # that touches one screenshot re-hosts one screenshot.
       - 'docs/screenshots/**'
       - 'docs/diagrams/**'
+      - 'docs/video/**'
   workflow_dispatch:  # manual trigger
 
 jobs:

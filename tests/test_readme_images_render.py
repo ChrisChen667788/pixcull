@@ -40,12 +40,20 @@ MIN_DISTINCT_COLOURS = 64
 MAX_DOMINANT_SHARE = 97.0
 
 
-def _render(page, svg_bytes: bytes, width: int, wait_ms: int, tmp_path: Path):
+#: The data: URL has to name the real type. Every image embedded with
+#: ``src=`` was an SVG until the film's poster, a JPEG, which declared as
+#: SVG decodes to nothing and read as "a flat rectangle".
+_MIME = {".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg",
+         ".jpeg": "image/jpeg", ".gif": "image/gif"}
+
+
+def _render(page, svg_bytes: bytes, width: int, wait_ms: int, tmp_path: Path,
+            mime: str = "image/svg+xml"):
     """Rasterize the way GitHub embeds it: an <img>, isolated document."""
     b64 = base64.b64encode(svg_bytes).decode()
     page.set_content(
         f'<body style="margin:0;background:#0d1117">'
-        f'<img id="i" src="data:image/svg+xml;base64,{b64}" width="{width}">')
+        f'<img id="i" src="data:{mime};base64,{b64}" width="{width}">')
     page.wait_for_selector("#i")
     nat = page.evaluate(
         "() => {const i = document.getElementById('i');"
@@ -86,7 +94,8 @@ def test_every_readme_image_actually_paints_something(rel, page, tmp_path):
     """The check that would have caught it. Not "does it parse" — does it
     put more than one colour on the screen."""
     p = ROOT / rel
-    n, dominant, share = _render(page, p.read_bytes(), 1280, 4000, tmp_path)
+    n, dominant, share = _render(page, p.read_bytes(), 1280, 4000, tmp_path,
+                                 mime=_MIME[p.suffix.lower()])
     assert n >= MIN_DISTINCT_COLOURS and share <= MAX_DOMINANT_SHARE, (
         f"{rel} renders as a flat rectangle: {n} distinct colours, "
         f"{share:.1f}% of pixels are {dominant}. It parses; it does not paint.")

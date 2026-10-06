@@ -9,6 +9,7 @@ not the current ones.
 Found the day 25 and 26 were replaced with real photographs and the
 ModelScope card kept showing the synthetic samples.
 """
+import importlib.util
 import re
 from pathlib import Path
 
@@ -39,12 +40,36 @@ def test_the_readme_is_still_watched():
     assert any(p.endswith("modelscope/README.md") for p in _paths())
 
 
+def _sync_module():
+    path = (Path(__file__).resolve().parents[1] / "scripts"
+            / "sync_modelscope_readme.py")
+    spec = importlib.util.spec_from_file_location("_sync_for_triggers", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 def test_every_image_the_card_references_is_covered_by_a_watched_path():
     """The real invariant: whatever the model card shows must be able to
-    trigger a sync when it changes."""
-    refs = set(re.findall(r"\]\((docs/[^)\s]+\.(?:png|svg|gif))\)",
-                          README.read_text(encoding="utf-8")))
+    trigger a sync when it changes.
+
+    "Whatever the card shows" is what the sync hosts, so the references are
+    found with the sync's own pattern.  This test used to carry its own,
+    for png, svg and gif in Markdown image syntax: a jpg, a webp, an
+    ``<img>`` tag or the film's mp4 could change without a sync, and this
+    reported nothing because it was not looking for them.
+
+    A file the card loads from raw.githubusercontent.com is served by
+    GitHub, current on every push, and needs no sync; the brand lockup and
+    the hero are loaded that way.  Everything else the card loads from
+    ModelScope — a relative path, or a modelscope.cn address like the
+    film's — and is only as current as the last sync."""
+    text = re.sub(r"https://raw\.githubusercontent\.com/\S+", "",
+                  README.read_text(encoding="utf-8"))
+    refs = set(_sync_module().ASSET_RE.findall(text))
     assert refs, "the card references no images — check the regex"
+    assert "docs/video/pixcull-30s.mp4" in refs, (
+        "the pattern no longer sees the film the card links")
     pats = _paths()
     def covered(ref: str) -> bool:
         for p in pats:

@@ -152,7 +152,16 @@ _GITATTRIBUTES_TEXT = "\n".join([
     "*.jpg filter=lfs diff=lfs merge=lfs -text",
     "*.jpeg filter=lfs diff=lfs merge=lfs -text",
     "*.webp filter=lfs diff=lfs merge=lfs -text",
+    "*.mp4 filter=lfs diff=lfs merge=lfs -text",
 ]) + "\n"
+
+
+#: What the model card references that this sync hosts on ModelScope.
+#: One pattern, read by the upload and by the test that checks every such
+#: file can trigger a sync — two copies of it would drift.  mp4 since the
+#: card links the 30-second film, which a GitHub link would put behind a
+#: slow connection for most of the people reading a ModelScope page.
+ASSET_RE = re.compile(r"docs/[A-Za-z0-9/_.-]+\.(?:png|gif|svg|jpe?g|webp|mp4)")
 
 
 def _shallow_clone(repo_id: str, branch: str, dest: Path) -> bool:
@@ -343,8 +352,8 @@ def _is_transient(exc: Exception) -> bool:
 def _upload_referenced_assets(api, repo_id: str, branch: str,
                               readme_text: str,
                               *, attempts: int = 4) -> tuple[int, int, list]:
-    """Upload every ``docs/...(png|gif|svg|jpg|jpeg|webp)`` the README
-    references so the relative paths resolve on ModelScope itself.
+    """Upload every ``docs/...`` asset the README references (``ASSET_RE``)
+    so the paths resolve on ModelScope itself.
 
     Returns ``(uploaded, expected, failed_paths)``.  The caller must treat
     a short count as a FAILURE: this used to return only a count that
@@ -352,8 +361,7 @@ def _upload_referenced_assets(api, repo_id: str, branch: str,
     assets still printed "✓ synced" and exited 0 — the README then
     referenced eight images that were not on the server.
     """
-    paths = sorted(set(re.findall(
-        r"docs/[A-Za-z0-9/_.-]+\.(?:png|gif|svg|jpe?g|webp)", readme_text)))
+    paths = sorted(set(ASSET_RE.findall(readme_text)))
     expected, n, failed = 0, 0, []
     for rel in paths:
         local = REPO_ROOT / rel

@@ -288,3 +288,33 @@ def test_an_already_current_card_is_not_a_failed_sync():
         "English output")
     assert 'or f"rc={c.returncode}"' in src, (
         "the failure branch can still print an empty reason")
+
+
+def test_the_film_on_the_card_is_hosted_on_modelscope_too():
+    """The card links the 30-second film by its ModelScope address.  The
+    upload used to collect images only, so that address would have been a
+    404 while the sync reported every referenced asset hosted: it was not
+    looking for video."""
+    m = _load()
+    readme = (m.README_SOURCE).read_text(encoding="utf-8")
+    want = "docs/video/pixcull-30s.mp4"
+    assert want in readme, "the card no longer links the film"
+    uploaded = []
+
+    class _Api:
+        def upload_file(self, **kw):
+            uploaded.append(kw["path_in_repo"])
+
+    n, expected, failed = m._upload_referenced_assets(
+        _Api(), "haozi667788/pixcull", "master", readme, attempts=1)
+    assert want in uploaded, f"the film was not uploaded: {sorted(uploaded)}"
+    assert "docs/video/pixcull-30s-poster.jpg" in uploaded
+    assert (n, failed) == (expected, [])
+
+
+def test_the_film_is_stored_as_lfs_on_modelscope():
+    """A rewritten .gitattributes that names every image type and not
+    video leaves the mp4 to whatever ModelScope defaults to."""
+    m = _load()
+    assert "*.mp4 filter=lfs diff=lfs merge=lfs -text" in (
+        m._GITATTRIBUTES_TEXT.splitlines())

@@ -54,6 +54,12 @@ tasks:
 > 它把一场拍摄分成保留 / 待定 / 剔除,每张打六个维度的分,并写清楚为什么 ——
 > 一句你能当着客户念出来的话。跑在你自己的机器上,RAW 不必去任何地方。
 
+<!-- 介绍片。封面图和视频都托管在本仓库的 docs/video/ 下(同步脚本会把
+     mp4 一并上传);每句画面文字的出处见 GitHub 上的 docs/video/README.md。 -->
+[![PixCull 30 秒介绍片的标题帧:落日下的雪峰套在琥珀色裁切框里,旁边是 Make the frame count.](docs/video/pixcull-30s-poster.jpg)](https://www.modelscope.cn/models/haozi667788/pixcull/resolve/master/docs/video/pixcull-30s.mp4)
+
+▶ [30 秒介绍片](https://www.modelscope.cn/models/haozi667788/pixcull/resolve/master/docs/video/pixcull-30s.mp4)(有配乐,画面文字为英文)。用仓库 `samples/input` 里的样例照片演示功能,不是软件录屏;每句话的出处见 [docs/video/README.md](https://github.com/ChrisChen667788/pixcull/blob/main/docs/video/README.md)。
+
 完整源码 + iOS 伴侣 App + Lightroom 插件,均在 GitHub:
 **[github.com/ChrisChen667788/pixcull](https://github.com/ChrisChen667788/pixcull)**
 
