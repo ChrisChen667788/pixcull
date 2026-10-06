@@ -62,8 +62,30 @@ FACE_DETECTOR_MODEL = _MODEL_DIR / "blaze_face_short_range.tflite"
 FACE_LANDMARKER_MODEL = _MODEL_DIR / "face_landmarker.task"
 
 
-def face_detection_unavailable() -> str | None:
-    """Why face detection cannot run in this install, or None if it can.
+#: Why face detection cannot run here, per code. The CLI prints the
+#: sentence; the review server words the same codes for the page.
+FACE_OFF = {
+    "no-mediapipe": (
+        "MediaPipe is not installed, so faces, closed eyes and face blur "
+        "are not checked — `pip install 'pixcull[face]'` adds them"),
+    "mediapipe-broken": (
+        "MediaPipe is installed but cannot be loaded ({detail}), so faces, "
+        "closed eyes and face blur are not checked — reinstall it"),
+    "no-models": (
+        "the face model files are missing from this install ({detail}), so "
+        "no face is detected — reinstall pixcull"),
+}
+
+
+def _import_mediapipe() -> None:
+    """What ``FaceDetector._lazy_init`` imports. A seam for tests."""
+    import mediapipe  # noqa: F401
+    from mediapipe.tasks import python  # noqa: F401
+    from mediapipe.tasks.python import vision  # noqa: F401
+
+
+def face_detection_status() -> tuple[str, str] | None:
+    """``(code, detail)`` when face detection cannot run here, else None.
 
     v3.93.1 — ``FaceDetector`` returns an empty result when MediaPipe or
     its two model files are missing, and says nothing, by design: it runs
@@ -71,26 +93,36 @@ def face_detection_unavailable() -> str | None:
     defect for as long as there has been a wheel: the model files below
     are tracked in git and were never in the build allowlist, so
     ``pip install 'pixcull[face]'`` installed MediaPipe and still found no
-    face. The run summary asks this once, in the main process, and prints
-    the answer.
+    face. The run summary asks this once, in the main process.
 
-    Does not import MediaPipe — ``find_spec`` only looks.
+    It imports MediaPipe, the way the detector will: a package that is
+    present and cannot load — a native library missing after an OS
+    upgrade — would otherwise pass a "is it installed" check and fail
+    silently in every worker, which is the case this exists for.
     """
     import importlib.util
     try:
-        has_mediapipe = importlib.util.find_spec("mediapipe") is not None
+        present = importlib.util.find_spec("mediapipe") is not None
     except (ImportError, ValueError):
-        has_mediapipe = False
-    if not has_mediapipe:
-        return ("MediaPipe is not installed, so faces, closed eyes and face "
-                "blur are not checked — `pip install 'pixcull[face]'` adds them")
+        present = False
+    if not present:
+        return ("no-mediapipe", "")
     missing = [p.name for p in (FACE_DETECTOR_MODEL, FACE_LANDMARKER_MODEL)
                if not p.is_file()]
     if missing:
-        return (f"the face model files are missing from this install "
-                f"({', '.join(missing)}), so no face is detected — "
-                f"reinstall pixcull")
+        return ("no-models", ", ".join(missing))
+    try:
+        _import_mediapipe()
+    except Exception as exc:  # noqa: BLE001 — any failure to load is the answer
+        why = (str(exc).splitlines() or [""])[0][:160]
+        return ("mediapipe-broken", f"{type(exc).__name__}: {why}")
     return None
+
+
+def face_detection_unavailable() -> str | None:
+    """The status as one sentence for a terminal, or None."""
+    st = face_detection_status()
+    return None if st is None else FACE_OFF[st[0]].format(detail=st[1])
 
 
 def _ear(pts: np.ndarray) -> float:

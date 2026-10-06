@@ -69,7 +69,8 @@ allowlist, so `pip install 'pixcull[face]'` installed MediaPipe and still
 found no face. No face count, no closed eyes, no face blur, and nothing said
 so, because the detector returns an empty result when it cannot run. The
 models ship now (the wheel goes from 1.9 MB to 6.9 MB), and a run that
-cannot check faces says so once, with the reason.
+did not check faces says so, with the reason — once in the terminal, and on
+the results page for a run analysed through the browser.
 
 The vendored font and the empty-state art are served from inside the
 package. The app icon is the brand mark, where the manifest had named three

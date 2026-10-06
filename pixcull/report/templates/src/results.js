@@ -230,6 +230,19 @@
     return true;
   }
 
+  // v3.93.1 — a run whose photographs were never checked for faces says
+  // so where the photographer is looking; the terminal line it used to
+  // print reached nobody who analysed through this page.
+  (function _initFaceOffBadge() {
+    const note = PAYLOAD && PAYLOAD.face_note;
+    const el = document.getElementById("faceOffBadge");
+    if (!el || !note) return;
+    const zh = (_getStoredLang() || "zh_CN") === "zh_CN";
+    el.textContent = zh ? "⚠ 未检查人脸" : "⚠ Faces not checked";
+    el.title = zh ? note.zh : note.en;
+    el.style.display = "";
+  })();
+
   // Helper for dynamic strings (e.g. emitted from JS templating)
   // — returns the translated string or the key as fallback.
   function _t(key, fallback) {

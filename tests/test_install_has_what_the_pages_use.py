@@ -110,6 +110,22 @@ def test_a_checkout_cannot_be_walked_out_of_docs(server):
         assert b"[project]" not in body
 
 
+@pytest.mark.parametrize("url", [
+    "/docs/brand/../ARCHITECTURE.md",
+    "/docs/brand/../USER-GUIDE.md",
+    "/docs/illustrations/../brand/pixcull-hero-dark.svg",
+    "/docs/brand/../illustrations/art-analyzing.png",
+    "/docs/brand/../screenshots/01-results-grid.png",
+])
+def test_a_prefix_reads_its_own_folder_and_nothing_beside_it(server, url):
+    """Found in review: bounded by docs/, a sideways step stayed inside
+    the bound and every flat file under docs/ was served."""
+    assert (ROOT / url.lstrip("/").replace("brand/../", "").replace(
+        "illustrations/../", "")).exists(), "the probe must name a real file"
+    status, _, _ = _req(server + url)
+    assert status in (403, 404), f"{url} → {status}"
+
+
 def test_every_icon_the_manifest_names_is_served(server, installed):
     status, _, body = _req(server + "/manifest.json")
     assert status == 200
@@ -276,34 +292,56 @@ def test_the_folder_setting_is_registered_and_documented():
 
 # -- face detection -----------------------------------------------------------
 
-def test_face_detection_says_when_mediapipe_is_missing(monkeypatch):
+@pytest.fixture
+def mp(monkeypatch):
+    """Control what face_detection_status sees: is MediaPipe there, and
+    does it load."""
     import importlib.util
     from pixcull.detectors import face as F
     real = importlib.util.find_spec
-    monkeypatch.setattr(importlib.util, "find_spec",
-                        lambda n, *a: None if n == "mediapipe" else real(n, *a))
-    why = F.face_detection_unavailable()
-    assert why and "pixcull[face]" in why
+    state = {"present": True, "load": None}
+    monkeypatch.setattr(importlib.util, "find_spec", lambda n, *a: (
+        (object() if state["present"] else None) if n == "mediapipe"
+        else real(n, *a)))
+
+    def _load():
+        if state["load"] is not None:
+            raise state["load"]
+    monkeypatch.setattr(F, "_import_mediapipe", _load)
+    return F, state
 
 
-def test_face_detection_says_when_the_models_are_missing(monkeypatch, tmp_path):
-    import importlib.util
-    from pixcull.detectors import face as F
-    real = importlib.util.find_spec
-    monkeypatch.setattr(importlib.util, "find_spec",
-                        lambda n, *a: object() if n == "mediapipe" else real(n, *a))
+def test_face_detection_says_when_mediapipe_is_missing(mp):
+    F, state = mp
+    state["present"] = False
+    assert F.face_detection_status() == ("no-mediapipe", "")
+    assert "pixcull[face]" in F.face_detection_unavailable()
+
+
+def test_face_detection_says_when_the_models_are_missing(mp, monkeypatch,
+                                                         tmp_path):
+    F, _ = mp
     monkeypatch.setattr(F, "FACE_LANDMARKER_MODEL", tmp_path / "gone.task")
-    why = F.face_detection_unavailable()
-    assert why and "gone.task" in why and "reinstall" in why
+    code, detail = F.face_detection_status()
+    assert code == "no-models" and "gone.task" in detail
+    assert "reinstall pixcull" in F.face_detection_unavailable()
 
 
-def test_face_detection_has_nothing_to_say_when_it_can_run(monkeypatch):
-    import importlib.util
-    from pixcull.detectors import face as F
-    real = importlib.util.find_spec
-    monkeypatch.setattr(importlib.util, "find_spec",
-                        lambda n, *a: object() if n == "mediapipe" else real(n, *a))
+def test_mediapipe_that_is_present_and_will_not_load_is_not_a_clearance(mp):
+    """Found in review: "installed" was decided by find_spec, which looks
+    for the package and never runs it. A missing native library passed,
+    and every worker then failed to start the detector in silence."""
+    F, state = mp
+    state["load"] = OSError("libGLESv2.so: cannot open shared object file")
+    code, detail = F.face_detection_status()
+    assert code == "mediapipe-broken" and "OSError" in detail
+    assert "cannot be loaded" in F.face_detection_unavailable()
+
+
+def test_face_detection_has_nothing_to_say_when_it_can_run(mp):
+    F, _ = mp
     assert F.FACE_DETECTOR_MODEL.is_file() and F.FACE_LANDMARKER_MODEL.is_file()
+    assert F.face_detection_status() is None
     assert F.face_detection_unavailable() is None
 
 
@@ -321,5 +359,122 @@ def test_the_run_summary_asks_once_in_the_main_process():
     det = ast.parse(face_src)
     cls = next(n for n in ast.walk(det)
                if isinstance(n, ast.ClassDef) and n.name == "FaceDetector")
-    assert not any(getattr(c.func, "id", "") == "face_detection_unavailable"
-                   for c in ast.walk(cls) if isinstance(c, ast.Call))
+    assert not any(getattr(c.func, "id", "") in (
+        "face_detection_unavailable", "face_detection_status")
+        for c in ast.walk(cls) if isinstance(c, ast.Call))
+
+
+# -- and the page says it where the web user is --------------------------------
+
+def _scores(out: Path, face_counts: list[str] | None) -> Path:
+    out.mkdir(parents=True, exist_ok=True)
+    cols = ["filename", "decision", "score_final"] + (
+        ["face_count"] if face_counts is not None else [])
+    lines = [",".join(cols)]
+    for i, fc in enumerate(face_counts or ["", ""]):
+        row = [f"f{i}.jpg", "keep", "0.7"] + ([fc] if face_counts is not None
+                                               else [])
+        lines.append(",".join(row))
+    (out / "scores.csv").write_text("\n".join(lines) + "\n", "utf-8")
+    return out
+
+
+@pytest.mark.parametrize("counts,checked", [
+    (["0.0", "0.0"], True),          # looked, found nobody: checked
+    (["", "1.0"], True),
+    (["", ""], False),               # the detector could not run
+    (None, False),                   # a CSV with no face column at all
+])
+def test_the_run_records_whether_faces_were_checked(tmp_path, counts, checked):
+    SA._FACE_CHECKED_CACHE.clear()
+    assert SA._faces_were_checked(_scores(tmp_path / "o", counts)) is checked
+
+
+def test_no_csv_is_not_a_verdict_either_way(tmp_path):
+    SA._FACE_CHECKED_CACHE.clear()
+    assert SA._faces_were_checked(tmp_path / "nothing") is None
+    (tmp_path / "e").mkdir()
+    (tmp_path / "e" / "scores.csv").write_text("filename,face_count\n", "utf-8")
+    assert SA._faces_were_checked(tmp_path / "e") is None
+
+
+@pytest.mark.parametrize("status", [("no-mediapipe", ""),
+                                    ("mediapipe-broken", "OSError: x"),
+                                    ("no-models", "a.task"), None])
+def test_every_reason_has_a_page_sentence(tmp_path, monkeypatch, status):
+    """Twin: the codes are produced in detectors.face and worded in the
+    server. A run made with faces off and viewed where they are on gets
+    the generic sentence."""
+    from pixcull.detectors import face as F
+    monkeypatch.setattr(F, "face_detection_status", lambda: status)
+    SA._FACE_CHECKED_CACHE.clear()
+    note = SA._face_note(_scores(tmp_path / "o", ["", ""]))
+    assert note and note["zh"] and note["en"]
+    assert note == dict(zip(("zh", "en"), SA._FACE_NOTE[status[0] if status else None]))
+    assert set(SA._FACE_NOTE) == set(F.FACE_OFF) | {None}
+
+
+def test_a_run_that_was_checked_carries_no_note(tmp_path, monkeypatch):
+    from pixcull.detectors import face as F
+    monkeypatch.setattr(F, "face_detection_status", lambda: ("no-mediapipe", ""))
+    SA._FACE_CHECKED_CACHE.clear()
+    assert SA._face_note(_scores(tmp_path / "o", ["0.0", "2.0"])) is None
+
+
+def test_an_unknown_run_is_not_read_from_the_working_directory(
+        tmp_path, monkeypatch):
+    """A run that cannot be found used to become Path(""), which is the
+    server's working directory — and any scores.csv sitting there."""
+    monkeypatch.chdir(tmp_path)
+    _scores(tmp_path, ["", ""])
+    monkeypatch.setattr(SA, "_DEMO_ROOT", tmp_path / "runs")
+    SA._FACE_CHECKED_CACHE.clear()
+    assert SA._run_output_dir("ffffffffff") is None
+    assert SA._face_note(None) is None
+
+
+def test_the_reason_is_worked_out_once_per_run(tmp_path, monkeypatch):
+    from pixcull.detectors import face as F
+    calls = []
+    monkeypatch.setattr(F, "face_detection_status",
+                        lambda: calls.append(1) or ("mediapipe-broken", "x"))
+    SA._FACE_CHECKED_CACHE.clear()
+    out = _scores(tmp_path / "o", ["", ""])
+    first = SA._face_note(out)
+    assert SA._face_note(out) == first and len(calls) == 1
+
+
+def _payload(html: str) -> dict:
+    start = html.index("const PAYLOAD = ") + len("const PAYLOAD = ")
+    return json.JSONDecoder().raw_decode(html[start:])[0]
+
+
+@pytest.mark.parametrize("counts", [["", ""], ["0.0", "1.0"]],
+                         ids=["faces-off", "faces-checked"])
+def test_the_results_page_is_sent_the_note(server, tmp_path, monkeypatch,
+                                           counts):
+    from pixcull.detectors import face as F
+    monkeypatch.setattr(F, "face_detection_status", lambda: ("no-mediapipe", ""))
+    SA._FACE_CHECKED_CACHE.clear()
+    rid = "f0f0f0f0f0"
+    _scores(tmp_path / rid / "output", counts)
+    status, _, body = _req(f"{server}/results/{rid}")
+    assert status == 200, body[:300]
+    note = _payload(body.decode("utf-8")).get("face_note")
+    if counts == ["", ""]:
+        assert note and "MediaPipe" in note["en"]
+    else:
+        assert note is None
+
+
+def test_the_results_page_shows_it():
+    src = (ROOT / "pixcull" / "report" / "templates" / "src"
+           / "results.js").read_text("utf-8")
+    code = "\n".join(l.split("//", 1)[0] for l in src.splitlines())
+    block = code[code.index("function _initFaceOffBadge()"):]
+    block = block[:block.index("})();")]
+    assert "PAYLOAD.face_note" in block and 'getElementById("faceOffBadge")' in block
+    assert "el.title = zh ? note.zh : note.en" in block
+    built = (ROOT / "pixcull" / "report" / "templates"
+             / "results.html").read_text("utf-8")
+    assert 'id="faceOffBadge"' in built and "_initFaceOffBadge" in built

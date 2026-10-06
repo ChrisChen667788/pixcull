@@ -121,6 +121,101 @@ _SAMPLES_NEED_CHECKOUT = (
     "上传一个文件夹即可开始,或从 git 仓库运行 pixcull serve。")
 
 
+#: v3.93.1 — why a run's photographs were never checked for faces, for the
+#: results page. Keyed on ``detectors.face.FACE_OFF``'s codes; ``None`` is
+#: a run made somewhere face detection was off, viewed somewhere it is on.
+_FACE_NOTE = {
+    "no-mediapipe": (
+        "这次运行没有检查人脸:没有安装 MediaPipe,闭眼、人脸模糊都没有判断。"
+        "pip install 'pixcull[face]' 后重新分析即可。",
+        "Faces were not checked in this run: MediaPipe is not installed, so "
+        "closed eyes and face blur were not judged. Install "
+        "'pixcull[face]' and analyse again."),
+    "mediapipe-broken": (
+        "这次运行没有检查人脸:MediaPipe 已安装但无法加载,闭眼、人脸模糊都没有"
+        "判断。重新安装 MediaPipe 后重新分析即可。",
+        "Faces were not checked in this run: MediaPipe is installed but "
+        "cannot be loaded, so closed eyes and face blur were not judged. "
+        "Reinstall it and analyse again."),
+    "no-models": (
+        "这次运行没有检查人脸:安装里缺少人脸模型文件。重新安装 pixcull 后重新"
+        "分析即可。",
+        "Faces were not checked in this run: the face model files are "
+        "missing from this install. Reinstall pixcull and analyse again."),
+    None: (
+        "这次运行的照片没有做人脸检查(分析时人脸检测没有启用),闭眼、人脸"
+        "模糊都没有判断。重新分析即可补上。",
+        "The photographs in this run were not checked for faces (face "
+        "detection was off when they were analysed). Analyse again to "
+        "add it."),
+}
+_FACE_CHECKED_CACHE: dict[tuple, object] = {}
+
+
+def _faces_were_checked(output_dir: Path) -> bool | None:
+    """Whether any frame in this run's ``scores.csv`` carries ``face_count``.
+
+    The detector writes ``face_count`` for every frame it looks at — 0 when
+    it finds nobody — and nothing at all when it cannot run, so an empty
+    column is the run's own record that faces were never checked. None when
+    there is no CSV to judge. Cached per file and mtime: the results page is
+    the hot path, and a run with faces off reads the whole column.
+    """
+    import csv as _csv
+    path = Path(output_dir) / "scores.csv"
+    try:
+        key = (str(path), path.stat().st_mtime_ns)
+    except OSError:
+        return None
+    if key in _FACE_CHECKED_CACHE:
+        return _FACE_CHECKED_CACHE[key]
+    seen = False
+    rows = 0
+    try:
+        with path.open(newline="", encoding="utf-8") as f:
+            for row in _csv.DictReader(f):
+                rows += 1
+                if (row.get("face_count") or "").strip():
+                    seen = True
+                    break
+    except (OSError, UnicodeDecodeError, _csv.Error):
+        return None
+    got = None if rows == 0 else seen
+    _FACE_CHECKED_CACHE[key] = got
+    return got
+
+
+def _face_note(output_dir: Path | None) -> dict | None:
+    """``{"zh", "en"}`` when this run was never checked for faces, else None.
+
+    Computed once per ``scores.csv`` and mtime: asking why involves
+    importing MediaPipe, and an import that fails is retried by Python on
+    every call — once per page load, for exactly the runs that need it.
+    """
+    if output_dir is None:
+        return None
+    if _faces_were_checked(output_dir) is not False:
+        return None
+    path = Path(output_dir) / "scores.csv"
+    try:
+        key = (str(path), path.stat().st_mtime_ns, "note")
+    except OSError:
+        return None
+    if key not in _FACE_CHECKED_CACHE:
+        from pixcull.detectors.face import face_detection_status
+        st = face_detection_status()
+        zh, en = _FACE_NOTE[st[0] if st else None]
+        _FACE_CHECKED_CACHE[key] = {"zh": zh, "en": en}
+    return _FACE_CHECKED_CACHE[key]
+
+
+def _run_output_dir(run_id: str) -> Path | None:
+    """The run's output directory, or None — never "" (which is the cwd)."""
+    run = _get_run(run_id) or _reload_run_from_disk(run_id) or {}
+    out = run.get("output_dir")
+    return Path(out) if out else None
+
+
 def _samples_dir() -> Path | None:
     """``samples/output`` of a checkout, or None when there is none."""
     rr = _repo_root()
@@ -8761,11 +8856,19 @@ class _Handler(BaseHTTPRequestHandler):
         these files and every other installed package's.
         """
         rel = path.split("?", 1)[0].lstrip("/")       # docs/brand/x.woff2
-        sub = rel[len("docs/"):] if rel.startswith("docs/") else rel
-        roots = [(_STATIC_ROOT, _STATIC_ROOT / sub)]
+        parts = rel.split("/", 2)
+        # Each prefix reads its own folder and nothing beside it: with
+        # docs/ as the bound, /docs/brand/../ARCHITECTURE.md was inside it
+        # and was served (review of v3.93.1).
+        if len(parts) < 3 or parts[0] != "docs" \
+                or parts[1] not in ("brand", "illustrations"):
+            self.send_error(404, "not found")
+            return
+        folder, name = parts[1], parts[2]
+        roots = [(_STATIC_ROOT / folder, _STATIC_ROOT / folder / name)]
         rr = _repo_root()
         if rr is not None:
-            roots.append((rr / "docs", rr / rel))
+            roots.append((rr / "docs" / folder, rr / "docs" / folder / name))
         target = None
         for root, cand in roots:
             resolved = cand.resolve()
@@ -10363,6 +10466,8 @@ class _Handler(BaseHTTPRequestHandler):
             "face_clusters": face_clusters_info,
             "locations": locations_info,
             "video": _build_video_payload(run_id),  # v2.2-P0-2; None=photo run
+            # v3.93.1 — set when no frame of this run was checked for faces.
+            "face_note": _face_note(_run_output_dir(run_id)),
         }
         # _safe_dumps strips NaN/Infinity (V14.0) so JS JSON.parse never
         # blows up on a stray inf in score_final or a NaN in axis stars.

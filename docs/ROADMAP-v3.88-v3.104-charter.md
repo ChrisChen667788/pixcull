@@ -277,6 +277,23 @@ Five paths that climb out of the package on purpose are listed with the
 reason an install does not need them; an exemption whose path is no
 longer built fails too.
 
+The review of this version (five lenses, every finding handed to a
+second reader told to refute it) confirmed five and refuted one. Three
+were fixed before release: the face notice reached only the terminal, so
+a run analysed through the browser — most of them — said nothing; it is
+on the results page now, decided from the run's own `face_count` column
+rather than from the server's install. "MediaPipe is installed" was
+decided by `find_spec`, which never runs the package, so one that could
+not load passed; the check imports it now. And bounded by `docs/`, a
+sideways step such as `/docs/brand/../ARCHITECTURE.md` stayed inside the
+bound and was served from a checkout; each prefix reads its own folder.
+The other two were declined: a reviewer recounted the commit message's
+gate line with a different set of excluded files (the local gate leaves
+out three, as CLAUDE.md says; CI leaves out two) and got a different
+number, which is not a defect; and four failures in
+`tests/test_v1_1_scripts.py`, a file every gate excludes and this
+version did not touch.
+
 Found on the way and also fixed: from an install, `/docs/…` fell back to
 the directory above the package — site-packages — and would serve any
 file under it. It reads the package's `report/static/` and, in a
