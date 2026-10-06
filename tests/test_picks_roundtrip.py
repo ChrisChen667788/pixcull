@@ -205,3 +205,21 @@ def test_the_copyable_list_parses_back_without_noise():
         "1. DSCF1234 ★★★\n2. DSCF1240 ★★★★★", n=5)
     assert idx == [1, 2]
     assert problems == []
+
+
+def test_a_numbered_line_can_carry_more_picks():
+    """Review of v3.93.2 — the numbered-line branch treated everything after
+    "12. " as a label, so "12. 3-5" returned [12] and dropped 3, 4 and 5
+    without a word: the exact failure this parser's docstring forbids."""
+    assert parse_picks("12. 3-5", n=20) == ([12, 3, 4, 5], [])
+    assert parse_picks("2. 7 9", n=20) == ([2, 7, 9], [])
+    idx, problems = parse_picks("12. 3-50", n=20)
+    assert idx == [12] and problems, "a range too wide is still reported"
+
+
+def test_a_numbered_line_with_a_label_stays_a_label():
+    """The other side: a filename, stars or words after the number are the
+    client's label, not more requests — and not noise."""
+    assert parse_picks("1. DSCF1234 ★★★", n=5) == ([1], [])
+    assert parse_picks("3. 照片 ★★", n=5) == ([3], [])
+    assert parse_picks("4. 1234.jpg", n=5) == ([4], [])

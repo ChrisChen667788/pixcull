@@ -110,6 +110,11 @@ def render_gallery(items: list[ProofItem], *, title: str,
     data = json.dumps([{"f": i.filename, "l": i.label, "r": i.rel,
                         "i": i.index}
                        for i in items], ensure_ascii=False)
+    # This lands inside a <script> block, and the HTML parser ends that
+    # block at the first "</script" it meets — inside a JSON string or not.
+    # A filename may contain one; "<\/" is the same JSON value and ends
+    # nothing. (Found reviewing PR #4; older than it.)
+    data = data.replace("</", "<\\/")
     esc_title = html.escape(title or "Proof sheet")
     esc_contact = html.escape(contact or "")
     esc_hook = html.escape(webhook or "")
@@ -205,8 +210,17 @@ def _digest(items: list[ProofItem]) -> str:
 
 _SEP = re.compile(r"[\s,，、;;；/|]+")
 _RANGE = re.compile(r"^(\d+)\s*[-~—–至到]\s*(\d+)$")
-_NUMBERED = re.compile(r"^\s*(\d+)\.\s+\S")
+_NUMBERED = re.compile(r"^\s*(\d+)\.\s+(?=\S)")
 _NOISE = re.compile(r"第|张|号|图|片|no\.?|#", re.I)
+
+
+def _only_picks(rest: str) -> bool:
+    """Whether ``rest`` is nothing but numbers and ranges."""
+    toks = [tok.strip().strip(".。()()[]【】")
+            for tok in _SEP.split(_NOISE.sub(" ", rest))]
+    toks = [tok for tok in toks if tok]
+    return bool(toks) and all(tok.isdigit() or _RANGE.match(tok)
+                              for tok in toks)
 
 
 def parse_picks(text: str, *, n: int) -> tuple[list[int], list[str]]:
@@ -232,14 +246,21 @@ def parse_picks(text: str, *, n: int) -> tuple[list[int], list[str]]:
             # noise when the reply is pasted back (PR #4 review).  Ordinary
             # free text is NOT matched here and keeps the old contract:
             # unknown words are reported, not silently dropped.
-            v = int(mnum.group(1))
-            if 1 <= v <= n:
-                if v not in seen:
-                    seen.add(v)
-                    out.append(v)
-            else:
-                problems.append(f"{v} is outside 1..{n}")
-            continue
+            #
+            # Unless the rest of the line is more picks: "12. 3-5" is the
+            # client asking for 12 and 3 to 5, and treating "3-5" as a label
+            # dropped three photographs without a word (review of v3.93.2).
+            # Only a rest made entirely of numbers and ranges is read as
+            # picks; anything else on the line is the label.
+            if not _only_picks(line[mnum.end():]):
+                v = int(mnum.group(1))
+                if 1 <= v <= n:
+                    if v not in seen:
+                        seen.add(v)
+                        out.append(v)
+                else:
+                    problems.append(f"{v} is outside 1..{n}")
+                continue
         cleaned = _NOISE.sub(" ", line)
         for tok in _SEP.split(cleaned):
             tok = tok.strip().strip(".。()()[]【】")

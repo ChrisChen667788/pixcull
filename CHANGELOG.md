@@ -150,6 +150,8 @@ which is the thing that was actually false.
 
 One line each, exactly as the release was titled at the time.
 
+**v3.90** — a run that had died was reported as still running
+
 **v3.89** — with every model on disk, the run still asked the network first
 
 **v3.88** — the scheduled run was red for nine days on a three-node model

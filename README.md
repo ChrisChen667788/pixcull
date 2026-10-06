@@ -62,6 +62,26 @@
 
 ## What's new
 
+**v3.93.2** — Three changes from [@gxfc9867](https://github.com/gxfc9867)
+(PR #4), and one brace. Chinese watermarks on a client proof sheet came out as
+empty boxes: the font lookup reached a Latin-only font first, and on a Mac
+Pillow opens `C:/Windows/Fonts/arial.ttf` by name, as Arial. CJK-capable fonts
+for every platform are tried first now. The client sheet gains a number beside
+each filename, a full-screen view, stars that travel back with the picks, and a
+copied list that parses back without warnings. The light theme's floating
+overlays are legible, and the deliverable-buckets toggle can be dragged.
+
+The PR restored a selector without its closing brace. Chrome reads CSS nesting,
+so nothing was rejected: every rule after it became a rule inside the toggle.
+On the review page the brand mark and the export button lost their colours,
+and client-present mode stopped hiding scores and verdicts. The browser lane
+caught it. The PR's own test, which looked for the property text near the
+selector, did not. Every stylesheet the product serves is now checked for a
+block that never closes. Reviewing the landing found two more on the client
+sheet: a reply like "12. 3-5" lost photographs 3 to 5, and a filename
+containing `</script>` could end the sheet's script, which was older than
+the PR. Both are fixed.
+
 **v3.93.1** — Five things the package needed and the wheel did not carry,
 found by looking for v3.93's defect where nobody had looked. The largest: the
 MediaPipe face models are tracked in git and were never in the build
@@ -145,20 +165,6 @@ Reported, diagnosed and fixed by [@gxfc9867](https://github.com/gxfc9867) in
 issue #2 and PR #4, verified on a real Windows machine; the commit is theirs.
 What was added here is the part that can be checked from a machine with no
 drive letters, and a pass in a real browser with two pretend ones.
-
-**v3.90** — A run that had already died was reported as still running.
-When every frame failed for one reason — 23 connect timeouts, in issue #3 —
-the reasons went to the terminal and were kept nowhere, the pipeline returned
-normally with nothing analysed, the server recorded that as done, and the
-results page answered `425 results not ready — pipeline may still be
-running. Refresh in a few seconds.` It had finished two minutes earlier, and
-refreshing could never have helped.
-
-The reasons are kept now, grouped by kind and written beside the run. A run
-that produces nothing is recorded as failed, with the most common cause in
-the message the upload page already shows. And the eleven routes that need a
-run's results answer 425 only while the analysis is actually running; they
-ask one function now instead of each deciding alone.
 
 Earlier releases are in [`CHANGELOG.md`](CHANGELOG.md).
 

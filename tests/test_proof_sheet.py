@@ -182,13 +182,22 @@ def test_every_cjk_font_is_tried_before_any_latin_only_font(monkeypatch):
     import PIL.ImageFont as ImageFont
 
     tried: list[str] = []
+    real_truetype = ImageFont.truetype
 
     def _never(path, size, *a, **k):
+        # Only the lookup's own font paths are refused. Pillow's
+        # load_default(size=…) — the last resort — itself calls truetype()
+        # with the bundled font as a file object; refusing that too broke
+        # the fallback the lookup is supposed to end on, and the test
+        # failed on CI's Pillow for a reason that was not the font order.
+        if not isinstance(path, str):
+            return real_truetype(path, size, *a, **k)
         tried.append(path)
         raise OSError(path)
 
     monkeypatch.setattr(ImageFont, "truetype", _never)
-    proof_sheet._watermark_font(20)
+    assert proof_sheet._watermark_font(20) is not None, (
+        "with every system font refused, the bundled default must still load")
 
     latin_only = {"C:/Windows/Fonts/arial.ttf",
                   "/System/Library/Fonts/Supplemental/Arial.ttf",
@@ -202,3 +211,16 @@ def test_every_cjk_font_is_tried_before_any_latin_only_font(monkeypatch):
         else:
             cjk_tried_first = True
     assert cjk_tried_first, "no CJK-capable font in the lookup at all"
+
+
+def test_a_filename_cannot_end_the_sheets_script():
+    """Review of v3.93.2 — the items are JSON inside a <script> block, and
+    the HTML parser closes that block at the first "</script" whatever the
+    JavaScript around it. A filename carrying one broke out of the script
+    into markup. Older than PR #4."""
+    hostile = "</script><img src=x onerror=alert(1)>.jpg"
+    page = render_gallery(build_items(_rows(hostile)), title="T")
+    body = page[page.index("<script>"):]
+    assert body.index("</script") == body.rindex("</script"), (
+        "a </script> before the template's own")
+    assert "<\\/script><img" in page, "the filename is still in the data"

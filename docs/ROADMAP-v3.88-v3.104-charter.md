@@ -310,6 +310,45 @@ accepts that for installation was not tested. And
 `pixcull-vertical-poster.svg` (three fill colours differ) — left as it
 was, for the documentation-truth versions below.
 
+### v3.93.2 — PR #4 lands, with the brace it was missing
+
+Not planned. gxfc9867 answered the review of 2026-10-02 on 2026-10-04:
+the three remaining commits, rebased on v3.92, each with the fix and the
+test asked for. The PR's CI had two red lanes and both were real.
+
+* **Browser lane.** The drag-CSS fix restored `.buckets-toggle {` and not
+  its `}`. Chrome reads CSS nesting, so the sheet parsed: every later rule
+  became a rule inside the toggle and matched nothing on the page. The
+  brand mark, the wordmark and the export button fell back to the
+  browser's dark-mode link blue (`test_visual_smoke`), and client-present
+  mode showed verdicts and scores (`test_client_present`). The PR's test
+  looked for `cursor: grab` within 900 characters of the selector — text
+  present, rule unbound. Reproduced locally: the client-present test
+  fails with the brace missing and passes with it.
+* **Hermetic lane.** The font-order test replaced `ImageFont.truetype`
+  with one that always fails. Pillow 12's `load_default(size=…)` — the
+  lookup's last resort — calls `truetype` itself, with the bundled font
+  as a file object, so the test broke the fallback it ends on. A test
+  defect, not a product one; reproduced on Pillow 12.2.
+
+Landed as the contributor's three commits, cherry-picked with authorship
+and `-x`, and one commit of ours: the brace, the test's interception
+narrowed to the lookup's own paths, and `tests/test_stylesheets_are_well_formed.py`,
+which counts braces in every stylesheet the product serves — the source
+CSS, every `<style>` in the built page and the page templates, and the
+proof sheet's template.
+
+Reviewed before pushing (three lenses, each finding handed to a second
+reader told to refute it): three stood, none refuted. The numbered-line
+parsing the PR added read everything after "12. " as a label, so a reply
+of "12. 3-5" returned photograph 12 and dropped 3 to 5 without a problem
+reported — the failure `parse_picks`' own docstring forbids; a rest made
+only of numbers and ranges is read as picks now. The sheet's items are
+JSON inside a `<script>`, and a filename containing `</script>` ended the
+block (older than the PR). And the stylesheet gate read template files
+only, missing eleven `<style>` blocks written inside Python; it reads
+those too, and names its sources instead of counting them.
+
 ### v3.94 — Python 3.13 is refused at install
 
 `requires-python = ">=3.11,<3.13"`. The ceiling exists because
