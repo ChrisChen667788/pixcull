@@ -25,6 +25,14 @@ lanes, the image, the Studio — so the floor is a version that CI runs.
 And transformers accepts the torch that is installed, which is the
 assertion that turns red in the floor-pinned lane on the day
 transformers moves its bar past ours, instead of in someone's terminal.
+
+v3.94 fixup — it did, twenty minutes after transformers 5.19.0 was
+uploaded, and not through the first assertion. 5.19.0 still declares
+``torch>=2.5`` and ``is_torch_available()`` still says yes on 2.5.1; then
+``get_device_type()`` calls ``torch.accelerator``, which torch added in
+2.6, and ``CLIPModel`` cannot be imported. Only reaching a model class
+caught it, which is why that assertion is here as well as the one that
+asks transformers. The floor is 2.6 since.
 """
 from __future__ import annotations
 

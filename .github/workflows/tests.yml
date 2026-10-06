@@ -132,7 +132,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install --index-url https://download.pytorch.org/whl/cpu \
                       --extra-index-url https://pypi.org/simple \
-                      "torch==2.5.1" "torchvision==0.20.1"
+                      "torch==2.6.0" "torchvision==0.21.0"
           pip install -e ".[dev]"
           pip install playwright
           python -m playwright install --with-deps chromium
@@ -172,13 +172,16 @@ jobs:
       matrix:
         include:
           # The declared floor, exactly, so the oldest torch promised is
-          # one this suite runs on (v3.92).
+          # one this suite runs on (v3.92). This is the entry that went
+          # red when transformers 5.19.0 started calling torch.accelerator
+          # (torch 2.6+) while still accepting 2.5 — the floor is 2.6 since.
           - python-version: "3.12"
-            torch: '"torch==2.5.1" "torchvision==0.20.1"'
-          # v3.94 — the whole suite on 3.13, not just an import. It cannot
-          # run the floor: torchvision 0.20.1 has no cp313 wheel, and the
-          # oldest pair that installs on 3.13 is torch 2.6 / torchvision
-          # 0.21. So this entry resolves the way a user on 3.13 does.
+            torch: '"torch==2.6.0" "torchvision==0.21.0"'
+          # v3.94 — the whole suite on 3.13, not just an import. One entry
+          # holds the floor still; this one resolves the way a user on
+          # 3.13 does, which is the newest of everything. (It was also the
+          # only option when the floor was 2.5: torchvision 0.20.1 has no
+          # cp313 wheel.)
           - python-version: "3.13"
             torch: "torch torchvision"
     steps:

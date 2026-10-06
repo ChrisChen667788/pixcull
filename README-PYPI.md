@@ -25,7 +25,7 @@ Apple-silicon accelerated. Whether the *judge* is local or cloud is a
 separate question — see the last two bullets below.
 
 **Upgrading from 3.53.1?** The dependency floor moved to numpy 2 and
-torch 2.5, and five other things behave differently. [Read the upgrade notes first](https://github.com/ChrisChen667788/pixcull/blob/main/CHANGELOG.md#upgrading-from-3531--read-this-first).
+torch 2.6, and five other things behave differently. [Read the upgrade notes first](https://github.com/ChrisChen667788/pixcull/blob/main/CHANGELOG.md#upgrading-from-3531--read-this-first).
 
 ## Quickstart
 

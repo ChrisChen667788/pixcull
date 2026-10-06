@@ -404,6 +404,26 @@ nothing examined and was rerun in full). Four stood, none refuted:
   email.message module or multipart for POST and PUT"), not in the
   module, and beside an alternative. The wording says so.
 
+**Fixup, after the push: the floor lane went red, and it was not us.**
+transformers 5.19.0 was uploaded at 16:38 UTC on 2026-10-06; the push's
+CI installed it at 16:59. It still declares `torch>=2.5` and
+`is_torch_available()` still accepts 2.5.1, then `get_device_type()`
+calls `torch.accelerator`, which torch added in 2.6, so `CLIPModel`
+cannot be imported. The 3.13 lane (torch 2.14) and every floating lane
+were green; only the lane pinned to the floor saw it, and only through
+`test_a_model_class_can_be_reached` — the assertion that asks transformers
+whether it will use the installed torch said yes. Reproduced locally:
+torch 2.5.1 + transformers 5.19.0 fails, 2.6.0 passes. The floor is 2.6
+in `pyproject.toml`, both pinned lanes, the Dockerfile and the Studio,
+and the upgrade notes say so — before 3.94.0 went to PyPI, which is the
+point of having the lane.
+
+The same push also carried the 30-second film (`docs/video/`), which
+found two gates narrower than their descriptions — the ModelScope sync
+hosted images only and its trigger test kept its own pattern — and one
+that assumed every README image was an SVG. GitHub does not play an mp4
+from the repository, so README.md links jsDelivr's copy.
+
 ### The first release since 3.53.1 — done at v3.92, not after v3.94
 
 Planned for after v3.94; the owner asked for it on 2026-10-02 so that

@@ -611,7 +611,11 @@ saliency map, which computes a feature rather than explaining a score.
 **transformers decides which torch it will use, and moves that bar**
 (v3.92).  5.6 wants 2.4, 5.18 wants 2.5; below the bar it does not fail to
 import — it disables PyTorch and every model class says "PyTorch was not
-found", with torch installed.  The floor in `pyproject.toml` is 2.5, the
+found", with torch installed.  **5.19.0 (2026-10-06) moved it without
+saying so**: it still declares and accepts torch 2.5, then calls
+`torch.accelerator` (2.6+), so `CLIPModel` cannot be imported — only
+`test_a_model_class_can_be_reached` saw it, not `is_torch_available()`.
+The floor in `pyproject.toml` is 2.6 since the v3.94 fixup, the
 hermetic and browser lanes are pinned to exactly that floor (so the oldest
 torch promised is one that is run), the smoke and real-model lanes float,
 and the Dockerfile and the Studio follow.  `tests/test_torch_floor.py` holds
@@ -829,7 +833,8 @@ check `/pypi/pixcull/<version>/json`.
 2026-10-01).  v3.88–v3.94 are shipped (v3.94: Python 3.13 — `cgi` was the
 only obstacle, replaced by `multipart` with `part_limit` set to the server's
 file limit; the hermetic lane is a 3.12-floor / 3.13-floating matrix because
-torchvision 0.20.1 has no cp313 wheel); PR #4 landed in v3.93.2 (the
+torchvision 0.20.1 has no cp313 wheel; the v3.94 fixup then raised the torch
+floor to 2.6 when transformers 5.19.0 broke 2.5); PR #4 landed in v3.93.2 (the
 contributor's three commits plus the closing brace one of them dropped —
 **CSS nesting means a missing `}` is not a parse error, it nests every later
 rule inside the open one**; `tests/test_stylesheets_are_well_formed.py`);

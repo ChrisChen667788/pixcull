@@ -16,10 +16,12 @@ Thirty-six versions sit between them. Most of what they changed is a
 thing that was broken and now works, and needs nothing from you. Six of
 them change what the same command does on the same machine.
 
-**The dependency floor moved: numpy 2, torch 2.5.** `numpy` went from
-`>=1.26,<2` to `>=2.0,<2.5`, `torch` from `>=2.2` to `>=2.5`,
-`torchvision` from `>=0.17` to `>=0.20`. An environment that pins
-`numpy<2` or a torch below 2.5 will fail to resolve, and the upgrade
+**The dependency floor moved: numpy 2, torch 2.6.** `numpy` went from
+`>=1.26,<2` to `>=2.0,<2.5`, `torch` from `>=2.2` to `>=2.6`,
+`torchvision` from `>=0.17` to `>=0.21` (3.92.0 and 3.93.1 said 2.5 and
+0.20; 3.94.0 raised them, for the reason at the end of this paragraph).
+An environment that pins `numpy<2` or a torch below 2.6 will fail to
+resolve, and the upgrade
 aborts without installing anything; anything else in that environment
 that still needs numpy 1.x has to move with it or live somewhere else.
 3.53.1 printed a startup warning telling you to run
@@ -28,7 +30,9 @@ the warning fires outside 2.0–2.4 instead. `opencv-python` gained a
 ceiling (`<6`), and the `mediapipe` extra is capped below 1.0, because
 1.0.1 aborts the process rather than raising. The torch floor is
 transformers' doing: below the torch it wants, it does not fail to
-import, it reports that PyTorch was not found.
+import, it reports that PyTorch was not found. transformers 5.19.0 found
+a second way: it accepts torch 2.5, then calls `torch.accelerator`,
+which torch added in 2.6, and no model class can be imported.
 
 **A cached model is read from disk, and the hub is not asked.** With no
 network, 3.53.1 failed every frame — `Analyzed 0/32` — with the weights

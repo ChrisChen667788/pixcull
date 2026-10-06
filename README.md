@@ -89,10 +89,16 @@ server's file limit,
 because an upload may carry 500 files.
 
 CI runs the install check on 3.11, 3.12 and 3.13, and the whole suite on 3.12
-at the torch floor and on 3.13. On 3.13 the oldest torch that installs is 2.6,
-since torchvision 0.20.1 has no 3.13 wheel. The upload path had never been
-tested over HTTP. It is now, with real multipart bodies, a 3 MB file, Windows
-paths and a 200-file upload.
+at the torch floor and on 3.13. The upload path had never been tested over
+HTTP. It is now, with real multipart bodies, a 3 MB file, Windows paths and a
+200-file upload.
+
+The torch floor is 2.6 now, up from 2.5. transformers 5.19.0 came out twenty
+minutes before this release's CI ran. It declares `torch>=2.5` and accepts 2.5
+at import, then calls `torch.accelerator`, which torch added in 2.6, so on 2.5
+no model class can be imported. The lane pinned to the floor exists to catch
+exactly this and went red. The floor moved in the package, both pinned CI
+lanes, the Docker image and the Studio together.
 
 **v3.93.2** — Three changes from [@gxfc9867](https://github.com/gxfc9867)
 (PR #4), and one brace. Chinese watermarks on a client proof sheet came out as
