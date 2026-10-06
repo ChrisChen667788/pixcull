@@ -93,12 +93,15 @@ at the torch floor and on 3.13. The upload path had never been tested over
 HTTP. It is now, with real multipart bodies, a 3 MB file, Windows paths and a
 200-file upload.
 
-The torch floor is 2.6 now, up from 2.5. transformers 5.19.0 came out twenty
+The torch floor is 2.7 now, up from 2.5. transformers 5.19.0 came out twenty
 minutes before this release's CI ran. It declares `torch>=2.5` and accepts 2.5
-at import, then calls `torch.accelerator`, which torch added in 2.6, so on 2.5
-no model class can be imported. The lane pinned to the floor exists to catch
-exactly this and went red. The floor moved in the package, both pinned CI
-lanes, the Docker image and the Studio together.
+at import, then calls `torch.accelerator.current_accelerator()`. torch 2.5 has
+no such function, and torch 2.6 raises from it on a machine with no GPU; from
+2.7 it returns nothing and transformers falls back to the CPU. On either of the
+older two, no model class can be imported. The CI lane pinned to the floor
+exists to catch exactly this, and it went red twice: the first fix, 2.6, was
+checked on a Mac, whose GPU hides the second failure. The floor moved in the
+package, both pinned CI lanes, the Docker image and the Studio together.
 
 **v3.93.2** — Three changes from [@gxfc9867](https://github.com/gxfc9867)
 (PR #4), and one brace. Chinese watermarks on a client proof sheet came out as

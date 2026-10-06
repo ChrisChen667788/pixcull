@@ -412,10 +412,17 @@ calls `torch.accelerator`, which torch added in 2.6, so `CLIPModel`
 cannot be imported. The 3.13 lane (torch 2.14) and every floating lane
 were green; only the lane pinned to the floor saw it, and only through
 `test_a_model_class_can_be_reached` — the assertion that asks transformers
-whether it will use the installed torch said yes. Reproduced locally:
-torch 2.5.1 + transformers 5.19.0 fails, 2.6.0 passes. The floor is 2.6
-in `pyproject.toml`, both pinned lanes, the Dockerfile and the Studio,
-and the upgrade notes say so — before 3.94.0 went to PyPI, which is the
+whether it will use the installed torch said yes.
+
+The first fix raised the floor to 2.6, checked on this Mac: 2.5.1 failed,
+2.6.0 passed. CI failed it again. In torch 2.6
+`current_accelerator()` raises when there is no accelerator — its own
+docstring says so — and a Mac has one (MPS), so the check could not see
+it; from 2.7 it returns None, which is what transformers expects. The
+second check ran where CI does, in a CPU-only Linux container, with 2.6
+as the control: 2.6.0 fails there, 2.7.1 passes. The floor is 2.7 in
+`pyproject.toml`, both pinned lanes, the Dockerfile and the Studio, and
+the upgrade notes say so — before 3.94.0 went to PyPI, which is the
 point of having the lane.
 
 The same push also carried the 30-second film (`docs/video/`), which

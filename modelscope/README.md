@@ -76,11 +76,13 @@ tasks:
   上传这条路径以前从没在 HTTP 层测过,现在用真实的 multipart 请求测了:3 MB 的
   文件、Windows 路径、一次 200 个文件。
 
-  torch 下限从 2.5 抬到 2.6。transformers 5.19.0 在本版 CI 开跑前二十分钟发布:
-  它声明 `torch>=2.5`、导入时也接受 2.5,随后却调用 torch 2.6 才加入的
-  `torch.accelerator`,于是在 2.5 上任何模型类都导入不了。专门钉在下限上的那条
-  CI lane 就是为这种情况设的,它红了。包、两条钉版本的 CI lane、Docker 镜像和
-  Studio 的下限一起改了。
+  torch 下限从 2.5 抬到 2.7。transformers 5.19.0 在本版 CI 开跑前二十分钟发布:
+  它声明 `torch>=2.5`、导入时也接受 2.5,随后却调用
+  `torch.accelerator.current_accelerator()`。torch 2.5 没有这个函数,torch 2.6 在
+  没有 GPU 的机器上调用它会抛异常;从 2.7 起它返回空,transformers 改用 CPU。
+  在前两个版本上,任何模型类都导入不了。专门钉在下限上的那条 CI lane 就是为这种
+  情况设的,它红了两次:第一次改成 2.6 是在 Mac 上验证的,而 Mac 的 GPU 恰好把
+  第二种失败藏住了。包、两条钉版本的 CI lane、Docker 镜像和 Studio 的下限一起改了。
 
 - **v3.93.2**:来自 [@gxfc9867](https://github.com/gxfc9867)(PR #4)的三处改动,加一个
   括号。客户选片页上的中文水印显示成空白方块:字体查找先碰到了只含拉丁字母的字体,

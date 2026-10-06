@@ -613,9 +613,15 @@ saliency map, which computes a feature rather than explaining a score.
 import — it disables PyTorch and every model class says "PyTorch was not
 found", with torch installed.  **5.19.0 (2026-10-06) moved it without
 saying so**: it still declares and accepts torch 2.5, then calls
-`torch.accelerator` (2.6+), so `CLIPModel` cannot be imported — only
-`test_a_model_class_can_be_reached` saw it, not `is_torch_available()`.
-The floor in `pyproject.toml` is 2.6 since the v3.94 fixup, the
+`torch.accelerator.current_accelerator()` — absent in 2.5, **raises with no
+accelerator in 2.6**, returns None from 2.7 — so `CLIPModel` cannot be
+imported.  Only `test_a_model_class_can_be_reached` saw it, not
+`is_torch_available()`.  **A torch question verified on this Mac is
+verified with an accelerator present** (MPS): 2.6 passed here and failed in
+CI.  Check torch behaviour in a CPU-only Linux container (`docker run
+python:3.12-slim`, colima is installed; mount from under `$HOME`, colima
+does not share `/private/tmp`).
+The floor in `pyproject.toml` is 2.7 since the v3.94 fixup, the
 hermetic and browser lanes are pinned to exactly that floor (so the oldest
 torch promised is one that is run), the smoke and real-model lanes float,
 and the Dockerfile and the Studio follow.  `tests/test_torch_floor.py` holds
@@ -834,7 +840,7 @@ check `/pypi/pixcull/<version>/json`.
 only obstacle, replaced by `multipart` with `part_limit` set to the server's
 file limit; the hermetic lane is a 3.12-floor / 3.13-floating matrix because
 torchvision 0.20.1 has no cp313 wheel; the v3.94 fixup then raised the torch
-floor to 2.6 when transformers 5.19.0 broke 2.5); PR #4 landed in v3.93.2 (the
+floor to 2.7 when transformers 5.19.0 broke 2.5 and 2.6); PR #4 landed in v3.93.2 (the
 contributor's three commits plus the closing brace one of them dropped —
 **CSS nesting means a missing `}` is not a parse error, it nests every later
 rule inside the open one**; `tests/test_stylesheets_are_well_formed.py`);

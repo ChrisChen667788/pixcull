@@ -53,7 +53,7 @@ RUN pip install --upgrade pip && \
     pip install --no-cache-dir \
         --index-url https://download.pytorch.org/whl/cpu \
         --extra-index-url https://pypi.org/simple \
-        "torch==2.6.0" "torchvision==0.21.0" && \
+        "torch==2.7.1" "torchvision==0.22.1" && \
     pip install --no-cache-dir -e .
 
 # Copy the runtime scripts + iOS + plugin trees last so source

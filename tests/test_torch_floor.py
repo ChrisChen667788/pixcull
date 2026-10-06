@@ -29,10 +29,13 @@ transformers moves its bar past ours, instead of in someone's terminal.
 v3.94 fixup — it did, twenty minutes after transformers 5.19.0 was
 uploaded, and not through the first assertion. 5.19.0 still declares
 ``torch>=2.5`` and ``is_torch_available()`` still says yes on 2.5.1; then
-``get_device_type()`` calls ``torch.accelerator``, which torch added in
-2.6, and ``CLIPModel`` cannot be imported. Only reaching a model class
-caught it, which is why that assertion is here as well as the one that
-asks transformers. The floor is 2.6 since.
+``get_device_type()`` calls ``torch.accelerator.current_accelerator()``,
+which 2.5 does not have and 2.6 raises from when there is no accelerator,
+and ``CLIPModel`` cannot be imported. Only reaching a model class caught
+it, which is why that assertion is here as well as the one that asks
+transformers. It caught it twice: the first fix (2.6) was verified on a
+Mac, where MPS is an accelerator and 2.6 does not raise. The floor is 2.7,
+which returns None, and was verified in a CPU-only Linux container.
 """
 from __future__ import annotations
 

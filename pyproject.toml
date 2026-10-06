@@ -75,8 +75,8 @@ dependencies = [
     # search until `_feature_tensor` shimmed both shapes. Cap the majors
     # so a future 6.x / torch 3.x can't drift in untested; bump
     # deliberately once the real-model CI lane is green on the new major.
-    "torch>=2.6,<3",
-    "torchvision>=0.21,<1",
+    "torch>=2.7,<3",
+    "torchvision>=0.22,<1",
     "transformers>=4.40,<6",
     "safetensors>=0.4",
     # subject segmentation (U^2-Net)
