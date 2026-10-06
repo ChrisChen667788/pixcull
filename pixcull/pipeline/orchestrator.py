@@ -596,6 +596,12 @@ def run_pipeline(
     # message here so CLI users still get a "done" signal.)
     if total > 0:
         console.print(f"[cyan]Analyzed {len(records)}/{total} images[/]")
+        # v3.93.1 — the face detector goes quiet when it cannot run, once
+        # per frame per worker. Say it once here, where a person reads.
+        from pixcull.detectors.face import face_detection_unavailable
+        face_off = face_detection_unavailable()
+        if face_off:
+            console.print(f"[yellow]Face detection is off: {face_off}.[/]")
     if failure_summary is not None:
         top = failure_summary["errors"][0]
         console.print(

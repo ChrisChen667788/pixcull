@@ -791,11 +791,19 @@ delivery-audit page ran `scripts/cli_audit.py` by a path beside
 `serve_app.py`; right when the server lived in `scripts/`, 500 on every
 installed copy since v2.31, and its smoke test ran the script from the
 checkout the whole time.  It is `pixcull.report.cli_audit` now.  **Sweeping
-for the class found five more, v3.93.1 in the charter — the worst is that
-`detectors/_models/*` (the MediaPipe face models) is tracked and not in the
-build allowlist, so `pixcull[face]` detects no face from a wheel.**  When a
-feature needs a file, ask whether `[tool.hatch.build] include` has a pattern
-for it; `Path(__file__)…parent.parent.parent` is a checkout path.
+for the class found five more (v3.93.1) — the worst was that
+`detectors/_models/*` (the MediaPipe face models) was tracked and not in the
+build allowlist, so `pixcull[face]` detected no face from any wheel.**  They
+ship now, and so do the font, the empty-state art and the app icon under
+`pixcull/report/static/` (served at the old `/docs/brand|illustrations/`
+URLs; a checkout falls back to `docs/`).  LUTs: `PIXCULL_LUTS_DIR`, then
+`~/.pixcull/luts`, then a checkout's `luts/`.  Retraining and the sample run
+refuse up front from an install.  **`tests/test_packaging.py` now derives
+what must ship from the paths the code builds** (`Path(__file__)…`,
+`_pkg_root()`, module-level names, pathlib aliases) and fails a path that
+climbs out of the package unless `CHECKOUT_ONLY` says why; when a feature
+needs a file, that test is where it gets caught.  `_repo_root()` is None from
+an install — every caller must handle that.
 
 `pixcull 3.92.0` is on PyPI (2026-10-02), the first release since 3.53.1;
 `CHANGELOG.md` opens with what changes for someone upgrading.  Publishing is
@@ -805,8 +813,9 @@ Release only.  PyPI's `/pypi/pixcull/json` lags the upload by minutes —
 check `/pypi/pixcull/<version>/json`.
 
 **Current block: `docs/ROADMAP-v3.88-v3.104-charter.md`** (written
-2026-10-01).  v3.88–v3.93 are shipped; PR #4 has three commits waiting on
-their author; v3.93.1 is next and is the wheel list above.  The
+2026-10-01).  v3.88–v3.93.1 are shipped; PR #4 has three commits waiting on
+their author (updated 2026-10-04, not re-reviewed); v3.94 (Python 3.13) is
+next.  The
 measurements the 2026-09-12 correction set unblocked (v3.29's second half,
 v2.83, v3.8) are scheduled there as v3.96–v3.99 and are plain engineering,
 not owner asks.

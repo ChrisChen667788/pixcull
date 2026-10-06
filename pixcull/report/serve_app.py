@@ -101,6 +101,34 @@ def _pkg_root() -> Path:
 #: A module name, so it resolves wherever the package is installed.
 _DELIVERY_AUDIT_MODULE = "pixcull.report.cli_audit"
 
+#: v3.93.1 — what the pages load from ``/docs/brand/`` and
+#: ``/docs/illustrations/``: the vendored font, the empty-state art and the
+#: app icon. They lived in the repository's docs/, which the wheel does
+#: not carry, so every installed copy served them as 404.
+_STATIC_ROOT = Path(__file__).resolve().parent / "static"
+
+#: v3.93.1 — two features that need a source checkout, said where the
+#: user is instead of failing after they start. Retraining imports two
+#: scripts from scripts/ and writes heads into the checkout's models/,
+#: which is where the pipeline reads them; an installed copy has neither.
+#: The sample run copies samples/, which is 9 MB of photographs and is
+#: not shipped.
+_RETRAIN_NEEDS_CHECKOUT = (
+    "重新训练需要源码仓库(git clone 后安装):训练脚本和训练出的模型都在仓库里,"
+    "pip 安装的版本既没有脚本,评分时也读不到训练结果。")
+_SAMPLES_NEED_CHECKOUT = (
+    "示例数据只随源码仓库提供(samples/ 不在安装包里)。"
+    "上传一个文件夹即可开始,或从 git 仓库运行 pixcull serve。")
+
+
+def _samples_dir() -> Path | None:
+    """``samples/output`` of a checkout, or None when there is none."""
+    rr = _repo_root()
+    if rr is None:
+        return None
+    src = rr / "samples" / "output"
+    return src if (src / "scores.csv").is_file() else None
+
 
 def _repo_root() -> Path | None:
     """The git checkout root, or None when running from a wheel.
@@ -5767,6 +5795,7 @@ class _Handler(BaseHTTPRequestHandler):
         "/storage_info": "_serve_storage_info",
         "/rubric_meta": "_serve_rubric_meta",
         "/retrain_status": "_serve_retrain_status",
+        "/sample_demo": "_serve_sample_demo_status",
         "/license": "_serve_license_status",
         "/license/refresh": "_handle_license_refresh",
         "/sync/download": "_handle_sync_download",
@@ -6587,15 +6616,12 @@ class _Handler(BaseHTTPRequestHandler):
             "theme_color":      "#d5b584",
             "orientation":      "any",
             "categories":       ["photo", "productivity", "utilities"],
+            # v3.93.1 — the three PNGs this listed have never existed, in
+            # the wheel or in the repository. The brand mark, as SVG at
+            # any size, written by scripts/brand/gen_brand_svg.py.
             "icons": [
-                {"src":   "/docs/brand/pixcull-icon-192.png",
-                 "sizes": "192x192", "type": "image/png",
-                 "purpose": "any maskable"},
-                {"src":   "/docs/brand/pixcull-icon-256.png",
-                 "sizes": "256x256", "type": "image/png",
-                 "purpose": "any"},
-                {"src":   "/docs/brand/pixcull-icon-512.png",
-                 "sizes": "512x512", "type": "image/png",
+                {"src":   "/docs/brand/pixcull-icon.svg",
+                 "sizes": "any", "type": "image/svg+xml",
                  "purpose": "any"},
             ],
             "shortcuts": [
@@ -8727,18 +8753,31 @@ class _Handler(BaseHTTPRequestHandler):
     def _serve_static_doc_asset(self, path: str) -> None:
         """v0.13.14 — serve images / SVGs under docs/illustrations/
         and docs/brand/.  Path-traversal-safe, immutable cache.
+
+        v3.93.1 — from the package's ``report/static/`` first, which is
+        what an installed copy has; then, in a checkout only, from the
+        repository's ``docs/``. The old fallback for an install was the
+        directory *above* the package — site-packages — which had none of
+        these files and every other installed package's.
         """
-        repo_root = _repo_root() or _pkg_root().parent
-        # Strip leading slash + resolve under repo root
-        rel = path.lstrip("/")
-        target = (repo_root / rel).resolve()
-        # Reject anything that resolves outside the repo
-        try:
-            target.relative_to(repo_root)
-        except ValueError:
-            self.send_error(403, "path traversal")
-            return
-        if not target.exists() or not target.is_file():
+        rel = path.split("?", 1)[0].lstrip("/")       # docs/brand/x.woff2
+        sub = rel[len("docs/"):] if rel.startswith("docs/") else rel
+        roots = [(_STATIC_ROOT, _STATIC_ROOT / sub)]
+        rr = _repo_root()
+        if rr is not None:
+            roots.append((rr / "docs", rr / rel))
+        target = None
+        for root, cand in roots:
+            resolved = cand.resolve()
+            try:
+                resolved.relative_to(root.resolve())
+            except ValueError:
+                self.send_error(403, "path traversal")
+                return
+            if resolved.is_file():
+                target = resolved
+                break
+        if target is None:
             self.send_error(404, "not found")
             return
         # Content-type detection by extension
@@ -9892,6 +9931,13 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _serve_sample_demo_status(self) -> None:
+        """v3.93.1 — whether this copy has the sample run to offer."""
+        ok = _samples_dir() is not None
+        self._send_json(200, json.dumps(
+            {"available": ok, "why": None if ok else _SAMPLES_NEED_CHECKOUT},
+            ensure_ascii=False).encode("utf-8"))
+
     def _handle_sample_demo(self) -> None:
         """P-UX-21 — instant sample-data path.
 
@@ -9912,11 +9958,14 @@ class _Handler(BaseHTTPRequestHandler):
         import secrets as _secrets
 
         # Project root contains a samples/ tree we ship in-repo
-        proj_root = _repo_root() or _pkg_root().parent
-        src = proj_root / "samples" / "output"
-        if not (src / "scores.csv").is_file():
-            self._reject_upload(500, "samples/ not bundled with this build")
+        src = _samples_dir()
+        if src is None:
+            # v3.93.1 — 404 and what to do, not 500: nothing failed, the
+            # data is not in an installed copy. The page asks GET
+            # /sample_demo first and does not show the button then.
+            self._reject_upload(404, _SAMPLES_NEED_CHECKOUT)
             return
+        proj_root = src.parent.parent
         run_id = "sample_" + _secrets.token_hex(4)
         dst = _DEMO_ROOT / run_id / "output"
         dst.parent.mkdir(parents=True, exist_ok=True)
@@ -12029,9 +12078,13 @@ class _Handler(BaseHTTPRequestHandler):
         global _annotations_since_retrain
         with _RUNS_LOCK:
             _annotations_since_retrain += 1
+            # v3.93.1 — not from an install, where it can only fail: every
+            # tenth correction used to start a retrain that died on its
+            # first import and left the admin page saying so.
             should_train = (
                 _annotations_since_retrain >= _AUTO_RETRAIN_THRESHOLD
                 and _RETRAIN_STATE.get("state") != "running"
+                and _repo_root() is not None
             )
             if should_train:
                 _annotations_since_retrain = 0
@@ -12237,6 +12290,9 @@ class _Handler(BaseHTTPRequestHandler):
             except (UnicodeDecodeError, json.JSONDecodeError) as exc:
                 _dbg("retrain/parse_body", exc)
 
+        if _repo_root() is None:
+            self._reject_upload(409, _RETRAIN_NEEDS_CHECKOUT)
+            return
         global _RETRAIN_STATE
         with _RUNS_LOCK:
             if _RETRAIN_STATE.get("state") == "running":
@@ -12396,6 +12452,9 @@ class _Handler(BaseHTTPRequestHandler):
         """Return the latest retrain run's state + per-axis CV metrics."""
         with _RUNS_LOCK:
             state = dict(_RETRAIN_STATE)
+            state["available"] = _repo_root() is not None
+            if not state["available"]:
+                state["unavailable_reason"] = _RETRAIN_NEEDS_CHECKOUT
             # V11.2 — surface auto-retrain progress for admin UI
             state["auto_retrain"] = {
                 "threshold": _AUTO_RETRAIN_THRESHOLD,

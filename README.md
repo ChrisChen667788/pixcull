@@ -62,6 +62,23 @@
 
 ## What's new
 
+**v3.93.1** — Five things the package needed and the wheel did not carry,
+found by looking for v3.93's defect where nobody had looked. The largest: the
+MediaPipe face models are tracked in git and were never in the build
+allowlist, so `pip install 'pixcull[face]'` installed MediaPipe and still
+found no face. No face count, no closed eyes, no face blur, and nothing said
+so, because the detector returns an empty result when it cannot run. The
+models ship now (the wheel goes from 1.9 MB to 6.9 MB), and a run that
+cannot check faces says so once, with the reason.
+
+The vendored font and the empty-state art are served from inside the
+package. The app icon is the brand mark, where the manifest had named three
+PNGs that never existed. `.cube` LUTs are read from `~/.pixcull/luts` or
+`PIXCULL_LUTS_DIR`. Retraining and the sample run need a source checkout,
+and an installed copy now says that before the click instead of failing
+after it. A packaging test works out what must ship from the paths the code
+builds, rather than from a list somebody has to remember to extend.
+
 **v3.93** — `pixcull video` never listened to the video. The function that
 reads a clip's audio was written for the first video release and nothing
 called it. The reel caption, the review page's event lane and the lightbox
@@ -141,20 +158,6 @@ that produces nothing is recorded as failed, with the most common cause in
 the message the upload page already shows. And the eleven routes that need a
 run's results answer 425 only while the analysis is actually running; they
 ask one function now instead of each deciding alone.
-
-**v3.89** — With every model already on disk, an offline run still asked
-the network first and waited to be refused: 48 connection attempts on 32
-photos, one per model load in each worker. Where a network drops packets
-rather than refusing them, each attempt waits out the operating system's
-connect timeout, which is how a Windows user measured 149 seconds and no
-results (issue #3). The disk comes first now, and the network is for a model
-that is not there — which also means a model cannot change between two runs
-of the same folder because the hub published a new revision.
-
-Loading an older checkpoint also started a background request asking the hub
-to convert it, whatever `local_files_only` said. That is switched off.
-Measured with the socket layer blocked, loopback included: 48 attempts
-before, none after, and every verdict the same.
 
 Earlier releases are in [`CHANGELOG.md`](CHANGELOG.md).
 

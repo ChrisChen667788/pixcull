@@ -319,6 +319,13 @@ def main(argv: list[str]) -> int:
         path.write_text(svg, encoding="utf-8")
         print(f"[brand] wrote {path.relative_to(repo_root)} "
               f"({len(svg):,} bytes)")
+    # v3.93.1 — the installable app's icon. The review server serves it
+    # from inside the package, because docs/ is not in the wheel; the
+    # mark is the same drawing, so it is written from the same function.
+    icon = repo_root / "pixcull" / "report" / "static" / "brand" / "pixcull-icon.svg"
+    icon.parent.mkdir(parents=True, exist_ok=True)
+    icon.write_text(_mark_only(brand), encoding="utf-8")
+    print(f"[brand] wrote {icon.relative_to(repo_root)}")
     return 0
 
 

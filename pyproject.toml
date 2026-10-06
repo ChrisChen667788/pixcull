@@ -1,6 +1,6 @@
 [project]
 name = "pixcull"
-version = "3.93.0"
+version = "3.93.1"
 description = "AI photo culling for professional photographers — MiniMax M3 judges the frame while reading the on-device measurements, 6-axis rubric, XMP/IPTC export, Lightroom & Capture One ready."
 # v2.23 — dedicated PyPI readme: the repo README leans on relative-path
 # screenshots and GitHub-only markup that render broken on pypi.org.
@@ -266,6 +266,15 @@ include = [
     "pixcull/data/*.tsv",                # v3.39 — the deferral inventory, same reason
     "pixcull/models/*.joblib",           # v3.44 — the rescorer the README promises; the default path is CWD-relative and resolved to nothing after pip install
     "pixcull/models/*.json",             # v3.44 — its per-axis training metadata
+    # v3.93.1 — tracked in git, opened by the package, and absent from every
+    # wheel until now. The MediaPipe face models: without them face.py
+    # returns an empty result, so `pixcull[face]` detected no face from an
+    # install. The font, the empty-state art and the app icon the review
+    # server serves: they lived in docs/, which the wheel does not carry.
+    "pixcull/detectors/_models/*.tflite",
+    "pixcull/detectors/_models/*.task",
+    "pixcull/report/static/brand/*",
+    "pixcull/report/static/illustrations/*.png",
 ]
 
 [tool.ruff]

@@ -497,6 +497,12 @@ PYTHONPATH=. python scripts/eval_on_golden_set.py golden/ \
     try {
       const res = await fetch("/retrain_status");
       const s = await res.json();
+      // v3.93.1 — an installed copy cannot retrain; say so, once, here.
+      if (s.available === false) {
+        retrainBtn.disabled = true;
+        retrainStatus.textContent = s.unavailable_reason || "";
+        return;
+      }
       const meta = s.last_meta || {};
       const axes = (s.axes || meta.axes || []);
       // Status pill

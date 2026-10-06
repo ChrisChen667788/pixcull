@@ -166,7 +166,9 @@ def test_list_cubes(tmp_path):
 
 
 def test_grade_bytes_with_cube(tmp_path, monkeypatch):
-    monkeypatch.setattr(C, "LUTS_DIR", tmp_path)
+    # v3.93.1 — LUTs are searched in several folders now (luts_dirs()),
+    # not one module constant that pointed beside the repository.
+    monkeypatch.setattr(C, "luts_dirs", lambda: [tmp_path])
     C._CUBE_CACHE.clear()
     _write_cube(tmp_path / "inv.cube", n=2, invert=True)
     jb = _jpeg(v=200, size=(20, 20))

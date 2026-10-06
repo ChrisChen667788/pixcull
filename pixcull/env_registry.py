@@ -57,6 +57,7 @@ KNOWN: dict[str, str] = {
     "PIXCULL_LICENSE_API":          "licence server base URL",
     "PIXCULL_LICENSE_KEY":          "licence key for issuing scripts",
     "PIXCULL_LLM_BUDGET_YUAN":      "daily cloud-judging spend ceiling",
+    "PIXCULL_LUTS_DIR":             "folder of .cube LUTs for the video grade menu (default ~/.pixcull/luts)",
     "PIXCULL_LOG_LEVEL":            "logging level",
     "PIXCULL_MEASURE_STRIP":        "measure the film-strip effect",
     "PIXCULL_MLX_WHISPER_MODEL":    "MLX Whisper model id for transcription",

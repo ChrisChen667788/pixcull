@@ -260,6 +260,39 @@ the user is, that it needs a checkout; and a packaging test fails when a
 file the package opens relative to itself is missing from the built
 wheel — the test v3.93 was chartered to leave behind.
 
+**Shipped, measure met.** Checked from a built wheel unpacked on its own,
+with nothing of the checkout on the path: the detector finds the face in
+the public-domain astronaut image; the font, the four illustrations and
+the icon answer 200; the sample run and retraining report themselves
+unavailable. The face models, the font and the art move the wheel from
+1.9 MB to 6.9 MB. Three of the five work from an install (faces, assets,
+LUTs in `~/.pixcull/luts` or `PIXCULL_LUTS_DIR`); two say they need a
+checkout (retraining, the sample run), and the tenth-correction
+auto-retrain no longer starts where it can only fail.
+
+The gate is two tests in `tests/test_packaging.py`: every path the
+package builds from its own location resolves to something in the wheel,
+and every `/docs/brand|illustrations/…` URL a page asks for is shipped.
+Five paths that climb out of the package on purpose are listed with the
+reason an install does not need them; an exemption whose path is no
+longer built fails too.
+
+Found on the way and also fixed: from an install, `/docs/…` fell back to
+the directory above the package — site-packages — and would serve any
+file under it. It reads the package's `report/static/` and, in a
+checkout only, the repository's `docs/`.
+
+Not done, and written down: retraining *from an install* is a feature,
+not a fix. The pipeline reads per-axis heads from the working directory
+and then the packaged copies, so a head trained into `~/.pixcull/models`
+would be trained and never read; making it work means a third place the
+pipeline looks, which changes scoring for anyone who retrains. The PWA
+manifest now names one SVG icon at any size; whether every browser
+accepts that for installation was not tested. And
+`scripts/brand/gen_brand_svg.py` no longer reproduces the committed
+`pixcull-vertical-poster.svg` (three fill colours differ) — left as it
+was, for the documentation-truth versions below.
+
 ### v3.94 — Python 3.13 is refused at install
 
 `requires-python = ">=3.11,<3.13"`. The ceiling exists because

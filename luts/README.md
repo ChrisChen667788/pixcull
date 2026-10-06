@@ -1,5 +1,10 @@
 # LUTs (drop your `.cube` 3D LUTs here) — v2.1-P1-1
 
+> **Installed with pip?** This folder only exists in a source checkout.
+> Put `.cube` files in `~/.pixcull/luts/` instead, or point
+> `PIXCULL_LUTS_DIR` at a folder of your own (v3.93.1). All three are
+> searched; the first file of a given name wins.
+
 Any `*.cube` file in this folder becomes a one-click look in the video
 review surface (`/video/<run_id>` → 🎩 grade dropdown), alongside the
 built-in parametric presets (Fuji Eterna / Kodak Vision3 / Arri 709A /

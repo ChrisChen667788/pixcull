@@ -1644,6 +1644,11 @@
   // via the manifest's absolute paths. Visitor goes from "click" to
   // "interactive /results page" in under 1 second.
   const sampleBtn = document.getElementById("sampleBtn");
+  // v3.93.1 — an installed copy has no samples/; the button used to be
+  // there anyway and answer 500. Ask first, and hide it when there are none.
+  if (sampleBtn) fetch("/sample_demo").then(r => r.json()).then(d => {
+    if (d && d.available === false) sampleBtn.hidden = true;
+  }).catch(() => {});
   if (sampleBtn) sampleBtn.addEventListener("click", async () => {
     sampleBtn.disabled = true; const orig = sampleBtn.textContent;
     sampleBtn.textContent = "⚡ 加载中…";

@@ -62,6 +62,37 @@ FACE_DETECTOR_MODEL = _MODEL_DIR / "blaze_face_short_range.tflite"
 FACE_LANDMARKER_MODEL = _MODEL_DIR / "face_landmarker.task"
 
 
+def face_detection_unavailable() -> str | None:
+    """Why face detection cannot run in this install, or None if it can.
+
+    v3.93.1 — ``FaceDetector`` returns an empty result when MediaPipe or
+    its two model files are missing, and says nothing, by design: it runs
+    once per photograph in every worker. That silence covered an install
+    defect for as long as there has been a wheel: the model files below
+    are tracked in git and were never in the build allowlist, so
+    ``pip install 'pixcull[face]'`` installed MediaPipe and still found no
+    face. The run summary asks this once, in the main process, and prints
+    the answer.
+
+    Does not import MediaPipe — ``find_spec`` only looks.
+    """
+    import importlib.util
+    try:
+        has_mediapipe = importlib.util.find_spec("mediapipe") is not None
+    except (ImportError, ValueError):
+        has_mediapipe = False
+    if not has_mediapipe:
+        return ("MediaPipe is not installed, so faces, closed eyes and face "
+                "blur are not checked — `pip install 'pixcull[face]'` adds them")
+    missing = [p.name for p in (FACE_DETECTOR_MODEL, FACE_LANDMARKER_MODEL)
+               if not p.is_file()]
+    if missing:
+        return (f"the face model files are missing from this install "
+                f"({', '.join(missing)}), so no face is detected — "
+                f"reinstall pixcull")
+    return None
+
+
 def _ear(pts: np.ndarray) -> float:
     """Eye Aspect Ratio for a 6-point eye contour."""
     v1 = np.linalg.norm(pts[1] - pts[5])

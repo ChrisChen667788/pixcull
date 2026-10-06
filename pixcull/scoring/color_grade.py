@@ -90,7 +90,28 @@ def apply_grade(img: np.ndarray, preset: str) -> np.ndarray:
 # --------------------------------------------------------------------------
 
 # Where user-supplied .cube LUTs are discovered (drop files here).
-LUTS_DIR = Path(__file__).resolve().parent.parent.parent / "luts"
+#
+# v3.93.1 — this was only the repository's ``luts/``, three directories up
+# from this file. From an installed copy that is the directory above
+# site-packages: nobody's LUTs are there and nothing says to put them
+# there, so the grade menu offered the built-in presets and nothing else,
+# with no way to change that. The user's folder comes first now.
+USER_LUTS_DIR = Path.home() / ".pixcull" / "luts"
+#: A checkout's drop-in folder (``luts/README.md``). Exists only in one.
+CHECKOUT_LUTS_DIR = Path(__file__).resolve().parent.parent.parent / "luts"
+
+
+def luts_dirs() -> list[Path]:
+    """Folders searched for ``*.cube``, first match of a name wins:
+    ``PIXCULL_LUTS_DIR`` when set, then ``~/.pixcull/luts``, then a
+    checkout's ``luts/``."""
+    import os
+    out = []
+    env = os.environ.get("PIXCULL_LUTS_DIR")
+    if env:
+        out.append(Path(env).expanduser())
+    out += [USER_LUTS_DIR, CHECKOUT_LUTS_DIR]
+    return out
 
 
 @dataclass(frozen=True)
@@ -181,15 +202,22 @@ def apply_cube(img: np.ndarray, cube: Cube) -> np.ndarray:
 _CUBE_CACHE: dict[str, Cube] = {}
 
 
+def _cube_files(luts_dir: Path | None = None) -> dict[str, Path]:
+    """``stem -> path`` over the search folders (or just ``luts_dir``)."""
+    dirs = [Path(luts_dir)] if luts_dir else luts_dirs()
+    found: dict[str, Path] = {}
+    for d in dirs:
+        if not d.is_dir():
+            continue
+        for p in sorted(d.glob("*.cube")):
+            found.setdefault(p.stem, p)
+    return found
+
+
 def list_cubes(luts_dir: Path | None = None) -> list[dict]:
     """Discover ``*.cube`` files → ``[{id:'cube:<stem>', label}]``."""
-    d = Path(luts_dir) if luts_dir else LUTS_DIR
-    if not d.is_dir():
-        return []
-    out = []
-    for p in sorted(d.glob("*.cube")):
-        out.append({"id": f"cube:{p.stem}", "label": f"LUT · {p.stem}"})
-    return out
+    return [{"id": f"cube:{stem}", "label": f"LUT · {stem}"}
+            for stem in sorted(_cube_files(luts_dir))]
 
 
 def _resolve_cube(preset: str, luts_dir: Path | None = None) -> Cube | None:
@@ -197,9 +225,8 @@ def _resolve_cube(preset: str, luts_dir: Path | None = None) -> Cube | None:
     if not preset.startswith("cube:"):
         return None
     stem = preset[len("cube:"):]
-    d = Path(luts_dir) if luts_dir else LUTS_DIR
-    path = d / f"{stem}.cube"
-    if not path.exists():
+    path = _cube_files(luts_dir).get(stem)
+    if path is None:
         return None
     key = str(path)
     if key not in _CUBE_CACHE:
