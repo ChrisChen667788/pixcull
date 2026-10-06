@@ -331,9 +331,14 @@ the PyPI page lost a sentence that was not true (audio events) and
 drawn from thirty-six versions of history, each checked against the code
 at the tag and at HEAD.
 
-What that release does not contain is v3.93 and v3.93.1 — so on PyPI
-today the delivery-audit page is still 500 and face detection still
-cannot run. The next upload is the owner's call.
+That release did not contain v3.93 or v3.93.1, so the delivery-audit
+page was still 500 there and face detection still could not run. The
+owner asked for a patch release on 2026-10-06, after v3.93.1 and its
+review fixes: `v3.93.1` is tagged, released on GitHub and on PyPI, and
+the wheel pip fetches from pypi.org has the same hash as the one checked
+on the release page — real face models inside, the static assets, the
+audit module. Its release notes open with the `[face]` users, for whom
+face detection had never worked from an install.
 
 ---
 
