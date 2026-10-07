@@ -31,3 +31,12 @@ licensed track.
 
 The film was rendered on 2026-10-06 from the tree at commit `16eff07`.
 Neither file carries metadata beyond the encoder's name.
+
+## Where it plays
+
+GitHub does not play an mp4 from the repository inline, so the README
+embeds a GitHub attachment uploaded from this exact file (sha256
+`f49b81a2…`). Links to the film go to jsDelivr's copy, and the ModelScope
+card plays its own copy. If `pixcull-30s.mp4` is re-rendered, upload the
+new one to a GitHub comment box and replace the attachment URL;
+`tests/test_readme_image_sources.py` fails until that is done.

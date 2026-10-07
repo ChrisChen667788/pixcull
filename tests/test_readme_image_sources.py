@@ -289,3 +289,41 @@ def test_the_film_is_linked_where_a_browser_will_play_it():
         assert not wrong, (
             f"{name} links the film somewhere a browser will not play it: "
             f"{wrong} — use {url}")
+
+
+#: The film as a GitHub attachment — the one form GitHub plays inline in a
+#: README, as a URL alone on its line. Uploaded 2026-10-07 from the file
+#: below; GitHub does not re-read the repository, so if the mp4 is
+#: re-rendered this attachment keeps showing the old cut until someone
+#: uploads the new one and replaces both constants.
+FILM_ATTACHMENT = ("https://github.com/user-attachments/assets/"
+                   "69eddc6b-24d3-406a-ace5-2ed3a5b44e67")
+FILM_ATTACHMENT_SHA256 = (
+    "f49b81a2fc5a880f92b241c2676a5c737a3e6d047eb00f6c4095ef4f625e68da")
+
+
+def test_the_readme_plays_the_film_inline():
+    lines = (ROOT / "README.md").read_text(encoding="utf-8").splitlines()
+    assert FILM_ATTACHMENT in (l.strip() for l in lines), (
+        "README.md no longer has the film's attachment URL on a line of its "
+        "own, which is what makes GitHub render a player")
+
+
+def test_the_attachment_is_never_a_link():
+    """Opened directly, the attachment URL answers 404 to anyone signed
+    out (measured 2026-10-07; only the README's rendered player is signed
+    for them). As an href it would be a dead link for most readers."""
+    for name in READMES:
+        text = (ROOT / name).read_text(encoding="utf-8")
+        assert not re.search(
+            r'(?:href="|\]\()https://github\.com/user-attachments/', text), (
+            f"{name} links a GitHub attachment; signed-out readers get a 404")
+
+
+def test_the_attachment_still_holds_the_committed_film():
+    import hashlib
+    got = hashlib.sha256((ROOT / FILM).read_bytes()).hexdigest()
+    assert got == FILM_ATTACHMENT_SHA256, (
+        f"{FILM} changed (sha256 {got[:12]}…) but the README still embeds the "
+        "attachment uploaded from the old file. Upload the new mp4 to a "
+        "GitHub comment box and replace FILM_ATTACHMENT and its hash.")

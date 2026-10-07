@@ -108,10 +108,15 @@ you specifically want CDN-linked images instead of ModelScope-hosted.
 outside this repo from eight `samples/input` frames with synthesised music;
 `docs/video/README.md` maps every on-screen line to the code that makes it
 true — change a feature it names and that table is what goes stale.  Both
-READMEs show its poster linked to a copy a browser will play: **GitHub will
-not play it** (the file page says too big, raw serves octet-stream +
-nosniff, which downloads), so README.md links jsDelivr and the card links
-modelscope.cn — `test_the_film_is_linked_where_a_browser_will_play_it`.
+READMEs show it where a browser will play it: **GitHub will not play an mp4
+from the repo** (the file page says too big, raw serves octet-stream +
+nosniff, which downloads), so README.md embeds a GitHub **attachment**
+(user-attachments URL alone on a line — signed-out viewers get a player,
+but the URL opened directly is a 404 for them, so it is never an href);
+every link goes to jsDelivr and the card plays modelscope.cn.  The
+attachment is pinned to the mp4's sha256 — **re-render the film and you
+must re-upload it** (the owner drags it into a GitHub comment box; Claude
+cannot, browsers are read-only to computer use).
 The sync hosts mp4 for that (`ASSET_RE` in
 `scripts/sync_modelscope_readme.py`, the one pattern the upload and the
 trigger test both read).

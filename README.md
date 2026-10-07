@@ -58,17 +58,21 @@
   It runs on your machine. The RAW files do not have to go anywhere.
 </p>
 
-<!-- The film. Poster and video live in docs/video/, and docs/video/README.md
-     says which file each on-screen line comes from. It is an illustration,
-     not a screen recording, and the caption says so. The link goes to
-     jsDelivr's copy of the same file because GitHub will not play it: the
-     file page says it is too big to show, and raw.githubusercontent.com
-     serves it as application/octet-stream, which downloads. -->
+<!-- The film: docs/video/pixcull-30s.mp4, uploaded to GitHub as an
+     attachment, because that URL on a line of its own is the only way
+     GitHub plays a video inline (an mp4 committed to the repo is "too big
+     to show", and raw.githubusercontent.com serves it as
+     application/octet-stream, which downloads). Opened directly, that URL
+     is a 404 for anyone signed out, so every *link* to the film goes to
+     jsDelivr's copy instead. docs/video/README.md says which file each
+     on-screen line comes from. It is an illustration, not a screen
+     recording, and the caption says so. -->
+
+https://github.com/user-attachments/assets/69eddc6b-24d3-406a-ace5-2ed3a5b44e67
+
 <p align="center">
-  <a href="https://cdn.jsdelivr.net/gh/ChrisChen667788/pixcull@main/docs/video/pixcull-30s.mp4"><img src="docs/video/pixcull-30s-poster.jpg"
-     alt="Title frame of a 30-second film about PixCull: a snow peak at sunset inside amber crop brackets, beside the words Make the frame count."
-     width="720" /></a><br/>
-  <sub>▶ <a href="https://cdn.jsdelivr.net/gh/ChrisChen667788/pixcull@main/docs/video/pixcull-30s.mp4">A 30-second film</a>, with music.
+  <sub>A 30-second film, with music
+  (<a href="https://cdn.jsdelivr.net/gh/ChrisChen667788/pixcull@main/docs/video/pixcull-30s.mp4">open the file</a>).
   It shows what PixCull does using the photographs in <code>samples/input</code>;
   it is not a recording of the app. <a href="docs/video/README.md">What each line rests on</a>.</sub>
 </p>
