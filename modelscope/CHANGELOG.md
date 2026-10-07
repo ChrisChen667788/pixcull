@@ -22,8 +22,8 @@ PyPI 上的上一个版本是 3.53.1,下一个是 3.92.0,中间隔着 36 个版�
 下限是 transformers 决定的:低于它要的版本时,它不是导入失败,而是报告「没找到
 PyTorch」。transformers 5.19.0 又多了一种坏法:它接受 torch 2.5,随后却调用
 `torch.accelerator.current_accelerator()` —— torch 2.5 没有这个函数,torch 2.6 在
-没有 GPU 的机器上调用它会抛异常,于是任何模型类都导入不了;从 2.7 起它返回空,
-transformers 改用 CPU。
+没有加速器(既没有 CUDA 设备、也没有 Apple MPS)的机器上调用它会抛异常,于是任何
+模型类都导入不了;从 2.7 起它返回空,transformers 改用 CPU。
 
 **已缓存的模型直接从磁盘读,不再先问 hub。** 断网时 3.53.1 每一帧都失败 ——
 `Analyzed 0/32` —— 而权重就在你自己的硬盘上,因为加载器先去连 hub。现在先读

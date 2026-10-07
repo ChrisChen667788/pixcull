@@ -96,11 +96,13 @@ HTTP. It is now, with real multipart bodies, a 3 MB file, Windows paths and a
 The torch floor is 2.7 now, up from 2.5. transformers 5.19.0 came out twenty
 minutes before this release's CI ran. It declares `torch>=2.5` and accepts 2.5
 at import, then calls `torch.accelerator.current_accelerator()`. torch 2.5 has
-no such function, and torch 2.6 raises from it on a machine with no GPU; from
-2.7 it returns nothing and transformers falls back to the CPU. On either of the
-older two, no model class can be imported. The CI lane pinned to the floor
-exists to catch exactly this, and it went red twice: the first fix, 2.6, was
-checked on a Mac, whose GPU hides the second failure. The floor moved in the
+no such function, and torch 2.6 raises from it on a machine with no
+accelerator (no CUDA device, no Apple MPS), such as a CPU-only Linux server;
+from 2.7 it returns nothing and transformers falls back to the CPU. On 2.5, and
+on 2.6 without an accelerator, no model class can be imported. The CI lane
+pinned to the floor exists to catch exactly this, and it went red twice: the
+first fix, 2.6, was checked on a Mac, where MPS counts as an accelerator and
+2.6 does not raise. The floor moved in the
 package, both pinned CI lanes, the Docker image and the Studio together.
 
 **v3.93.2** — Three changes from [@gxfc9867](https://github.com/gxfc9867)
@@ -907,7 +909,7 @@ culling" SaaS, the things you'll notice immediately on PixCull:
 git clone https://github.com/ChrisChen667788/pixcull.git
 cd pixcull
 
-# 2. Python 3.11, 3.12 or 3.13 (on 3.13 the oldest torch that installs is 2.6)
+# 2. Python 3.11, 3.12 or 3.13 (torch 2.7 or newer on all three)
 python3.12 -m venv .venv
 source .venv/bin/activate
 
@@ -1488,7 +1490,7 @@ pixcull m3 label --folder <photos> --limit 150
 git clone https://github.com/ChrisChen667788/pixcull.git
 cd pixcull
 
-# 2. Python 3.11、3.12 或 3.13(3.13 上能装的最老 torch 是 2.6)
+# 2. Python 3.11、3.12 或 3.13(三者都要 torch 2.7 或更新)
 python3.12 -m venv .venv
 source .venv/bin/activate
 

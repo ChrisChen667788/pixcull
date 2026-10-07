@@ -33,9 +33,9 @@ transformers' doing: below the torch it wants, it does not fail to
 import, it reports that PyTorch was not found. transformers 5.19.0 found
 a second way: it accepts torch 2.5, then calls
 `torch.accelerator.current_accelerator()`, which torch 2.5 does not have
-and torch 2.6 raises from on a machine with no GPU, so no model class
-can be imported. From 2.7 it returns nothing and transformers uses the
-CPU.
+and torch 2.6 raises from on a machine with no accelerator (no CUDA
+device, no Apple MPS), so no model class can be imported. From 2.7 it
+returns nothing and transformers uses the CPU.
 
 **A cached model is read from disk, and the hub is not asked.** With no
 network, 3.53.1 failed every frame — `Analyzed 0/32` — with the weights

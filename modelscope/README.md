@@ -79,10 +79,11 @@ tasks:
   torch 下限从 2.5 抬到 2.7。transformers 5.19.0 在本版 CI 开跑前二十分钟发布:
   它声明 `torch>=2.5`、导入时也接受 2.5,随后却调用
   `torch.accelerator.current_accelerator()`。torch 2.5 没有这个函数,torch 2.6 在
-  没有 GPU 的机器上调用它会抛异常;从 2.7 起它返回空,transformers 改用 CPU。
-  在前两个版本上,任何模型类都导入不了。专门钉在下限上的那条 CI lane 就是为这种
-  情况设的,它红了两次:第一次改成 2.6 是在 Mac 上验证的,而 Mac 的 GPU 恰好把
-  第二种失败藏住了。包、两条钉版本的 CI lane、Docker 镜像和 Studio 的下限一起改了。
+  没有加速器(既没有 CUDA 设备、也没有 Apple MPS)的机器上调用它会抛异常,比如只有
+  CPU 的 Linux 服务器;从 2.7 起它返回空,transformers 改用 CPU。在 2.5 上、以及没有
+  加速器的 2.6 上,任何模型类都导入不了。专门钉在下限上的那条 CI lane 就是为这种
+  情况设的,它红了两次:第一次改成 2.6 是在 Mac 上验证的,而 Mac 的 MPS 算加速器,
+  2.6 在那里不会抛异常,于是第二种失败被藏住了。包、两条钉版本的 CI lane、Docker 镜像和 Studio 的下限一起改了。
 
 - **v3.93.2**:来自 [@gxfc9867](https://github.com/gxfc9867)(PR #4)的三处改动,加一个
   括号。客户选片页上的中文水印显示成空白方块:字体查找先碰到了只含拉丁字母的字体,
