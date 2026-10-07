@@ -64,6 +64,24 @@ tasks:
 **[github.com/ChrisChen667788/pixcull](https://github.com/ChrisChen667788/pixcull)**
 
 ## 最近更新
+- **v3.94.1**:在 Windows 上,没有 C++ 编译器就装不上 Python 3.13 版的 3.94.0。
+  有一个包里根本没有代码用到的依赖 `imagededup`(当初声明是为了「去重」,而去重
+  早就改用 CLIP 和 DINOv2 了),它只发布到 Python 3.12 的预编译包,还带一个必须编译
+  的 C++ 扩展,所以在 3.13 上每次安装都要现场编译它,Linux ARM 上也一样。CI 的
+  每台机器都有编译器,所以没有一条 lane 看得到。只用预编译包为 Windows + Python
+  3.13 解析 3.94.0,会停在「No matching distribution found for imagededup」。它已经
+  删掉;包代码直接用到、却只靠 imagededup 的依赖树顺带装上的 `scipy`,现在正式声明。
+
+  有两道检查守住它。一条测试:声明了却没有任何代码 import 的依赖、以及 import 了却
+  没声明的依赖,都会失败。一个新的 CI 任务:只用预编译包,为 Windows、Apple Silicon、
+  Linux 在 Python 3.11、3.12、3.13 上把整棵依赖树解析一遍;只提供源码包的依赖会被
+  现场构建,证明它是纯 Python。拿 README 的说法去对这张清单,发现平台徽章写着支持
+  Intel Mac,而 torch 从 2.2 之后就不再给 Intel Mac 出包了;徽章现在只写 Apple Silicon。
+
+  这一版还有:没有桌面环境的 Linux 需要给 OpenCV 装 `libgl1` 和 `libglib2.0-0`,
+  README 里写上了;在网络全部被拒的情况下加载已缓存模型的那条测试,现在除了 CLIP,
+  也覆盖 DINOv2 和美学评分轴用的两个 pyiqa 模型。
+
 - **v3.94**:Python 3.13 能装了。`requires-python` 原来停在 3.12,是因为审片服务器
   用 `cgi.FieldStorage` 解析上传,而 3.13 移除了 `cgi` 模块。实测下来这是唯一的
   障碍:在 3.13 上所有依赖都能装上,包括 MediaPipe(它的 wheel 对任意 Python 3
@@ -140,16 +158,6 @@ tasks:
   两条 lane 就钉在这个下限上,所以「承诺的最老版本」是真被跑过的版本;另有一条
   测试直接问 transformers 肯不肯用当前装的 torch —— 下次它再抬高要求,会先红在
   这里,而不是红在某个用户的终端里。
-
-- **v3.91.1**:每周拿真模型做测试的那条 CI,其实一直什么都没跑。它的步骤名叫
-  「downloads CLIP + BLIP」,却什么也不下载:里面每一条测试都等着权重已经在缓存
-  里,而全新的 runner 上一个都没有,于是每条都跳过,整条 lane 靠五个跳过转绿。
-  9 月 14 日和 28 日两次定时运行都是这样;跳过台账里还有三行写着这些测试「在这条
-  lane 里覆盖」。
-
-  现在它先把权重拉下来(走产品自己的加载函数),并且在这条 lane 里,缺模型算失败
-  而不是跳过。是读一次绿灯运行的日志读出来的 —— 那次运行本该证明 v3.89 的断网
-  测试在某处真的跑过。
 
 更早的版本记录在 [`CHANGELOG.md`](https://github.com/ChrisChen667788/pixcull/blob/main/modelscope/CHANGELOG.md)。
 
@@ -506,6 +514,9 @@ pip install -e ".[dev]"
 python scripts/serve_demo.py
 # 浏览器开 http://127.0.0.1:8770
 ```
+
+在没有桌面环境的 Linux(服务器、容器)上,OpenCV 还需要两个系统库,否则第一次运行
+就会报找不到 `libGL.so.1`:`sudo apt-get install libgl1 libglib2.0-0`。Docker 镜像里已经装好了。
 
 把一个 JPG / RAW / HEIC 的文件夹拖到上传页;
 首次约 30 秒预热模型 (Apple Silicon),之后每张 ~1 秒 (M2 Pro 实测)。

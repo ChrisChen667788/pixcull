@@ -431,6 +431,48 @@ hosted images only and its trigger test kept its own pattern — and one
 that assumed every README image was an SVG. GitHub does not play an mp4
 from the repository, so README.md links jsDelivr's copy.
 
+### v3.94.1 — on Windows, Python 3.13 needed a compiler to install it
+
+Found while checking whether issue #3 could close. Trying the released
+3.94.0 in a clean Linux container failed before PixCull ran:
+`imagededup` would not build. It is a base dependency that nothing in the
+package imports (near-duplicates are CLIP and DINOv2), with wheels for
+Python 3.9-3.12 only and a mandatory C++ extension. Resolved for Windows,
+Python 3.13, binaries only, 3.94.0 stops at "No matching distribution
+found for imagededup"; every CI runner has a compiler, so nothing saw it.
+
+- `imagededup` removed from the package, the Studio requirements and the
+  app spec. Removing it found `scipy` imported (detectors/canon.py) and
+  guaranteed only by that tree; it is declared now (>=1.13, the first
+  built against numpy 2).
+- `tests/test_declared_dependencies.py`: a declared dependency nothing
+  imports fails, and so does an import nothing declares, each exception
+  named with its reason (`safetensors`, `jinja2`; the guarded optional
+  imports).
+- `scripts/check_installs_without_compiler.py` and a CI job: resolve the
+  whole tree for Windows x64, Apple Silicon and Linux x86_64 on every
+  advertised Python with `--only-binary=:all:`, from PEP 658 metadata,
+  and build any sdist-only dependency to prove it is pure (`openai-clip`,
+  under pyiqa, is). Its first Linux run reported safetensors as needing a
+  compiler: pip does not expand a PEP 600 manylinux tag, so given
+  manylinux_2_28 alone it refused every manylinux2014 wheel. The Linux
+  target lists the whole glibc-2.28 tag set now, and a test holds it.
+- Holding the README to that list: the platform badge claimed Intel Macs,
+  for which torch has published no wheel since 2.2.2. It says Apple
+  Silicon.
+- The headless-Linux `libGL.so.1` requirement is in the install notes
+  (also found in the container), and the socket-level offline test covers
+  DINOv2 and the aesthetic axis's pyiqa models; the real-model lane
+  fetches their weights through the product's loaders.
+
+Reviewed before committing (three lenses and a refuting fourth): nothing
+in the dependency change or the docs; two latent holes in the new check,
+both of the kind this block keeps finding. With no Python classifiers it
+checked nothing and exited 0, and it counted `cp312-none-any` as pure,
+which only one Python accepts. Both fixed, both with tests. Measured on the
+released 3.94.0 as a control: Windows, macOS and Linux all fail on Python
+3.13 at imagededup and pass on 3.11/3.12; the 3.94.1 tree passes all nine.
+
 ### The first release since 3.53.1 — done at v3.92, not after v3.94
 
 Planned for after v3.94; the owner asked for it on 2026-10-02 so that

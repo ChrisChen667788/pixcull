@@ -161,31 +161,63 @@ def test_a_load_failure_that_is_not_a_miss_is_not_retried_online(exc):
 #: not have. Naming it "covered elsewhere" is only true if somewhere runs it.
 EFFECT_TEST = ("tests/test_runs_without_network.py::"
                "test_loading_a_cached_model_opens_no_socket")
+#: v3.94.1 — the aesthetic metrics load outside transformers, so their
+#: offline test is separate and needs its own weights in the lane.
+AESTHETIC_EFFECT_TEST = ("tests/test_runs_without_network.py::"
+                         "test_loading_the_cached_aesthetic_metrics_opens_no_socket")
+
+
+def _real_model_lane() -> list[str]:
+    """The lane's shell, step by step, comments removed: a test named in a
+    comment is not a test the lane runs (this check used to search the raw
+    file, which a comment would have satisfied)."""
+    import re
+
+    import yaml
+    jobs = yaml.safe_load((ROOT / ".github" / "workflows" / "tests.yml")
+                          .read_text("utf-8"))["jobs"]
+    job = next(j for j in jobs.values()
+               if str(j.get("name", "")).startswith("real-model integration"))
+    return ["\n".join(re.sub(r"(^|\s)#.*$", "", line)
+                      for line in (step.get("run") or "").splitlines())
+            for step in job["steps"]]
 
 
 def test_the_real_model_lane_runs_the_effect_test():
-    workflow = (ROOT / ".github" / "workflows" / "tests.yml").read_text("utf-8")
-    lane = workflow[workflow.index("real-model integration"):]
-    assert EFFECT_TEST in lane, (
-        "the socket-level offline test skips without cached CLIP; the weekly "
-        "real-model lane downloads CLIP and must run it by name")
-    assert lane.index("test_build_search_real_clip_end_to_end") \
-        < lane.index(EFFECT_TEST), "it must run after CLIP has been downloaded"
+    steps = _real_model_lane()
+    runs = "\n".join(steps)
+    for test in (EFFECT_TEST, AESTHETIC_EFFECT_TEST):
+        assert test in runs, (
+            f"the real-model lane does not run {test}; it skips everywhere "
+            "else for want of the weights, so this lane is the only place it "
+            "means anything")
+    fetch = next((i for i, s in enumerate(steps) if "from_pretrained(" in s), None)
+    run = next(i for i, s in enumerate(steps) if EFFECT_TEST in s)
+    assert fetch is not None and fetch < run, "the weights must be fetched first"
+    assert "facebook/dinov2-base" in steps[fetch]
+    assert "from pixcull.scoring.aesthetic import _metrics" in steps[fetch] \
+        and "_metrics()" in steps[fetch], (
+        "the lane does not fetch the aesthetic metrics' weights through the "
+        "product's loader; their offline test would fail there for want of "
+        "weights, not for a regression")
 
 
-def test_loading_a_cached_model_opens_no_socket(monkeypatch):
-    """Asserted against the socket layer, not against the call order.
+#: Every Hugging Face model the analysis loads, by the repo and classes the
+#: product passes to model_assets.from_pretrained. v3.94.1 — this test
+#: loaded CLIP only; DINOv2 goes through the same wrapper, so a transformers
+#: change that touched AutoModel's load path would have passed it.
+CACHED_LOADS = {
+    "CLIP": (CLIP, ("CLIPProcessor", "CLIPModel")),
+    "DINOv2": ("facebook/dinov2-base", ("AutoImageProcessor", "AutoModel")),
+}
 
-    Loopback is blocked too: a local proxy is how many laptops reach the
-    hub, and a probe that let 127.0.0.1 through measured an online run
-    and reported it as offline.
-    """
-    if not is_cached(CLIP):
-        absent("CLIP is not in the local hub cache on this machine")
-    transformers = pytest.importorskip("transformers")
-    from pixcull.model_assets import from_pretrained
 
-    opened = []
+def _refuse_the_network(monkeypatch) -> list:
+    """Every IPv4/IPv6 connect raises and is recorded. Loopback is blocked
+    too: a local proxy is how many laptops reach the hub, and a probe that
+    let 127.0.0.1 through measured an online run and reported it as
+    offline."""
+    opened: list = []
     real_connect = socket.socket.connect
 
     def _refuse(self, addr, *a, **k):
@@ -200,8 +232,57 @@ def test_loading_a_cached_model_opens_no_socket(monkeypatch):
     # The loader must set this itself — a cached `.bin` checkpoint starts a
     # background conversion request to the hub otherwise.
     monkeypatch.delenv("DISABLE_SAFETENSORS_CONVERSION", raising=False)
+    return opened
 
-    proc = from_pretrained(transformers.CLIPProcessor, CLIP)
-    model = from_pretrained(transformers.CLIPModel, CLIP)
-    assert proc is not None and model is not None
-    assert opened == [], f"a cached model reached for the network: {opened}"
+
+def test_the_loads_held_here_are_the_ones_the_product_makes():
+    """The repo ids above are what the detectors pass; a renamed model
+    would leave this test loading something nothing uses."""
+    pkg = Path(__file__).resolve().parent.parent / "pixcull"
+    sources = "\n".join(p.read_text(encoding="utf-8") for p in pkg.rglob("*.py"))
+    for name, (repo, classes) in CACHED_LOADS.items():
+        assert f'"{repo}"' in sources, f"{name}: no detector loads {repo} any more"
+
+
+@pytest.mark.parametrize("name", sorted(CACHED_LOADS))
+def test_loading_a_cached_model_opens_no_socket(monkeypatch, name):
+    """Asserted against the socket layer, not against the call order."""
+    repo, classes = CACHED_LOADS[name]
+    if not is_cached(repo):
+        absent(f"{name} is not in the local hub cache on this machine")
+    transformers = pytest.importorskip("transformers")
+    from pixcull.model_assets import from_pretrained
+
+    opened = _refuse_the_network(monkeypatch)
+    for cls in classes:
+        assert from_pretrained(getattr(transformers, cls), repo) is not None
+    assert opened == [], f"a cached {name} reached for the network: {opened}"
+
+
+def test_loading_the_cached_aesthetic_metrics_opens_no_socket(monkeypatch):
+    """v3.94.1. The aesthetic axis loads its weights outside transformers:
+    openai-clip's downloader for the CLIP backbones of laion_aes and
+    clipiqa, and pyiqa's load_file_from_url for their heads. Both look on
+    disk first; this holds that, through the product's own loader, so an
+    update to either cannot start asking the network for a file it has.
+
+    Whether the weights are here is decided by trying with the network
+    refused: a laptop without them skips, and the real-model lane, which
+    downloads them first and sets PIXCULL_REQUIRE_MODELS, fails instead —
+    that lane is where this test means something."""
+    pytest.importorskip("pyiqa")
+    from pixcull.scoring import aesthetic
+
+    aesthetic._metrics.cache_clear()
+    opened = _refuse_the_network(monkeypatch)
+    try:
+        metrics, _device = aesthetic._metrics()
+    except Exception as exc:  # noqa: BLE001 — classified just below
+        if opened:
+            absent("pyiqa's aesthetic weights are not cached on this machine "
+                   f"({type(exc).__name__} after reaching for {opened[0]})")
+        raise
+    finally:
+        aesthetic._metrics.cache_clear()
+    assert set(metrics) == {"laion_aes", "clipiqa"}
+    assert opened == [], f"a cached aesthetic metric reached for the network: {opened}"

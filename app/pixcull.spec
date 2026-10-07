@@ -116,7 +116,6 @@ for pkg in (
     "mlx_lm",
     "mlx_vlm",
     "rumps",
-    "imagededup",
 ):
     try:
         datas += copy_metadata(pkg)
@@ -136,7 +135,6 @@ collect_packages = [
     "mlx",
     "mlx_lm",
     "mlx_vlm",
-    "imagededup",
     "pixcull",
     "pandas",
     "sklearn",

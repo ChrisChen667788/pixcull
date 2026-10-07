@@ -43,7 +43,7 @@ sacremoses>=0.1,<0.2
 rembg>=2.0.57
 onnxruntime>=1.17
 pyiqa>=0.1.11
-imagededup>=0.3.2
+scipy>=1.13
 
 # PixCull itself
 # (uncomment after publishing to PyPI; for now, the Studio

@@ -99,6 +99,27 @@ jobs:
           python -c "import pixcull.tether; print('tether: ok')"
           python -c "import pixcull.sync; print('sync: ok')"
 
+  no-compiler:
+    # v3.94.1 — 3.94.0 said it supported Python 3.13, and on Windows without
+    # a compiler it could not be installed there: a dependency nothing used
+    # (imagededup) shipped no 3.13 wheel and needed a C++ build. Every
+    # runner has a compiler, so no lane could see it. This resolves the
+    # whole tree for each advertised platform and Python, binaries only,
+    # from metadata — nothing is installed and no Windows runner is needed.
+    name: installs without a compiler (every advertised platform)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build the wheel
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build --wheel --outdir dist
+      - name: Resolve every platform and Python, binaries only
+        run: python scripts/check_installs_without_compiler.py dist/pixcull-*.whl
+
   browser:
     # v3.42 — playwright has never been installed on a runner, so every
     # test in these three files has been reporting green by skipping.
@@ -425,8 +446,13 @@ jobs:
                             (AutoModel, "facebook/dinov2-base")):
               from_pretrained(cls, repo)
               print("fetched", cls.__name__, repo, flush=True)
-          for repo in (CLIP_REPO, VLM_REPO):
+          for repo in (CLIP_REPO, VLM_REPO, "facebook/dinov2-base"):
               assert is_cached(repo), f"{repo} is not in the hub cache"
+          # v3.94.1 — the aesthetic axis's weights, for its offline test.
+          # They load outside transformers (openai-clip and pyiqa's own
+          # downloader), through the product's loader as everything above.
+          from pixcull.scoring.aesthetic import _metrics
+          print("fetched pyiqa", sorted(_metrics()[0]), flush=True)
           PY
       - name: Install ffmpeg (the journey cuts a clip)
         run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
@@ -447,4 +473,5 @@ jobs:
           # v3.89 — with CLIP now on disk, loading it must open no socket.
           # Skips in the hermetic run for want of the weights; this is the
           # lane the skip ledger points at.
-          pytest -q tests/test_runs_without_network.py::test_loading_a_cached_model_opens_no_socket
+          pytest -q tests/test_runs_without_network.py::test_loading_a_cached_model_opens_no_socket \
+                    tests/test_runs_without_network.py::test_loading_the_cached_aesthetic_metrics_opens_no_socket

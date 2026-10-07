@@ -813,6 +813,20 @@ applause must name `audio-tagger` in the same paragraph.
 `audio_moment_boost` is still uncalled — wiring it changes reel ranking and
 needs a measurement first.
 
+**A declared dependency has to install everywhere we advertise, without a
+compiler** (v3.94.1).  `imagededup` was declared, imported by nothing, and
+shipped no Python 3.13 wheel — so 3.94.0 could not be installed on Windows
+3.13 without MSVC, and no CI runner could see it because they all have
+compilers.  `tests/test_declared_dependencies.py` fails a dependency nothing
+imports and an import nothing declares; the `no-compiler` CI job runs
+`scripts/check_installs_without_compiler.py`, which resolves every advertised
+platform × Python with binaries only (PEP 658 metadata from pypi.org — the
+Tsinghua mirror has none, so there it downloads every torch wheel) and
+builds sdist-only deps to prove they are pure.  **pip does not expand a PEP
+600 manylinux tag** — pass the whole tag set, or it reads manylinux2014
+wheels as missing.  Intel Macs cannot install PixCull at all (torch has no
+x86_64 macOS wheel after 2.2.2); the badge no longer says they can.
+
 **The wheel carries the package and nothing else** (v3.93).  The
 delivery-audit page ran `scripts/cli_audit.py` by a path beside
 `serve_app.py`; right when the server lived in `scripts/`, 500 on every

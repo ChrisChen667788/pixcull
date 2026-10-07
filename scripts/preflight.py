@@ -97,6 +97,10 @@ GATES: list[tuple[str, str]] = [
      "the per-vertical priors match what the README lists"),
     ("tests/test_audio_claim_matches_wiring.py",
      "the public pages claim audio events only while something runs them"),
+    ("tests/test_declared_dependencies.py",
+     "every declared dependency is imported, and every import is declared"),
+    ("tests/test_installs_without_compiler.py",
+     "the no-compiler install check runs in CI and covers what the README claims"),
 ]
 
 

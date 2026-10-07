@@ -37,7 +37,7 @@
   <a href="https://github.com/ChrisChen667788/pixcull/actions/workflows/tests.yml"><img alt="tests" src="https://img.shields.io/github/actions/workflow/status/ChrisChen667788/pixcull/tests.yml?branch=main&label=tests&style=flat-square" /></a>
   <a href="./LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square" /></a>
   <img alt="Python" src="https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-3776AB.svg?style=flat-square&logo=python&logoColor=white" />
-  <img alt="Platform" src="https://img.shields.io/badge/macOS-Apple%20Silicon%20%26%20Intel-000.svg?style=flat-square&logo=apple" />
+  <img alt="Platform" src="https://img.shields.io/badge/macOS-Apple%20Silicon-000.svg?style=flat-square&logo=apple" />
   <img alt="Cloud judge" src="https://img.shields.io/badge/MiniMax%20M3-cloud%20judge%20(local%20mode%20available)-dcb87e.svg?style=flat-square" />
   <a href="https://github.com/ChrisChen667788/pixcull/stargazers"><img alt="stars" src="https://img.shields.io/github/stars/ChrisChen667788/pixcull?style=flat-square" /></a>
   <a href="https://github.com/ChrisChen667788/pixcull/releases/latest"><img alt="latest release" src="https://img.shields.io/github/v/release/ChrisChen667788/pixcull?style=flat-square&color=dcb87e" /></a>
@@ -80,6 +80,28 @@ https://github.com/user-attachments/assets/69eddc6b-24d3-406a-ace5-2ed3a5b44e67
 ---
 
 ## What's new
+
+**v3.94.1** — On Windows, Python 3.13 could not install 3.94.0 without a C++
+compiler. A dependency nothing in the package used, `imagededup` (declared
+for duplicate detection, which has been CLIP and DINOv2 for a long time),
+ships wheels up to Python 3.12 only and has a mandatory C++ extension, so on
+3.13 every install compiled it, and so did every install on Linux ARM. Every
+CI runner has a compiler, so no lane saw it. Resolved for Windows and Python
+3.13 with binaries only, 3.94.0 stops at "No matching distribution found for
+imagededup". It is gone, and `scipy`, which the package imports and only
+imagededup's dependency tree had been guaranteeing, is now declared.
+
+Two checks hold it. A test fails a dependency nothing imports, and an import
+nothing declares. A new CI job resolves the whole dependency tree for Windows,
+Apple Silicon and Linux on Python 3.11, 3.12 and 3.13 with binaries only, and
+builds any dependency that ships only source to prove it is pure Python.
+Holding the README to that list found its platform badge claiming Intel Macs,
+for which torch has published nothing since 2.2; it says Apple Silicon now.
+
+Also in this release: a Linux machine with no desktop needs `libgl1` and
+`libglib2.0-0` for OpenCV, and the README says so; and the test that loads
+cached models with every connection refused covers DINOv2 and the aesthetic
+axis's two pyiqa models, not only CLIP.
 
 **v3.94** — Python 3.13 installs. `requires-python` stopped at 3.12 because
 the review server parsed uploads with `cgi.FieldStorage`, and 3.13 removed the
@@ -187,19 +209,6 @@ The two CI lanes that hold torch still are pinned to exactly that floor, so
 the oldest version promised is one that is run, and a test asks transformers
 whether it will use the torch it finds — which is where this shows next time,
 instead of in someone's terminal.
-
-**v3.91.1** — The weekly lane that tests against the real models had been
-running nothing. Its step was named "downloads CLIP + BLIP" and downloaded
-nothing: every test in it waits for the weights to be cached already, a fresh
-runner has none, so each one skipped and the lane finished green on five
-skips. The scheduled runs of 14 and 28 September both read that way, and
-three rows of the skip ledger named this lane as where those tests are
-covered.
-
-It fetches the weights first now, through the product's own loader, and in
-that lane a missing model fails instead of skipping. Found by reading the log
-of a green run — the one that was meant to show v3.89's offline test ran
-somewhere.
 
 Earlier releases are in [`CHANGELOG.md`](CHANGELOG.md).
 
@@ -925,6 +934,10 @@ python scripts/serve_demo.py
 # → open http://127.0.0.1:8770
 ```
 
+On a Linux machine with no desktop (a server, a container), OpenCV also needs
+two system libraries, or the first run stops on `libGL.so.1`:
+`sudo apt-get install libgl1 libglib2.0-0`. The Docker image already has them.
+
 Drop a folder of JPG / RAW / HEIC into the upload page; first run
 warms the models (~30 s on Apple Silicon), subsequent batches score
 at roughly 1 s / photo on M2 Pro.
@@ -1505,6 +1518,9 @@ pip install -e ".[dev]"
 python scripts/serve_demo.py
 # → 浏览器开 http://127.0.0.1:8770
 ```
+
+在没有桌面环境的 Linux(服务器、容器)上,OpenCV 还需要两个系统库,否则第一次运行
+就会报找不到 `libGL.so.1`:`sudo apt-get install libgl1 libglib2.0-0`。Docker 镜像里已经装好了。
 
 把一个 JPG / RAW / HEIC 的文件夹拖到上传页;首次约 30 秒预热模型
 (Apple Silicon),之后每张 ~1 秒 (M2 Pro 实测)。

@@ -1,6 +1,6 @@
 [project]
 name = "pixcull"
-version = "3.94.0"
+version = "3.94.1"
 description = "AI photo culling for professional photographers — MiniMax M3 judges the frame while reading the on-device measurements, 6-axis rubric, XMP/IPTC export, Lightroom & Capture One ready."
 # v2.23 — dedicated PyPI readme: the repo README leans on relative-path
 # screenshots and GitHub-only markup that render broken on pypi.org.
@@ -103,8 +103,19 @@ dependencies = [
     # The import is lazy and a missing pyiqa now costs that one axis
     # rather than the run — see pixcull/scoring/aesthetic.py.
     "pyiqa>=0.1.11",
-    # duplicate detection
-    "imagededup>=0.3.2",
+    # v3.94.1 — imagededup is gone. It was declared for "duplicate
+    # detection", and nothing in the package has imported it for a long
+    # time: near-duplicates are CLIP and DINOv2. It cost every install a
+    # C++ build where no wheel exists — Python 3.13 on any platform, and
+    # Linux on ARM — so on Windows without a compiler `pip install
+    # pixcull` failed on 3.13 outright. tests/test_declared_dependencies.py
+    # now fails a dependency nothing imports.
+    #
+    # scipy is the one thing the package imported that only imagededup's
+    # tree had been guaranteeing (detectors/canon.py, scipy.ndimage); it
+    # still arrives through scikit-learn, but undeclared is how v3.49
+    # began. 1.13 is the first scipy built against numpy 2.
+    "scipy>=1.13",
     # v3.49 — scikit-learn and joblib were never declared. They arrived
     # transitively through imagededup, entirely unpinned, and the eight
     # rescorer artifacts this package ships are version-sensitive

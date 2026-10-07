@@ -157,6 +157,8 @@ which is the thing that was actually false.
 
 One line each, exactly as the release was titled at the time.
 
+**v3.91.1** — the weekly lane that tests the real models had run no test
+
 **v3.91** — on Windows the folder picker could not leave the C: drive
 
 **v3.90** — a run that had died was reported as still running

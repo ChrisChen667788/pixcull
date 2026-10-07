@@ -116,8 +116,8 @@ RELEASE_VERSION=13.0.0 ./scripts/release.sh
 - [ ] **DeepSeek API 转售** 不允许 — 我们从用户的 token 路过转发到
       DeepSeek 是合规的(用户自带 key),但如果要做托管 API 服务
       需要联系 DeepSeek 商务获 OEM 授权
-- [ ] **GPL 兼容性**:目前依赖里 `imagededup` 是 Apache 2.0,可商用 ✓
-      `pyiqa` MIT ✓ `mlx-vlm` MIT ✓ `rembg` MIT ✓ 全部干净
+- [ ] **GPL 兼容性**:`pyiqa` MIT ✓ `mlx-vlm` MIT ✓ `rembg` MIT ✓ 全部干净
+      (`imagededup` 在 v3.94.1 移除了 —— 包里没有代码用它)
 
 ## 关键文件位置
 
