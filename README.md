@@ -58,6 +58,16 @@
   It runs on your machine. The RAW files do not have to go anywhere.
 </p>
 
+> **Upgrade to 3.94.1: earlier releases lose a scoring axis on a new install.**
+> Before 3.94.1 the aesthetic axis failed to load wherever setuptools was 82 or
+> newer (setuptools 82, February 2026, removed a module one of PixCull's
+> dependencies imports), and runs scored five of the six axes with only a
+> warning in the log. torch has required a recent setuptools since 2.13 (July
+> 2026), so every new installation since then was affected, every install from
+> PyPI included. `pip install -U pixcull`, then re-run the shoots that matter:
+> a `scores.csv` whose `laion_aes` column is empty or missing was scored without
+> the aesthetic axis.
+
 <!-- The film: docs/video/pixcull-30s.mp4, uploaded to GitHub as an
      attachment, because that URL on a line of its own is the only way
      GitHub plays a video inline (an mp4 committed to the repo is "too big
@@ -98,14 +108,15 @@ builds any dependency that ships only source to prove it is pure Python.
 Holding the README to that list found its platform badge claiming Intel Macs,
 for which torch has published nothing since 2.2; it says Apple Silicon now.
 
-The aesthetic axis had been missing from every fresh install since February.
-pyiqa builds both of its models on openai-clip, whose first lines import
-`pkg_resources`; setuptools 82 removed that module on 8 February, and torch
-requires setuptools, so a fresh install brings in the newest one. So `import
+The aesthetic axis had been missing from fresh installs. pyiqa builds both of
+its models on openai-clip, whose first lines import `pkg_resources`;
+setuptools 82 removed that module on 8 February, and since torch 2.13 (8 July)
+requires a recent setuptools, every fresh install has brought in 82 or newer,
+every install from PyPI among them, whichever earlier release. So `import
 clip` failed, the scorer caught the error, and runs went on with five axes and
-a warning telling you to install pyiqa, which was installed. Every fresh
-install since then is affected, whichever release; an environment whose
-setuptools is older than 82 is not. PixCull now
+a warning telling you to install pyiqa, which was installed. An environment in
+which `python -c "import pkg_resources"` fails was affected; one with
+setuptools older than 82 was not. PixCull now
 supplies the one name openai-clip takes from `pkg_resources` while it imports,
 then removes it, and the warning names the import that failed. The new offline
 test for that axis caught it: in CI it failed on `import clip` before it
@@ -1172,6 +1183,14 @@ from scratch.
   <i>专业摄影师的 AI 选片工具。<br/>
   6 维评分,XMP / IPTC / 相册一键导出,Lightroom &amp; Capture One 直通,MiniMax M3 云端判图(可切纯本地)。</i>
 </p>
+
+> **请升级到 3.94.1:更早的版本装进新环境会少一个评分轴。**
+> 3.94.1 之前,只要环境里的 setuptools 是 82 或更新(setuptools 82 于 2026 年 2 月发布,
+> 删掉了 PixCull 一个依赖要导入的模块),美学评分轴就加载不了,运行只按六个轴里的五个
+> 打分,日志里只有一行警告。torch 从 2.13(2026 年 7 月)起要求较新的 setuptools,
+> 所以那之后的每一次新安装都受影响,从 PyPI 安装的全部在内。
+> `pip install -U pixcull` 之后,重要的拍摄请重新跑一遍:`scores.csv` 里 `laion_aes`
+> 一列为空或者不存在,就说明那次是缺了美学轴打的分。
 
 <p align="center">
   <sub>▶ <a href="https://cdn.jsdelivr.net/gh/ChrisChen667788/pixcull@main/docs/video/pixcull-30s.mp4">30 秒介绍片</a>(有配乐,画面文字为英文)。用

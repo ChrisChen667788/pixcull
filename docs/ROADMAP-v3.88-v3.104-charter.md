@@ -465,12 +465,14 @@ found for imagededup"; every CI runner has a compiler, so nothing saw it.
   DINOv2 and the aesthetic axis's pyiqa models; the real-model lane
   fetches their weights through the product's loaders.
 
-**Fixup: the aesthetic axis was missing from every fresh install since
-February.** The new offline test for the aesthetic metrics failed in both
+**Fixup: the aesthetic axis was missing from fresh installs.** The new offline test for the aesthetic metrics failed in both
 hermetic lanes — not for want of weights, but on `import clip` before it
-reached for any: openai-clip 1.0.1 begins `from pkg_resources import
-packaging`, setuptools 82 (2026-02-08) removed pkg_resources, and torch
-requires setuptools (2.14: >=77.0.3), so CI and every fresh install got 84.
+reached for any: openai-clip 1.0.1 does `from pkg_resources import
+packaging` (line 6), setuptools 82 (2026-02-08) removed pkg_resources, and
+torch 2.13+ requires setuptools>=77.0.3, so CI and every fresh install since
+2026-07-08 got 84 — every PyPI release of PixCull postdates that. (torch 2.11
+and 2.12 pinned setuptools<82, so installs from 03-23 to 07-08 were spared;
+from 02-08 to 03-23 torch 2.10 pulled the newest setuptools on Python 3.12+.)
 `AestheticScorer` caught the ImportError (v3.60's "missing pyiqa costs one
 axis, not the run"), so the run went on with five axes and a warning telling
 the user to `pip install pyiqa`. Reproduced on the released 3.94.0 in a fresh

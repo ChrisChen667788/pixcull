@@ -54,6 +54,14 @@ tasks:
 > 它把一场拍摄分成保留 / 待定 / 剔除,每张打六个维度的分,并写清楚为什么 ——
 > 一句你能当着客户念出来的话。跑在你自己的机器上,RAW 不必去任何地方。
 
+> **请升级到 3.94.1:更早的版本装进新环境会少一个评分轴。**
+> 3.94.1 之前,只要环境里的 setuptools 是 82 或更新(setuptools 82 于 2026 年 2 月发布,
+> 删掉了 PixCull 一个依赖要导入的模块),美学评分轴就加载不了,运行只按六个轴里的五个
+> 打分,日志里只有一行警告。torch 从 2.13(2026 年 7 月)起要求较新的 setuptools,
+> 所以那之后的每一次新安装都受影响,从 PyPI 安装的全部在内。
+> `pip install -U pixcull` 之后,重要的拍摄请重新跑一遍:`scores.csv` 里 `laion_aes`
+> 一列为空或者不存在,就说明那次是缺了美学轴打的分。
+
 <!-- 介绍片。封面图和视频都托管在本仓库的 docs/video/ 下(同步脚本会把
      mp4 一并上传);每句画面文字的出处见 GitHub 上的 docs/video/README.md。 -->
 [![PixCull 30 秒介绍片的标题帧:落日下的雪峰套在琥珀色裁切框里,旁边是 Make the frame count.](docs/video/pixcull-30s-poster.jpg)](https://www.modelscope.cn/models/haozi667788/pixcull/resolve/master/docs/video/pixcull-30s.mp4)
@@ -78,12 +86,13 @@ tasks:
   现场构建,证明它是纯 Python。拿 README 的说法去对这张清单,发现平台徽章写着支持
   Intel Mac,而 torch 从 2.2 之后就不再给 Intel Mac 出包了;徽章现在只写 Apple Silicon。
 
-  美学评分轴从今年 2 月起,在每一次全新安装里都是缺失的。pyiqa 的两个模型都建在
-  openai-clip 上,而 openai-clip 开头就 import `pkg_resources`;setuptools 82 在 2 月
-  8 日删掉了这个模块,而 torch 依赖 setuptools,全新安装会装上最新的那个。于是
+  美学评分轴在全新安装里一直是缺失的。pyiqa 的两个模型都建在 openai-clip 上,而
+  openai-clip 开头几行就 import `pkg_resources`;setuptools 82 在 2 月 8 日删掉了这个
+  模块,而 torch 从 2.13(7 月 8 日)起要求较新的 setuptools,所以那之后的每一次全新
+  安装都会装上 82 或更新的版本,从 PyPI 装的任何一个旧版本都在其中。于是
   `import clip` 失败,评分器把错误吞掉,运行照常进行,只剩五个轴,外加一行让你去装
-  pyiqa 的警告 —— 而 pyiqa 明明已经装好了。从那以后的每一次全新安装都受影响,不管
-  装的是哪个版本;setuptools 低于 82 的环境不受影响。现在 PixCull 在导入时临时提供 openai-clip 从
+  pyiqa 的警告 —— 而 pyiqa 明明已经装好了。在环境里运行
+  `python -c "import pkg_resources"` 报错,就说明它受影响;setuptools 低于 82 的环境不受影响。现在 PixCull 在导入时临时提供 openai-clip 从
   `pkg_resources` 里拿的那一个名字,用完就撤掉;警告也会说出真正失败的是哪个导入。
   是这次给美学轴新加的断网测试抓到的:它在 CI 里还没去拿任何权重,就先在
   `import clip` 上失败了。

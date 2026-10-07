@@ -9,6 +9,16 @@ MiniMax M3 云端判图,本机实测指标作为证据一并送入;`--vlm-mode o
 
 ![PixCull results grid](https://raw.githubusercontent.com/ChrisChen667788/pixcull/main/docs/screenshots/01-results-grid.png)
 
+> **Upgrade to 3.94.1: earlier releases lose a scoring axis on a new install.**
+> Before 3.94.1 the aesthetic axis failed to load wherever setuptools was 82 or
+> newer (setuptools 82, February 2026, removed a module one of PixCull's
+> dependencies imports), and runs scored five of the six axes with only a
+> warning in the log. torch has required a recent setuptools since 2.13 (July
+> 2026), so every new installation since then was affected, every install from
+> PyPI included. `pip install -U pixcull`, then re-run the shoots that matter:
+> a `scores.csv` whose `laion_aes` column is empty or missing was scored without
+> the aesthetic axis.
+
 ## Install
 
 ```bash
