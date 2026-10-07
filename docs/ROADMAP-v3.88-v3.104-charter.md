@@ -450,6 +450,19 @@ on the release page — real face models inside, the static assets, the
 audit module. Its release notes open with the `[face]` users, for whom
 face detection had never worked from an install.
 
+3.94.0 followed on 2026-10-07, at the owner's request, carrying v3.93.2
+(PR #4) and v3.94 (Python 3.13). It waited for the torch floor: the
+lane pinned to it went red on transformers 5.19.0, and 3.94.0 ships
+torch >= 2.7 rather than a floor that cannot load a model. Before the
+tag, a three-reviewer pass with a refuting fourth read the commits since
+the v3.94 review and the release notes: the notes said uploads were
+unchanged, and the industry-sample upload is not (it refuses a request
+without a Content-Length, and takes at most 1,024 parts), and the public
+docs said "no GPU" where torch means "no accelerator". Both fixed before
+publishing. The wheel on PyPI has the same sha256 as the Release asset
+(b0ba508a…), was smoke-tested on a fresh Python 3.13 outside the
+checkout, and installs from pypi.org with both face models inside.
+
 ---
 
 ## What the correction set unblocked and nobody measured
