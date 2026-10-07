@@ -103,7 +103,10 @@ def resolve(wheel: str, platform: str, python: str, work: Path, pure: Path,
         r = subprocess.run(
             [*_uv(), "pip", "compile", str(req), "--python-platform", platform,
              "--python-version", python, "--no-build", "--index-url", INDEX,
-             "--find-links", str(pure), "--quiet", "--no-header", "-o", str(work / "out.txt")],
+             "--find-links", str(pure), "--quiet", "--no-header", "-o", str(work / "out.txt"),
+             # A cached index page can predate a release minutes old: checking
+             # the published 3.94.1 first reported "no version of pixcull==3.94.1".
+             "--refresh-package", "pixcull"],
             capture_output=True, text=True)
         if r.returncode == 0:
             return True, ""

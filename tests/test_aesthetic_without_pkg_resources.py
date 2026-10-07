@@ -67,8 +67,18 @@ def test_openai_clip_is_what_pyiqa_imports():
     reading pkg_resources, the shim has nothing to do."""
     spec = importlib.util.find_spec("clip")
     assert spec is not None, "openai-clip is not installed; pyiqa requires it"
-    source = open(spec.origin.replace("__init__.py", "clip.py"), encoding="utf-8").read()
-    assert "from pkg_resources import packaging" in source
+    import re
+    from pathlib import Path
+    taken = set()
+    for py in Path(spec.origin).parent.glob("*.py"):
+        for names in re.findall(r"^\s*from pkg_resources import (.+)$",
+                                py.read_text(encoding="utf-8"), re.M):
+            taken |= {n.strip() for n in names.split(",")}
+        assert not re.search(r"^\s*import pkg_resources", py.read_text(encoding="utf-8"), re.M), (
+            f"{py.name} imports pkg_resources whole; the shim supplies one name")
+    assert taken == {"packaging"}, (
+        f"openai-clip takes {sorted(taken)} from pkg_resources; the shim "
+        "supplies only `packaging`")
 
 
 def test_without_the_shim_clip_cannot_be_imported(setuptools_82):

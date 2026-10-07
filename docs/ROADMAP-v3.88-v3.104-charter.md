@@ -487,6 +487,20 @@ dependencies were pulled into the other platforms' resolutions. It resolves
 with `uv pip compile --python-platform` now, which evaluates markers for the
 target (and does all nine in about 15 s).
 
+Released the same day as **3.94.1**: tag, GitHub Release, PyPI. The wheel
+PyPI serves has the sha256 of the Release asset (841d0fc9…); the published
+version resolves without a compiler on all nine targets; installed from
+pypi.org into a fresh Python 3.13 venv with setuptools 84 it scores
+laion_aes 4.232 and clipiqa 0.437, where 3.94.0 scored nothing. The
+real-model lane, dispatched on the fixup, fetched both pyiqa models through
+`_metrics()` on a fresh runner and passed all three socket-level tests with
+weights required. The fixup's own review left two nits, taken afterwards:
+the premise test now requires `packaging` to be the only name clip takes
+from pkg_resources, and the CI job pins uv below 1.0 (a reworded hint would
+fail loudly, not pass). Checking the published version also showed uv's
+index cache can hide a release minutes old, so a spec is resolved with
+`--refresh-package` for the package under test.
+
 Reviewed before committing (three lenses and a refuting fourth): nothing
 in the dependency change or the docs; two latent holes in the new check,
 both of the kind this block keeps finding. With no Python classifiers it

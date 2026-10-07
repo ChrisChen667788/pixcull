@@ -115,7 +115,7 @@ jobs:
           python-version: "3.12"
       - name: Build the wheel
         run: |
-          python -m pip install --upgrade pip build uv
+          python -m pip install --upgrade pip build "uv>=0.12,<1"
           python -m build --wheel --outdir dist
       - name: Resolve every platform and Python, binaries only
         run: python scripts/check_installs_without_compiler.py dist/pixcull-*.whl
