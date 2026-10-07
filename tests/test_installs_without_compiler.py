@@ -60,21 +60,26 @@ def test_it_covers_every_advertised_python():
 
 
 def _tags() -> list[str]:
-    return [t for tags in _check().PLATFORMS.values() for t in tags]
+    return list(_check().PLATFORMS.values())
 
 
 def test_it_covers_the_platform_that_broke():
-    assert "win_amd64" in _tags()
+    assert "x86_64-pc-windows-msvc" in _tags()
 
 
-def test_linux_accepts_the_tags_most_linux_wheels_carry():
-    """pip does not expand a PEP 600 manylinux tag. Given manylinux_2_28
-    alone it rejected every manylinux2014 wheel, and the check went on to
-    compile a Rust sdist and would have called that a compiler dependency."""
-    linux = [t for t in _tags() if "linux" in t]
-    for tag in ("manylinux_2_28_x86_64", "manylinux_2_17_x86_64", "manylinux2014_x86_64"):
-        assert tag in linux, f"the Linux target does not accept {tag}"
-
+def test_it_resolves_for_the_target_not_for_the_runner():
+    """Its first CI run used `pip install --dry-run --platform`, which keeps
+    evaluating environment markers for the machine pip runs on: on the
+    Linux runner, torch's Linux-only CUDA dependencies were pulled into the
+    Windows and macOS resolutions and failed them on nvidia-nccl-cu12. (A
+    first local version also gave pip a single PEP 600 manylinux tag, which
+    pip does not expand, and blamed safetensors.) uv evaluates markers for
+    the target and expands manylinux compatibility itself."""
+    import inspect
+    src = inspect.getsource(_check().resolve)
+    code = "\n".join(l.split("#", 1)[0] for l in src.splitlines())
+    assert '"--python-platform"' in code and '"compile"' in code, code
+    assert '"--platform"' not in code
 
 def test_the_platform_badge_claims_only_what_is_checked():
     """3.94.0's badge said "macOS — Apple Silicon & Intel". torch has had
@@ -87,9 +92,10 @@ def test_the_platform_badge_claims_only_what_is_checked():
     platforms = _tags()
     # Exact platform tags: "intel" once matched manylinux_2_28_x86_64 here
     # and passed a badge that claimed Intel Macs.
-    claims = {"apple silicon": r"macosx_\d+_\d+_arm64",
-              "intel": r"macosx_\d+_\d+_x86_64",
-              "windows": r"win_amd64", "linux": r"manylinux_\d+_\d+_x86_64"}
+    claims = {"apple silicon": r"aarch64-apple-darwin",
+              "intel": r"x86_64-apple-darwin",
+              "windows": r"x86_64-pc-windows-msvc",
+              "linux": r"x86_64-(manylinux_\d+_\d+|unknown-linux-gnu)"}
     for word, tag in claims.items():
         if word in text:
             assert any(re.fullmatch(tag, p) for p in platforms), (
@@ -97,20 +103,24 @@ def test_the_platform_badge_claims_only_what_is_checked():
                 f"not cover it ({sorted(_check().PLATFORMS)})")
 
 
-def test_it_reads_pips_failure_as_pip_writes_it():
-    """Both forms, copied from pip 26 resolving 3.94.0 and the patched wheel
-    for Windows / Python 3.13 with binaries only."""
-    pattern = _check().NO_DIST
-    direct = ("ERROR: Could not find a version that satisfies the requirement "
-              "imagededup>=0.3.2 (from pixcull) (from versions: 0.0.1, 0.1.0)\n"
-              "ERROR: No matching distribution found for imagededup>=0.3.2\n")
-    via_conflict = ("The conflict is caused by:\n"
-                    "    pyiqa 0.1.16 depends on openai-clip\n\n"
-                    "Additionally, some packages in these conflicts have no matching "
-                    "distributions available for your environment:\n"
-                    "    openai-clip\n")
-    got = [(m.group(1) or m.group(2)) for m in map(pattern.search, (direct, via_conflict))]
-    assert got[0].startswith("imagededup") and got[1] == "openai-clip", got
+def test_it_reads_the_failure_as_uv_writes_it():
+    """Copied from uv 0.12 resolving 3.94.0 (imagededup, no cp313 wheel) and
+    the 3.94.1 tree before the pure build (openai-clip, sdist only), both
+    for Windows / Python 3.13 with --no-build."""
+    pattern = _check().NO_WHEEL
+    no_cp313 = (
+        "hint: You require CPython 3.13 (`cp313`), but we only found wheels for "
+        "`imagededup` (v0.3.2) with the following Python ABI tags: `cp38`, `cp39`, `cp310`\n\n"
+        "hint: Wheels are required for `imagededup` because building from source is "
+        "disabled for all packages (i.e., with `--no-build`)\n")
+    sdist_only = (
+        "  cause: Because all versions of openai-clip have no usable wheels and "
+        "pyiqa>=0.1.15 depends on openai-clip, we can conclude that pyiqa>=0.1.15 "
+        "cannot be used.\n\n"
+        "hint: Wheels are required for `openai-clip` because building from source is "
+        "disabled for all packages (i.e., with `--no-build`)\n")
+    got = [pattern.search(t).group(1) for t in (no_cp313, sdist_only)]
+    assert got == ["imagededup", "openai-clip"], got
 
 
 def test_only_a_universal_wheel_counts_as_pure():

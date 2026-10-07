@@ -1,4 +1,8 @@
+import importlib.util
 import logging
+import sys
+import types
+from contextlib import contextmanager
 from functools import cache
 
 logger = logging.getLogger(__name__)
@@ -16,6 +20,39 @@ from pixcull.detectors.base import DetectionResult, Detector
 # docs/ROADMAP-v2.2-charter.md and the import-hygiene fix notes.
 
 
+@contextmanager
+def _pkg_resources_for_openai_clip():
+    """v3.94.1 — the aesthetic axis was missing from every fresh install.
+
+    pyiqa builds both metrics on `clip` (openai-clip 1.0.1), whose module
+    begins `from pkg_resources import packaging` to compare torch versions.
+    setuptools 82 (2026-02-08) removed pkg_resources, and torch requires
+    setuptools, so a fresh install gets the newest; from then on `import clip`
+    raised, the ImportError below caught it, and the run went on with five
+    axes and one warning line that told the user to install pyiqa — which
+    was installed.
+
+    `packaging` is the only name clip takes from it. Provide that, for the
+    duration of the import only, and take it away again: a library that
+    probes for pkg_resources afterwards must still find it absent, not a
+    module with one attribute.
+    """
+    if "clip" in sys.modules or importlib.util.find_spec("pkg_resources") is not None:
+        yield
+        return
+    import packaging
+    import packaging.version  # clip calls packaging.version.parse
+
+    shim = types.ModuleType("pkg_resources")
+    shim.packaging = packaging
+    sys.modules["pkg_resources"] = shim
+    try:
+        yield
+    finally:
+        if sys.modules.get("pkg_resources") is shim:
+            del sys.modules["pkg_resources"]
+
+
 @cache
 def _metrics():
     import pyiqa
@@ -26,10 +63,11 @@ def _metrics():
         else "mps" if torch.backends.mps.is_available()
         else "cpu"
     )
-    return {
-        "laion_aes": pyiqa.create_metric("laion_aes", device=device),
-        "clipiqa":   pyiqa.create_metric("clipiqa", device=device),
-    }, device
+    with _pkg_resources_for_openai_clip():
+        return {
+            "laion_aes": pyiqa.create_metric("laion_aes", device=device),
+            "clipiqa":   pyiqa.create_metric("clipiqa", device=device),
+        }, device
 
 
 @cache
@@ -65,11 +103,18 @@ class AestheticScorer(Detector):
         try:
             metrics, device = _metrics()
         except ImportError as exc:
+            # v3.94.1 — say which import failed. This used to tell everyone
+            # to install pyiqa, including the people whose pyiqa was fine
+            # and whose `clip` could not find pkg_resources.
+            if getattr(exc, "name", None) == "pyiqa":
+                hint = ("Install it with `pip install pyiqa` (it ships with "
+                        "pixcull; a --no-deps or constrained install can miss it).")
+            else:
+                hint = (f"pyiqa is installed; the import that failed is "
+                        f"{getattr(exc, 'name', None) or 'one of its dependencies'}.")
             logger.warning(
-                "aesthetic axis unavailable: %s. Install it with "
-                "`pip install pyiqa` (it ships with pixcull; a --no-deps "
-                "or constrained install can miss it). The other five axes "
-                "are unaffected.", exc)
+                "aesthetic axis unavailable: %s. %s The other five axes "
+                "are unaffected.", exc, hint)
             out = DetectionResult()
             out.flags.append("aesthetic_unavailable")
             return out

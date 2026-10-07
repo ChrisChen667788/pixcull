@@ -116,6 +116,10 @@ dependencies = [
     # still arrives through scikit-learn, but undeclared is how v3.49
     # began. 1.13 is the first scipy built against numpy 2.
     "scipy>=1.13",
+    # v3.94.1 — imported by scoring/aesthetic.py to stand in for the one
+    # name openai-clip takes from pkg_resources (gone in setuptools 82).
+    # transformers already requires it; declared because we import it.
+    "packaging>=21",
     # v3.49 — scikit-learn and joblib were never declared. They arrived
     # transitively through imagededup, entirely unpinned, and the eight
     # rescorer artifacts this package ships are version-sensitive

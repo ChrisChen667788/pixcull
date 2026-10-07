@@ -5,23 +5,31 @@ advertise, on a machine with no compiler?
 3.94.0 could not, on Windows with Python 3.13: `imagededup` has wheels for
 3.9-3.12 only and a mandatory C++ extension, and nothing in CI noticed
 because every runner has a compiler. This resolves the whole dependency
-tree for each (platform, Python) the way pip would on that machine, from
-metadata only, without installing anything:
+tree for each (platform, Python) the way an installer on that machine
+would, from metadata only, installing nothing:
 
-    pip install --dry-run --only-binary=:all: --platform P --python-version V
+    uv pip compile --python-platform P --python-version V --no-build
 
-Binary-only is stricter than a user's pip: a dependency that ships only
-an sdist still installs without a compiler if it is pure Python
+uv rather than `pip install --dry-run --platform`: pip's --platform changes
+which wheel tags it accepts but evaluates environment markers for the
+machine pip runs on. On the Linux CI runner that pulled torch's
+`platform_system == "Linux"` CUDA dependencies into the Windows and macOS
+resolutions and failed them on nvidia-nccl-cu12; on a Mac it would have
+left them out of the Linux one. uv evaluates markers for the target.
+
+Binary-only is stricter than a user's installer: a dependency that ships
+only an sdist still installs without a compiler if it is pure Python
 (`openai-clip`, under pyiqa, is one). So when resolution stops on a
-package with no wheel, its sdist is built here; a `none-any` wheel means
-pure Python, and it is offered to the next resolution. Anything else is
-a package that needs a compiler on that platform, and the check fails.
+package with no wheel, its sdist is built here; a universal `py3-none-any`
+wheel means pure Python, and it is offered to the next resolution. Anything
+else needs a compiler on that platform, and the check fails.
 
 Usage:  python scripts/check_installs_without_compiler.py dist/pixcull-*.whl
 """
 from __future__ import annotations
 
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -31,24 +39,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 INDEX = "https://pypi.org/simple"   # serves PEP 658 metadata; resolving is cheap
 
-#: Each platform as the wheel tags a machine of that kind accepts. pip
-#: expands a macOS tag to older macOS versions by itself; it does not
-#: expand a PEP 600 manylinux tag, so given only manylinux_2_28 it rejects
-#: every wheel tagged manylinux_2_17 / manylinux2014 — which is most of
-#: them — and this check read that as "needs a compiler" (it was building
-#: a Rust sdist when it was caught). Linux here is a glibc 2.28 machine.
+#: Each platform as uv names it. Linux is a glibc 2.28 machine; uv accepts
+#: every older manylinux tag for it, which pip's --platform did not.
 #: tests/test_installs_without_compiler.py holds this list to the claims.
 PLATFORMS = {
-    "Windows x64": ("win_amd64",),
-    "macOS, Apple Silicon": ("macosx_14_0_arm64",),
-    "Linux x86_64": tuple(f"manylinux_2_{minor}_x86_64" for minor in range(28, 4, -1))
-                    + ("manylinux2014_x86_64", "manylinux2010_x86_64",
-                       "manylinux1_x86_64"),
+    "Windows x64": "x86_64-pc-windows-msvc",
+    "macOS, Apple Silicon": "aarch64-apple-darwin",
+    "Linux x86_64": "x86_64-manylinux_2_28",
 }
 
-NO_DIST = re.compile(
-    r"No matching distribution found for ([A-Za-z0-9_.\-]+)"
-    r"|no matching distributions available for your environment:\s*\n\s+([A-Za-z0-9_.\-]+)")
+NO_WHEEL = re.compile(r"Wheels are required for `([^`]+)` because building from source is disabled")
 
 
 def advertised_pythons() -> list[str]:
@@ -88,23 +88,29 @@ def _build_pure(name: str, work: Path, pure: Path) -> str | None:
     return None
 
 
-def resolve(wheel: str, tags: tuple[str, ...], python: str, work: Path, pure: Path,
+def _uv() -> list[str]:
+    exe = shutil.which("uv")
+    return [exe] if exe else [sys.executable, "-m", "uv"]
+
+
+def resolve(wheel: str, platform: str, python: str, work: Path, pure: Path,
             built: dict[str, str]) -> tuple[bool, str]:
-    abi = "cp" + python.replace(".", "")
-    platform_args = [a for tag in tags for a in ("--platform", tag)]
+    req = work / "requirement.in"
+    path = Path(wheel)
+    req.write_text(f"pixcull @ {path.resolve().as_uri()}\n" if path.is_file()
+                   else f"{wheel}\n", encoding="utf-8")
     for _ in range(6):
-        target = Path(tempfile.mkdtemp(dir=work))
-        r = _pip("install", "--dry-run", "--ignore-installed", "--only-binary=:all:",
-                 *platform_args, "--python-version", python,
-                 "--implementation", "cp", "--abi", abi, "--target", str(target),
-                 "--find-links", str(pure), "-i", INDEX, "--timeout", "60", wheel)
+        r = subprocess.run(
+            [*_uv(), "pip", "compile", str(req), "--python-platform", platform,
+             "--python-version", python, "--no-build", "--index-url", INDEX,
+             "--find-links", str(pure), "--quiet", "--no-header", "-o", str(work / "out.txt")],
+            capture_output=True, text=True)
         if r.returncode == 0:
             return True, ""
-        m = NO_DIST.search(r.stdout + r.stderr)
+        m = NO_WHEEL.search(r.stdout + r.stderr)
         if not m:
-            return False, (r.stderr.strip().splitlines() or ["pip failed"])[-1]
-        name = (m.group(1) or m.group(2)).split("[")[0]
-        name = re.split(r"[<>=!~]", name)[0]
+            return False, ((r.stderr or r.stdout).strip().splitlines() or ["uv failed"])[-1]
+        name = m.group(1)
         if name in built:
             return False, f"{name}: no wheel, and the pure build did not satisfy it"
         tag = _build_pure(name, work, pure)
@@ -132,9 +138,9 @@ def main(argv: list[str]) -> int:
         work = Path(tmp)
         pure = work / "pure"
         pure.mkdir()
-        for label, tags in PLATFORMS.items():
+        for label, platform in PLATFORMS.items():
             for python in pythons:
-                ok, why = resolve(wheel, tags, python, work, pure, built)
+                ok, why = resolve(wheel, platform, python, work, pure, built)
                 print(f"{'OK  ' if ok else 'FAIL'}  {label:22} Python {python}"
                       + ("" if ok else f"  — {why}"), flush=True)
                 failures += not ok

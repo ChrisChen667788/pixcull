@@ -826,6 +826,18 @@ builds sdist-only deps to prove they are pure.  **pip does not expand a PEP
 600 manylinux tag** — pass the whole tag set, or it reads manylinux2014
 wheels as missing.  Intel Macs cannot install PixCull at all (torch has no
 x86_64 macOS wheel after 2.2.2); the badge no longer says they can.
+**The resolution is done with uv, not pip:** `pip --platform` evaluates
+environment markers for the host, so on a Linux runner it dragged torch's
+Linux-only CUDA deps into the Windows/macOS resolutions.
+
+**The aesthetic axis needs `pkg_resources` for openai-clip** (v3.94.1).
+setuptools 82 (2026-02-08) removed it; torch requires setuptools, so every
+fresh install since then lost the aesthetic axis to a caught ImportError and
+a warning that blamed pyiqa.  `aesthetic._pkg_resources_for_openai_clip`
+supplies the one name for the import only.  **This laptop's venv has
+setuptools 81 and cannot see it** — the fresh `smoke313` venv (setuptools 84)
+can.  A caught ImportError that drops an axis is a silent regression; check
+`aesthetic metrics produced` on a fresh install, not on this venv.
 
 **The wheel carries the package and nothing else** (v3.93).  The
 delivery-audit page ran `scripts/cli_audit.py` by a path beside

@@ -98,6 +98,19 @@ builds any dependency that ships only source to prove it is pure Python.
 Holding the README to that list found its platform badge claiming Intel Macs,
 for which torch has published nothing since 2.2; it says Apple Silicon now.
 
+The aesthetic axis had been missing from every fresh install since February.
+pyiqa builds both of its models on openai-clip, whose first lines import
+`pkg_resources`; setuptools 82 removed that module on 8 February, and torch
+requires setuptools, so a fresh install brings in the newest one. So `import
+clip` failed, the scorer caught the error, and runs went on with five axes and
+a warning telling you to install pyiqa, which was installed. Every fresh
+install since then is affected, whichever release; an environment whose
+setuptools is older than 82 is not. PixCull now
+supplies the one name openai-clip takes from `pkg_resources` while it imports,
+then removes it, and the warning names the import that failed. The new offline
+test for that axis caught it: in CI it failed on `import clip` before it
+reached for any weights.
+
 Also in this release: a Linux machine with no desktop needs `libgl1` and
 `libglib2.0-0` for OpenCV, and the README says so; and the test that loads
 cached models with every connection refused covers DINOv2 and the aesthetic

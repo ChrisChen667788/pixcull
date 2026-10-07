@@ -465,6 +465,28 @@ found for imagededup"; every CI runner has a compiler, so nothing saw it.
   DINOv2 and the aesthetic axis's pyiqa models; the real-model lane
   fetches their weights through the product's loaders.
 
+**Fixup: the aesthetic axis was missing from every fresh install since
+February.** The new offline test for the aesthetic metrics failed in both
+hermetic lanes — not for want of weights, but on `import clip` before it
+reached for any: openai-clip 1.0.1 begins `from pkg_resources import
+packaging`, setuptools 82 (2026-02-08) removed pkg_resources, and torch
+requires setuptools (2.14: >=77.0.3), so CI and every fresh install got 84.
+`AestheticScorer` caught the ImportError (v3.60's "missing pyiqa costs one
+axis, not the run"), so the run went on with five axes and a warning telling
+the user to `pip install pyiqa`. Reproduced on the released 3.94.0 in a fresh
+Python 3.13 venv: no aesthetic metrics. This laptop never saw it — its venv
+has setuptools 81. `_pkg_resources_for_openai_clip` supplies `packaging`
+under that name for the import only and removes it after; tested against the
+real openai-clip with pkg_resources blocked, control included. After the fix
+the same venv scores laion_aes 4.232, clipiqa 0.437.
+
+The same CI run failed the new install check on Windows and macOS with
+nvidia-nccl-cu12 / cuda-bindings: `pip --platform` changes the accepted tags
+but evaluates environment markers for the runner, so torch's Linux-only CUDA
+dependencies were pulled into the other platforms' resolutions. It resolves
+with `uv pip compile --python-platform` now, which evaluates markers for the
+target (and does all nine in about 15 s).
+
 Reviewed before committing (three lenses and a refuting fourth): nothing
 in the dependency change or the docs; two latent holes in the new check,
 both of the kind this block keeps finding. With no Python classifiers it

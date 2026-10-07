@@ -78,6 +78,16 @@ tasks:
   现场构建,证明它是纯 Python。拿 README 的说法去对这张清单,发现平台徽章写着支持
   Intel Mac,而 torch 从 2.2 之后就不再给 Intel Mac 出包了;徽章现在只写 Apple Silicon。
 
+  美学评分轴从今年 2 月起,在每一次全新安装里都是缺失的。pyiqa 的两个模型都建在
+  openai-clip 上,而 openai-clip 开头就 import `pkg_resources`;setuptools 82 在 2 月
+  8 日删掉了这个模块,而 torch 依赖 setuptools,全新安装会装上最新的那个。于是
+  `import clip` 失败,评分器把错误吞掉,运行照常进行,只剩五个轴,外加一行让你去装
+  pyiqa 的警告 —— 而 pyiqa 明明已经装好了。从那以后的每一次全新安装都受影响,不管
+  装的是哪个版本;setuptools 低于 82 的环境不受影响。现在 PixCull 在导入时临时提供 openai-clip 从
+  `pkg_resources` 里拿的那一个名字,用完就撤掉;警告也会说出真正失败的是哪个导入。
+  是这次给美学轴新加的断网测试抓到的:它在 CI 里还没去拿任何权重,就先在
+  `import clip` 上失败了。
+
   这一版还有:没有桌面环境的 Linux 需要给 OpenCV 装 `libgl1` 和 `libglib2.0-0`,
   README 里写上了;在网络全部被拒的情况下加载已缓存模型的那条测试,现在除了 CLIP,
   也覆盖 DINOv2 和美学评分轴用的两个 pyiqa 模型。

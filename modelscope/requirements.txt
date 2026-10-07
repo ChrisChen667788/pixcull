@@ -44,6 +44,7 @@ rembg>=2.0.57
 onnxruntime>=1.17
 pyiqa>=0.1.11
 scipy>=1.13
+packaging>=21
 
 # PixCull itself
 # (uncomment after publishing to PyPI; for now, the Studio
