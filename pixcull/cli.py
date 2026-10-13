@@ -516,6 +516,12 @@ def proof_sheet(
             console.print(f"    {m}")
         if len(res["missing"]) > 5:
             console.print(f"    … and {len(res['missing']) - 5} more")
+    if res.get("unrenderable"):
+        # v3.94.2 — the watermark is on every frame the client sees.
+        from pixcull.utils.fonts import INSTALL_HINT
+        console.print(f"[yellow]⚠ the watermark draws "
+                      f"{' '.join(res['unrenderable'])} as boxes[/yellow] — "
+                      f"no installed font has them. {INSTALL_HINT}")
 
 
 @app.command(name="view-folder")
@@ -1961,6 +1967,15 @@ def m3_eval(
                               sorted({m["stratum"]: (m["pop"], m["sampled"])
                                       for m in _st.values()}.items())) +
                           "[/dim]")
+    # v3.94.2 — loaded before the review passes, which write into it. It
+    # used to be loaded after them, so any --review raised
+    # UnboundLocalError before a single verdict was read.
+    lab = load_labels(labels)
+    if not lab:
+        console.print(f"[red]{labels} has no rows with a manual_label.[/red] "
+                      "An unlabelled row cannot make anyone right or wrong.")
+        raise typer.Exit(code=2)
+
     # v2.53.2 — repeatable. As a single Option this silently kept only the
     # LAST --review: passing both review passes threw the first one's
     # judgements away and reported a smaller, quieter number as if it were
@@ -1999,12 +2014,6 @@ def m3_eval(
     if not key:
         console.print("[red]No MiniMax key.[/red] "
                       "See `pixcull m3 doctor` for how to supply one.")
-        raise typer.Exit(code=2)
-
-    lab = load_labels(labels)
-    if not lab:
-        console.print(f"[red]{labels} has no rows with a manual_label.[/red] "
-                      "An unlabelled row cannot make anyone right or wrong.")
         raise typer.Exit(code=2)
 
     src = scores or labels

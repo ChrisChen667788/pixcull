@@ -8,6 +8,7 @@ fails the gate instead of silently forking the two.
 from __future__ import annotations
 
 import importlib.util
+import re
 import sys
 from pathlib import Path
 
@@ -74,3 +75,36 @@ def test_buckets_toggle_drag_rule_is_bound_in_both_copies():
         window = text[i:i + 900]
         assert "cursor: grab" in window, f"{label}: grab not inside the rule"
         assert "touch-action: none" in window, f"{label}: touch-action not inside the rule"
+
+
+def _effective(css: str, selector: str, prop: str) -> str | None:
+    """The value the cascade gives `prop` on exactly `selector`: the last
+    declaration in the last top-level rule for it, in document order.
+    Equal specificity, so position decides; compound selectors such as
+    `.buckets-toggle.bk-toggle-dragging` are deliberately not matched."""
+    css = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+    value = None
+    for body in re.findall(rf"(?m)^\s*{re.escape(selector)}\s*\{{([^}}]*)\}}", css):
+        for m in re.finditer(rf"(?<![\w-]){re.escape(prop)}\s*:\s*([^;]+);", body):
+            value = m.group(1).strip()
+    return value
+
+
+def test_the_buckets_toggle_shows_the_hand_that_says_it_moves():
+    """v3.94.2 — the test above finds the FIRST `.buckets-toggle {` and
+    sees `cursor: grab` there. A later rule for the same selector (the
+    button's own styling, from modules/chips.css) said `cursor: pointer`
+    and won: a browser showed the pointing hand, never the grab. Measured
+    with getComputedStyle in Chrome before the fix: "pointer"."""
+    artifact = (ROOT / "pixcull" / "report" / "templates"
+                / "results.html").read_text("utf-8")
+    assert _effective(artifact, ".buckets-toggle", "cursor") == "grab"
+    assert _effective(artifact, ".buckets-toggle", "touch-action") == "none"
+
+
+def test_the_cascade_reader_takes_the_last_rule():
+    css = (".x {\n  cursor: grab;\n}\n.x.y {\n  cursor: grabbing;\n}\n"
+           "/* .x { cursor: help; } */\n.x {\n  color: red; cursor: pointer;\n}\n")
+    assert _effective(css, ".x", "cursor") == "pointer"
+    assert _effective(css, ".x", "color") == "red"
+    assert _effective(css, ".x", "touch-action") is None

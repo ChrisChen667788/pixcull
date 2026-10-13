@@ -72,6 +72,29 @@ tasks:
 **[github.com/ChrisChen667788/pixcull](https://github.com/ChrisChen667788/pixcull)**
 
 ## 最近更新
+- **v3.94.2**:把 [@gxfc9867](https://github.com/gxfc9867) 报过的每一个问题(#2、#3 和
+  PR #4)都在 `main` 上实际跑了一遍。PR #4 里有三处没修干净。
+
+  PR #4 让水印先去找中文字体,但字体只要「能打开」就被采用,于是有三种情况仍然
+  画成方框:Mac 上的韩文(那里排第一的中文字体没有韩文字母)、Docker 镜像里的任何
+  中日韩文字(镜像里没有中文字体),以及联系表 PDF(它的字体清单里从来没有中文
+  字体)。现在一个字体只有在能画出文字里每一个字时才会被采用,判断方法是把每个
+  字形和这个字体的「缺字方框」逐一比对。装着的字体都画不出来时,`pixcull
+  proof-sheet` 会列出哪些字会变成方框、该装哪个包。Docker 镜像现在带了这个字体
+  (`fonts-wqy-microhei`,5 MB,中日韩都有),CI 也装上了,真实字体的测试在 Linux
+  上也会跑。
+
+  可拖动的「交付分组」按钮从来没显示过抓手光标:同一个按钮后面还有一条规则写着
+  `pointer`,在层叠里赢了;原来的测试只读它找到的第一条规则,所以看不见。浅色
+  主题下,无障碍开关「开启」时的文字(PR #4 为了保留强调色特意没动)对比度只有
+  4.0:1,11px 的小字不够;现在是 9.1:1,在真实浏览器里量过。
+
+  联系表还有一个更严重的问题:从 v2.56.2 起,每一格都写着「(image unavailable)」。
+  `ImageOps` 只在另一个函数里导入,这里的 NameError 落进了单元格的 `except`,而
+  这条路径唯一的测试只检查了「图片缺失」时的处理。现在有一条测试让 ruff 检查整个
+  包里未定义的名字,它又找到一处:`pixcull m3 eval --review` 在读到任何一条
+  判断之前就崩溃了。
+
 - **v3.94.1**:在 Windows 上,没有 C++ 编译器就装不上 Python 3.13 版的 3.94.0。
   有一个包里根本没有代码用到的依赖 `imagededup`(当初声明是为了「去重」,而去重
   早就改用 CLIP 和 DINOv2 了),它只发布到 Python 3.12 的预编译包,还带一个必须编译
@@ -166,17 +189,6 @@ tasks:
   属于安装包的一部分,并有测试在「只有安装包」的条件下运行它。搬进来之后,它第一次
   落到一道原本扫不到它的门禁面前,当场判红:给客户的 PDF 里,封面的入选张数和
   「最佳五张」取的是机器的判定,摄影师删掉的帧可能排在最前面。现在它们跟随改判。
-
-- **v3.92**:这个包承诺支持的最老的 torch,是它自己用不了的。`pyproject.toml`
-  写的是 `torch>=2.2`,而 transformers 自己决定它肯用哪个 torch:5.18 要 2.5,
-  低于这个版本它并不会导入失败,而是把 PyTorch 禁用,之后每个模型都报「找不到
-  PyTorch」—— 明明装着。全新安装会把两者都解析到最新版,永远碰不到;只升级了
-  其中一个的老环境会碰到,按 Dockerfile 构建的镜像也会,因为它钉的是 2.4.1。
-
-  现在下限是 2.5,包、镜像、ModelScope Studio 三处一致。CI 里固定 torch 版本的
-  两条 lane 就钉在这个下限上,所以「承诺的最老版本」是真被跑过的版本;另有一条
-  测试直接问 transformers 肯不肯用当前装的 torch —— 下次它再抬高要求,会先红在
-  这里,而不是红在某个用户的终端里。
 
 更早的版本记录在 [`CHANGELOG.md`](https://github.com/ChrisChen667788/pixcull/blob/main/modelscope/CHANGELOG.md)。
 
@@ -535,7 +547,9 @@ python scripts/serve_demo.py
 ```
 
 在没有桌面环境的 Linux(服务器、容器)上,OpenCV 还需要两个系统库,否则第一次运行
-就会报找不到 `libGL.so.1`:`sudo apt-get install libgl1 libglib2.0-0`。Docker 镜像里已经装好了。
+就会报找不到 `libGL.so.1`:`sudo apt-get install libgl1 libglib2.0-0`。水印或联系表标题用中文、
+日文、韩文的话,还要装一个有这些字的字体:`sudo apt-get install fonts-wqy-microhei`。
+这三个包 Docker 镜像里都已经装好了。
 
 把一个 JPG / RAW / HEIC 的文件夹拖到上传页;
 首次约 30 秒预热模型 (Apple Silicon),之后每张 ~1 秒 (M2 Pro 实测)。

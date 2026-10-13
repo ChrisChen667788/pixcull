@@ -194,8 +194,13 @@ def write_proof_sheet(rows: list[dict], dest: Path, *, resolve,
     }
     (dest / "picks_manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=1), encoding="utf-8")
+    # v3.94.2 — the watermark is the photographer's name on every frame
+    # the client sees. Characters no installed font can draw are boxes on
+    # all of them, so the caller hears about it before the sheet goes out.
+    from pixcull.utils.fonts import unrenderable
     return {"selected": len(items), "written": written,
             "missing": missing, "dest": str(dest),
+            "unrenderable": unrenderable(title or "PROOF") if written else "",
             "manifest": str(dest / "picks_manifest.json"),
             "digest": manifest["digest"]}
 
@@ -296,51 +301,26 @@ def parse_picks(text: str, *, n: int) -> tuple[list[int], list[str]]:
     return out, problems
 
 
-def _watermark_font(px: int):
-    """A font big enough to read at the size the image is displayed.
+def _watermark_font(px: int, text: str = ""):
+    """A font big enough to read at the size the image is displayed, and
+    able to draw ``text``.
 
     PIL's default bitmap font is about 11px. Tiled across a 1024px proof
     it produced marks a client could see and not read, which is not a
-    watermark — it is texture. Sized to the image, and looked up on the
-    system **first**: the bundled default carries no CJK glyphs, so a
-    Chinese/Japanese/Korean title rendered through it came out as tofu
-    boxes. The bundled default is kept as the last resort so a machine
+    watermark — it is texture. Sized to the image, and chosen from the
+    system fonts by what they can draw: the bundled default has no CJK
+    glyphs, so a Chinese/Japanese/Korean title drawn with it came out as
+    tofu boxes. The bundled default stays the last resort, so a machine
     with no fonts still exports.
 
-    (Bug: this function used to return ``ImageFont.load_default()`` on
-    its first line, which made the whole system-font loop below dead code
-    — every CJK watermark was tofu. The Windows path was missing too.)
+    (Bug history: this function once returned ``ImageFont.load_default()``
+    on its first line, which made the system-font loop dead code. PR #4
+    fixed that and put the Chinese fonts first, but a font was still taken
+    because it *opened*: Korean on a Mac, and anything CJK in the Docker
+    image, stayed boxes. v3.94.2 chooses by coverage; see utils/fonts.py.)
     """
-    from PIL import ImageFont
-    # CJK-capable fonts for EVERY platform first; Latin-only fallbacks after.
-    # Pillow opens a font by *name* even when the given path does not exist:
-    # on a Mac, "C:/Windows/Fonts/arial.ttf" loads happily as Arial — which
-    # has no CJK glyphs.  A Latin-only font anywhere above this list's CJK
-    # entries therefore stops the loop before any real Chinese font is ever
-    # tried, and the watermark renders tofu (found on PR #4's review).
-    for path in ("C:/Windows/Fonts/msyh.ttc",                     # 微软雅黑
-                 "C:/Windows/Fonts/msyhbd.ttc",                   # 微软雅黑 Bold
-                 "C:/Windows/Fonts/simhei.ttf",                   # 黑体
-                 "C:/Windows/Fonts/simsun.ttc",                   # 宋体
-                 "/System/Library/Fonts/PingFang.ttc",            # 苹方
-                 "/System/Library/Fonts/Hiragino Sans GB.ttc",
-                 "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-                 "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
-                 "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
-                 # Latin-only last resorts, never ahead of a CJK font:
-                 "C:/Windows/Fonts/arial.ttf",
-                 "/System/Library/Fonts/Supplemental/Arial.ttf",
-                 "/System/Library/Fonts/Helvetica.ttc",
-                 "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"):
-        try:
-            return ImageFont.truetype(path, px)
-        except Exception:  # noqa: BLE001
-            continue
-    try:
-        return ImageFont.load_default(size=px)
-    except TypeError:
-        pass
-    return ImageFont.load_default()
+    from pixcull.utils.fonts import font_for
+    return font_for(text, px)
 
 
 def _burn_index(im, ImageDraw, n: int) -> None:
@@ -359,8 +339,11 @@ def _burn_index(im, ImageDraw, n: int) -> None:
     """
     d = ImageDraw.Draw(im, "RGBA")
     size = max(28, int(im.height * 0.09))
-    font = _watermark_font(size)
     label = str(n)
+    # Chosen for the digits, not this number: a font that draws 0-9 draws
+    # every label, and one choice serves the whole sheet instead of one
+    # per photo (500 distinct labels measured 3x slower than before).
+    font = _watermark_font(size, "0123456789")
     try:
         box = d.textbbox((0, 0), label, font=font)
         tw, th = box[2] - box[0], box[3] - box[1]
@@ -388,7 +371,7 @@ def _stamp(im, ImageDraw, text: str) -> None:
     """
     d = ImageDraw.Draw(im, "RGBA")
     size = max(18, im.width // 22)
-    font = _watermark_font(size)
+    font = _watermark_font(size, text)
     try:
         box = d.textbbox((0, 0), text, font=font)
         tw, th = box[2] - box[0], box[3] - box[1]

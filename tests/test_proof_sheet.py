@@ -179,8 +179,13 @@ def test_every_cjk_font_is_tried_before_any_latin_only_font(monkeypatch):
     tofu.  The rule this pins is positional and permanent: no Latin-only
     font may ever be attempted before a CJK-capable one."""
     from pixcull.export import proof_sheet
+    from pixcull.utils import fonts
     import PIL.ImageFont as ImageFont
 
+    # v3.94.2 — the choice is cached per text; a cached one would mean no
+    # font is tried at all, and the refused-everything one must not leak.
+    fonts._choose.cache_clear()
+    monkeypatch.setattr(fonts, "_choose", fonts._choose.__wrapped__)
     tried: list[str] = []
     real_truetype = ImageFont.truetype
 
@@ -196,13 +201,10 @@ def test_every_cjk_font_is_tried_before_any_latin_only_font(monkeypatch):
         raise OSError(path)
 
     monkeypatch.setattr(ImageFont, "truetype", _never)
-    assert proof_sheet._watermark_font(20) is not None, (
+    assert proof_sheet._watermark_font(20, "张三婚礼") is not None, (
         "with every system font refused, the bundled default must still load")
 
-    latin_only = {"C:/Windows/Fonts/arial.ttf",
-                  "/System/Library/Fonts/Supplemental/Arial.ttf",
-                  "/System/Library/Fonts/Helvetica.ttc",
-                  "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"}
+    latin_only = set(fonts.LATIN_FONTS)
     assert tried, "the lookup never reached ImageFont.truetype"
     cjk_tried_first = False
     for path in tried:

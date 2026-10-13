@@ -473,7 +473,11 @@
       color: #fff; border: 1px solid var(--border-hi);
       border-radius: 999px;
       padding: 6px 14px; font-size: 11.5px; font-weight: 500;
-      cursor: pointer;
+      /* v3.94.2 — grab, not pointer: the toggle is draggable (PR #4), and
+         this rule comes later in the page than the drag rule in
+         results.css, so a `pointer` here won the cascade and the hand
+         that says "you can move this" was never shown. */
+      cursor: grab;
       box-shadow: 0 8px 24px rgba(0,0,0,0.5);
       transition: background 120ms;
     }

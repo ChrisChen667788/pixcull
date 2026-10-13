@@ -30,7 +30,9 @@ extra: `pip install 'pixcull[face]'`. Without it a run says so and the
 other checks are unchanged.
 
 On a Linux machine with no desktop (a server, a container), OpenCV also
-needs two system libraries: `sudo apt-get install libgl1 libglib2.0-0`.
+needs two system libraries: `sudo apt-get install libgl1 libglib2.0-0`. A
+Chinese, Japanese or Korean watermark or contact-sheet title also needs a font
+with those characters: `sudo apt-get install fonts-wqy-microhei`.
 
 Python 3.11–3.13. First run downloads the optional scoring models to
 `~/.pixcull/models/`; the measurements they make run on-device and are

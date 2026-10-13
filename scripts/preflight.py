@@ -101,6 +101,8 @@ GATES: list[tuple[str, str]] = [
      "every declared dependency is imported, and every import is declared"),
     ("tests/test_installs_without_compiler.py",
      "the no-compiler install check runs in CI and covers what the README claims"),
+    ("tests/test_no_undefined_names.py",
+     "no name is used that does not exist (an except can hide a NameError for months)"),
 ]
 
 

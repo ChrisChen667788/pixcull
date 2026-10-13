@@ -91,6 +91,34 @@ https://github.com/user-attachments/assets/69eddc6b-24d3-406a-ace5-2ed3a5b44e67
 
 ## What's new
 
+**v3.94.2** — Every report [@gxfc9867](https://github.com/gxfc9867) made
+(#2, #3 and PR #4) was re-checked against `main` by running it. Three fixes
+from PR #4 had not fully landed.
+
+The watermark that PR #4 taught to find a Chinese font still drew boxes for
+Korean on a Mac, whose first CJK font has no Hangul; for any Chinese, Japanese
+or Korean in the Docker image, which had no CJK font; and on the contact-sheet
+PDF, whose font list never had one. Each font was taken because it opened. A
+font is now used only if it draws every character of the text, measured by
+comparing each glyph with the font's missing-glyph box. When no installed font
+can, `pixcull proof-sheet` names the characters that will be boxes and the
+package that fixes it. The Docker image carries that font now
+(`fonts-wqy-microhei`, 5 MB, Chinese, Japanese and Korean), and CI installs
+it so the real-font tests run on Linux too.
+
+The draggable buckets toggle never showed the grab cursor: a later rule for
+the same button said `pointer` and won the cascade, which the test, reading
+the first rule it found, could not see. And in the light theme the
+accessibility toggle's "on" state, left alone by PR #4 to keep its accent,
+measured 4.0:1 for an 11px label; it is 9.1:1 now, checked in a real browser.
+
+The contact sheet had a worse fault of its own. Since v2.56.2 every cell said
+"(image unavailable)": `ImageOps` was imported inside another function, the
+NameError landed in the cell's `except`, and the only test of that path
+checked that a *missing* image was handled. A test now asks ruff for
+undefined names across the package. It found one more: `pixcull m3 eval
+--review` crashed before reading a single verdict.
+
 **v3.94.1** — On Windows, Python 3.13 could not install 3.94.0 without a C++
 compiler. A dependency nothing in the package used, `imagededup` (declared
 for duplicate detection, which has been CLIP and DINOv2 for a long time),
@@ -218,21 +246,6 @@ it in front of a gate it had been outside of, which failed at once: the
 client PDF's cover count and its five best frames came from the machine's
 verdicts, so a frame the photographer had culled could lead it. They follow
 the corrections now.
-
-**v3.92** — The oldest torch this package promised was one it could not
-use. `pyproject.toml` said `torch>=2.2` beside a transformers that decides
-for itself which torch it will accept: 5.18 wants 2.5, and below that it does
-not fail to import. It disables PyTorch, and every model then reports
-"PyTorch was not found" — with torch installed. A fresh install resolves the
-newest of both and never sees it. An environment that upgrades one and not
-the other does, and so would an image built from the Dockerfile, which pinned
-2.4.1.
-
-The floor is 2.5 now, in the package, the image and the ModelScope Studio.
-The two CI lanes that hold torch still are pinned to exactly that floor, so
-the oldest version promised is one that is run, and a test asks transformers
-whether it will use the torch it finds — which is where this shows next time,
-instead of in someone's terminal.
 
 Earlier releases are in [`CHANGELOG.md`](CHANGELOG.md).
 
@@ -960,7 +973,9 @@ python scripts/serve_demo.py
 
 On a Linux machine with no desktop (a server, a container), OpenCV also needs
 two system libraries, or the first run stops on `libGL.so.1`:
-`sudo apt-get install libgl1 libglib2.0-0`. The Docker image already has them.
+`sudo apt-get install libgl1 libglib2.0-0`. A Chinese, Japanese or Korean
+watermark or contact-sheet title also needs a font that has those characters:
+`sudo apt-get install fonts-wqy-microhei`. The Docker image already has all three.
 
 Drop a folder of JPG / RAW / HEIC into the upload page; first run
 warms the models (~30 s on Apple Silicon), subsequent batches score
@@ -1552,7 +1567,9 @@ python scripts/serve_demo.py
 ```
 
 在没有桌面环境的 Linux(服务器、容器)上,OpenCV 还需要两个系统库,否则第一次运行
-就会报找不到 `libGL.so.1`:`sudo apt-get install libgl1 libglib2.0-0`。Docker 镜像里已经装好了。
+就会报找不到 `libGL.so.1`:`sudo apt-get install libgl1 libglib2.0-0`。水印或联系表标题用中文、
+日文、韩文的话,还要装一个有这些字的字体:`sudo apt-get install fonts-wqy-microhei`。
+这三个包 Docker 镜像里都已经装好了。
 
 把一个 JPG / RAW / HEIC 的文件夹拖到上传页;首次约 30 秒预热模型
 (Apple Silicon),之后每张 ~1 秒 (M2 Pro 实测)。

@@ -26,24 +26,16 @@ _MUTED = (106, 96, 82)     # graphite
 _BG = (250, 248, 245)      # warm paper
 _A4_150DPI = (1240, 1754)  # A4 portrait @ ~150 dpi — readable, modest file size
 
-# TrueType candidates (macOS / Linux); falls back to Pillow's bitmap font.
-_FONT_CANDIDATES = (
-    "/System/Library/Fonts/Supplemental/Arial.ttf",
-    "/System/Library/Fonts/Helvetica.ttc",
-    "/Library/Fonts/Arial.ttf",
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-    "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-)
+def _font(size: int, text: str = ""):
+    """A font that can draw ``text``.
 
-
-def _font(size: int):
-    from PIL import ImageFont, ImageOps
-    for path in _FONT_CANDIDATES:
-        try:
-            return ImageFont.truetype(path, size)
-        except (OSError, ValueError):
-            continue
-    return ImageFont.load_default()
+    v3.94.2 — this used to try five Latin-only fonts, so a Chinese title,
+    studio name or filename was drawn as boxes on every machine. The
+    choice is now made against the text; see :mod:`pixcull.utils.fonts`.
+    """
+    from pixcull.utils.fonts import font_for
+    # Latin first: a sheet with no CJK in it keeps the Arial it always had.
+    return font_for(text, size, latin_first=True)
 
 
 _BRASS = (220, 184, 126)   # star fill / brand accent
@@ -92,7 +84,11 @@ def _cover_page(page: tuple[int, int], cover: dict, margin: int):
         d.text((cx - tw / 2, y), text, font=font, fill=fill)
 
     title = str(cover.get("title") or "Selects")
-    _centered(title, H * 0.46, _font(54), _INK)
+    # One face for the whole cover, chosen against everything on it.
+    cover_text = " ".join(str(cover.get(k) or "") for k in
+                          ("title", "studio", "date", "count_line"))
+    cover_text += " Selects curated with PixCull"
+    _centered(title, H * 0.46, _font(54, cover_text), _INK)
     d.line([(cx - 140, H * 0.46 + 86), (cx + 140, H * 0.46 + 86)],
            fill=_BRASS, width=2)
     y = H * 0.46 + 120
@@ -100,9 +96,10 @@ def _cover_page(page: tuple[int, int], cover: dict, margin: int):
                             ("count_line", 20, _MUTED)):
         val = cover.get(key)
         if val:
-            _centered(str(val), y, _font(size), fill)
+            _centered(str(val), y, _font(size, cover_text), fill)
             y += size + 18
-    _centered("curated with PixCull", H - margin - 10, _font(14), _MUTED)
+    _centered("curated with PixCull", H - margin - 10,
+              _font(14, cover_text), _MUTED)
     return canvas
 
 
@@ -134,15 +131,22 @@ def render_contact_sheet(
     Unreadable / missing images are drawn as an outlined "missing" cell so
     one bad file never aborts the sheet.  Returns the page count.
     """
-    from PIL import Image, ImageDraw
+    # v3.94.2 — ImageOps used to be imported only inside _font(), so here
+    # the name did not exist: every exif_transpose raised NameError, the
+    # except below caught it, and every cell of every contact sheet since
+    # v2.56.2 said "(image unavailable)".
+    from PIL import Image, ImageDraw, ImageOps
 
     items = list(items)
     W, H = page
     title_h = 64
     cap_h = 30
-    title_font = _font(30)
-    cap_font = _font(16)
-    foot_font = _font(15)
+    # One face per page role, chosen against all the text it will draw.
+    page_text = " ".join([title, "(image unavailable)", "0123456789 /"]
+                         + [str(it[1]) for it in items if len(it) > 1])
+    title_font = _font(30, page_text)
+    cap_font = _font(16, page_text)
+    foot_font = _font(15, page_text)
 
     cell_w = (W - 2 * margin - (cols - 1) * gutter) // cols
     avail_h = H - 2 * margin - title_h

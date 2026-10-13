@@ -71,6 +71,13 @@
     html[data-theme="light"] .shortcuts-hint:hover {
       background: color-mix(in srgb, var(--bg-card) 96%, transparent);
     }
+    /* v3.94.2 — the toggle's "on" state kept its accent text on purpose
+       (above), and in the light palette that accent is #866939 on a pale
+       blue: 4.0:1, under the 4.5:1 an 11px label needs. The deeper accent
+       keeps the meaning and reads. Dark was 8.8:1 and is untouched. */
+    html[data-theme="light"] .a11y-toggle.on {
+      color: var(--accent-mid);
+    }
     /* Inner chrome that was drawn in white-alpha (invisible on light):
        the kbd caps of the shortcut pill and the onboarding tip, and the
        onboarding tip's header rule. */

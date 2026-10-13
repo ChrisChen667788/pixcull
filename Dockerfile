@@ -29,6 +29,10 @@ FROM python:3.12-slim
 #   libxext6 + libsm6     for some rawpy decode paths
 #   exiftool              soft-dep for IPTC embed (V29.1)
 #   git                   pip install -e in dev mode reaches it
+#   fonts-wqy-microhei    v3.94.2: the slim image has no CJK font, so a
+#                         Chinese/Japanese/Korean watermark or contact-sheet
+#                         title was drawn as boxes. 5 MB; covers all three
+#                         (fonts-noto-cjk does too, at 90 MB).
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libgl1 \
         libglib2.0-0 \
@@ -36,6 +40,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libsm6 \
         exiftool \
         git \
+        fonts-wqy-microhei \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

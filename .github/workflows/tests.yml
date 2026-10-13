@@ -287,8 +287,11 @@ jobs:
       # An install step only fixes the tests that come AFTER it. Both of
       # these have to stay above the run below; a guard in
       # tests/test_writers_do_not_overwrite.py holds them there.
-      - name: Install ffmpeg (video tests + the journey)
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+      - name: Install ffmpeg (video tests + the journey) and the Docker image's CJK font
+        # v3.94.2 — fonts-wqy-microhei is what the Docker image installs;
+        # without it tests/test_text_is_drawn_not_boxed.py's real-font
+        # cases would skip here and only ever run on a Mac.
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg fonts-wqy-microhei
 
       # v3.51 — mediapipe's system half. v3.50 installed the Python
       # package and the four face tests started running for the first

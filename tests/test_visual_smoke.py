@@ -191,3 +191,61 @@ def test_grid_and_lightbox_have_no_legacy_palette(base_url):
     assert img_pane[1] >= 0, f"image stage shoved above the viewport: {panes}"
     assert info_pane[0] >= img_pane[2] - 5, \
         f"info panel not in the right rail: {panes}"
+
+
+_TOGGLE_CONTRAST = r"""() => {
+  // Any CSS colour (oklch, color-mix, rgba) to sRGB through a canvas, then
+  // composite it over what is behind it, then WCAG 2.1's ratio.
+  const cv = document.createElement('canvas'); cv.width = cv.height = 1;
+  const ctx = cv.getContext('2d', {willReadFrequently: true});
+  const rgba = c => { ctx.clearRect(0, 0, 1, 1); ctx.fillStyle = '#000'; ctx.fillStyle = c;
+                      ctx.fillRect(0, 0, 1, 1); const d = ctx.getImageData(0, 0, 1, 1).data;
+                      return {r: d[0], g: d[1], b: d[2], a: d[3] / 255}; };
+  const over = (f, b) => ({r: f.r*f.a + b.r*(1-f.a), g: f.g*f.a + b.g*(1-f.a),
+                           b: f.b*f.a + b.b*(1-f.a), a: 1});
+  const lum = c => { const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92
+                                       : Math.pow((v + 0.055) / 1.055, 2.4); };
+                     return 0.2126*f(c.r) + 0.7152*f(c.g) + 0.0722*f(c.b); };
+  const el = document.getElementById('a11yToggleBtn');
+  const cs = getComputedStyle(el);
+  let page = rgba(getComputedStyle(document.body).backgroundColor);
+  if (page.a === 0) page = rgba(getComputedStyle(document.documentElement).backgroundColor);
+  const bg = over(rgba(cs.backgroundColor), page), fg = over(rgba(cs.color), bg);
+  const [hi, lo] = [lum(fg), lum(bg)].sort((p, q) => q - p);
+  return {on: el.classList.contains('on'), ratio: (hi + 0.05) / (lo + 0.05)};
+}"""
+
+
+@pytest.mark.parametrize("theme", ["light", "dark"])
+def test_the_accessibility_toggle_reads_when_it_is_on(base_url, theme):
+    """v3.94.2 — PR #4 made every floating overlay legible in the light
+    theme and left the a11y toggle's "on" state alone on purpose, to keep
+    its accent. In light that accent measured 4.0:1 on its pale-blue fill,
+    for an 11px label that needs 4.5:1. Measured through the real page,
+    the real click and the real cascade."""
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as pw:
+        try:
+            browser = pw.chromium.launch()
+        except Exception:                             # no bundled chromium:
+            try:                                      # the system Chrome will do
+                browser = pw.chromium.launch(channel="chrome")
+            except Exception as exc:
+                pytest.skip(f"chromium unavailable: {exc}")
+        ctx = browser.new_context(viewport={"width": 1280, "height": 800},
+                                  reduced_motion="reduce")
+        ctx.add_init_script(
+            f"try{{localStorage.setItem('pixcull_theme','{theme}');"
+            "localStorage.setItem('pixcull_onboarded_v1','1');"
+            "localStorage.removeItem('pixcull_a11y_pref');}catch(e){}")
+        pg = ctx.new_page()
+        pg.goto(f"{base_url}/results/{RUN}", wait_until="domcontentloaded", timeout=30000)
+        pg.wait_for_function("document.querySelectorAll('#grid .card').length>3",
+                             timeout=30000)
+        pg.click("#a11yToggleBtn")
+        pg.mouse.move(700, 400)                       # off the button: no :hover
+        pg.wait_for_timeout(400)                      # past the colour transition
+        got = pg.evaluate(_TOGGLE_CONTRAST)
+        browser.close()
+    assert got["on"], "clicking the toggle did not turn it on"
+    assert got["ratio"] >= 4.5, f"{theme}: {got['ratio']:.2f}:1 for an 11px label"

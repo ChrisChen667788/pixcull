@@ -511,6 +511,31 @@ which only one Python accepts. Both fixed, both with tests. Measured on the
 released 3.94.0 as a control: Windows, macOS and Linux all fail on Python
 3.13 at imagededup and pass on 3.11/3.12; the 3.94.1 tree passes all nine.
 
+**v3.94.2 — the contributor's reports, re-run instead of re-read.** Every
+problem gxfc9867 reported (#2 ×2, #3 ×4 including the setuptools one, PR #4's
+four commits and the review's findings on them) was reproduced against
+`main` by one agent per group and then attacked by a second. Held: the
+picker (simulated Windows; os.listdrives first, 30 s cache), offline loading
+and the 425, the review sheet (copy-list round trip, `12. 3-5`, 44 px
+targets, keyboard rating, `</script>` in a filename), the brace gate, and the
+delivery-audit route from an installed wheel. Not fully landed, all from
+PR #4: CJK watermarks (a font was taken because it opened — Korean on a
+Mac, everything in the slim Docker image, and the contact sheet's
+Latin-only list), the buckets toggle's grab cursor (overridden by a later
+`pointer` rule; the test read the first rule — the indexOf-anchor shape
+again), and the a11y toggle's light "on" state at 4.03:1. Measured in
+python:3.12-slim before and after: no CJK font → every character boxed;
+fonts-wqy-microhei (5 MB) covers zh/zh-Hant/ja/ko and punctuation, so the
+image ships it rather than fonts-noto-cjk (90 MB).
+
+Found on the way, and worse than anything reported: every contact-sheet cell
+had said "(image unavailable)" since v2.56.2 (`ImageOps` imported inside
+another function; NameError swallowed per cell). ruff's undefined-name rules
+over the package found that and `m3 eval --review`'s UnboundLocalError, and
+now run as a test and a preflight gate. Mutation-checked: each fix reverted
+turns its test red, and the real-font test was rewritten after the first
+draft passed with the choice broken (it read the chooser's own bookkeeping).
+
 ### The first release since 3.53.1 — done at v3.92, not after v3.94
 
 Planned for after v3.94; the owner asked for it on 2026-10-02 so that
