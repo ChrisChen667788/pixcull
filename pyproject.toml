@@ -1,6 +1,6 @@
 [project]
 name = "pixcull"
-version = "3.94.2"
+version = "3.94.3"
 description = "AI photo culling for professional photographers — MiniMax M3 judges the frame while reading the on-device measurements, 6-axis rubric, XMP/IPTC export, Lightroom & Capture One ready."
 # v2.23 — dedicated PyPI readme: the repo README leans on relative-path
 # screenshots and GitHub-only markup that render broken on pypi.org.
@@ -77,7 +77,11 @@ dependencies = [
     # deliberately once the real-model CI lane is green on the new major.
     "torch>=2.7,<3",
     "torchvision>=0.22,<1",
-    "transformers>=4.40,<6",
+    # v3.94.3 — 5.20.0 guards `torch.distributed.checkpoint.hf_storage`
+    # with torch>=2.7, but that module arrived in 2.8, so on torch 2.7.x
+    # (our floor) every model import fails. Fixed upstream in
+    # huggingface/transformers#49652; only that one release is excluded.
+    "transformers>=4.40,<6,!=5.20.0",
     "safetensors>=0.4",
     # subject segmentation (U^2-Net)
     "rembg>=2.0.57",

@@ -29,7 +29,7 @@ rawpy>=0.19
 # tests/test_dependency_pins_agree.py — do not edit one file alone.
 torch>=2.7,<3
 torchvision>=0.22,<1
-transformers>=4.40,<6
+transformers>=4.40,<6,!=5.20.0
 safetensors>=0.4
 
 # Bilingual VLM caption (Tab 2): BLIP captions the frame in English,

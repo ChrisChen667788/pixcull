@@ -72,6 +72,16 @@ tasks:
 **[github.com/ChrisChen667788/pixcull](https://github.com/ChrisChen667788/pixcull)**
 
 ## 最近更新
+- **v3.94.3**:transformers 5.20.0(10 月 15 日)在 torch 2.7 上导入不了任何模型,
+  而 2.7 正是这个包支持的最低 torch。它先判断 `torch>=2.7`,再去导入一个 torch 2.8
+  才有的模块,于是 `from transformers import CLIPModel` 直接失败,PixCull 通过
+  transformers 加载的模型全都用不了。全新安装不受影响(会装上最新的 torch);停在
+  torch 2.7.x、又升级了 transformers 的环境会中招。CI 里钉在 torch 下限的那条线在它
+  发布当天就红了,抓住它的是 5.19.0 那次加的测试。现在只排除这一个版本
+  (`transformers!=5.20.0`);上游修复在
+  [huggingface/transformers#49652](https://github.com/huggingface/transformers/pull/49652),
+  之后的版本照常可用。
+
 - **v3.94.2**:把 [@gxfc9867](https://github.com/gxfc9867) 报过的每一个问题(#2、#3 和
   PR #4)都在 `main` 上实际跑了一遍。PR #4 里有三处没修干净。
 
@@ -171,24 +181,6 @@ tasks:
   训练和示例数据需要源码仓库,安装版现在会在点击之前就说明,而不是点了之后失败。
   另有一道打包测试从代码拼出的路径推导「必须随包发布什么」,而不是靠一份需要有人
   记得补的清单。
-
-- **v3.93**:`pixcull video` 从来没有听过视频里的声音。读取音轨的那个函数是随第一
-  个视频版本写的,但没有任何地方调用它。Reel 文案、审片页的事件轨道、灯箱里的
-  时间轴都是按读取 `audio_events.json` 写的,而没有一次运行写出过这个文件。现在
-  它在打分和 Reel 检测之间运行,`--no-audio` 可以跳过。
-
-  按最顺手的方式接上,反而比不接更糟。笑声、掌声、音乐来自一个可选模型
-  (`pixcull models pull audio-tagger`,16 MB);没有它时代码会回退到手调的信号
-  检测。这个项目自己在 64 段真实音频上测过那套检测:20 段掌声一段没检出,笑声
-  只有 12% 判对。读取方拿到什么就显示什么,所以这个回退会让大多数安装在 Reel
-  文案里写上「现场笑声」。现在没有模型时,运行如实记录「没有听」并说明怎么装;
-  审片页能区分「听了但没听到」和「没有听」。
-
-  交付审计页从 v2.31 起在所有安装版上都返回 500:它运行的是 `scripts/` 里的
-  脚本,而安装包不带这个目录;那个脚本的测试又是从源码目录里跑的。现在审计
-  属于安装包的一部分,并有测试在「只有安装包」的条件下运行它。搬进来之后,它第一次
-  落到一道原本扫不到它的门禁面前,当场判红:给客户的 PDF 里,封面的入选张数和
-  「最佳五张」取的是机器的判定,摄影师删掉的帧可能排在最前面。现在它们跟随改判。
 
 更早的版本记录在 [`CHANGELOG.md`](https://github.com/ChrisChen667788/pixcull/blob/main/modelscope/CHANGELOG.md)。
 

@@ -91,6 +91,18 @@ https://github.com/user-attachments/assets/69eddc6b-24d3-406a-ace5-2ed3a5b44e67
 
 ## What's new
 
+**v3.94.3** — transformers 5.20.0 (15 October) cannot import a model on
+torch 2.7, the oldest torch this package supports. It checks for `torch>=2.7`
+before importing a module that only exists from torch 2.8, so `from
+transformers import CLIPModel` fails, and with it every model PixCull loads
+through transformers. A fresh install is not affected, because it resolves the
+newest torch; an environment on torch 2.7.x that upgrades transformers is. The
+CI lane pinned to the torch floor caught it the day it shipped, through the
+test added for 5.19.0. That one release is now excluded
+(`transformers!=5.20.0`); the fix is upstream in
+[huggingface/transformers#49652](https://github.com/huggingface/transformers/pull/49652),
+and later releases are accepted as before.
+
 **v3.94.2** — Every report [@gxfc9867](https://github.com/gxfc9867) made
 (#2, #3 and PR #4) was re-checked against `main` by running it. Three fixes
 from PR #4 had not fully landed.
@@ -220,32 +232,6 @@ PNGs that never existed. `.cube` LUTs are read from `~/.pixcull/luts` or
 and an installed copy now says that before the click instead of failing
 after it. A packaging test works out what must ship from the paths the code
 builds, rather than from a list somebody has to remember to extend.
-
-**v3.93** — `pixcull video` never listened to the video. The function that
-reads a clip's audio was written for the first video release and nothing
-called it. The reel caption, the review page's event lane and the lightbox
-scrubber were all built to read `audio_events.json`, and no run had ever
-written one. It runs now, between scoring and the reel detector;
-`--no-audio` skips it.
-
-Wiring it the obvious way would have been worse than leaving it out.
-Laughter, applause and music come from an optional model
-(`pixcull models pull audio-tagger`, 16 MB), and without it the code falls
-back to hand-tuned signal detectors. This project measured those on 64 real
-clips: none of 20 applause clips found, laughter right 12% of the time. The
-readers print what they are handed, so the fallback would have written
-"laughter" into reel captions on most installs. Without the model, a run
-records that nothing listened and how to change that, and the review page
-tells "heard nothing" apart from "did not listen".
-
-The delivery-audit page has answered 500 on every installed copy since
-v2.31. It ran a script from `scripts/`, which the wheel does not carry, and
-the test for that script ran it from the checkout. The audit is part of the
-package now, and a test runs it with nothing else on the path. Moving it put
-it in front of a gate it had been outside of, which failed at once: the
-client PDF's cover count and its five best frames came from the machine's
-verdicts, so a frame the photographer had culled could lead it. They follow
-the corrections now.
 
 Earlier releases are in [`CHANGELOG.md`](CHANGELOG.md).
 

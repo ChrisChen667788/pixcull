@@ -536,6 +536,18 @@ now run as a test and a preflight gate. Mutation-checked: each fix reverted
 turns its test red, and the real-font test was rewritten after the first
 draft passed with the choice broken (it read the chooser's own bookkeeping).
 
+**v3.94.3 — transformers 5.20.0 and the torch floor, again.** Pushing v3.94.2
+turned the floor-pinned 3.12 lane red at `test_a_model_class_can_be_reached`,
+the test added for 5.19.0. 5.20.0 (2026-10-15) imports
+`torch.distributed.checkpoint.hf_storage` behind a `torch>=2.7` check; the
+module is in torch 2.8.0 and absent from 2.7.0/2.7.1 (pytorch tags checked), so
+on 2.7.x every model import fails while 2.6 skips the branch. Reproduced on
+macOS with torch 2.7.1 (distributed is available there too); the declared spec
+`transformers>=4.40,<6,!=5.20.0` resolves 5.19.0 and CLIPModel is reachable.
+Excluding one release rather than raising the floor to 2.8: the upstream fix
+(huggingface/transformers#49651 / #49652, approved) is a one-word version bump,
+and users on 2.7 lose nothing.
+
 ### The first release since 3.53.1 — done at v3.92, not after v3.94
 
 Planned for after v3.94; the owner asked for it on 2026-10-02 so that
