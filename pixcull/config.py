@@ -64,7 +64,7 @@ class PixCullConfig(BaseModel):
     @classmethod
     def load(cls, path: Path | None = None) -> "PixCullConfig":
         path = path or DEFAULT_TEMPLATE_PATH
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
         return cls(**data)
 

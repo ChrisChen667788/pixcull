@@ -1673,7 +1673,7 @@ def _photo_timeline_items(run_id: str, *, limit: int = 800) -> list[dict]:
     frames_root = run_dir / "video_frames"
     out: list[dict] = []
     try:
-        with open(scores, newline="") as fh:
+        with open(scores, encoding="utf-8", newline="") as fh:
             for row in _csv.DictReader(fh):
                 fn = row.get("filename", "")
                 # Skip the synthetic video frames of a video run.

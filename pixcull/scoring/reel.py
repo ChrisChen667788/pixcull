@@ -584,7 +584,7 @@ def _load_scene_face(output_dir: Path) -> dict[str, dict]:
     if not scores_csv.exists():
         return out
     try:
-        with open(scores_csv, newline="") as fh:
+        with open(scores_csv, encoding="utf-8", newline="") as fh:
             reader = csv.DictReader(fh)
             for row in reader:
                 fn = row.get("filename", "")
