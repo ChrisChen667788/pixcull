@@ -72,6 +72,20 @@ tasks:
 **[github.com/ChrisChen667788/pixcull](https://github.com/ChrisChen667788/pixcull)**
 
 ## 最近更新
+- **v3.94.4**:在设成繁体中文的 Windows 上,`pixcull run` 一张照片都没分析就报
+  `UnicodeDecodeError` 退出(#5,[@KennethLeePhotographer](https://github.com/KennethLeePhotographer)
+  报告)。内置的场景模板是 UTF-8,却按系统编码打开,而那台机器上系统编码是 cp950。
+  [@mayuriphad](https://github.com/mayuriphad) 的 PR #6 修好了这一处,以及两个同样
+  写法的 `scores.csv` 读取。
+
+  同一个原因还藏在另外十二处,只是写法不同,那次搜索没覆盖到:ffprobe、ffmpeg、
+  exiftool 的输出也按系统编码解码,而这几个工具不管机器设成什么都输出 UTF-8。在
+  Big5 区域设置下,名字或元数据里带中文的视频读不出信息;照片里原有的星级、色标和
+  关键词读回来是空的,而 IPTC 写入把「空」当成「没有要保留的」,可能覆盖摄影师自己
+  打的星级。现在这些地方都明确用 UTF-8。新增一道测试解析包内源码,任何没写明编码的
+  文本读取或解码都会判红;另有两道测试用输出 UTF-8 的替身程序实际跑 ffprobe 和
+  exiftool 的读取。
+
 - **v3.94.3**:transformers 5.20.0(10 月 15 日)在 torch 2.7 上导入不了任何模型,
   而 2.7 正是这个包支持的最低 torch。它先判断 `torch>=2.7`,再去导入一个 torch 2.8
   才有的模块,于是 `from transformers import CLIPModel` 直接失败,PixCull 通过
@@ -168,19 +182,6 @@ tasks:
   附近找属性文字,没抓到。现在产品提供的每份样式表都会检查有没有没闭合的块。合入前
   的复审又在客户选片页上找到两处:回复「12. 3-5」会丢掉 3 到 5 号;文件名里带
   `</script>` 能提前结束页面脚本(比这个 PR 更早就存在)。都已修复。
-
-- **v3.93.1**:包要用、安装包却没带的五样东西 —— 拿 v3.93 那类缺陷去之前没人看过的
-  地方找出来的。最严重的是 MediaPipe 人脸模型:文件在 git 里,却从来不在打包白名单
-  里,所以 `pip install 'pixcull[face]'` 装上了 MediaPipe 也检测不到任何一张脸 ——
-  没有人脸数、没有闭眼、没有人脸模糊,而且没有任何提示,因为检测器跑不了时就返回
-  空结果。现在模型随包发布(安装包从 1.9 MB 变成 6.9 MB),没有检查人脸的运行会
-  说明原因 —— 命令行里说一次,通过网页分析的运行在结果页上显示。
-
-  内置字体和空状态插画改由包内提供;应用图标改用品牌标识,原来清单里写的三张 PNG
-  从来就不存在;`.cube` LUT 从 `~/.pixcull/luts` 或 `PIXCULL_LUTS_DIR` 读取。重新
-  训练和示例数据需要源码仓库,安装版现在会在点击之前就说明,而不是点了之后失败。
-  另有一道打包测试从代码拼出的路径推导「必须随包发布什么」,而不是靠一份需要有人
-  记得补的清单。
 
 更早的版本记录在 [`CHANGELOG.md`](https://github.com/ChrisChen667788/pixcull/blob/main/modelscope/CHANGELOG.md)。
 

@@ -276,7 +276,8 @@ def assemble_reel(
     cmd += ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "veryfast",
             str(mp4_path)]
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=1800,
+                              encoding="utf-8", errors="replace")
     except (OSError, subprocess.TimeoutExpired) as exc:  # pragma: no cover
         raise FFmpegError(f"ffmpeg assembly failed: {exc}")
     if proc.returncode != 0:
@@ -434,7 +435,8 @@ def assemble_multi(
     cmd += ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "veryfast",
             str(mp4_path)]
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=1800,
+                              encoding="utf-8", errors="replace")
     except (OSError, subprocess.TimeoutExpired) as exc:  # pragma: no cover
         raise FFmpegError(f"ffmpeg multi-assembly failed: {exc}")
     if proc.returncode != 0:
@@ -534,7 +536,8 @@ def export_preset(
     cmd += (["-c:a", "aac", "-b:a", "160k"] if has_audio else ["-an"])
     cmd += [str(out)]
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=1800,
+                              encoding="utf-8", errors="replace")
     except (OSError, subprocess.TimeoutExpired) as exc:  # pragma: no cover
         raise FFmpegError(f"ffmpeg export failed: {exc}")
     if proc.returncode != 0:

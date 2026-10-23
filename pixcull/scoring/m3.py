@@ -956,7 +956,8 @@ def api_key_from_env() -> str:
             out = subprocess.run(
                 ["security", "find-generic-password", "-s",
                  "MINIMAX_API_KEY", "-w"],
-                capture_output=True, text=True, timeout=10)
+                capture_output=True, text=True, timeout=10,
+                encoding="utf-8", errors="replace")
             if out.returncode == 0:
                 return out.stdout.strip()
         except Exception:  # noqa: BLE001

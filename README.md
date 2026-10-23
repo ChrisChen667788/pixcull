@@ -91,6 +91,23 @@ https://github.com/user-attachments/assets/69eddc6b-24d3-406a-ace5-2ed3a5b44e67
 
 ## What's new
 
+**v3.94.4** — On a Windows machine set to Traditional Chinese, `pixcull run`
+stopped with `UnicodeDecodeError` before analysing a single photograph (#5,
+reported by [@KennethLeePhotographer](https://github.com/KennethLeePhotographer)).
+The bundled scene templates are UTF-8 and were opened in the system's encoding,
+which is cp950 there. [@mayuriphad](https://github.com/mayuriphad)'s PR #6 fixed
+that read and the two `scores.csv` readers with the same shape.
+
+Twelve more places had the same cause in a form that search did not cover: the
+output of ffprobe, ffmpeg and exiftool was decoded in the system encoding too,
+although those tools write UTF-8 whatever the machine is set to. Under a Big5
+locale a video with Chinese in its name or metadata failed to probe. A
+photograph's own rating, label and keywords read back as nothing, and the IPTC
+writer takes nothing as nothing to preserve, so it could overwrite a rating the
+photographer had set. All of them name UTF-8 now. A test parses the package
+source and fails any text read or decoded without a named encoding, and two
+tests run the ffprobe and exiftool readers against stand-ins that write UTF-8.
+
 **v3.94.3** — transformers 5.20.0 (15 October) cannot import a model on
 torch 2.7, the oldest torch this package supports. It checks for `torch>=2.7`
 before importing a module that only exists from torch 2.8, so `from
@@ -214,24 +231,6 @@ block that never closes. Reviewing the landing found two more on the client
 sheet: a reply like "12. 3-5" lost photographs 3 to 5, and a filename
 containing `</script>` could end the sheet's script, which was older than
 the PR. Both are fixed.
-
-**v3.93.1** — Five things the package needed and the wheel did not carry,
-found by looking for v3.93's defect where nobody had looked. The largest: the
-MediaPipe face models are tracked in git and were never in the build
-allowlist, so `pip install 'pixcull[face]'` installed MediaPipe and still
-found no face. No face count, no closed eyes, no face blur, and nothing said
-so, because the detector returns an empty result when it cannot run. The
-models ship now (the wheel goes from 1.9 MB to 6.9 MB), and a run that
-did not check faces says so, with the reason — once in the terminal, and on
-the results page for a run analysed through the browser.
-
-The vendored font and the empty-state art are served from inside the
-package. The app icon is the brand mark, where the manifest had named three
-PNGs that never existed. `.cube` LUTs are read from `~/.pixcull/luts` or
-`PIXCULL_LUTS_DIR`. Retraining and the sample run need a source checkout,
-and an installed copy now says that before the click instead of failing
-after it. A packaging test works out what must ship from the paths the code
-builds, rather than from a list somebody has to remember to extend.
 
 Earlier releases are in [`CHANGELOG.md`](CHANGELOG.md).
 

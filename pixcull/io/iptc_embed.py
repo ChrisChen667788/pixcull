@@ -57,7 +57,8 @@ def read_embedded(image_path) -> dict:
         res = subprocess.run(
             [exiftool, "-q", "-j", "-XMP:Rating", "-XMP:Label",
              "-IPTC:Keywords", "-XMP-dc:Subject", str(image_path)],
-            capture_output=True, timeout=30, check=False, text=True)
+            capture_output=True, timeout=30, check=False, text=True,
+            encoding="utf-8", errors="replace")
         rows = _json.loads(res.stdout or "[]")
     except Exception:  # noqa: BLE001
         return {}

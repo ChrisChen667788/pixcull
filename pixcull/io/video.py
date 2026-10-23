@@ -187,6 +187,7 @@ def probe_video(
     try:
         proc = subprocess.run(
             cmd, capture_output=True, text=True, timeout=120,
+            encoding="utf-8", errors="replace",
         )
     except (OSError, subprocess.TimeoutExpired) as exc:  # pragma: no cover
         raise FFmpegError(f"ffprobe failed to run on {path.name}: {exc}")
@@ -290,6 +291,7 @@ def _keyframe_timestamps(
     try:
         proc = subprocess.run(
             cmd, capture_output=True, text=True, timeout=300,
+            encoding="utf-8", errors="replace",
         )
         data = json.loads(proc.stdout or "{}")
     except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError):
@@ -405,6 +407,7 @@ def extract_keyframes(
     try:
         proc = subprocess.run(
             cmd, capture_output=True, text=True, timeout=1800,
+            encoding="utf-8", errors="replace",
         )
     except (OSError, subprocess.TimeoutExpired) as exc:  # pragma: no cover
         raise FFmpegError(f"ffmpeg extraction failed on {path.name}: {exc}")

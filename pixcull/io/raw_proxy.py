@@ -105,7 +105,8 @@ def make_proxy(
             raise FFmpegError(recipe.advice)
         try:
             proc = subprocess.run([tool_bin, str(path), str(out)],
-                                  capture_output=True, text=True, timeout=3600)
+                                  capture_output=True, text=True, timeout=3600,
+                                  encoding="utf-8", errors="replace")
         except (OSError, subprocess.TimeoutExpired) as exc:  # pragma: no cover
             raise FFmpegError(f"RAW transcoder failed: {exc}")
         if proc.returncode != 0 or not out.exists():
@@ -123,7 +124,8 @@ def make_proxy(
            "-i", str(path), "-c:v", "prores_ks", "-profile:v", "0",
            "-c:a", "aac", str(out)]
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=1800,
+                              encoding="utf-8", errors="replace")
     except (OSError, subprocess.TimeoutExpired) as exc:  # pragma: no cover
         raise FFmpegError(f"ffmpeg proxy transcode failed: {exc}")
     if proc.returncode != 0:

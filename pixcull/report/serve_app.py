@@ -13880,7 +13880,13 @@ class _Handler(BaseHTTPRequestHandler):
         try:
             proc = subprocess.run(
                 cmd, capture_output=True, text=True, timeout=90,
-                env={**os.environ, "PYTHONPATH":
+                # v3.94.4 — both ends in UTF-8: a child Python writes a pipe
+                # in the locale's encoding (cp950 on Traditional-Chinese
+                # Windows) and the parent would decode it with the same, so
+                # a filename outside that code page broke the audit page.
+                encoding="utf-8", errors="replace",
+                env={**os.environ, "PYTHONIOENCODING": "utf-8",
+                     "PYTHONPATH":
                      str(_repo_root() or _pkg_root().parent) +
                      os.pathsep + os.environ.get("PYTHONPATH", "")},
             )

@@ -548,6 +548,25 @@ Excluding one release rather than raising the floor to 2.8: the upstream fix
 (huggingface/transformers#49651 / #49652, approved) is a one-word version bump,
 and users on 2.7 lose nothing.
 
+**v3.94.4 — issue #5 and its twelve siblings.** PR #6 (@mayuriphad) fixed the
+three `open()` calls that decoded UTF-8 files in the locale's encoding; it was
+reproduced first in `python:3.12-slim` with `localedef -i zh_TW -f BIG5`
+(config load and the CJK-named `scores.csv` both raise before, pass after).
+Sweeping for the class by parsing rather than grepping found twelve
+`subprocess.run(text=True)` calls with no `encoding=`, which decode a child's
+output with the same locale. Same container, stand-in tools writing UTF-8:
+`probe_video` raised `UnicodeDecodeError` on a CJK-named clip, and
+`read_embedded` returned `{}` for a photograph carrying Chinese keywords, which
+`build_args` reads as "no rating to preserve" and so overwrites the
+photographer's own `XMP:Rating` in place. Both read correctly after.
+`tests/test_text_io_names_its_encoding.py` parses the package (268 text-I/O
+sites) and fails any text-mode `open`, `read_text`/`write_text` or
+`text=True` subprocess without an encoding; its control is the pre-PR tree,
+where it names all fifteen. `tests/test_utf8_reads.py` now pins its children to
+this checkout (from `tmp_path` they imported the interpreter's installed
+pixcull, here a 2.19 copy) and runs both readers under
+`-W error::EncodingWarning`. Reverting the fix turns all three red.
+
 ### The first release since 3.53.1 — done at v3.92, not after v3.94
 
 Planned for after v3.94; the owner asked for it on 2026-10-02 so that

@@ -157,6 +157,8 @@ which is the thing that was actually false.
 
 One line each, exactly as the release was titled at the time.
 
+**v3.93.1** — the face models were never in the wheel
+
 **v3.93** — `pixcull video` never listened to the video
 
 **v3.92** — the oldest torch we promised was one we could not use

@@ -236,7 +236,7 @@ def extract_audio(video_path: Path, dest: Path, *,
     proc = subprocess.run(
         [exe, "-v", "error", "-y", "-i", str(video_path),
          "-vn", "-ac", "1", "-ar", str(_SAMPLE_RATE), "-f", "wav", str(dest)],
-        capture_output=True, text=True)
+        capture_output=True, text=True, encoding="utf-8", errors="replace")
     if proc.returncode != 0 or not dest.is_file():
         raise TranscriptionUnavailable(
             f"could not extract audio from {video_path.name}: "
