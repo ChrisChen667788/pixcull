@@ -209,3 +209,31 @@ def test_jsonl_with_one_record_is_still_read_as_jsonl(tmp_path):
     p.write_text(json.dumps({"filename": "a", "overall_label": "cull",
                              "source": "human"}) + "\n", encoding="utf-8")
     assert audit_labels([p]).counts == {"human": 1}
+
+
+def test_a_one_line_record_that_mentions_verdicts_is_still_a_record(tmp_path):
+    """Review of v3.95: the sheet test looked only for the key, so a single
+    JSONL record carrying `verdicts` was read as an empty sheet and lost."""
+    p = tmp_path / "one.jsonl"
+    p.write_text(json.dumps({"filename": "a.jpg", "overall_label": "cull",
+                             "source": "human", "verdicts": {}}) + "\n",
+                 encoding="utf-8")
+    inv = audit_labels([p])
+    assert inv.counts == {"human": 1} and inv.skipped == {}
+
+
+def test_an_unanswered_photograph_is_not_a_human_label(tmp_path):
+    from pixcull.scoring.ground_truth import load_blind_sheet
+    p = _sheet(tmp_path, "nulls.json", {"a.jpg": None, "b.jpg": None},
+               source="human")
+    inv = audit_labels([p])
+    assert inv.human == 0 and inv.usable_for_accuracy is False
+    assert inv.skipped == {str(p): "no label records"}
+    # accuracy() reads the same records; it must refuse, not report n=0.
+    with pytest.raises(CircularMeasurement):
+        accuracy({"a.jpg": "keep", "b.jpg": "keep"}, load_blind_sheet(p))
+    # One answer among the nulls is one label.
+    q = _sheet(tmp_path, "one.json", {"a.jpg": "keep", "b.jpg": None},
+               source="human")
+    assert audit_labels([q]).counts == {"human": 1}
+    assert accuracy({"a.jpg": "keep"}, load_blind_sheet(q))["n"] == 1

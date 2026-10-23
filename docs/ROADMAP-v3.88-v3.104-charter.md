@@ -630,6 +630,18 @@ that would have made the original hole visible. The parse now lives once
 gate on `selection`, not `source`); that is a twin path left as is, recorded
 here. Three of the four new tests fail on the old module.
 
+**v3.95 fixup — what the pre-push review found** (three reviewers, one
+refuter; all three confirmed by reproduction). A one-line JSONL record that
+happened to carry a `verdicts` key was read as an empty sheet and lost; it is
+a record when it carries a label of its own. A sheet saves an unanswered
+photograph as `null`, and the audit counted key presence, so a sheet of nulls
+was "usable" and `accuracy()` then passed its guard and reported n=0; both
+now read a label the way `accuracy()` does and skip records without one. And
+v3.94.4 had put `errors="replace"` on the macOS keychain read of the API key,
+which turns a corrupt entry into a key of U+FFFD and a stream of 401s instead
+of "no key"; that read is strict again. Each fix was reverted in turn and its
+test went red.
+
 ### v3.96 — v3.29's second half: what the non-human rows did to the numbers
 
 `evaluate()` with and without the rows v3.29 learned to exclude. If the

@@ -956,8 +956,12 @@ def api_key_from_env() -> str:
             out = subprocess.run(
                 ["security", "find-generic-password", "-s",
                  "MINIMAX_API_KEY", "-w"],
+                # v3.95 — strict on purpose: bytes that are not UTF-8
+                # raise into the except below and the key reads as unset.
+                # errors="replace" would hand every caller a key full of
+                # U+FFFD and a stream of 401s with nothing pointing here.
                 capture_output=True, text=True, timeout=10,
-                encoding="utf-8", errors="replace")
+                encoding="utf-8")
             if out.returncode == 0:
                 return out.stdout.strip()
         except Exception:  # noqa: BLE001

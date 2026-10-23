@@ -104,7 +104,11 @@ def audit_labels(paths) -> LabelInventory:
         except (OSError, UnicodeDecodeError) as exc:
             inv.skipped[str(p)] = f"unreadable: {exc}"
             continue
-        records = _blind_sheet_records(_whole_document(text))
+        doc = _whole_document(text)
+        # A one-line JSONL file parses as one object too. If it carries a
+        # label of its own it is a record, whatever other keys it has.
+        records = (None if isinstance(doc, dict) and _label_of(doc)
+                   else _blind_sheet_records(doc))
         if records is None:
             records = []
             for line in text.splitlines():
@@ -114,9 +118,10 @@ def audit_labels(paths) -> LabelInventory:
                     continue
         local: Counter = Counter()
         for rec in records:
-            if not isinstance(rec, dict):
-                continue
-            if "overall_label" not in rec and "decision" not in rec:
+            # The key being present is not a label: a sheet saves an
+            # unanswered photograph as null, and counting it made a sheet
+            # of nulls "usable" while accuracy() then measured nothing.
+            if not _label_of(rec):
                 continue
             local[label_provenance(rec)] += 1
         if local:
@@ -125,6 +130,14 @@ def audit_labels(paths) -> LabelInventory:
         else:
             inv.skipped[str(p)] = "no label records"
     return inv
+
+
+def _label_of(rec) -> str:
+    """The label a record carries, read the way accuracy() reads it, or ""."""
+    if not isinstance(rec, dict):
+        return ""
+    label = rec.get("overall_label") or rec.get("decision")
+    return label.strip() if isinstance(label, str) else ""
 
 
 def _whole_document(text: str):
@@ -192,7 +205,11 @@ def accuracy(predictions: dict[str, str], truth_records: list[dict], *,
     impossible, which is why the signature is shaped this way.
     """
     prov = Counter(label_provenance(r) for r in truth_records)
-    human = [r for r in truth_records if label_provenance(r) == "human"]
+    # v3.95 — a human record with no label in it is not a human label. A
+    # blind sheet saves an unanswered photograph as null; a sheet of those
+    # used to pass this guard and come back as n=0, agreement 0.0.
+    human = [r for r in truth_records
+             if label_provenance(r) == "human" and _label_of(r)]
     if strict and not human:
         raise CircularMeasurement(
             "no human-labelled records in the truth set "

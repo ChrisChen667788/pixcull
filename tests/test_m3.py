@@ -528,6 +528,32 @@ def test_key_comes_from_the_environment(monkeypatch):
     assert m3.api_key_from_env() == FAKE_KEY
 
 
+def _fake_security(tmp_path, monkeypatch, payload: bytes):
+    """A `security` on PATH that prints `payload`. The real keychain is
+    never asked: PATH holds only the stand-in."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    tool = bin_dir / "security"
+    tool.write_text(f"#!{sys.executable}\nimport sys\n"
+                    f"sys.stdout.buffer.write({payload!r})\n", encoding="utf-8")
+    tool.chmod(0o755)
+    monkeypatch.delenv("MINIMAX_API_KEY", raising=False)
+    monkeypatch.setenv("PATH", str(bin_dir))
+    monkeypatch.setattr(m3.sys, "platform", "darwin")
+
+
+def test_a_key_is_read_from_the_keychain(tmp_path, monkeypatch):
+    _fake_security(tmp_path, monkeypatch, FAKE_KEY.encode() + b"\n")
+    assert m3.api_key_from_env() == FAKE_KEY
+
+
+def test_a_corrupt_keychain_entry_reads_as_no_key(tmp_path, monkeypatch):
+    """v3.95 review: with errors="replace" this returned a key full of
+    U+FFFD, so every call failed with 401 instead of saying "no key"."""
+    _fake_security(tmp_path, monkeypatch, b"sk-\xff\xfe\xfa")
+    assert m3.api_key_from_env() == ""
+
+
 def test_missing_key_is_a_clear_error(fake_openai):
     with pytest.raises(ValueError) as ei:
         m3.MiniMaxM3Judge("")
