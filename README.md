@@ -91,6 +91,18 @@ https://github.com/user-attachments/assets/69eddc6b-24d3-406a-ace5-2ed3a5b44e67
 
 ## What's new
 
+**v3.95** — The check that refuses to measure accuracy against the model's own
+output could not read the labels it exists to accept. `pixcull m3 label` saves
+a blind pass as one JSON object holding a map of verdicts, and the audit read
+one record per line, so it found nothing in that file and returned an empty
+inventory, which reads the same as "audited, nothing wrong". Run on the owner's
+two blind passes from September, it counted 0 labels; it counts 158 human labels
+now, and a pass that does not say a person made it is still not counted as
+human. A file that contributes nothing is listed with the reason. Nothing in
+the product calls the audit yet: the next four versions measure what those
+labels unblocked (what the excluded labels did to the personalisation numbers,
+whether the profile generalises across shoots), and they are what it is for.
+
 **v3.94.4** — On a Windows machine set to Traditional Chinese, `pixcull run`
 stopped with `UnicodeDecodeError` before analysing a single photograph (#5,
 reported by [@KennethLeePhotographer](https://github.com/KennethLeePhotographer)).
@@ -211,26 +223,6 @@ pinned to the floor exists to catch exactly this, and it went red twice: the
 first fix, 2.6, was checked on a Mac, where MPS counts as an accelerator and
 2.6 does not raise. The floor moved in the
 package, both pinned CI lanes, the Docker image and the Studio together.
-
-**v3.93.2** — Three changes from [@gxfc9867](https://github.com/gxfc9867)
-(PR #4), and one brace. Chinese watermarks on a client proof sheet came out as
-empty boxes: the font lookup reached a Latin-only font first, and on a Mac
-Pillow opens `C:/Windows/Fonts/arial.ttf` by name, as Arial. CJK-capable fonts
-for every platform are tried first now. The client sheet gains a number beside
-each filename, a full-screen view, stars that travel back with the picks, and a
-copied list that parses back without warnings. The light theme's floating
-overlays are legible, and the deliverable-buckets toggle can be dragged.
-
-The PR restored a selector without its closing brace. Chrome reads CSS nesting,
-so nothing was rejected: every rule after it became a rule inside the toggle.
-On the review page the brand mark and the export button lost their colours,
-and client-present mode stopped hiding scores and verdicts. The browser lane
-caught it. The PR's own test, which looked for the property text near the
-selector, did not. Every stylesheet the product serves is now checked for a
-block that never closes. Reviewing the landing found two more on the client
-sheet: a reply like "12. 3-5" lost photographs 3 to 5, and a filename
-containing `</script>` could end the sheet's script, which was older than
-the PR. Both are fixed.
 
 Earlier releases are in [`CHANGELOG.md`](CHANGELOG.md).
 

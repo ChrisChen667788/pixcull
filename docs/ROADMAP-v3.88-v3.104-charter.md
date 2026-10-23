@@ -617,6 +617,19 @@ bridge and nothing calls it from there. Recorded in v3.79, not fixed.
 **Measure:** the blind file audits as 158 human labels; a sheet with a
 non-human row is refused.
 
+**Shipped.** Measured on the owner's files in `~/pixcull_label_run/`:
+`landscape.json` + `portrait.json` audit as 0 labels before and 158 human
+after; all six sheets in `blind_2026-09-12/` as 0 before and 756 human after;
+`corrections_2026-09-12.jsonl` as 158 human both times. A sheet with no
+`source` audits as unknown and one saying `auto` as model, and neither makes
+the inventory usable, so `accuracy()` refuses them as before. Every file that
+contributes nothing is in `inv.skipped` with its reason, which is the part
+that would have made the original hole visible. The parse now lives once
+(`_blind_sheet_records`), shared by the audit and `load_blind_sheet`.
+`vlm_eval.load_labels` and `calibrate` still read sheets their own way (they
+gate on `selection`, not `source`); that is a twin path left as is, recorded
+here. Three of the four new tests fail on the old module.
+
 ### v3.96 — v3.29's second half: what the non-human rows did to the numbers
 
 `evaluate()` with and without the rows v3.29 learned to exclude. If the

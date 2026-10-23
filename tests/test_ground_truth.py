@@ -148,3 +148,64 @@ def test_the_signature_takes_records_not_a_mapping():
         "truth_records has a default, so a caller can omit the records "
         "entirely and the provenance check has nothing to check")
     assert p.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
+
+
+# ------------------------------------------- v3.95: the blind sheet itself
+#
+# `pixcull m3 label` saves one object with a `verdicts` map. The audit read
+# JSONL only, so the owner's two real sheets (79 landscape + 79 portrait,
+# 2026-09-12) audited as 0 labels, which reads as "audited, nothing wrong".
+
+
+def _sheet(tmp_path, name, verdicts, *, indent=None, **extra):
+    p = tmp_path / name
+    p.write_text(json.dumps({"selection": "blind", "blind": True,
+                             "tool": "pixcull m3 label", "verdicts": verdicts,
+                             **extra}, indent=indent), encoding="utf-8")
+    return p
+
+
+def test_a_blind_sheet_audits_as_the_human_labels_it_holds(tmp_path):
+    a = _sheet(tmp_path, "landscape.json",
+               {f"L{i}.JPG": "keep" if i % 4 else "cull" for i in range(79)},
+               source="human")
+    # Pretty-printed too: one object over many lines is not JSONL either.
+    b = _sheet(tmp_path, "portrait.json",
+               {f"P{i}.JPG": "keep" for i in range(79)}, indent=2,
+               source="human")
+    inv = audit_labels([a, b])
+    assert inv.human == 158 and inv.counts == {"human": 158}
+    assert inv.usable_for_accuracy is True
+    assert inv.skipped == {}
+
+
+def test_a_sheet_that_does_not_say_human_is_not_counted_as_human(tmp_path):
+    old = _sheet(tmp_path, "old.json", {"a.jpg": "keep"})          # pre-v2.94
+    auto = _sheet(tmp_path, "auto.json", {"b.jpg": "keep"}, source="auto")
+    inv = audit_labels([old, auto])
+    assert inv.counts == {"unknown": 1, "model": 1}
+    assert inv.usable_for_accuracy is False
+
+
+def test_a_file_that_contributes_nothing_says_why(tmp_path):
+    """The defect's shape: nothing found must not read as nothing wrong."""
+    picks = tmp_path / "client_picks.jsonl"
+    picks.write_text(json.dumps({"filename": "a.jpg", "picked": True}),
+                     encoding="utf-8")
+    broken = _sheet(tmp_path, "broken.json", ["a.jpg"], source="human")
+    missing = tmp_path / "nope.json"
+    inv = audit_labels([picks, broken, missing])
+    assert sum(inv.counts.values()) == 0
+    assert inv.skipped == {str(picks): "no label records",
+                           str(broken): "no label records",
+                           str(missing): "not a file"}
+    assert "3 file(s) contributed none" in inv.summary()
+
+
+def test_jsonl_with_one_record_is_still_read_as_jsonl(tmp_path):
+    """A one-line JSONL file parses as one JSON object; it is a sheet only
+    if it carries `verdicts`."""
+    p = tmp_path / "one.jsonl"
+    p.write_text(json.dumps({"filename": "a", "overall_label": "cull",
+                             "source": "human"}) + "\n", encoding="utf-8")
+    assert audit_labels([p]).counts == {"human": 1}

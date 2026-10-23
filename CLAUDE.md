@@ -597,10 +597,12 @@ against `ceiling_units`, and the block sits behind `llm_budget`'s daily cap
 (which carries a default) that declines calls one at a time as they happen — so the
 halfway stop the planner exists to prevent was reachable by setting no
 ceiling at all, silently.  It takes `daily_cap_units` now and names which
-limit bound it.  **`audit_labels` has the same shape of hole and still does:**
-it reads JSONL, the blind sheet writes one object with a `verdicts` map, and
-handed the blind file it returns an empty inventory that reads exactly like
-"audited, nothing wrong".  Use `load_blind_sheet` to bridge.
+limit bound it.  **`audit_labels` had the same shape of hole until v3.95:**
+it read JSONL, the blind sheet writes one object with a `verdicts` map, and
+handed the blind file it returned an empty inventory that read exactly like
+"audited, nothing wrong" (the owner's two September passes: 0 labels).  It
+reads both shapes now and lists every file that contributed nothing in
+`inv.skipped`, with the reason.
 
 **The per-axis attribution heatmap was removed in v3.78, not deferred.**
 It produced the same PNG for all six axes (the per-axis heads moved into
@@ -876,7 +878,7 @@ floor to 2.7 when transformers 5.19.0 broke 2.5 and 2.6); PR #4 landed in v3.93.
 contributor's three commits plus the closing brace one of them dropped —
 **CSS nesting means a missing `}` is not a parse error, it nests every later
 rule inside the open one**; `tests/test_stylesheets_are_well_formed.py`);
-v3.95 (`audit_labels` and the blind sheet) is next.  The
+v3.95 (`audit_labels` and the blind sheet) is shipped.  The
 measurements the 2026-09-12 correction set unblocked (v3.29's second half,
 v2.83, v3.8) are scheduled there as v3.96–v3.99 and are plain engineering,
 not owner asks.

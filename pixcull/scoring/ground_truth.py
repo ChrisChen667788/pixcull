@@ -59,6 +59,9 @@ def label_provenance(rec: dict) -> str:
 class LabelInventory:
     counts: Counter = field(default_factory=Counter)
     by_file: dict[str, Counter] = field(default_factory=dict)
+    #: path -> why it contributed nothing. Without it a file the audit
+    #: could not read and a file it read and found clean look the same.
+    skipped: dict[str, str] = field(default_factory=dict)
 
     @property
     def human(self) -> int:
@@ -70,26 +73,47 @@ class LabelInventory:
 
     def summary(self) -> str:
         parts = ", ".join(f"{k}={v}" for k, v in sorted(self.counts.items()))
-        return f"{sum(self.counts.values())} labels ({parts})"
+        out = f"{sum(self.counts.values())} labels ({parts})"
+        if self.skipped:
+            out += f"; {len(self.skipped)} file(s) contributed none"
+        return out
 
 
 def audit_labels(paths) -> LabelInventory:
-    """Count label records by provenance across JSONL files."""
+    """Count label records by provenance across label files.
+
+    Reads both shapes this project writes: JSONL, one record per line
+    (annotations, client picks, rubric dumps), and the single object
+    `pixcull m3 label` saves, whose `verdicts` map goes through the same
+    conversion as `load_blind_sheet`, so `source` comes from the file.
+
+    v3.95 — it used to read JSONL only. Handed the blind sheet, the one
+    tool that produces human labels, it found no record on any line and
+    returned an empty inventory, which reads exactly like "audited,
+    nothing wrong". A file that contributes nothing is now listed in
+    `skipped` with the reason.
+    """
     inv = LabelInventory()
     for p in paths:
         p = Path(p)
         if not p.is_file():
+            inv.skipped[str(p)] = "not a file"
             continue
-        local: Counter = Counter()
         try:
             text = p.read_text(encoding="utf-8")
-        except OSError:
+        except (OSError, UnicodeDecodeError) as exc:
+            inv.skipped[str(p)] = f"unreadable: {exc}"
             continue
-        for line in text.splitlines():
-            try:
-                rec = json.loads(line)
-            except json.JSONDecodeError:
-                continue
+        records = _blind_sheet_records(_whole_document(text))
+        if records is None:
+            records = []
+            for line in text.splitlines():
+                try:
+                    records.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
+        local: Counter = Counter()
+        for rec in records:
             if not isinstance(rec, dict):
                 continue
             if "overall_label" not in rec and "decision" not in rec:
@@ -98,7 +122,40 @@ def audit_labels(paths) -> LabelInventory:
         if local:
             inv.by_file[str(p)] = local
             inv.counts.update(local)
+        else:
+            inv.skipped[str(p)] = "no label records"
     return inv
+
+
+def _whole_document(text: str):
+    """The file parsed as one JSON value, or None if it is not one (JSONL
+    with more than one line is not)."""
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return None
+
+
+def _blind_sheet_records(doc) -> list[dict] | None:
+    """Label records from a parsed blind sheet; None if `doc` is not one.
+
+    A sheet is an object carrying `verdicts`. One whose `verdicts` is the
+    wrong type is still a sheet, with no usable records in it."""
+    if not isinstance(doc, dict) or "verdicts" not in doc:
+        return None
+    verdicts = doc["verdicts"]
+    if not isinstance(verdicts, dict):
+        return []
+    src = doc.get("source")
+    out = []
+    for fn, label in verdicts.items():
+        rec = {"filename": fn, "overall_label": label,
+               "selection": doc.get("selection"),
+               "reviewed_at": doc.get("reviewed_at")}
+        if src:
+            rec["source"] = src
+        out.append(rec)
+    return out
 
 
 def load_blind_sheet(path) -> list[dict]:
@@ -114,29 +171,11 @@ def load_blind_sheet(path) -> list[dict]:
     the correct answer: nothing in that file says a person made it, and
     this module's whole job is to stop that being assumed.
     """
-    import json as _json
-    from pathlib import Path as _Path
-
-    p = _Path(path)
     try:
-        doc = _json.loads(p.read_text(encoding="utf-8"))
-    except (OSError, _json.JSONDecodeError):
+        doc = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return []
-    if not isinstance(doc, dict):
-        return []
-    verdicts = doc.get("verdicts")
-    if not isinstance(verdicts, dict):
-        return []
-    src = doc.get("source")
-    out = []
-    for fn, label in verdicts.items():
-        rec = {"filename": fn, "overall_label": label,
-               "selection": doc.get("selection"),
-               "reviewed_at": doc.get("reviewed_at")}
-        if src:
-            rec["source"] = src
-        out.append(rec)
-    return out
+    return _blind_sheet_records(doc) or []
 
 
 class CircularMeasurement(RuntimeError):
