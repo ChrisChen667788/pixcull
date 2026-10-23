@@ -642,6 +642,17 @@ which turns a corrupt entry into a key of U+FFFD and a stream of 401s instead
 of "no key"; that read is strict again. Each fix was reverted in turn and its
 test went red.
 
+**Released as 3.95.0** on 2026-10-23, the first PyPI release since 3.94.1:
+tag `v3.95.0` on `ff2670a`, GitHub Release with written notes (checked
+sentence by sentence against the code by a separate pass, no problems), then
+the opt-in PyPI dispatch. The wheel PyPI serves has the sha256 of the Release
+asset (947041af…), and it is byte-identical to the wheel the tag run built.
+It lists every file 3.94.1 did plus `pixcull/utils/fonts.py`. Installed
+from pypi.org into a fresh Python 3.13 venv (transformers 5.20.2, torch
+2.14.1, setuptools 84), with `-W error::EncodingWarning` it loads the scene
+templates and probes a CJK-named clip through a UTF-8 stand-in ffprobe, and
+`CLIPModel` imports.
+
 ### v3.96 — v3.29's second half: what the non-human rows did to the numbers
 
 `evaluate()` with and without the rows v3.29 learned to exclude. If the

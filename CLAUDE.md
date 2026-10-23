@@ -860,8 +860,10 @@ climbs out of the package unless `CHECKOUT_ONLY` says why; when a feature
 needs a file, that test is where it gets caught.  `_repo_root()` is None from
 an install — every caller must handle that.
 
-`pixcull 3.94.1` is on PyPI (2026-10-07; the aesthetic axis restored on
-fresh installs, Python 3.13 without a compiler), after 3.94.0 (same day),
+`pixcull 3.95.0` is on PyPI (2026-10-23; Windows in a non-UTF-8 language,
+issue #5 and its twelve siblings; CJK text drawn rather than boxed; the
+contact sheet's photographs), after 3.94.1 (2026-10-07; the aesthetic axis
+restored on fresh installs, Python 3.13 without a compiler), 3.94.0 (same day),
 3.93.1 (2026-10-06) and 3.92.0 (2026-10-02, the first release since 3.53.1); `CHANGELOG.md` opens with what changes for someone upgrading from
 3.53.1.  Publishing is
 `workflow_dispatch` + opt-in from the tag (`gh workflow run release.yml
