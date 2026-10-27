@@ -60,3 +60,13 @@ A new producer belongs in the table with an honest answer in the provenance
 column. The test that matters is not "does it write a source" but "is the source
 it writes true", and the only way to check that is to know who or what actually
 made the label.
+
+## How many there were — v3.96
+
+The rule now lives in `excluded_reason`, and what it leaves out is counted
+(`gather_examples_from_runs(..., excluded=Counter())`, printed by
+`pixcull personalize learn`). Measured on the owner's machine on 2026-10-28:
+**zero** rows of either excluded kind in any label set, so v3.29's exclusions
+changed no figure published before them. What did pollute the one published
+figure was a different producer — endorsement with the verdict on screen —
+and the v3.96 entry of `docs/ROADMAP-v3.88-v3.104-charter.md` has that split.

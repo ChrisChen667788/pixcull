@@ -880,9 +880,19 @@ floor to 2.7 when transformers 5.19.0 broke 2.5 and 2.6); PR #4 landed in v3.93.
 contributor's three commits plus the closing brace one of them dropped —
 **CSS nesting means a missing `}` is not a parse error, it nests every later
 rule inside the open one**; `tests/test_stylesheets_are_well_formed.py`);
-v3.95 (`audit_labels` and the blind sheet) is shipped.  The
-measurements the 2026-09-12 correction set unblocked (v3.29's second half,
-v2.83, v3.8) are scheduled there as v3.96–v3.99 and are plain engineering,
+v3.95 (`audit_labels` and the blind sheet) is shipped.  **v3.96 measured
+v3.29's second half:** no `compare_rejected` or `synced` row exists in any
+label set on this machine, so that delta is zero; the published 0.801 vs
+0.799 reproduces exactly from the 608-row sheet, its folds straddle zero,
+and on its 408 endorsed rows personalisation loses however the folds are
+drawn.  **`evaluate()`'s stride folds are drawn by position, so a figure
+from one file order can be an accident of sorting:** the 158 blind labels
+give +0.041 as sorted and −0.048 on average over 200 redraws (−0.279 …
++0.065).  The first draft published the +0.041; review caught it.  Report
+the redrawn spread (`scripts/measure_label_provenance.py --reorder`) beside
+any stride figure.  `evaluate()` returns `fold_deltas` and
+`gather_examples_from_runs` counts what it leaves out.
+v3.97–v3.99 (singletons, v2.83, v3.8) are next and are plain engineering,
 not owner asks.
 
 **Earlier block: `docs/ROADMAP-v3.1-v3.27-charter.md`** — twenty-seven versions read

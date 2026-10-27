@@ -366,11 +366,13 @@ had been explicitly asked to replace everything.
 No construction test could have found it. The arguments were exactly what the
 docstring described; exiftool simply did not compose them that way.
 
-**v3.29's second half did not run.** The charter asked for `evaluate()` re-run
-with and without the non-human rows, so that if the delta is material every
-published personalisation figure could be marked as computed over polluted
-labels. That needs the same correction set as ask 2. The provenance fix shipped;
-the impact measurement did not.
+**v3.29's second half ran in v3.96 (2026-10-28).** With and without the
+excluded rows are the same rows on this machine — no `compare_rejected` or
+`synced` correction exists in any label set here — so that delta is zero at
+n=158 and n=608. The published 0.801 vs 0.799 was polluted another way: 408
+of its 608 rows were endorsements, its folds straddle zero, and the two
+documents that quote it now say so. Numbers and the rerunnable command are
+in the v3.96 entry of `docs/ROADMAP-v3.88-v3.104-charter.md`.
 
 **`24-transcript-edit.png` is still synthetic**, and declared as such. It needs
 footage with speech in it; the owner's working copy of the source clip is no

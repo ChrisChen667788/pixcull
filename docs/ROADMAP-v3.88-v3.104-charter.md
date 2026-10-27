@@ -662,6 +662,75 @@ v3.29 was computed over polluted labels and should say so.
 **Measure:** the delta, with its sample size. No threshold decided in
 advance turns a small delta into "fine".
 
+**Shipped — and the delta the charter asked for is zero, for a reason that
+matters more than the number.** Neither kind of row v3.29 excludes
+(`compare_rejected` siblings, `synced` corrections) occurs in any label set
+on the owner's machine: not in `corrections_2026-09-12.jsonl` (158 rows, all
+`source: human`), and not in the 608-row sheet, which predates both producers
+and never lived in an `annotations.jsonl`. So with and without are the same
+rows, n=158 and n=608. The figure published before v3.29 — held-out keep-F1
+0.801 personal vs 0.799 generic (v2.14 charter, DESIGN-AUDIT-2030Q3) — was
+not touched by those exclusions. It was polluted by something else, and the
+measurement that shows it is a split of the same sheet:
+
+| label set | n | generic | personal | Δ as the file is sorted | Δ per fold | Δ over 200 reorderings |
+|---|---|---|---|---|---|---|
+| the 608-row sheet (as published) | 608 | 0.799 | 0.801 | +0.002 | −0.018 … +0.018 | −0.005 … +0.005, mean +0.001 |
+| its 408 rows endorsed with the verdict on screen | 408 | 0.869 | 0.854 | −0.015 | −0.026 … −0.007 | −0.016 … −0.008, mean −0.014 |
+| its 200 v0.11 rows (95 real cull disagreements) | 200 | 0.459 | 0.564 | +0.105 | +0.000 … +0.166 | +0.069 … +0.126, mean +0.100 |
+| the 158 blind corrections, stride folds | 158 | 0.807 | 0.849 | +0.041 | +0.004 … +0.074 | **−0.279 … +0.065, mean −0.048** |
+
+All four-fold stride, the method that produced the published figure, which
+reproduces to the third decimal from `training_combined.csv` joined to the
+rubric stars in `scores_for_baseline.csv`. Its folds straddle zero, and
+redrawing them moves it only between −0.005 and +0.005: the published
+"personal ≥ generic" was no measurable effect, not a small one. Two thirds
+of its rows were endorsements, on which personalisation loses however the
+folds are drawn; the third that carries disagreement is where it gains.
+
+**The last column was added after review, and it changed the blind row.**
+Stride folds are drawn by position, so one sort order of a file is one draw
+of the folds. As the blind file happens to be sorted (one shoot, then the
+other), stride gives +0.041 with every fold above zero; redrawn 200 times it
+averages −0.048 and ranges from −0.279 to +0.065. The first draft of this
+entry, the README and the commit reported +0.041 as a result; it is an
+accident of sorting, and there is no stable stride answer on these 158
+labels. The 408 and 200 rows keep their sign under every redraw, but "in
+every fold" did not survive it either (all four folds negative in 15 of 200
+redraws of the 408), so the claims above are about the mean. The blind
+set's whole-shoot figure (+0.033 over two shoots) does not depend on order
+and belongs to v3.98. **`evaluate()`'s stride folds are order-dependent and
+the CLI's per-fold range cannot show it**; whether `evaluate()` should report
+a redrawn spread itself is left to v3.98, which is the version that reads
+these numbers. n=158 and n=200 are small; these are directions, not effect
+sizes.
+
+What changed in the product, so the next figure can say what it was over:
+`excluded_reason` is the one statement of the rule; `gather_examples_from_runs`
+and the new `load_corrections` take a Counter that receives what the rule
+left out and `include_excluded=True` for the "with" half; `evaluate()`
+returns `fold_deltas` beside the mean; `pixcull personalize learn` prints
+both. `scripts/measure_label_provenance.py` is the measurement, rerunnable,
+and reports the redrawn spread beside every stride figure (`--reorder N`,
+200 by default):
+
+    scripts/measure_label_provenance.py \
+        --corrections ~/pixcull_label_run/corrections_2026-09-12.jsonl \
+        --labels ~/pixcull_label_run/training_combined.csv \
+        --scores ~/pixcull_label_run/scores_for_baseline.csv \
+        --subset endorsed=~/pixcull_label_run/training_v2.14.csv \
+        --subset v011=~/pixcull_label_run/training_v011.csv
+
+The two documents that quoted 0.801 carry a dated note pointing here.
+Nine mutations (counting removed, `include_excluded` ignored, a later label
+not un-counting, unscored frames counted, an unlabelled excluded record that
+ends a label not counted, `fold_deltas` dropped, the axes check removed, the
+BOM-tolerant read reverted, the CLI row removed) each turn a test red.
+The pre-push review (three reviewers, one refuter) re-derived every number
+from the previous module with its own joins, and confirmed the blind row's
+order dependence, the uncounted unlabelled record and the BOM; all three are
+fixed in this version.
+
 ### v3.97 — the singleton analysis, with the right vectors
 
 Three of four blocks showed a frame with no near-duplicate is culled more

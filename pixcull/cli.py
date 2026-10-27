@@ -2750,6 +2750,13 @@ app.add_typer(personalize_app, name="personalize")
 _PROFILE_PATH = Path.home() / ".pixcull" / "personal_profile.json"
 
 
+#: Why `excluded_reason` left a correction out, in a reader's words.
+_LEFT_OUT_WHY = {
+    "compare_rejected": "burst siblings rejected in compare (kept as pairs)",
+    "synced": "synced from another photographer",
+}
+
+
 @personalize_app.command("learn")
 def personalize_learn(
     runs_root: Path = typer.Option(
@@ -2758,11 +2765,14 @@ def personalize_learn(
 ) -> None:
     """Fit a taste profile from your corrections + report held-out
     keep-F1, personalised vs generic."""
+    from collections import Counter
+
     from pixcull.scoring.personal_learn import (
         evaluate, gather_examples_from_runs, learn_profile)
     from pixcull.scoring.personalized import (
         MIN_ANNS_FOR_PERSONALIZATION, save_profile)
-    exs = gather_examples_from_runs(runs_root)
+    left_out: Counter = Counter()
+    exs = gather_examples_from_runs(runs_root, excluded=left_out)
     if not exs:
         console.print(f"[yellow]No corrections found under {runs_root}.[/yellow] "
                       "Cull a batch first (1 / 2 / 3), then re-run.")
@@ -2778,6 +2788,11 @@ def personalize_learn(
     table.add_row("keep rate", f"{prof.keep_rate:.0%}")
     table.add_row("threshold shift", f"{prof.keep_threshold_shift:+.3f}")
     table.add_row("most-cared axis", prof.most_cared_axis or "—")
+    # v3.96 — the rule that leaves some corrections out used to do it
+    # without a word, so nobody could say how many there were.
+    if left_out:
+        table.add_row("not learned from", "; ".join(
+            f"{_LEFT_OUT_WHY.get(k, k)}: {n}" for k, n in sorted(left_out.items())))
     # v2.83 — an unmeasurable evaluation used to print 0.000 in these
     # three cells, which reads as "measured, personalisation does
     # nothing" and is the opposite of what happened.
@@ -2790,6 +2805,10 @@ def personalize_learn(
         table.add_row("held-out keep-F1 · generic", f"{ev['generic_f1']:.3f}")
         table.add_row("held-out keep-F1 · personal", f"{ev['personal_f1']:.3f}")
         table.add_row("Δ (personal − generic)", f"{ev['delta']:+.3f}")
+        fd = ev.get("fold_deltas") or []
+        if fd:
+            table.add_row("Δ per held-out fold",
+                          f"{min(fd):+.3f} … {max(fd):+.3f} ({len(fd)} folds)")
         table.add_row("held out", scope)
     console.print(table)
     if not ev.get("refused") and not ev.get("grouped"):

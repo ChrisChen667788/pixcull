@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import csv
 import json
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Iterable, Optional
@@ -235,10 +236,16 @@ def evaluate(examples: Iterable[Example], *, folds: int = 4) -> dict:
         per.append(_keep_f1(test, lambda a, p=prof: decide(a, profile=p)))
     g = sum(gen) / len(gen)
     pf = sum(per) / len(per)
+    # v3.96 — the mean alone hides how much it moves. The published
+    # +0.002 was a four-fold mean; a reader could not tell whether the
+    # folds agreed on it or straddled zero, and that is the difference
+    # between "no effect" and "no idea".
     return {"n": len(exs), "folds": len(splits), "grouped": grouped,
             "n_runs": len(groups),
             "generic_f1": round(g, 3), "personal_f1": round(pf, 3),
-            "delta": round(pf - g, 3), "refused": None}
+            "delta": round(pf - g, 3),
+            "fold_deltas": [round(b - a, 3) for a, b in zip(gen, per)],
+            "refused": None}
 
 
 # --------------------------------------------------------------------- #
@@ -403,10 +410,83 @@ def evaluate_by_vertical(examples: Iterable[Example], *,
 # --------------------------------------------------------------------- #
 # Gather from the user's local runs
 # --------------------------------------------------------------------- #
-def gather_examples_from_runs(runs_root) -> list:
+def excluded_reason(rec: dict) -> str | None:
+    """Why a correction is left out of THIS photographer's taste, or None.
+
+    The one place the rule lives. v3.96 — it used to be inline in
+    `gather_examples_from_runs`, which dropped these records without
+    counting them, so nothing could say how many there were or measure
+    what keeping them would have done.
+    """
+    # v3.9 — a burst sibling rejected in the compare modal is NOT a
+    # photograph the photographer disliked. It is one that lost to a
+    # near-identical frame, so its axis stars are nearly the winner's.
+    # Averaged into the cull bucket it flattens the very keep-minus-cull
+    # gap `axis_weights` is built from, and every use of the compare
+    # gesture made the profile slightly worse with nothing saying so.
+    #
+    # The preference is not discarded — it is kept in its correct form,
+    # as a pair, in `pairwise_prefs.jsonl`.
+    if rec.get("source") == "compare_rejected":
+        return "compare_rejected"
+    # v3.29 — a correction another photographer made on their own machine
+    # is a real human correction. It is not THIS photographer's taste, and
+    # this file exists to learn one person's taste. Multi-shooter sync was
+    # pouring a second shooter's judgement into the same profile with
+    # nothing marking it, which is v3.9's defect with a different producer.
+    if rec.get("synced"):
+        return "synced"
+    return None
+
+
+def _fold_records(records, *, include_excluded: bool):
+    """filename -> (decision, record), latest line wins; and filename ->
+    the reason its latest statement was left out.
+
+    An excluded record still counts as the frame's newest statement:
+    a synced record after a local one removes the local label rather
+    than leaving it standing (v3.29).
+    """
+    dec: dict[str, tuple[str, dict]] = {}
+    left_out: dict[str, str] = {}
+    for r in records:
+        if not isinstance(r, dict):
+            continue
+        f = r.get("filename")
+        d = r.get("overall_label") or r.get("decision")
+        reason = excluded_reason(r)
+        if reason and not include_excluded:
+            had = dec.pop(f, None) is not None
+            # Left out if it carried a label, or if it removed one: an
+            # unlabelled synced record still ends an earlier local label,
+            # and that frame is one the "with" half keeps.
+            if f and (d in DECISIONS or had):
+                left_out[f] = reason
+            continue
+        if f and d in DECISIONS:
+            dec[f] = (d, r)            # latest line wins
+            left_out.pop(f, None)
+    return dec, left_out
+
+
+def _count_left_out(excluded, left_out: dict, joined) -> None:
+    """Add to the caller's counter the frames the rule left out that would
+    otherwise have become examples, so `with = without + left out`."""
+    if excluded is not None:
+        excluded.update(r for f, r in left_out.items() if f in joined)
+
+
+def gather_examples_from_runs(runs_root, *, excluded: Counter | None = None,
+                              include_excluded: bool = False) -> list:
     """Join ``annotations.jsonl`` (the user's keep/maybe/cull) with
     ``scores.csv`` (``rubric_<axis>_stars``) across every run under
-    ``runs_root``.  Latest decision per filename wins."""
+    ``runs_root``.  Latest decision per filename wins.
+
+    ``excluded``, if given, is a Counter that receives one entry per frame
+    `excluded_reason` left out, keyed by the reason. ``include_excluded``
+    keeps those frames instead, which is the "with" half of the v3.96
+    measurement; nothing learns from it by default.
+    """
     out: list[Example] = []
     root = Path(runs_root)
     if not root.exists():
@@ -430,43 +510,18 @@ def gather_examples_from_runs(runs_root) -> list:
                                         or row.get("scene") or "").strip()
         except OSError:
             continue
-        dec: dict[str, str] = {}
+        records = []
         try:
             for line in ann.read_text("utf-8").splitlines():
                 try:
-                    r = json.loads(line)
+                    records.append(json.loads(line))
                 except json.JSONDecodeError:
                     continue
-                f = r.get("filename")
-                d = r.get("overall_label") or r.get("decision")
-                # v3.9 — a burst sibling rejected in the compare modal is
-                # NOT a photograph the photographer disliked.  It is one
-                # that lost to a near-identical frame, so its axis stars
-                # are nearly the winner's.  Averaged into the cull bucket
-                # it flattens the very keep-minus-cull gap `axis_weights`
-                # is built from, and every use of the compare gesture made
-                # the profile slightly worse with nothing saying so.
-                #
-                # The preference is not discarded — it is kept in its
-                # correct form, as a pair, in `pairwise_prefs.jsonl`.
-                if r.get("source") == "compare_rejected":
-                    dec.pop(f, None)
-                    continue
-                # v3.29 — a correction another photographer made on their
-                # own machine is a real human correction. It is not THIS
-                # photographer's taste, and this file exists to learn one
-                # person's taste. Multi-shooter sync was pouring a second
-                # shooter's judgement into the same profile with nothing
-                # marking it, which is v3.9's defect with a different
-                # producer.
-                if r.get("synced"):
-                    dec.pop(f, None)
-                    continue
-                if f and d in DECISIONS:
-                    dec[f] = d            # latest line wins
         except OSError:
             continue
-        for f, d in dec.items():
+        dec, left_out = _fold_records(records, include_excluded=include_excluded)
+        _count_left_out(excluded, left_out, axmap)
+        for f, (d, _rec) in dec.items():
             if f in axmap:
                 # v2.83 — which shoot, so held-out folds can be whole
                 # shoots rather than a stride through one afternoon.
@@ -474,3 +529,35 @@ def gather_examples_from_runs(runs_root) -> list:
                                    run_id=str(ann.parent.parent.name),
                                    vertical=vmap.get(f, "")))
     return out
+
+
+def load_corrections(path, *, excluded: Counter | None = None,
+                     include_excluded: bool = False) -> list:
+    """Examples from a corrections file: JSONL, one record per photograph,
+    each carrying its own ``axes`` (the rubric stars it was scored with)
+    beside ``overall_label``, and optionally ``run_id`` and ``vertical``.
+
+    That is the shape of the owner's blind corrections, which were joined
+    to their scores by hand and so never lived in an ``annotations.jsonl``
+    beside a ``scores.csv``. The same exclusion rule and latest-wins fold
+    apply. A labelled record without ``axes`` raises: it is a broken
+    join, and dropping it would shrink the sample with nothing saying so.
+    """
+    records = []
+    # utf-8-sig: a file re-saved in a BOM-writing editor still loads.
+    with open(path, encoding="utf-8-sig") as fh:
+        for no, line in enumerate(fh, 1):
+            if not line.strip():
+                continue
+            rec = json.loads(line)
+            if (isinstance(rec, dict)
+                    and (rec.get("overall_label") or rec.get("decision"))
+                    and not isinstance(rec.get("axes"), dict)):
+                raise ValueError(f"{path}:{no}: a labelled record with no axes")
+            records.append(rec)
+    dec, left_out = _fold_records(records, include_excluded=include_excluded)
+    _count_left_out(excluded, left_out, left_out)
+    return [Example(axes={a: _f(r["axes"].get(a)) for a in AXES}, decision=d,
+                    run_id=str(r.get("run_id") or ""),
+                    vertical=str(r.get("vertical") or ""))
+            for d, r in dec.values()]
