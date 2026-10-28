@@ -489,11 +489,22 @@
   // hoisted (var + function-declaration) so they're safe to call
   // from the first render() pass before the async fetch resolves —
   // empty map → label fallback to the raw token.
-  var _CULL_REASONS_LIST = [];   // [{token, label_zh}, ...]
-  var _CULL_REASONS_MAP  = {};   // {token: label_zh}
+  var _CULL_REASONS_LIST = [];   // [{token, label_zh, label_en}, ...]
+  var _CULL_REASONS_MAP  = {};   // {token: {label_zh, label_en}}
+  // The taxonomy ships both labels; pick by the language the page is in
+  // so the cull picker does not stay Chinese inside an English UI.
+  function _uiLangEn() {
+    const v = I18N_CURRENT || (typeof _getStoredLang === "function" ? _getStoredLang() : "");
+    return String(v || "").toLowerCase().indexOf("en") === 0;
+  }
+  function _cullLabelFor(entry) {
+    if (!entry) return "";
+    if (_uiLangEn() && entry.label_en) return entry.label_en;
+    return entry.label_zh || entry.token || "";
+  }
   function _cullReasonLabel(token) {
     if (!token) return "";
-    return _CULL_REASONS_MAP[token] || token;
+    return _cullLabelFor(_CULL_REASONS_MAP[token]) || token;
   }
 
   // P-UX-5 — labels for similarity reasons returned by
@@ -5697,7 +5708,7 @@
     if (annCullReasonPills && !annCullReasonPills.dataset.built && _CULL_REASONS_LIST.length) {
       annCullReasonPills.innerHTML = _CULL_REASONS_LIST.map(e =>
         `<button class="reason-pill" type="button" data-token="${esc(e.token)}"
-                  title="${esc(e.label_zh || e.token)}">${esc(e.label_zh || e.token)}</button>`
+                  title="${esc(_cullLabelFor(e) || e.token)}">${esc(_cullLabelFor(e) || e.token)}</button>`
       ).join(" ");
       annCullReasonPills.dataset.built = "1";
       annCullReasonPills.addEventListener("click", e => {
@@ -5737,10 +5748,10 @@
     // matching cell.
     axesContainer.innerHTML = rubricMeta.map((ax, idx) => `
       <div class="axis-row" data-axis="${ax.name}" data-axis-idx="${idx}">
-        <div class="axis-name">${ax.label_zh}
-          <span class="axis-en">${ax.label_en}</span>
+        <div class="axis-name">${_uiLangEn() ? ax.label_en : ax.label_zh}
+          <span class="axis-en">${_uiLangEn() ? ax.label_zh : ax.label_en}</span>
         </div>
-        <div class="axis-desc">${ax.description_zh}</div>
+        <div class="axis-desc">${_uiLangEn() ? (ax.description_en || ax.description_zh) : ax.description_zh}</div>
         <div class="stars" data-stars data-axis="${ax.name}" data-axis-idx="${idx}">
           ${[1,2,3,4,5].map(i => `<span class="star" data-v="${i}">★</span>`).join("")}
         </div>
@@ -8764,7 +8775,7 @@
       _CULL_REASONS_LIST = Array.isArray(d.cull_reasons) ? d.cull_reasons : [];
       _CULL_REASONS_MAP = {};
       for (const e of _CULL_REASONS_LIST) {
-        if (e && e.token) _CULL_REASONS_MAP[e.token] = e.label_zh || e.token;
+        if (e && e.token) _CULL_REASONS_MAP[e.token] = e;
       }
       if (statsR && statsR.ok) {
         const sd = await statsR.json();
@@ -8795,7 +8806,7 @@
         ? ` <span style="opacity:0.55;font-size:10px">×${n}</span>`
         : "";
       return `<button class="reason-pill" data-token="${esc(e.token)}" type="button"
-               title="${esc(e.label_zh || e.token)}${n > 0 ? ` · 你已用过 ${n} 次` : ''}">${esc(e.label_zh || e.token)}${hint}</button>`;
+               title="${esc(_cullLabelFor(e) || e.token)}${n > 0 ? ` · 你已用过 ${n} 次` : ''}">${esc(_cullLabelFor(e) || e.token)}${hint}</button>`;
     }).join(" ");
   }
 

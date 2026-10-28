@@ -21,6 +21,7 @@ catalogue entry that no longer appears in its template fails
 from __future__ import annotations
 
 import json
+import re
 from functools import lru_cache
 from http.cookies import SimpleCookie
 from pathlib import Path
@@ -66,6 +67,28 @@ def load_shared_catalogue(lang: str) -> dict[str, str]:
     return load_page_catalogue("_shared", lang)
 
 
+_CJK = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
+
+
+def _replace_source(html: str, source: str, target: str) -> str:
+    """Replace one catalogue key, keeping short keys out of longer words.
+
+    Chinese has no spaces, so a short key like ``场景`` happily matches
+    inside ``重判场景`` and turns the button into ``重判Scene``. Keys of
+    four characters or fewer therefore only match where neither
+    neighbour is a CJK character; longer keys are specific enough to
+    replace anywhere.
+    """
+    if len(source) > 4 or not _CJK.search(source):
+        return html.replace(source, target)
+    pattern = re.compile(
+        r"(?<![\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff])"
+        + re.escape(source)
+        + r"(?![\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff])"
+    )
+    return pattern.sub(lambda _m: target, html)
+
+
 def localize_page(name: str, html: str, lang: str) -> str:
     """Translate a page template into ``lang``.
 
@@ -77,7 +100,7 @@ def localize_page(name: str, html: str, lang: str) -> str:
     if not catalogue:
         return html
     for source in sorted(catalogue, key=len, reverse=True):
-        html = html.replace(source, catalogue[source])
+        html = _replace_source(html, source, catalogue[source])
     if _normalize_lang(lang) == "en_US":
         html = html.replace('<html lang="zh">', '<html lang="en">', 1)
         html = html.replace("<html lang='zh'>", "<html lang='en'>", 1)

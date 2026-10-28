@@ -112,5 +112,10 @@
   "美感": "Aesthetics",
   "技术": "Technique",
   "主体": "Subject",
-  "构图": "Composition"
+  "构图": "Composition",
+  "重判场景": "Reclassify scene",
+  "重判 ${rid} 的场景? (face_count>0 的 stilllife → 改为次高概率类)": "Reclassify the scenes in ${rid}? Still life frames with face_count>0 move to the next most likely genre.",
+  "重判 ${rid} 的场景?": "Reclassify the scenes in ${rid}?",
+  " (face_count>0 的 stilllife → 改为次高概率类)": " (still life with face_count>0 moves to the next most likely genre)",
+  "P-PRO-7.1 · 完整交付审计(场景 + 人脸 + 婚礼 + ICC + EXIF)": "P-PRO-7.1 · Full delivery audit (scene + faces + wedding + ICC + EXIF)"
 }

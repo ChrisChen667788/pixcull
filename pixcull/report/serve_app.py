@@ -76,6 +76,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import quote, unquote, urlparse
 
+from pixcull.i18n import _normalize_lang
 from pixcull.report.page_i18n import localize_page, resolve_lang
 
 # v2.31 — packaged-install support. Until now every asset path was
@@ -2290,7 +2291,7 @@ _RESULTS_CACHE_LOCK = threading.Lock()
 _RESULTS_CACHE_MAX = 4          # runs are multi-MB; a few is plenty
 
 
-def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
+def _build_results(run_id: str, lang: str = "zh") -> tuple[list[dict], dict] | None:
     """Cached wrapper around :func:`_build_results_uncached`.
 
     Falls through to an uncached build whenever the inputs can't be
@@ -2306,10 +2307,10 @@ def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
         # annotations.jsonl is optional: 0 means "not present", which is
         # the same observable state as before it was ever written.
         ann_mtime = ann_path.stat().st_mtime_ns if ann_path.exists() else 0
-        cache_key = (run_id, str(output_dir),
+        cache_key = (run_id, str(output_dir), _normalize_lang(lang),
                      scores_path.stat().st_mtime_ns, ann_mtime)
     except OSError:
-        return _build_results_uncached(run_id)
+        return _build_results_uncached(run_id, lang)
 
     with _RESULTS_CACHE_LOCK:
         hit = _RESULTS_CACHE.get(cache_key)
@@ -2319,15 +2320,17 @@ def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
     # Built OUTSIDE the lock: this is the multi-second path, and holding
     # the lock across it would serialise every concurrent request.  Two
     # racing builds duplicate work but agree on the result.
-    built = _build_results_uncached(run_id)
+    built = _build_results_uncached(run_id, lang)
     if built is not None:
         with _RESULTS_CACHE_LOCK:
-            # Drop superseded generations of THIS run first: a re-scored
-            # run would otherwise keep up to _MAX copies of its own
-            # multi-MB row list alive until plain eviction got to them
-            # (_MtimeLRUCache does the same for its single path).
+            # Drop superseded generations of THIS run and language: a
+            # re-scored run would otherwise keep up to _MAX copies of its
+            # own multi-MB row list alive until plain eviction got to
+            # them (_MtimeLRUCache does the same for its single path).
+            # Other languages stay, so an en/zh switch does not force a
+            # rebuild of the language it just left.
             for k in [k for k in _RESULTS_CACHE
-                      if k[:2] == cache_key[:2] and k != cache_key]:
+                      if k[:3] == cache_key[:3] and k != cache_key]:
                 _RESULTS_CACHE.pop(k, None)
             if len(_RESULTS_CACHE) >= _RESULTS_CACHE_MAX:
                 _RESULTS_CACHE.pop(next(iter(_RESULTS_CACHE)))   # oldest out
@@ -2405,7 +2408,7 @@ def _cached_near_dup_groups(cache_path: Path, cache: dict,
     return groups
 
 
-def _build_results_uncached(run_id: str) -> tuple[list[dict], dict] | None:
+def _build_results_uncached(run_id: str, lang: str = "zh") -> tuple[list[dict], dict] | None:
     # V8.5: fall back to disk-reload if the run isn't in memory
     # (e.g. server restarted, or the .app and dev server share runs
     # via a symlink). Without this fallback /results/<run_id> is
@@ -2562,6 +2565,7 @@ def _build_results_uncached(run_id: str) -> tuple[list[dict], dict] | None:
             meta_inconsistencies=_s(r.get("meta_inconsistencies", "")),
             idx=_idx,
             vertical=run_vertical,        # V17.3 — business-flavored phrases
+            lang="en" if _normalize_lang(lang) == "en_US" else "zh",
         )
         # V9.0: detected style modes for the UI tag chip
         from pixcull.scoring.style_modes import detect_style_modes
@@ -4398,7 +4402,7 @@ class _Handler(BaseHTTPRequestHandler):
         cluster_id, is_burst_peak. When the user opens the lightbox
         we re-fetch a single row via /results JSON (already implemented).
         """
-        result = _build_results(run_id)
+        result = _build_results(run_id, self._page_lang())
         if result is None:
             run = _get_run(run_id) or _reload_run_from_disk(run_id)
             if run is None:
@@ -4466,7 +4470,7 @@ class _Handler(BaseHTTPRequestHandler):
         """
         from urllib.parse import parse_qs
 
-        result = _build_results(run_id)
+        result = _build_results(run_id, self._page_lang())
         if result is None:
             self.send_error(404, "no such run"); return True
         rows, _ = result
@@ -4565,7 +4569,7 @@ class _Handler(BaseHTTPRequestHandler):
         """
         from urllib.parse import parse_qs
 
-        result = _build_results(run_id)
+        result = _build_results(run_id, self._page_lang())
         if result is None:
             self.send_error(404, "no such run"); return True
         rows, _ = result
@@ -4637,7 +4641,7 @@ class _Handler(BaseHTTPRequestHandler):
         """
         from urllib.parse import parse_qs
         from datetime import datetime as _dt
-        result = _build_results(run_id)
+        result = _build_results(run_id, self._page_lang())
         if result is None:
             self.send_error(404, "no such run"); return True
         rows, _ = result
@@ -4801,7 +4805,7 @@ class _Handler(BaseHTTPRequestHandler):
             width = 256
         width = max(64, min(512, width))
 
-        result = _build_results(run_id)
+        result = _build_results(run_id, self._page_lang())
         if result is None:
             self.send_error(404, "no results yet"); return True
         rows, _meta = result
@@ -4946,7 +4950,7 @@ class _Handler(BaseHTTPRequestHandler):
             ]
           }
         """
-        result = _build_results(run_id)
+        result = _build_results(run_id, self._page_lang())
         if result is None:
             run = _get_run(run_id) or _reload_run_from_disk(run_id)
             if run is None:
@@ -5116,10 +5120,21 @@ class _Handler(BaseHTTPRequestHandler):
             "exposure":     "曝光问题",
             "other":        "其他",
         }
+        labels_en = {
+            "focus_miss":   "Missed focus",
+            "eyes_closed":  "Eyes closed / expression",
+            "motion_blur":  "Blur / camera shake",
+            "framing":      "Weak composition",
+            "duplicate":    "Better duplicate exists",
+            "exposure":     "Exposure problem",
+            "other":        "Other",
+        }
         body = _safe_dumps({
             "schema":  "pixcull.api.v1.taxonomy.v1",
             "cull_reasons": [
-                {"token": t, "label_zh": labels_zh.get(t, t)}
+                {"token": t,
+                 "label_zh": labels_zh.get(t, t),
+                 "label_en": labels_en.get(t, t)}
                 for t in _CULL_REASONS
             ],
         }).encode("utf-8")
@@ -5207,7 +5222,7 @@ class _Handler(BaseHTTPRequestHandler):
         if run is None:
             self._reject_upload(404, f"no such run: {run_id}")
             return True
-        result = _build_results(run_id)
+        result = _build_results(run_id, self._page_lang())
         if result is None:
             self._reject_upload(*_no_results_status(run_id)); return True
         rows, _summary = result
@@ -5765,7 +5780,7 @@ class _Handler(BaseHTTPRequestHandler):
         found — typically because the filename was URL-encoded wrong,
         but the message says so the iOS UI can tell.
         """
-        result = _build_results(run_id)
+        result = _build_results(run_id, self._page_lang())
         if result is None:
             run = _get_run(run_id) or _reload_run_from_disk(run_id)
             if run is None:
@@ -5803,7 +5818,7 @@ class _Handler(BaseHTTPRequestHandler):
         if run is None:
             self.send_error(404, "no such run")
             return True
-        result = _build_results(run_id)
+        result = _build_results(run_id, self._page_lang())
         summary = result[1] if result else {}
         face_clusters_info = (_build_face_clusters_info(run_id, result[0])
                                if result else {"clusters": [], "n_noise": 0})
@@ -6869,9 +6884,19 @@ class _Handler(BaseHTTPRequestHandler):
         release naturally invalidates the cache rather than serving
         stale chrome to an upgraded user.
         """
+        from pixcull import __version__ as _pixcull_version
+        try:
+            _shell_stamp = int(_RESULTS_HTML_PATH.stat().st_mtime)
+        except OSError:
+            _shell_stamp = 0
+        # A static cache name kept serving the pre-upgrade shell forever.
+        # Include the package version and the template mtime so an edit
+        # or upgrade activates a new worker and drops the old cache.
+        _shell_cache = (f"pixcull-shell-{_pixcull_version}-"
+                        f"{_shell_stamp}")
         sw = (
             "// v0.10-P2-1 — minimal PWA service worker.\n"
-            "const CACHE = 'pixcull-shell-v0.10';\n"
+            f"const CACHE = '{_shell_cache}';\n"
             "const SHELL = [\n"
             "  '/',\n"
             "  '/manifest.json',\n"
@@ -9728,7 +9753,7 @@ class _Handler(BaseHTTPRequestHandler):
             return
         # Lean on the same _build_results helper that the inline
         # template path uses — guarantees identical fields.
-        result = _build_results(run_id)
+        result = _build_results(run_id, self._page_lang())
         if result is None:
             self.send_error(404, "no results yet")
             return
@@ -10492,7 +10517,7 @@ class _Handler(BaseHTTPRequestHandler):
             view["fallbacks"] = _fb
         try:
             from pixcull.scoring.identity_audit import audit_rows as _ar
-            _res = _build_results(run_id)
+            _res = _build_results(run_id, self._page_lang())
             if _res:
                 _ia = _ar(_res[0])
                 view["identity"] = {
@@ -10531,7 +10556,7 @@ class _Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _serve_results(self, run_id: str) -> None:
-        result = _build_results(run_id)
+        result = _build_results(run_id, self._page_lang())
         if result is None:
             # V14.0 — distinguish "run hasn't started/doesn't exist" from
             # "run finished but produced no analyzable images". The first
@@ -10606,7 +10631,9 @@ class _Handler(BaseHTTPRequestHandler):
         # V19.4.1 — hot-reloadable template (loaded from disk per request,
         # mtime-cached). Editing pixcull/report/templates/results.html
         # picks up on the next /results hit; no server restart required.
-        html = _results_html_template().replace(
+        html = localize_page(
+            "results.html", _results_html_template(), self._page_lang(),
+        ).replace(
             "__PAYLOAD__",
             _safe_dumps(payload).replace("</", "<\\/"),
         )
@@ -10656,7 +10683,7 @@ class _Handler(BaseHTTPRequestHandler):
         an IMG_0001.jpg). The plugin falls back to basename matching
         if abs paths don't appear in the catalog.
         """
-        result = _build_results(run_id)
+        result = _build_results(run_id, self._page_lang())
         if result is None:
             run = _get_run(run_id) or _reload_run_from_disk(run_id)
             if run is None:
@@ -10706,7 +10733,7 @@ class _Handler(BaseHTTPRequestHandler):
         the user picks "select per-location best" so the UI can show
         an updated decision summary.
         """
-        result = _build_results(run_id)
+        result = _build_results(run_id, self._page_lang())
         if result is None:
             run = _get_run(run_id) or _reload_run_from_disk(run_id)
             if run is None:
@@ -11077,7 +11104,7 @@ class _Handler(BaseHTTPRequestHandler):
         if run is None:
             self.send_error(404, "no such run")
             return
-        result = _build_results(run_id)
+        result = _build_results(run_id, self._page_lang())
         if result is None:
             self.send_error(*_no_results_status(run_id))
             return
@@ -11206,7 +11233,7 @@ class _Handler(BaseHTTPRequestHandler):
         refresh after a label edit without re-rendering the whole
         results page.
         """
-        result = _build_results(run_id)
+        result = _build_results(run_id, self._page_lang())
         if result is None:
             run = _get_run(run_id) or _reload_run_from_disk(run_id)
             if run is None:
@@ -11542,7 +11569,7 @@ class _Handler(BaseHTTPRequestHandler):
                 )
                 return
 
-        result = _build_results(run_id)
+        result = _build_results(run_id, self._page_lang())
         if result is None:
             self.send_error(500, "no results to export")
             return
@@ -11859,7 +11886,7 @@ class _Handler(BaseHTTPRequestHandler):
             if x.strip() in ("keep", "maybe", "cull")
         ) or ("keep",)
 
-        result = _build_results(run_id)
+        result = _build_results(run_id, self._page_lang())
         if result is None:
             run = _get_run(run_id) or _reload_run_from_disk(run_id)
             if run is None:
@@ -11932,12 +11959,21 @@ class _Handler(BaseHTTPRequestHandler):
         annotation form locally without re-requesting on every image.
         """
         from pixcull.scoring.rubric import RUBRIC_AXES
+        description_en = {
+            "technical": "Focus, exposure, sharpness and noise, judged against the Adams Zone System",
+            "subject": "How clearly the subject reads, and whether the decisive moment lands",
+            "composition": "Framing, balance, leading lines and negative space",
+            "light": "Quality, direction and contrast of the light, plus colour temperature",
+            "moment": "Whether the expression, gesture or peak action is captured",
+            "aesthetic": "Overall visual appeal and whether it fits a coherent body of work",
+        }
         meta = [
             {
                 "name": a.name,
                 "label_zh": a.label_zh,
                 "label_en": a.label_en,
                 "description_zh": a.description_zh,
+                "description_en": description_en.get(a.name, a.description_zh),
                 "rubric_descriptors": list(a.rubric_descriptors),
                 "checklist": [{"key": k, "weight": w} for k, w in a.checklist],
             }
@@ -12029,7 +12065,7 @@ class _Handler(BaseHTTPRequestHandler):
         try:
             from pixcull.client_picks import picked_filenames
             from pixcull.reconcile import LABELS_ZH, reconcile
-            result = _build_results(run_id)
+            result = _build_results(run_id, self._page_lang())
             rows = result[0] if result else []
             got = reconcile(rows, picked_filenames(Path(run["output_dir"])))
             got["labels"] = LABELS_ZH
@@ -12379,7 +12415,7 @@ class _Handler(BaseHTTPRequestHandler):
             self.send_error(404, "no such run")
             return
 
-        result = _build_results(run_id)
+        result = _build_results(run_id, self._page_lang())
         if result is None:
             self.send_error(404, "no results yet")
             return
@@ -14140,7 +14176,7 @@ class _Handler(BaseHTTPRequestHandler):
             self.wfile.write(body)
             return
 
-        result = _build_results(run_id)
+        result = _build_results(run_id, self._page_lang())
         if result is None:
             self.send_error(*_no_results_status(run_id))
             return
