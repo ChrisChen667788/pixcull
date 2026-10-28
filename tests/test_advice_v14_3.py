@@ -16,6 +16,8 @@ the V14.3 patch fixed:
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from pixcull.scoring.photo_advice import (
@@ -353,3 +355,94 @@ def test_idx_rotation_still_works_with_vertical():
     # With 3 wedding subject phrases and 10 different idx values,
     # we expect at least 2 different phrases to appear.
     assert len(picks) >= 2, f"only saw {len(picks)} unique phrases: {picks}"
+
+
+# ---------------------------------------------------------------------------
+# 5. English advice
+# ---------------------------------------------------------------------------
+
+_CJK = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
+
+
+@pytest.mark.parametrize("decision", ["keep", "maybe", "cull"])
+def test_english_advice_has_no_chinese(decision):
+    """``lang="en"`` must produce English strengths, weaknesses, fixes
+    and verdict text — this is what an English results page renders in
+    the lightbox."""
+    row = {"filename": "en.jpg", "scene": "portrait", "face_count": 1,
+           "subject_fraction": 0.6, "flags": "closed_eyes",
+           "score_final": 0.42, "score_exposure": 0.3}
+    final = {"subject": 4.5, "technical": 2.0, "composition": 3.0,
+             "light": 2.0, "moment": 2.0, "aesthetic": 3.5}
+    ad = build_advice(row, final, decision, idx=3, lang="en")
+    blob = " ".join([
+        ad["verdict_short"],
+        " ".join(ad["strengths"]),
+        " ".join(ad["weaknesses"]),
+        " ".join(ad.get("suggestions") or []),
+        ad.get("maybe_rationale") or "",
+    ])
+    assert not _CJK.search(blob), f"Chinese leaked into English advice: {blob}"
+
+
+def test_default_advice_stays_chinese():
+    """Callers that do not pass ``lang`` keep the existing Chinese output."""
+    row = {"filename": "zh.jpg", "scene": "portrait", "face_count": 1,
+           "subject_fraction": 0.6}
+    final = {"subject": 5.0, "technical": 4.0, "composition": 4.0,
+             "light": 4.0, "moment": 4.0, "aesthetic": 4.0}
+    ad = build_advice(row, final, "keep", idx=0)
+    assert _CJK.search(" ".join(ad["strengths"]) + ad["verdict_short"])
+
+
+@pytest.mark.parametrize("vertical", ["wedding", "bird", "kids", "sports"])
+def test_english_advice_with_a_vertical_has_no_chinese(vertical):
+    """Per-vertical phrase pools are a separate catalogue from the
+    generic one, so they need the same English guard."""
+    row = {"filename": "v.jpg", "scene": "portrait", "face_count": 2,
+           "subject_fraction": 0.6, "score_exposure": 0.2,
+           "flags": "closed_eyes", "score_final": 0.4}
+    final = {"subject": 4.5, "technical": 2.0, "composition": 3.0,
+             "light": 1.0, "moment": 2.0, "aesthetic": 3.0}
+    ad = build_advice(row, final, "maybe", idx=0, vertical=vertical, lang="en")
+    blob = " ".join(ad["strengths"] + ad["weaknesses"] + ad["suggestions"])
+    assert not _CJK.search(blob), f"{vertical} leaked Chinese: {blob}"
+
+
+# ---------------------------------------------------------------------------
+# 6. English phrase coverage
+# ---------------------------------------------------------------------------
+
+def _walk_templates(kind):
+    from pixcull.scoring import photo_advice as pa
+
+    if kind == "vertical":
+        for _vertical, axes in pa.VERTICAL_STRENGTH_TEMPLATES.items():
+            for _axis, items in axes.items():
+                yield from items
+        for _vertical, axes in pa.VERTICAL_WEAKNESS_TEMPLATES.items():
+            for _axis, items in axes.items():
+                yield from items
+        return
+    source = (pa.STRENGTH_TEMPLATES if kind == "strength"
+              else pa.WEAKNESS_TEMPLATES)
+    for _axis, items in source.items():
+        yield from items
+
+
+def test_every_template_phrase_has_an_english_translation():
+    """A phrase missing from ``photo_advice_en`` silently renders in
+    Chinese on an English page. Walk every pool instead of testing one
+    row per axis."""
+    from pixcull.scoring import photo_advice as pa
+
+    missing = set()
+    for kind in ("strength", "weakness", "vertical"):
+        for template in _walk_templates(kind):
+            for phrase in template.get("phrases", []):
+                if phrase not in pa._EN_PHRASES:
+                    missing.add(phrase)
+            for fix in template.get("fixes") or []:
+                if fix not in pa._EN_FIXES:
+                    missing.add(fix)
+    assert not missing, f"{len(missing)} phrases have no English: {sorted(missing)[:5]}"

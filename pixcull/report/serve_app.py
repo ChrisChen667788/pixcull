@@ -76,6 +76,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import quote, unquote, urlparse
 
+from pixcull.i18n import _normalize_lang
+from pixcull.report.page_i18n import (
+    localize_page, resolve_lang, translate_message,
+    translate_progress_message,
+)
+
 # v2.31 — packaged-install support. Until now every asset path was
 # `Path(__file__).parent.parent / …`, i.e. "this file lives in
 # <repo>/scripts/", which is true for a git clone and FALSE for a
@@ -1089,7 +1095,23 @@ _THEME_TOGGLE_HTML = """<style>
 """
 
 
-def _read_template(name: str) -> str:
+#: The pages outside the review workspace have no language switcher of
+#: their own. Two links, a cookie and a reload is enough: the server
+#: already reads ``pixcull_lang`` on the next request.
+_LANG_SWITCH_HTML = """
+<div id="pixcullLangSwitch" style="position:fixed;left:14px;bottom:12px;
+     z-index:2147483000;display:flex;gap:2px;font:11px/1.6 system-ui,sans-serif;
+     background:rgba(20,22,26,.82);border:1px solid rgba(255,255,255,.14);
+     border-radius:999px;padding:2px 4px;backdrop-filter:blur(8px)">
+  <button type="button" onclick="document.cookie='pixcull_lang=en_US;path=/;max-age=31536000';location.reload()"
+          style="border:0;background:none;color:#e8e8ea;padding:1px 6px;cursor:pointer">EN</button>
+  <button type="button" onclick="document.cookie='pixcull_lang=zh_CN;path=/;max-age=31536000';location.reload()"
+          style="border:0;background:none;color:#9a9aa2;padding:1px 6px;cursor:pointer">中文</button>
+</div>
+"""
+
+
+def _read_template(name: str, lang: str = "") -> str:
     """v2.5-P0-1 — load a sibling HTML page template (video_review /
     timeline) from the same dir as results.html, so large embedded page
     blobs live as files instead of bloating this module.
@@ -1115,7 +1137,9 @@ def _read_template(name: str) -> str:
         # can't shift a page's layout.
         if "</body>" in html:
             html = html.replace("</body>", _THEME_TOGGLE_HTML + "</body>", 1)
-    return html
+    if "</body>" in html and "pixcullLangSwitch" not in html:
+        html = html.replace("</body>", _LANG_SWITCH_HTML + "</body>", 1)
+    return localize_page(name, html, lang) if lang else html
 _RESULTS_HTML_CACHE: tuple[int, str] | None = None
 
 
@@ -2270,7 +2294,7 @@ _RESULTS_CACHE_LOCK = threading.Lock()
 _RESULTS_CACHE_MAX = 4          # runs are multi-MB; a few is plenty
 
 
-def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
+def _build_results(run_id: str, lang: str = "zh") -> tuple[list[dict], dict] | None:
     """Cached wrapper around :func:`_build_results_uncached`.
 
     Falls through to an uncached build whenever the inputs can't be
@@ -2286,10 +2310,10 @@ def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
         # annotations.jsonl is optional: 0 means "not present", which is
         # the same observable state as before it was ever written.
         ann_mtime = ann_path.stat().st_mtime_ns if ann_path.exists() else 0
-        cache_key = (run_id, str(output_dir),
+        cache_key = (run_id, str(output_dir), _normalize_lang(lang),
                      scores_path.stat().st_mtime_ns, ann_mtime)
     except OSError:
-        return _build_results_uncached(run_id)
+        return _build_results_uncached(run_id, lang)
 
     with _RESULTS_CACHE_LOCK:
         hit = _RESULTS_CACHE.get(cache_key)
@@ -2299,15 +2323,17 @@ def _build_results(run_id: str) -> tuple[list[dict], dict] | None:
     # Built OUTSIDE the lock: this is the multi-second path, and holding
     # the lock across it would serialise every concurrent request.  Two
     # racing builds duplicate work but agree on the result.
-    built = _build_results_uncached(run_id)
+    built = _build_results_uncached(run_id, lang)
     if built is not None:
         with _RESULTS_CACHE_LOCK:
-            # Drop superseded generations of THIS run first: a re-scored
-            # run would otherwise keep up to _MAX copies of its own
-            # multi-MB row list alive until plain eviction got to them
-            # (_MtimeLRUCache does the same for its single path).
+            # Drop superseded generations of THIS run and language: a
+            # re-scored run would otherwise keep up to _MAX copies of its
+            # own multi-MB row list alive until plain eviction got to
+            # them (_MtimeLRUCache does the same for its single path).
+            # Other languages stay, so an en/zh switch does not force a
+            # rebuild of the language it just left.
             for k in [k for k in _RESULTS_CACHE
-                      if k[:2] == cache_key[:2] and k != cache_key]:
+                      if k[:3] == cache_key[:3] and k != cache_key]:
                 _RESULTS_CACHE.pop(k, None)
             if len(_RESULTS_CACHE) >= _RESULTS_CACHE_MAX:
                 _RESULTS_CACHE.pop(next(iter(_RESULTS_CACHE)))   # oldest out
@@ -2385,7 +2411,7 @@ def _cached_near_dup_groups(cache_path: Path, cache: dict,
     return groups
 
 
-def _build_results_uncached(run_id: str) -> tuple[list[dict], dict] | None:
+def _build_results_uncached(run_id: str, lang: str = "zh") -> tuple[list[dict], dict] | None:
     # V8.5: fall back to disk-reload if the run isn't in memory
     # (e.g. server restarted, or the .app and dev server share runs
     # via a symlink). Without this fallback /results/<run_id> is
@@ -2542,6 +2568,7 @@ def _build_results_uncached(run_id: str) -> tuple[list[dict], dict] | None:
             meta_inconsistencies=_s(r.get("meta_inconsistencies", "")),
             idx=_idx,
             vertical=run_vertical,        # V17.3 — business-flavored phrases
+            lang="en" if _normalize_lang(lang) == "en_US" else "zh",
         )
         # V9.0: detected style modes for the UI tag chip
         from pixcull.scoring.style_modes import detect_style_modes
@@ -4378,7 +4405,7 @@ class _Handler(BaseHTTPRequestHandler):
         cluster_id, is_burst_peak. When the user opens the lightbox
         we re-fetch a single row via /results JSON (already implemented).
         """
-        result = _build_results(run_id)
+        result = _build_results(run_id, self._page_lang())
         if result is None:
             run = _get_run(run_id) or _reload_run_from_disk(run_id)
             if run is None:
@@ -4446,7 +4473,7 @@ class _Handler(BaseHTTPRequestHandler):
         """
         from urllib.parse import parse_qs
 
-        result = _build_results(run_id)
+        result = _build_results(run_id, self._page_lang())
         if result is None:
             self.send_error(404, "no such run"); return True
         rows, _ = result
@@ -4545,7 +4572,7 @@ class _Handler(BaseHTTPRequestHandler):
         """
         from urllib.parse import parse_qs
 
-        result = _build_results(run_id)
+        result = _build_results(run_id, self._page_lang())
         if result is None:
             self.send_error(404, "no such run"); return True
         rows, _ = result
@@ -4617,7 +4644,7 @@ class _Handler(BaseHTTPRequestHandler):
         """
         from urllib.parse import parse_qs
         from datetime import datetime as _dt
-        result = _build_results(run_id)
+        result = _build_results(run_id, self._page_lang())
         if result is None:
             self.send_error(404, "no such run"); return True
         rows, _ = result
@@ -4781,7 +4808,7 @@ class _Handler(BaseHTTPRequestHandler):
             width = 256
         width = max(64, min(512, width))
 
-        result = _build_results(run_id)
+        result = _build_results(run_id, self._page_lang())
         if result is None:
             self.send_error(404, "no results yet"); return True
         rows, _meta = result
@@ -4926,7 +4953,7 @@ class _Handler(BaseHTTPRequestHandler):
             ]
           }
         """
-        result = _build_results(run_id)
+        result = _build_results(run_id, self._page_lang())
         if result is None:
             run = _get_run(run_id) or _reload_run_from_disk(run_id)
             if run is None:
@@ -5096,10 +5123,21 @@ class _Handler(BaseHTTPRequestHandler):
             "exposure":     "曝光问题",
             "other":        "其他",
         }
+        labels_en = {
+            "focus_miss":   "Missed focus",
+            "eyes_closed":  "Eyes closed / expression",
+            "motion_blur":  "Blur / camera shake",
+            "framing":      "Weak composition",
+            "duplicate":    "Better duplicate exists",
+            "exposure":     "Exposure problem",
+            "other":        "Other",
+        }
         body = _safe_dumps({
             "schema":  "pixcull.api.v1.taxonomy.v1",
             "cull_reasons": [
-                {"token": t, "label_zh": labels_zh.get(t, t)}
+                {"token": t,
+                 "label_zh": labels_zh.get(t, t),
+                 "label_en": labels_en.get(t, t)}
                 for t in _CULL_REASONS
             ],
         }).encode("utf-8")
@@ -5187,7 +5225,7 @@ class _Handler(BaseHTTPRequestHandler):
         if run is None:
             self._reject_upload(404, f"no such run: {run_id}")
             return True
-        result = _build_results(run_id)
+        result = _build_results(run_id, self._page_lang())
         if result is None:
             self._reject_upload(*_no_results_status(run_id)); return True
         rows, _summary = result
@@ -5745,7 +5783,7 @@ class _Handler(BaseHTTPRequestHandler):
         found — typically because the filename was URL-encoded wrong,
         but the message says so the iOS UI can tell.
         """
-        result = _build_results(run_id)
+        result = _build_results(run_id, self._page_lang())
         if result is None:
             run = _get_run(run_id) or _reload_run_from_disk(run_id)
             if run is None:
@@ -5783,7 +5821,7 @@ class _Handler(BaseHTTPRequestHandler):
         if run is None:
             self.send_error(404, "no such run")
             return True
-        result = _build_results(run_id)
+        result = _build_results(run_id, self._page_lang())
         summary = result[1] if result else {}
         face_clusters_info = (_build_face_clusters_info(run_id, result[0])
                                if result else {"clusters": [], "n_noise": 0})
@@ -6005,6 +6043,7 @@ class _Handler(BaseHTTPRequestHandler):
         ("/timeline/data/", "_serve_timeline_data", "tail", ()),
         ("/timeline/", "_serve_timeline_page", "tail", ()),
         ("/xmp_zip/", "_serve_xmp_zip", "tail", ()),
+        ("/reveal/", "_serve_reveal", "tail", ()),
         ("/share/", "_serve_share_page", "tail", ()),
         ("/style/distances/", "_serve_style_distances", "tail", ()),
         ("/tether/status/", "_serve_tether_status", "tail", ()),
@@ -6295,9 +6334,30 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_error(404, "not found")
 
     # --- handlers ----------------------------------------------------------
+    def _page_lang(self) -> str:
+        """Resolve this request's page language and persist an explicit
+        ``?lang=`` choice in a cookie for the next page."""
+        from urllib.parse import parse_qs
+        query = urlparse(self.path).query
+        lang = resolve_lang(
+            query=query,
+            cookie_header=self.headers.get("Cookie", ""),
+            accept_language=self.headers.get("Accept-Language", ""),
+            env=os.environ.get("PIXCULL_LANG", ""),
+        )
+        self._extra_headers = []
+        if (parse_qs(query).get("lang") or [""])[0].strip():
+            self._extra_headers.append(
+                ("Set-Cookie",
+                 f"pixcull_lang={lang}; Path=/; Max-Age=31536000; SameSite=Lax"))
+        return lang
+
+    def _serve_localized_page(self, html: str, template: str) -> None:
+        lang = self._page_lang()
+        self._send_html(200, localize_page(template, html, lang).encode("utf-8"))
+
     def _serve_upload_page(self) -> None:
-        body = _UPLOAD_HTML.encode("utf-8")
-        self._send_html(200, body)
+        self._serve_localized_page(_UPLOAD_HTML, "pages/upload.html")
 
     def _serve_bias_audit_page(self) -> None:
         """v0.13-P0-4 — render the bias audit dashboard.
@@ -6589,6 +6649,8 @@ class _Handler(BaseHTTPRequestHandler):
             .replace("<!--__DIS_ROWS__-->", rows_html)
             .replace("<!--__DIS_PER_RUN__-->", per_run_html)
         )
+        html_body = localize_page(
+            "pages/disagreement.html", html_body, self._page_lang())
         self._send_html(200, html_body.encode("utf-8"))
 
     # ── v2.32-P1 — cross-run library search ──────────────────────────
@@ -6596,6 +6658,7 @@ class _Handler(BaseHTTPRequestHandler):
         """GET /library — search across every indexed shoot at once."""
         html = _read_template("pages/library.html").replace(
             "/*__DESIGN_TOKENS_CSS__*/", _DESIGN_TOKENS_CSS)
+        html = localize_page("pages/library.html", html, self._page_lang())
         self._send_html(200, html.encode("utf-8"))
 
     def _serve_api_v1_library_status(self) -> None:
@@ -6825,9 +6888,19 @@ class _Handler(BaseHTTPRequestHandler):
         release naturally invalidates the cache rather than serving
         stale chrome to an upgraded user.
         """
+        from pixcull import __version__ as _pixcull_version
+        try:
+            _shell_stamp = int(_RESULTS_HTML_PATH.stat().st_mtime)
+        except OSError:
+            _shell_stamp = 0
+        # A static cache name kept serving the pre-upgrade shell forever.
+        # Include the package version and the template mtime so an edit
+        # or upgrade activates a new worker and drops the old cache.
+        _shell_cache = (f"pixcull-shell-{_pixcull_version}-"
+                        f"{_shell_stamp}")
         sw = (
             "// v0.10-P2-1 — minimal PWA service worker.\n"
-            "const CACHE = 'pixcull-shell-v0.10';\n"
+            f"const CACHE = '{_shell_cache}';\n"
             "const SHELL = [\n"
             "  '/',\n"
             "  '/manifest.json',\n"
@@ -9413,7 +9486,9 @@ class _Handler(BaseHTTPRequestHandler):
                 "</body>"
             ).encode("utf-8")
             return self._send_html(404, body)
-        body = _render_video_review_html(rid).encode("utf-8")
+        body = localize_page(
+            "pages/video_review.html", _render_video_review_html(rid),
+            self._page_lang()).encode("utf-8")
         self._send_html(200, body)
 
     def _serve_timeline_data(self, tail: str) -> None:
@@ -9437,7 +9512,10 @@ class _Handler(BaseHTTPRequestHandler):
         rid = _safe_run_id(tail)
         if rid is None:
             return self.send_error(400, "bad run_id")
-        self._send_html(200, _render_timeline_html(rid).encode("utf-8"))
+        body = localize_page(
+            "pages/timeline.html", _render_timeline_html(rid),
+            self._page_lang())
+        self._send_html(200, body.encode("utf-8"))
 
     def _serve_healthz(self) -> None:
         """v0.13.10 — operational health probe.
@@ -9679,7 +9757,7 @@ class _Handler(BaseHTTPRequestHandler):
             return
         # Lean on the same _build_results helper that the inline
         # template path uses — guarantees identical fields.
-        result = _build_results(run_id)
+        result = _build_results(run_id, self._page_lang())
         if result is None:
             self.send_error(404, "no results yet")
             return
@@ -10049,6 +10127,7 @@ class _Handler(BaseHTTPRequestHandler):
             .replace("<!--__HISTORY_COUNT__-->", f"{len(entries)} 个 run")
             .replace("<!--__HISTORY_CARDS__-->", cards_html)
         )
+        page = localize_page("pages/history.html", page, self._page_lang())
         body = page.encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -10102,8 +10181,12 @@ class _Handler(BaseHTTPRequestHandler):
         # shell; only the shared design-tokens CSS is spliced in, same as
         # the v2.16 page extractions). Byte-identical to the prior inline
         # r"""...""" + _DESIGN_TOKENS_CSS build (route-diff verified).
-        page = _read_template("pages/tether.html").replace(
-            "/*__DESIGN_TOKENS_CSS__*/", _DESIGN_TOKENS_CSS)
+        lang = self._page_lang()
+        page = localize_page(
+            "pages/tether.html",
+            _read_template("pages/tether.html").replace(
+                "/*__DESIGN_TOKENS_CSS__*/", _DESIGN_TOKENS_CSS),
+            lang)
         body = page.encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -10438,7 +10521,7 @@ class _Handler(BaseHTTPRequestHandler):
             view["fallbacks"] = _fb
         try:
             from pixcull.scoring.identity_audit import audit_rows as _ar
-            _res = _build_results(run_id)
+            _res = _build_results(run_id, self._page_lang())
             if _res:
                 _ia = _ar(_res[0])
                 view["identity"] = {
@@ -10468,6 +10551,12 @@ class _Handler(BaseHTTPRequestHandler):
                 Path(run["output_dir"]))
         except Exception:  # noqa: BLE001
             pass
+        # Pipeline progress lines are written in Chinese by the
+        # orchestrator. The home page polls this endpoint, so translate
+        # them here rather than threading a language through the pipeline.
+        if isinstance(view.get("message"), str):
+            view["message"] = translate_progress_message(
+                view["message"], self._page_lang())
         body = json.dumps(view, ensure_ascii=False).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -10477,7 +10566,7 @@ class _Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _serve_results(self, run_id: str) -> None:
-        result = _build_results(run_id)
+        result = _build_results(run_id, self._page_lang())
         if result is None:
             # V14.0 — distinguish "run hasn't started/doesn't exist" from
             # "run finished but produced no analyzable images". The first
@@ -10552,10 +10641,28 @@ class _Handler(BaseHTTPRequestHandler):
         # V19.4.1 — hot-reloadable template (loaded from disk per request,
         # mtime-cached). Editing pixcull/report/templates/results.html
         # picks up on the next /results hit; no server restart required.
-        html = _results_html_template().replace(
+        page_lang = self._page_lang()
+        html = localize_page(
+            "results.html", _results_html_template(), page_lang,
+        ).replace(
             "__PAYLOAD__",
             _safe_dumps(payload).replace("</", "<\\/"),
         )
+        # The page's own ``_t()`` strings used to arrive only through
+        # /api/v1/locale, which is async: the grid rendered from the
+        # Chinese fallbacks first and never repainted them. Ship the
+        # dictionary with the document so the first paint is already in
+        # the page language, and so ``_uiLangEn()`` is true before any
+        # fetch resolves.
+        from pixcull.i18n import load_locale
+        boot = (
+            "<script>window.PIXCULL_LANG=%s;window.__pixcullStrings=%s;</script>"
+            % (
+                _safe_dumps(page_lang),
+                _safe_dumps(load_locale(page_lang)).replace("</", "<\\/"),
+            )
+        )
+        html = html.replace("<head>", "<head>" + boot, 1)
         # v2.1-P0-2 — discoverability: a video run gets a floating
         # "🎬 视频审片" button into the P0-4 review surface (and the
         # joint photo+video timeline).  Pure additive inject before
@@ -10602,7 +10709,7 @@ class _Handler(BaseHTTPRequestHandler):
         an IMG_0001.jpg). The plugin falls back to basename matching
         if abs paths don't appear in the catalog.
         """
-        result = _build_results(run_id)
+        result = _build_results(run_id, self._page_lang())
         if result is None:
             run = _get_run(run_id) or _reload_run_from_disk(run_id)
             if run is None:
@@ -10652,7 +10759,7 @@ class _Handler(BaseHTTPRequestHandler):
         the user picks "select per-location best" so the UI can show
         an updated decision summary.
         """
-        result = _build_results(run_id)
+        result = _build_results(run_id, self._page_lang())
         if result is None:
             run = _get_run(run_id) or _reload_run_from_disk(run_id)
             if run is None:
@@ -11023,7 +11130,7 @@ class _Handler(BaseHTTPRequestHandler):
         if run is None:
             self.send_error(404, "no such run")
             return
-        result = _build_results(run_id)
+        result = _build_results(run_id, self._page_lang())
         if result is None:
             self.send_error(*_no_results_status(run_id))
             return
@@ -11152,7 +11259,7 @@ class _Handler(BaseHTTPRequestHandler):
         refresh after a label edit without re-rendering the whole
         results page.
         """
-        result = _build_results(run_id)
+        result = _build_results(run_id, self._page_lang())
         if result is None:
             run = _get_run(run_id) or _reload_run_from_disk(run_id)
             if run is None:
@@ -11488,7 +11595,7 @@ class _Handler(BaseHTTPRequestHandler):
                 )
                 return
 
-        result = _build_results(run_id)
+        result = _build_results(run_id, self._page_lang())
         if result is None:
             self.send_error(500, "no results to export")
             return
@@ -11805,7 +11912,7 @@ class _Handler(BaseHTTPRequestHandler):
             if x.strip() in ("keep", "maybe", "cull")
         ) or ("keep",)
 
-        result = _build_results(run_id)
+        result = _build_results(run_id, self._page_lang())
         if result is None:
             run = _get_run(run_id) or _reload_run_from_disk(run_id)
             if run is None:
@@ -11834,6 +11941,45 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
+
+    def _serve_reveal(self, rel: str) -> None:
+        """Reveal a frame's original file in the desktop file manager.
+
+        The page cannot open a local file: browsers have no such call,
+        and ``/full/`` is a 1600px render. PixCull also never copies the
+        originals, so the only address is the ``path`` column of
+        ``scores.csv``. This looks a filename up there and hands the
+        result to Finder / Explorer / xdg-open.
+
+        The filename has to be a row of this run. That is both the
+        feature and the guard: a crafted path resolves to nothing.
+        """
+        from urllib.parse import unquote
+        from pixcull.report.reveal import source_path_for, reveal_in_file_manager
+
+        parts = rel.split("/", 1)
+        if len(parts) != 2:
+            self._send_json(400, b'{"error": "need run_id/filename"}')
+            return
+        run_id, filename = unquote(parts[0]), unquote(parts[1])
+        output_dir = _run_output_dir(run_id)
+        if output_dir is None:
+            self._send_json(404, b'{"error": "no such run"}')
+            return
+        src = source_path_for(output_dir, filename, base=_repo_root())
+        if src is None:
+            self._send_json(404, b'{"error": "not a frame of this run"}')
+            return
+        if not src.exists():
+            payload = json.dumps({
+                "path": str(src),
+                "error": "the original is not reachable — is the drive mounted?",
+            }, ensure_ascii=False)
+            self._send_json(404, payload.encode("utf-8"))
+            return
+        reveal_in_file_manager(src)
+        self._send_json(200, json.dumps(
+            {"path": str(src)}, ensure_ascii=False).encode("utf-8"))
 
     def _serve_xmp_zip(self, run_id: str) -> None:
         """Stream all sidecars + a README into a single zip download."""
@@ -11884,7 +12030,9 @@ class _Handler(BaseHTTPRequestHandler):
                 "label_zh": a.label_zh,
                 "label_en": a.label_en,
                 "description_zh": a.description_zh,
+                "description_en": a.description_en or a.description_zh,
                 "rubric_descriptors": list(a.rubric_descriptors),
+                "rubric_descriptors_en": list(a.rubric_descriptors_en),
                 "checklist": [{"key": k, "weight": w} for k, w in a.checklist],
             }
             for a in RUBRIC_AXES
@@ -11975,7 +12123,7 @@ class _Handler(BaseHTTPRequestHandler):
         try:
             from pixcull.client_picks import picked_filenames
             from pixcull.reconcile import LABELS_ZH, reconcile
-            result = _build_results(run_id)
+            result = _build_results(run_id, self._page_lang())
             rows = result[0] if result else []
             got = reconcile(rows, picked_filenames(Path(run["output_dir"])))
             got["labels"] = LABELS_ZH
@@ -12310,10 +12458,18 @@ class _Handler(BaseHTTPRequestHandler):
         """
         # P2.4 — split rel into run_id + query string. Most callers
         # pass just the run_id; the new "?n=N" form supports batch.
+        # The prefix table hands this handler ``urlparse(...).path``, so
+        # a query string only arrives on the /api/v1 form. Read it from
+        # ``self.path`` either way: ``?n=`` and ``?lang=`` were silently
+        # dropped on /next_to_label/<run> before this.
         path_q = rel.split("?", 1)
         run_id = unquote(path_q[0])
         from urllib.parse import parse_qs
-        qparams = parse_qs(path_q[1]) if len(path_q) > 1 else {}
+        qparams = parse_qs(urlparse(self.path).query)
+        if len(path_q) > 1 and not qparams:
+            qparams = parse_qs(path_q[1])
+        lang = (qparams.get("lang", [""])[0] or "").strip().lower()
+        english = lang.startswith("en")
         try:
             n_requested = int(qparams.get("n", ["1"])[0])
         except (ValueError, TypeError):
@@ -12325,7 +12481,7 @@ class _Handler(BaseHTTPRequestHandler):
             self.send_error(404, "no such run")
             return
 
-        result = _build_results(run_id)
+        result = _build_results(run_id, self._page_lang())
         if result is None:
             self.send_error(404, "no results yet")
             return
@@ -12387,23 +12543,42 @@ class _Handler(BaseHTTPRequestHandler):
         # Returns a list of short reason fragments suitable for the UI
         # tooltip. Identical logic to the legacy single-item path, just
         # factored out so the batch path can reuse it.
-        def _reasons_for(c: dict) -> list[str]:
+        def _reasons_for(c: dict, english: bool = False) -> list[str]:
+            """Why this frame was queued. ``english`` swaps the Chinese
+            fragments for the English ones the page shows; the numbers and
+            the tokens are the same either way.
+            """
             reasons: list[str] = []
             if (c.get("rescorer_pred") is not None
                     and c["rescorer_pred"] != c["decision"]):
                 prob = c.get("rescorer_prob_keep")
                 prob_str = f" (P={prob:.2f})" if prob is not None else ""
-                reasons.append(
-                    f"规则=={c['decision']} 但 rescorer=={c['rescorer_pred']}{prob_str}"
-                )
+                if english:
+                    reasons.append(
+                        "rule says "
+                        f"{c['decision']} but the rescorer says "
+                        f"{c['rescorer_pred']}{prob_str}"
+                    )
+                else:
+                    reasons.append(
+                        f"规则=={c['decision']} 但 rescorer=={c['rescorer_pred']}{prob_str}"
+                    )
             if (c.get("rescorer_prob_keep") is not None
                     and 0.40 <= c["rescorer_prob_keep"] <= 0.70):
-                reasons.append(
-                    f"rescorer 不确定区 (P={c['rescorer_prob_keep']:.2f})"
-                )
+                if english:
+                    reasons.append(
+                        f"rescorer uncertain (P={c['rescorer_prob_keep']:.2f})"
+                    )
+                else:
+                    reasons.append(
+                        f"rescorer 不确定区 (P={c['rescorer_prob_keep']:.2f})"
+                    )
             score = c.get("score_final")
             if score is not None and 0.35 <= score <= 0.65:
-                reasons.append(f"score_final={score:.2f} 临界")
+                if english:
+                    reasons.append(f"score_final={score:.2f} is borderline")
+                else:
+                    reasons.append(f"score_final={score:.2f} 临界")
             # v0.11-P1-4 — hard-example surface
             if _hard_stats is not None:
                 he_boost = _hard_stats.boost_for(
@@ -12411,11 +12586,19 @@ class _Handler(BaseHTTPRequestHandler):
                     vertical=str(c.get("vertical", "") or c.get("scene", "")),
                 )
                 if he_boost >= 0.5:
-                    reasons.append(
-                        f"hard-example 场景 (历史反转 boost={he_boost:.2f})"
-                    )
+                    if english:
+                        reasons.append(
+                            f"hard-example scene (history flip boost={he_boost:.2f})"
+                        )
+                    else:
+                        reasons.append(
+                            f"hard-example 场景 (历史反转 boost={he_boost:.2f})"
+                        )
             if not reasons:
-                reasons.append("queue 中未标注的下一张")
+                reasons.append(
+                    "next unlabeled frame in the queue" if english
+                    else "queue 中未标注的下一张"
+                )
             return reasons
 
         # P2.4 — batch mode returns the top-N as a queue array. Used
@@ -12427,7 +12610,7 @@ class _Handler(BaseHTTPRequestHandler):
                 queue.append({
                     "filename":       c["filename"],
                     "priority_rank":  i + 1,
-                    "why":            "; ".join(_reasons_for(c)),
+                    "why":            "; ".join(_reasons_for(c, english)),
                     "decision":       c.get("decision"),
                     "score_final":    c.get("score_final"),
                     "rescorer_pred":  c.get("rescorer_pred"),
@@ -12450,7 +12633,7 @@ class _Handler(BaseHTTPRequestHandler):
             "n_total": len(rows),
             "n_labeled": len(labeled),
             "n_remaining": len(candidates),
-            "why": "; ".join(_reasons_for(chosen)),
+            "why": "; ".join(_reasons_for(chosen, english)),
             "row": chosen,
         }, ensure_ascii=False).encode("utf-8"))
 
@@ -12657,8 +12840,7 @@ class _Handler(BaseHTTPRequestHandler):
 
     # --- V14.6 first-run page + status ------------------------------------
     def _serve_first_run_page(self) -> None:
-        body = _FIRST_RUN_HTML.encode("utf-8")
-        self._send_html(200, body)
+        self._serve_localized_page(_FIRST_RUN_HTML, "pages/first_run.html")
 
     def _serve_first_run_status(self) -> None:
         body = _safe_dumps(first_run_snapshot()).encode("utf-8")
@@ -12666,8 +12848,7 @@ class _Handler(BaseHTTPRequestHandler):
 
     # --- V17.0 verticals --------------------------------------------------
     def _serve_verticals_page(self) -> None:
-        body = _VERTICALS_HTML.encode("utf-8")
-        self._send_html(200, body)
+        self._serve_localized_page(_VERTICALS_HTML, "pages/verticals.html")
 
     def _serve_verticals_json(self) -> None:
         from pixcull import verticals as vmod
@@ -13111,6 +13292,7 @@ class _Handler(BaseHTTPRequestHandler):
         ).replace(
             "__VZH__", v.zh
         )
+        html = localize_page("pages/vertical_bulk.html", html, self._page_lang())
         self._send_html(200, html.encode("utf-8"))
 
     def _serve_vertical_bulk_thumb(self) -> None:
@@ -13550,8 +13732,7 @@ class _Handler(BaseHTTPRequestHandler):
 
     # --- V14.7 opt-in error reporting -------------------------------------
     def _serve_privacy_page(self) -> None:
-        body = _PRIVACY_HTML.encode("utf-8")
-        self._send_html(200, body)
+        self._serve_localized_page(_PRIVACY_HTML, "pages/privacy.html")
 
     def _serve_error_reports_settings(self) -> None:
         """GET — read current opt-in state from config.json. Default OFF."""
@@ -13629,8 +13810,7 @@ class _Handler(BaseHTTPRequestHandler):
 
     # --- storage admin -----------------------------------------------------
     def _serve_admin_page(self) -> None:
-        body = _ADMIN_HTML.encode("utf-8")
-        self._send_html(200, body)
+        self._serve_localized_page(_ADMIN_HTML, "pages/admin.html")
 
     # v0.7-P0-3 — performance debug page.  Lightweight: same template
     # frame as /admin, but populated with process RSS, # active runs,
@@ -13638,8 +13818,7 @@ class _Handler(BaseHTTPRequestHandler):
     # 4 s via fetch() to /admin/perf.json so the operator can watch
     # how big-batch runs grow over time.
     def _serve_admin_perf_page(self) -> None:
-        body = _ADMIN_PERF_HTML.encode("utf-8")
-        self._send_html(200, body)
+        self._serve_localized_page(_ADMIN_PERF_HTML, "pages/admin_perf.html")
 
     def _serve_admin_perf_json(self) -> None:
         import resource
@@ -14090,7 +14269,7 @@ class _Handler(BaseHTTPRequestHandler):
             self.wfile.write(body)
             return
 
-        result = _build_results(run_id)
+        result = _build_results(run_id, self._page_lang())
         if result is None:
             self.send_error(*_no_results_status(run_id))
             return
@@ -14271,7 +14450,7 @@ class _Handler(BaseHTTPRequestHandler):
                 headers.append(("Content-Encoding", "gzip"))
                 headers.append(("Vary", "Accept-Encoding"))
         self.send_response(status)
-        for k, v in headers:
+        for k, v in list(getattr(self, "_extra_headers", ())) + headers:
             self.send_header(k, v)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
@@ -14292,6 +14471,7 @@ class _Handler(BaseHTTPRequestHandler):
         JS surfaces ``data.error`` directly, so a clean string beats a
         BaseHTTPRequestHandler error page being scraped into a textbox.
         """
+        message = translate_message(message, self._page_lang())
         body = json.dumps({"error": message}, ensure_ascii=False).encode("utf-8")
         self._send_json(status, body)
 

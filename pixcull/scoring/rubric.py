@@ -77,6 +77,10 @@ class AxisDef:
     # The 80-100 pt rubric — one descriptor per star level, in Chinese
     # so the annotator panel is readable at a glance.
     rubric_descriptors: tuple[str, str, str, str, str]  # 1★ ... 5★
+    # English copy for the annotator panel. Empty falls back to the
+    # Chinese description, so a locale without a translation still reads.
+    description_en: str = ""
+    rubric_descriptors_en: tuple[str, str, str, str, str] = ("", "", "", "", "")
 
 
 # Each rubric axis: descriptors written for *this domain* (curating
@@ -85,7 +89,10 @@ class AxisDef:
 # different from a "4★" to a working photographer. V5.0: descriptors
 # now sourced from photography_canon.CANON_DESCRIPTORS_ZH which
 # encodes the Cartier-Bresson + Adams + classic-composition canon.
-from pixcull.scoring.photography_canon import get_axis_descriptors as _canon_desc
+from pixcull.scoring.photography_canon import (
+    get_axis_descriptors as _canon_desc,
+    get_axis_descriptors_en as _canon_desc_en,
+)
 
 
 RUBRIC_AXES: tuple[AxisDef, ...] = (
@@ -94,6 +101,7 @@ RUBRIC_AXES: tuple[AxisDef, ...] = (
         label_zh="技术",
         label_en="Technical",
         description_zh="对焦、曝光、清晰度、噪点 — Adams Zone System 标准",
+        description_en="Focus, exposure, sharpness and noise, judged against the Adams Zone System",
         checklist=(
             ("not_severely_blurry", 1.0),
             ("not_severely_overexposed", 1.0),
@@ -106,12 +114,14 @@ RUBRIC_AXES: tuple[AxisDef, ...] = (
             ("canon_midgray_anchored", 0.4),   # zone V near 0.5 luma
         ),
         rubric_descriptors=_canon_desc("technical"),
+        rubric_descriptors_en=_canon_desc_en("technical"),
     ),
     AxisDef(
         name="subject",
         label_zh="主体",
         label_en="Subject",
         description_zh="主体明确性 + Cartier-Bresson 决定性瞬间",
+        description_en="How clearly the subject reads, and whether the decisive moment lands",
         checklist=(
             ("has_clear_subject", 1.0),
             ("subject_eyes_open", 0.5),     # face only
@@ -119,12 +129,14 @@ RUBRIC_AXES: tuple[AxisDef, ...] = (
             ("not_random_passersby", 0.5),
         ),
         rubric_descriptors=_canon_desc("subject"),
+        rubric_descriptors_en=_canon_desc_en("subject"),
     ),
     AxisDef(
         name="composition",
         label_zh="构图",
         label_en="Composition",
         description_zh="三分法 / 黄金比 / 引导线 / 负空间 / 奇数法则",
+        description_en="Rule of thirds, golden ratio, leading lines, negative space and odd-number grouping",
         checklist=(
             ("horizon_within_2deg", 0.8),
             ("rule_of_thirds_close", 0.5),
@@ -137,42 +149,49 @@ RUBRIC_AXES: tuple[AxisDef, ...] = (
             ("canon_figure_ground_pop", 0.7),     # fig vs bg luma contrast
         ),
         rubric_descriptors=_canon_desc("composition"),
+        rubric_descriptors_en=_canon_desc_en("composition"),
     ),
     AxisDef(
         name="light",
         label_zh="光线",
         label_en="Light",
         description_zh="光质 / 光位(Loop/Split/Rembrandt) / 黄金时刻",
+        description_en="Quality and direction of light (loop, split, Rembrandt) and golden hour",
         checklist=(
             ("not_blown_highlights", 1.0),
             ("not_crushed_shadows", 0.8),
             ("color_temperature_clean", 0.5),
         ),
         rubric_descriptors=_canon_desc("light"),
+        rubric_descriptors_en=_canon_desc_en("light"),
     ),
     AxisDef(
         name="moment",
         label_zh="瞬间",
         label_en="Moment",
         description_zh="时机、动作峰值、情绪含量(Cartier-Bresson)",
+        description_en="Timing, peak action and emotional charge, in the Cartier-Bresson sense",
         checklist=(
             ("not_blink_or_mid_yawn", 0.5),
             ("action_at_peak", 0.8),
             ("emotion_present", 0.8),
         ),
         rubric_descriptors=_canon_desc("moment"),
+        rubric_descriptors_en=_canon_desc_en("moment"),
     ),
     AxisDef(
         name="aesthetic",
         label_zh="美感",
         label_en="Aesthetic",
         description_zh="整体艺术感、色彩协调、情绪记忆点",
+        description_en="Overall artistic impact, colour harmony and whether the frame stays with you",
         checklist=(
             ("clipiqa_above_median", 0.5),
             ("laion_aes_above_median", 0.8),
             ("no_subject_environment_conflict", 0.5),
         ),
         rubric_descriptors=_canon_desc("aesthetic"),
+        rubric_descriptors_en=_canon_desc_en("aesthetic"),
     ),
 )
 

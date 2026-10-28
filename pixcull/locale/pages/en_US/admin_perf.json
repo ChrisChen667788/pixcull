@@ -1,0 +1,21 @@
+{
+  "PixCull · 性能监控": "PixCull · Performance",
+  "性能监控 · /admin/perf": "Performance · /admin/perf",
+  "← 返回管理面板": "← Back to admin",
+  "Per-run 数据表": "Per-run table",
+  "列设置": "Columns",
+  "恢复默认列顺序 + 显示": "Restore default column order and show",
+  "最后刷新": "Last refresh",
+  "每 4 秒刷新。打开开发者控制台后输入": "Refreshes every 4 seconds. Open the developer console and type",
+  "可查看 localStorage 容量。": "to inspect localStorage usage.",
+  "进程状态": "Process",
+  "磁盘 · /tmp/pixcull_demo": "Disk · /tmp/pixcull_demo",
+  "重置": "Reset",
+  " 列可见": " columns visible",
+  " 个 run · ": " runs · ",
+  "(无活跃 run)": "(no active runs)",
+  "每行平均": "Average per row",
+  "行数": "Rows",
+  "缓存 (字节)": "Cache (bytes)",
+  "缓存": "Cache"
+}

@@ -267,6 +267,38 @@ def export(
                       f"[dim](source image not reachable)[/dim]")
 
 
+@app.command()
+def reveal(
+    run_dir: Path = typer.Argument(
+        ..., exists=True, file_okay=False,
+        help="Run output dir (the one containing scores.csv)"),
+    filename: str = typer.Argument(
+        ..., help="Frame to reveal, e.g. DSCF1234.JPG"),
+) -> None:
+    """Show a frame's original file in Finder / Explorer / the file manager.
+
+    The browser cannot open a local file, and PixCull never copies the
+    originals — ``scores.csv`` holds the only address. This is the same
+    lookup the lightbox's 原片 button uses.
+    """
+    from pixcull.report.reveal import (
+        reveal_in_file_manager, source_path_for,
+    )
+
+    src = source_path_for(run_dir, filename, base=Path.cwd())
+    if src is None:
+        console.print(
+            f"[red]{filename} is not a frame of this run[/] "
+            f"[dim](no row in {run_dir / 'scores.csv'})[/dim]")
+        raise typer.Exit(code=1)
+    if not src.exists():
+        console.print(f"[red]not reachable[/]: {src}")
+        console.print("[dim]the drive with the originals is not mounted[/dim]")
+        raise typer.Exit(code=2)
+    reveal_in_file_manager(src)
+    console.print(f"[green]✓[/] {src}")
+
+
 @app.command(name="import-catalog")
 def import_catalog(
     catalog: Path = typer.Argument(

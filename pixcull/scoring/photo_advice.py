@@ -39,6 +39,9 @@ from __future__ import annotations
 import hashlib
 from typing import Any
 
+from pixcull.scoring.photo_advice_en import FIXES as _EN_FIXES
+from pixcull.scoring.photo_advice_en import PHRASES as _EN_PHRASES
+
 
 # ---------------------------------------------------------------------------
 # STRENGTH templates
@@ -1142,6 +1145,7 @@ def _pick_per_axis(
     is_strength: bool = True,
     anchor: int | str | None = None,
     vertical: str | None = None,
+    lang: str = "zh",
 ) -> list[dict[str, Any]]:
     """Pick phrases across axes that meet star+genre+style+metric criteria.
 
@@ -1227,7 +1231,10 @@ def _pick_per_axis(
                 continue
             if not _passes(v, t["thresh"], t["op"]):
                 continue
-            phrase = _stable_pick(t["phrases"], anchor, axis_name + t["metric"])
+            phrases = t["phrases"]
+            if lang == "en":
+                phrases = [_EN_PHRASES.get(p, p) for p in phrases]
+            phrase = _stable_pick(phrases, anchor, axis_name + t["metric"])
             if not phrase:
                 continue
             # V20 — interpolate measured value into phrase if the
@@ -1241,6 +1248,8 @@ def _pick_per_axis(
             }
             if not is_strength:
                 fixes = t.get("fixes") or []
+                if lang == "en":
+                    fixes = [_EN_FIXES.get(f, f) for f in fixes]
                 entry["fix"] = (
                     _stable_pick(fixes, anchor, axis_name + "fix")
                     if fixes else ""
@@ -1295,12 +1304,51 @@ _FLAG_WEAKNESS_ZH: dict[str, tuple[str, str]] = {
                               "看连拍组里其他帧"),
 }
 
+_FLAG_WEAKNESS_EN: dict[str, tuple[str, str]] = {
+    "closed_eyes":          ("The subject's eyes are closed; the moment is lost",
+                              "Check the rest of the burst for an open-eye frame"),
+    "motion_blur_on_face":  ("The face has motion blur; focus did not hold",
+                              "Raise the shutter to 1/250 or faster, or use a still frame from the burst"),
+    "severely_overexposed": ("Highlights are severely clipped and information is lost",
+                              "Reshoot at -1.0 or -1.3 EV, or recover from RAW"),
+    "severely_blurry":      ("The frame is clearly blurred; focus is not on the subject",
+                              "Check the focus point, steady the camera, or drop this frame"),
+    "no_clear_subject":     ("No clear visual subject; the frame is diffuse",
+                              "Reframe around one subject, or move in tighter"),
+    "shadows_clipped":      ("Shadows are clipped and dark detail is lost",
+                              "Add exposure or lift shadows, or recover them in post"),
+    "highlight_clip":       ("Local highlights are clipped",
+                              "Reduce exposure or pull highlights down in post"),
+    "subject_blur":         ("The subject is slightly soft",
+                              "Raise the shutter next time or stop down for more depth of field"),
+    "horizon_tilt":         ("The horizon tilts more than 3 degrees",
+                              "Straighten it in post"),
+    "blink":                ("The subject may be blinking",
+                              "Check the rest of the burst"),
+}
+
+_AXIS_LABEL_EN = {
+    "technical": "Technical", "subject": "Subject",
+    "composition": "Composition", "light": "Light",
+    "moment": "Moment", "aesthetic": "Aesthetics",
+}
+
+_AXIS_FIX_EN = {
+    "technical":   "Check focus, shutter speed and ISO noise headroom",
+    "subject":     "Reframe so the subject reads more clearly and fills more of the frame",
+    "composition": "Try the rule of thirds, leading lines or more lead room",
+    "light":       "Change the time of day or add light; avoid hard midday sun",
+    "moment":      "Wait for the expression or action to land, or check the burst",
+    "aesthetic":   "Grade it, retouch it, or ask whether it fits the body of work",
+}
+
 
 def _synthesize_fallback_weakness(
     row: dict[str, Any],
     final_stars: dict[str, float | None],
     decision: str,
     flags_str: str,
+    lang: str = "zh",
 ) -> list[dict[str, Any]]:
     """V20 — guarantee maybe/cull rows surface at least one weakness +
     suggestion, even when the curated WEAKNESS_TEMPLATES didn't fire.
@@ -1342,7 +1390,10 @@ def _synthesize_fallback_weakness(
     )
     for flag in flag_priority:
         if flag in fl and len(out) < 2:
-            phrase, fix = _FLAG_WEAKNESS_ZH[flag]
+            phrase, fix = (
+                _FLAG_WEAKNESS_EN[flag] if lang == "en"
+                else _FLAG_WEAKNESS_ZH[flag]
+            )
             out.append({
                 "phrase":  phrase,
                 "fix":     fix,
@@ -1359,20 +1410,24 @@ def _synthesize_fallback_weakness(
             rated.sort(key=lambda x: x[1])
             ax, stars = rated[0]
             if stars <= 2.5:
-                axis_zh = _AXIS_LABEL_ZH.get(ax, ax)
+                axis_zh = ((_AXIS_LABEL_EN if lang == "en" else _AXIS_LABEL_ZH)
+                           .get(ax, ax))
                 # Axis-specific generic suggestion. Intentionally
                 # non-overlapping with the rich WEAKNESS_TEMPLATES
                 # so we never duplicate when both fire.
-                axis_fix = {
+                axis_fix = (_AXIS_FIX_EN if lang == "en" else {
                     "technical":   "确认对焦 + 快门速度 + ISO 噪点裕度",
                     "subject":     "重构图让主体更清晰、占比更大",
                     "composition": "考虑改用三分法 / 引导线 / 留 lead-room",
                     "light":       "改时段或补光,避开正午硬顶光",
                     "moment":      "等表情/动作到位再按快门,或翻连拍组",
                     "aesthetic":   "调色、后期或重新审美这张是否符合作品风格",
-                }.get(ax, "复盘这一轴,看是否能在后期或重拍中改善")
+                }).get(ax, ("Review this axis and see whether it can be improved in post or on a reshoot"
+                             if lang == "en" else "复盘这一轴,看是否能在后期或重拍中改善"))
                 out.append({
-                    "phrase":  f"{axis_zh} {stars:.1f}★ — 低于 keep 推荐线 3.5★",
+                    "phrase":  (f"{axis_zh} {stars:.1f}★, below the 3.5★ keep line"
+                                if lang == "en" else
+                                f"{axis_zh} {stars:.1f}★ — 低于 keep 推荐线 3.5★"),
                     "fix":     axis_fix,
                     "axis":    ax,
                     "source":  "axis-fallback",
@@ -1390,8 +1445,12 @@ def _synthesize_fallback_weakness(
             score_f = None
         if score_f is not None and score_f <= 0.5:
             out.append({
-                "phrase":  f"综合分 {score_f:.2f} 低于 keep/maybe 门槛",
-                "fix":     "整体素质不够,考虑剔除或大幅后期",
+                "phrase":  (f"Overall score {score_f:.2f}, below the keep/maybe line"
+                            if lang == "en" else
+                            f"综合分 {score_f:.2f} 低于 keep/maybe 门槛"),
+                "fix":     ("Overall quality is not there; cull it or do substantial post"
+                            if lang == "en" else
+                            "整体素质不够,考虑剔除或大幅后期"),
                 "axis":    None,
                 "source":  "score-floor",
             })
@@ -1399,8 +1458,12 @@ def _synthesize_fallback_weakness(
     # 4) Last-resort generic for maybe — at least say something useful.
     if not out and decision == "maybe":
         out.append({
-            "phrase":  "处在 keep 与 cull 边缘,建议人工二审",
-            "fix":     "对比连拍组其他帧,或参考同场景标定样片",
+            "phrase":  ("On the keep/cull boundary; review it by hand"
+                        if lang == "en" else
+                        "处在 keep 与 cull 边缘,建议人工二审"),
+            "fix":     ("Compare it with the rest of the burst, or a reference frame from the same scene"
+                        if lang == "en" else
+                        "对比连拍组其他帧,或参考同场景标定样片"),
             "axis":    None,
             "source":  "edge-case",
         })
@@ -1412,6 +1475,7 @@ def _synthesize_maybe_rationale(
     final_stars: dict[str, float | None],
     flags: str,
     inconsistencies_count: int,
+    lang: str = "zh",
 ) -> str:
     """One-line "why is this maybe" sentence.
 
@@ -1432,34 +1496,37 @@ def _synthesize_maybe_rationale(
     weakest = rated[0]
     strongest = rated[-1]
     parts: list[str] = []
+    labels = _AXIS_LABEL_EN if lang == "en" else _AXIS_LABEL_ZH
+    s_label = labels.get(strongest[0], strongest[0])
+    w_label = labels.get(weakest[0], weakest[0])
     if strongest[1] >= 4.0:
-        parts.append(f"{_AXIS_LABEL_ZH.get(strongest[0], strongest[0])}强")
+        parts.append(f"{s_label} strong" if lang == "en" else f"{s_label}强")
     elif strongest[1] >= 3.5:
-        parts.append(f"{_AXIS_LABEL_ZH.get(strongest[0], strongest[0])}过得去")
+        parts.append(f"{s_label} okay" if lang == "en" else f"{s_label}过得去")
     if weakest[1] <= 2.0 and strongest[0] != weakest[0]:
-        parts.append(f"{_AXIS_LABEL_ZH.get(weakest[0], weakest[0])}弱")
+        parts.append(f"{w_label} weak" if lang == "en" else f"{w_label}弱")
     elif weakest[1] <= 2.5 and strongest[0] != weakest[0]:
-        parts.append(f"{_AXIS_LABEL_ZH.get(weakest[0], weakest[0])}偏低")
+        parts.append(f"{w_label} low" if lang == "en" else f"{w_label}偏低")
 
     # Flag-derived contributions
     flag_bits: list[str] = []
     fl = (flags or "").lower()
     if "blurred_subject" in fl or "soft_subject" in fl:
-        flag_bits.append("主体软")
+        flag_bits.append("soft subject" if lang == "en" else "主体软")
     if "blink" in fl:
-        flag_bits.append("可能闭眼")
+        flag_bits.append("possible blink" if lang == "en" else "可能闭眼")
     if "highlight_clip" in fl:
-        flag_bits.append("高光剪切")
+        flag_bits.append("clipped highlights" if lang == "en" else "高光剪切")
     if "horizon_tilt" in fl:
-        flag_bits.append("地平线斜")
+        flag_bits.append("tilted horizon" if lang == "en" else "地平线斜")
     parts.extend(flag_bits[:1])  # cap at 1 flag bit to keep sentence short
 
     if inconsistencies_count >= 2:
-        tail = "多源判断分歧"
+        tail = "sources disagree" if lang == "en" else "多源判断分歧"
     elif strongest[1] - weakest[1] < 1.0:
-        tail = "等同票"
+        tail = "evenly matched" if lang == "en" else "等同票"
     else:
-        tail = "势均力敌"
+        tail = "close call" if lang == "en" else "势均力敌"
 
     if not parts:
         return tail
@@ -1473,6 +1540,7 @@ def build_advice(
     meta_inconsistencies: str = "",
     idx: int | None = None,
     vertical: str | None = None,
+    lang: str = "zh",
 ) -> dict[str, Any]:
     """V14.3: produce per-image-distinctive advice.
 
@@ -1505,12 +1573,12 @@ def build_advice(
     strengths_detail = _pick_per_axis(
         STRENGTH_TEMPLATES, row, final_stars, genre, styles,
         star_min=4.0, max_total=3, is_strength=True, anchor=anchor,
-        vertical=vertical,
+        vertical=vertical, lang=lang,
     )
     weak_detail = _pick_per_axis(
         WEAKNESS_TEMPLATES, row, final_stars, genre, styles,
         star_max=3.0, max_total=3, is_strength=False, anchor=anchor,
-        vertical=vertical,
+        vertical=vertical, lang=lang,
     )
 
     # V20 — guarantee maybe/cull always gets at least one weakness +
@@ -1523,6 +1591,7 @@ def build_advice(
     if decision in ("maybe", "cull") and not weak_detail:
         weak_detail = _synthesize_fallback_weakness(
             row, final_stars, decision, str(row.get("flags", "") or ""),
+            lang=lang,
         )
 
     # Flat string lists for V5.2-shape callers (card row, JS templates,
@@ -1533,16 +1602,18 @@ def build_advice(
 
     # 1-line verdict head
     if decision == "keep":
-        head = "保留 ✓"
+        head = "Keep ✓" if lang == "en" else "保留 ✓"
     elif decision == "cull":
-        head = "建议剔除 ✗"
+        head = "Suggest cull ✗" if lang == "en" else "建议剔除 ✗"
     else:
-        head = "待定"
+        head = "Maybe" if lang == "en" else "待定"
     bits = []
     if strengths:
-        bits.append(f"亮点: {strengths[0]}")
+        bits.append((f"Strength: {strengths[0]}" if lang == "en"
+                     else f"亮点: {strengths[0]}"))
     if weaknesses:
-        bits.append(f"弱点: {weaknesses[0]}")
+        bits.append((f"Weakness: {weaknesses[0]}" if lang == "en"
+                     else f"弱点: {weaknesses[0]}"))
     verdict_short = head + (" — " + "; ".join(bits) if bits else "")
 
     inc_list: list[str] = []
@@ -1561,6 +1632,7 @@ def build_advice(
             final_stars,
             str(row.get("flags", "") or ""),
             len(inc_list),
+            lang=lang,
         ) or None
 
     return {

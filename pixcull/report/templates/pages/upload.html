@@ -1368,10 +1368,14 @@
       const res = await fetch("/verticals.json");
       if (!res.ok) return;
       const reg = await res.json();
+      // The registry ships an English name alongside the Chinese one;
+      // pick by the language the server rendered this page in.
+      const langEn = (document.documentElement.lang || "")
+        .toLowerCase().startsWith("en");
       for (const v of reg) {
         const opt = document.createElement("option");
         opt.value = v.key;
-        opt.textContent = `${v.icon}  ${v.zh}`;
+        opt.textContent = `${v.icon}  ${langEn && v.en ? v.en : v.zh}`;
         sel.appendChild(opt);
       }
     } catch (_) { /* offline → auto-detect default fine */ }

@@ -293,6 +293,52 @@ CANON_DESCRIPTORS_ZH: dict[str, tuple[str, str, str, str, str]] = {
 }
 
 
+CANON_DESCRIPTORS_EN: dict[str, tuple[str, str, str, str, str]] = {
+    "technical": (
+        "Technical reject (clipping at both ends, out of focus, heavy shake)",
+        "Clear technical problem (crushed below Zone II or blown above Zone IX by more than 5%)",
+        "Zone System roughly holds (histogram covers II-IX, subject in focus)",
+        "Technically clean (Adams standard: front to back sharp, clear tonal separation)",
+        "Technically perfect (every pixel right, the full zone range used)",
+    ),
+    "subject": (
+        "No clear subject (the frame has no visual anchor)",
+        "A subject exists, but the pose or expression is weak and the background competes",
+        "Subject is clear, findable in one second, background does not interfere",
+        "Strong subject (peak pose, live expression, lead room that fits)",
+        "Decisive moment (Cartier-Bresson: the event and the form land together)",
+    ),
+    "composition": (
+        "Composition is wrong (horizon off by more than 3 degrees, subject cropped, figure-ground muddled)",
+        "Readable but plain (centred subject, no leading lines, no negative space)",
+        "Standard composition (thirds or symmetry, subject off the frame edge)",
+        "Composition is deliberate (leading lines, negative space, geometry you can feel)",
+        "Composition is striking (every element carries the story, diagonal tension, odd rhythm or golden ratio)",
+    ),
+    "light": (
+        "Light is a problem (crushed and blown, ratio beyond 1:16, heavy colour cast)",
+        "Ordinary light (flat, clipped highlights, no atmosphere)",
+        "Clean light (sensible ratio, subject readable, no obvious fault)",
+        "Considered light (readable direction: loop, split or Rembrandt; the quality suits the subject)",
+        "Exceptional light (golden hour, dramatic quality, the kind that decides the photograph)",
+    ),
+    "moment": (
+        "Moment missed (mid-motion, eyes closed, neutral expression)",
+        "Ordinary moment (the pose is fine, no emotion, no peak action)",
+        "Moment lands (either the action or the expression is right)",
+        "Strong moment (peak action, emotion and form all converge)",
+        "Decisive moment (ten thousand more frames would not find it again)",
+    ),
+    "aesthetic": (
+        "Poor aesthetic (mixed colour, incoherent, forgettable)",
+        "Plain aesthetic (simple colour, weak visual memory)",
+        "Passing aesthetic (harmonious colour, comfortable composition, one memorable point)",
+        "Strong aesthetic (colour, light, composition and mood pull the same way, a clear visual language)",
+        "Top-tier aesthetic (portfolio cover, original expression, remembered after one look)",
+    ),
+}
+
+
 # ---------------------------------------------------------------------------
 # 3. Prompt injection — what VLM + meta-judge see before scoring
 # ---------------------------------------------------------------------------
@@ -323,6 +369,12 @@ def build_canon_section_zh() -> str:
                  "如\"Zone III 死黑\"、\"Rule of Space 缺失\"、"
                  "\"Rembrandt 三角不完整\"、\"决定性瞬间\")。")
     return "\n".join(lines)
+
+
+def get_axis_descriptors_en(axis_name: str) -> tuple[str, str, str, str, str]:
+    """English 1-5★ descriptors, falling back to the Chinese ladder."""
+    return CANON_DESCRIPTORS_EN.get(
+        axis_name, get_axis_descriptors(axis_name))
 
 
 def get_axis_descriptors(axis_name: str) -> tuple[str, str, str, str, str]:

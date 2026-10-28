@@ -77,6 +77,7 @@ class VerticalPolicy:
     cull_max_delta:  float = 0.0
     tolerated_flags: frozenset[str] = frozenset()
     notes:           str = ""
+    notes_en:        str = ""
 
 
 @dataclass(frozen=True)
@@ -106,6 +107,11 @@ class Vertical:
     primary_axes:  tuple[str, ...] = ()
     # V17.2 — per-vertical scoring policy. Empty default = no override.
     policy:        VerticalPolicy = field(default_factory=VerticalPolicy)
+    # English copy for the /verticals page. Empty means "fall back to
+    # the Chinese field", so a locale without a translation still reads
+    # as Chinese rather than as a blank card.
+    en:            str = ""
+    description_en: str = ""
 
 
 # 10 verticals as named by the user. Ordering = display order on the
@@ -119,6 +125,8 @@ VERTICALS: tuple[Vertical, ...] = (
     Vertical(
         key="landscape",  zh="风光摄影", icon="🏔",
         description="自然山水/星空/晨昏/极地。重曝光层次 + 构图严谨,锐度需要顶级。",
+        en="Landscape",
+        description_en="Mountains, water, night sky, golden hour, polar. Strong tonal range, disciplined composition, top-tier sharpness.",
         parent_genres=frozenset({"landscape", "astro"}),
         sample_target=25,
         primary_axes=("technical", "composition", "light", "aesthetic"),
@@ -127,11 +135,14 @@ VERTICALS: tuple[Vertical, ...] = (
             tolerated_flags=frozenset({"severely_blurry"}),
                                      # ICM / long-exposure water/cloud are valid
             notes="风光提高 keep 门槛 +3pp,容忍 long-exposure 软糊",
+            notes_en="Landscape raises the keep bar by 3pp and tolerates long-exposure softness.",
         ),
     ),
     Vertical(
         key="wildlife",   zh="野生动物摄影", icon="🐅",
         description="哺乳/爬行/水生野生主体。抓姿态 + 焦点在眼睛 + 大光圈隔离背景。",
+        en="Wildlife",
+        description_en="Mammals, reptiles, marine subjects. Catch the pose, focus on the eye, isolate the background with a fast lens.",
         parent_genres=frozenset({"wildlife"}),
         sample_target=20,
         primary_axes=("subject", "moment", "technical"),
@@ -140,11 +151,14 @@ VERTICALS: tuple[Vertical, ...] = (
             tolerated_flags=frozenset({"motion_blur_on_face"}),
                                      # face detector trips on muzzle/eye area
             notes="野生降低 keep 门槛 -4pp,容忍人脸检测器误判动物面部",
+            notes_en="Wildlife lowers the keep bar by 4pp and tolerates face-detector misfires on animal faces.",
         ),
     ),
     Vertical(
         key="bird",       zh="拍鸟", icon="🦅",
         description="飞鸟 / 栖鸟 / 涉禽。眼神光 + 飞行姿态 + 翅膀清晰是核心。",
+        en="Birding",
+        description_en="Flight, perch and wading birds. Catchlight, flight pose and clean wing detail matter most.",
         parent_genres=frozenset({"wildlife"}),
         sample_target=20,
         primary_axes=("subject", "moment", "technical"),
@@ -152,11 +166,14 @@ VERTICALS: tuple[Vertical, ...] = (
             cull_max_delta=-0.03,    # bird shots are usually clearly good or clearly bad
             tolerated_flags=frozenset({"motion_blur_on_face"}),
             notes="拍鸟略提高 cull 门槛 -3pp,允许人脸检测器误判鸟头",
+            notes_en="Birding raises the cull bar by 3pp and allows the face detector to misfire on bird heads.",
         ),
     ),
     Vertical(
         key="wedding",    zh="婚纱摄影", icon="💒",
         description="婚礼现场 / 婚纱预约。高调干净光、人物表情自然、瞬间到位。",
+        en="Wedding",
+        description_en="Wedding day and engagement shoots. Clean high-key light, natural expressions, the moment landing.",
         parent_genres=frozenset({"portrait", "event", "fashion"}),
         sample_target=30,
         primary_axes=("subject", "light", "moment", "aesthetic"),
@@ -165,11 +182,14 @@ VERTICALS: tuple[Vertical, ...] = (
             tolerated_flags=frozenset({"shadows_clipped"}),
                                      # low-key candid often crushes shadows on purpose
             notes="婚纱降低 keep 门槛 -2pp,容忍低调阴影剪切",
+            notes_en="Wedding lowers the keep bar by 2pp and tolerates crushed shadows in low-key candids.",
         ),
     ),
     Vertical(
         key="travel",     zh="旅拍写真", icon="🌅",
         description="海岛 / 古镇 / 异域旅拍。环境与人物比例,色彩氛围,服装与场景搭配。",
+        en="Travel portraits",
+        description_en="Islands, old towns, destination shoots. Subject-to-scene balance, colour mood, wardrobe that fits the location.",
         parent_genres=frozenset({"portrait", "landscape", "street"}),
         sample_target=25,
         primary_axes=("composition", "light", "aesthetic"),
@@ -177,11 +197,14 @@ VERTICALS: tuple[Vertical, ...] = (
             keep_min_delta=-0.03,    # creative liberty
             cull_max_delta=-0.05,    # rarely outright cull
             notes="旅拍整体宽容 keep -3pp / cull -5pp,留更多氛围片",
+            notes_en="Travel is more forgiving overall: keep -3pp, cull -5pp, to keep more atmospheric frames.",
         ),
     ),
     Vertical(
         key="cosplay",    zh="cosplay", icon="🎭",
         description="角色扮演 + 道具服装。服装细节锐 + 角色姿态戏剧 + 场景氛围契合。",
+        en="Cosplay",
+        description_en="Character work and costume builds. Sharp costume detail, dramatic pose, a scene that matches the character.",
         parent_genres=frozenset({"portrait", "fashion"}),
         sample_target=20,
         primary_axes=("subject", "composition", "aesthetic"),
@@ -191,11 +214,14 @@ VERTICALS: tuple[Vertical, ...] = (
                                          "severely_underexposed"}),
                                      # 暗调氛围 is the genre
             notes="cosplay 容忍低调 / 欠曝(角色氛围),keep -2pp",
+            notes_en="Cosplay tolerates low-key and underexposed frames for mood; keep -2pp.",
         ),
     ),
     Vertical(
         key="kids",       zh="儿童摄影", icon="👶",
         description="日常 / 摄影棚 / 户外。表情真实 > 锐度;动作模糊若情绪到位仍可保留。",
+        en="Children",
+        description_en="Everyday, studio, outdoors. A real expression beats sharpness; motion blur is fine when the feeling lands.",
         parent_genres=frozenset({"portrait"}),
         sample_target=25,
         primary_axes=("moment", "subject", "aesthetic"),
@@ -205,11 +231,14 @@ VERTICALS: tuple[Vertical, ...] = (
             tolerated_flags=frozenset({"motion_blur_on_face",
                                          "subject_blur"}),
             notes="儿童最宽容:keep -5pp / cull -5pp,容忍主体微糊 + 脸部动态",
+            notes_en="Children is the most forgiving: keep -5pp, cull -5pp, tolerating slight subject blur and face motion.",
         ),
     ),
     Vertical(
         key="pet",        zh="宠物摄影", icon="🐶",
         description="家养 / 流浪 / 工作犬。眼神 + 神态 + 干净背景。",
+        en="Pets",
+        description_en="Family pets, rescues, working dogs. Catchlight, expression, clean background.",
         parent_genres=frozenset({"wildlife", "portrait"}),
         sample_target=20,
         primary_axes=("subject", "moment", "aesthetic"),
@@ -218,11 +247,14 @@ VERTICALS: tuple[Vertical, ...] = (
             tolerated_flags=frozenset({"motion_blur_on_face",
                                          "subject_blur"}),
             notes="宠物 keep -4pp,容忍人脸检测误判 + 主体微糊",
+            notes_en="Pets: keep -4pp, tolerating face-detection misfires and slight subject blur.",
         ),
     ),
     Vertical(
         key="event",      zh="活动摄影", icon="🎪",
         description="发布会 / 演出 / 大型活动。多人场景的瞬间 + 信息密度构图。",
+        en="Events",
+        description_en="Launches, shows, large gatherings. Peak moments in crowded scenes, composition that carries information.",
         parent_genres=frozenset({"event", "documentary"}),
         sample_target=25,
         primary_axes=("moment", "composition", "subject"),
@@ -231,11 +263,14 @@ VERTICALS: tuple[Vertical, ...] = (
             tolerated_flags=frozenset({"closed_eyes"}),
                                      # 20-人合影总有人在眨眼
             notes="活动 keep -3pp,容忍多人合影中的闭眼",
+            notes_en="Events: keep -3pp, tolerating closed eyes in group shots.",
         ),
     ),
     Vertical(
         key="sports",     zh="运动摄影", icon="⚽",
         description="赛场 / 训练 / 极限。峰值瞬间 + 高速锐度 + 动作姿态。",
+        en="Sports",
+        description_en="Matches, training, extreme sport. Peak action, high-speed sharpness, body position.",
         parent_genres=frozenset({"sports"}),
         sample_target=30,
         primary_axes=("moment", "technical", "subject"),
@@ -243,6 +278,7 @@ VERTICALS: tuple[Vertical, ...] = (
             keep_min_delta=-0.05,    # capture peak even with imperfections
             tolerated_flags=frozenset({"closed_eyes"}),
             notes="运动 keep -5pp,峰值动作优先于完美状态",
+            notes_en="Sports: keep -5pp, peak action over perfect technique.",
         ),
     ),
 )
@@ -509,6 +545,8 @@ def registry_with_progress() -> list[dict]:
         out.append({
             "key":           v.key,
             "zh":            v.zh,
+            "en":            v.en or v.zh,
+            "description_en": v.description_en or v.description,
             "icon":          v.icon,
             "description":   v.description,
             "parent_genres": sorted(v.parent_genres),
@@ -521,6 +559,7 @@ def registry_with_progress() -> list[dict]:
                 "cull_max_delta":  eff.cull_max_delta,
                 "tolerated_flags": sorted(eff.tolerated_flags),
                 "notes":           eff.notes,
+                "notes_en":        getattr(eff, "notes_en", "") or eff.notes,
                 "is_override":     pol_ov is not None,
                 "baseline_f1":     (pol_ov or {}).get("baseline_f1"),
                 "tuned_f1":        (pol_ov or {}).get("tuned_f1"),

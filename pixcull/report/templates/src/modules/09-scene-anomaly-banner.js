@@ -37,7 +37,7 @@
       <span class="sab-icon"><svg class="icon"><use href="#icon-chart"/></svg></span>
       <span class="sab-msg">${reason}</span>
       <button class="sab-toggle" type="button">查看分布详情</button>
-      <button class="sab-close" type="button" aria-label="关闭场景分布提示">✕</button>`;
+      <button class="sab-close" type="button" aria-label="${_t("scene.close_hint", "关闭场景分布提示")}">✕</button>`;
     document.body.appendChild(banner);
 
     // P-UX-28 — pie chart panel.  Lazy-built on first click.

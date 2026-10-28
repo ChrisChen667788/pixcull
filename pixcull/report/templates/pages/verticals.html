@@ -737,6 +737,11 @@
       toastStack.appendChild(el);
       setTimeout(() => el.remove(), 3500);
     }
+    // English copy rides on the same registry payload; the page picks
+    // the English field when the server rendered it as an English page.
+    const LANG_EN = (document.documentElement.lang || "").toLowerCase().startsWith("en");
+    const vName = v => (LANG_EN && v.en) ? v.en : v.zh;
+    const vDesc = v => (LANG_EN && v.description_en) ? v.description_en : v.description;
     const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => (
       {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
     ));
@@ -773,8 +778,9 @@
         const q = viewState.search.trim().toLowerCase();
         out = out.filter(v =>
           v.key.toLowerCase().includes(q)
+          || vName(v).toLowerCase().includes(q)
           || v.zh.toLowerCase().includes(q)
-          || (v.description||"").toLowerCase().includes(q)
+          || (vDesc(v)||"").toLowerCase().includes(q)
         );
       }
       // Sort
@@ -783,7 +789,7 @@
       else if (s === "progress-asc")  out.sort((a,b) => a.progress - b.progress);
       else if (s === "samples-desc")  out.sort((a,b) => b.counts.total - a.counts.total);
       else if (s === "samples-asc")   out.sort((a,b) => a.counts.total - b.counts.total);
-      else if (s === "zh") out.sort((a,b) => a.zh.localeCompare(b.zh, "zh"));
+      else if (s === "zh") out.sort((a,b) => vName(a).localeCompare(vName(b), LANG_EN ? "en" : "zh"));
       // "default" = original registry order
       return out;
     }
@@ -879,7 +885,7 @@
     }
 
     function renderTune(key, vert, result) {
-      tuneTitle.textContent = `${vert.icon}  ${vert.zh} · 自动调参结果`;
+      tuneTitle.textContent = `${vert.icon}  ${vName(vert)} · 自动调参结果`;
       tuneSubtitle.textContent =
         `分析了 ${result.n_samples_analyzed} 张样本(👍 ${result.n_good} · 👎 ${result.n_bad}) · `
         + `耗时 ${result.elapsed_s}s`;
@@ -1004,10 +1010,10 @@
       if (!v) return;
       // Need at least 1 good + 1 bad
       if ((v.counts.good || 0) < 1 || (v.counts.bad || 0) < 1) {
-        toast(`需要先在 ${v.zh} 中各上传至少 1 张好片 / 待剔除`, "error");
+        toast(`需要先在 ${vName(v)} 中各上传至少 1 张好片 / 待剔除`, "error");
         return;
       }
-      toast(`正在分析 ${v.zh} 的 ${v.counts.total} 张样本…`, "");
+      toast(`正在分析 ${vName(v)} 的 ${v.counts.total} 张样本…`, "");
       try {
         const res = await fetch(`/verticals/tune/${encodeURIComponent(key)}`,
                                   {method: "POST"});
@@ -1101,7 +1107,7 @@
 
     function renderLlmPhrases(vert, result) {
       llmPhrasesTitle.textContent =
-        `${vert.icon}  ${vert.zh} · AI 专属话术`;
+        `${vert.icon}  ${vName(vert)} · AI 专属话术`;
       const tokens = (result.prompt_tokens || 0)
                    + (result.completion_tokens || 0);
       llmPhrasesSubtitle.innerHTML =
@@ -1140,7 +1146,7 @@
       const v = registry.find(x => x.key === key);
       if (!v) return;
       if ((v.counts.good || 0) < 3) {
-        toast(`${v.zh} 至少需要 3 张好样本才能生成 AI 话术`, "error");
+        toast(`${vName(v)} 至少需要 3 张好样本才能生成 AI 话术`, "error");
         return;
       }
       toast(`正在用 DeepSeek 分析 ${v.counts.good} 张好样本…`, "");
@@ -1336,7 +1342,7 @@
       unsplashResult.innerHTML = `<span style="color:var(--muted)">点 "拉取" → Unsplash API 搜索 → 下载入桶</span>`;
       unsplashFetchBtn.disabled = false;
       document.getElementById("unsplashTitle").textContent =
-        `${v.icon}  ${v.zh} · 从 Unsplash 拉取`;
+        `${v.icon}  ${vName(v)} · 从 Unsplash 拉取`;
       unsplashModal.classList.add("show");
       setTimeout(() => unsplashQuery.focus(), 50);
     }
@@ -1394,10 +1400,10 @@
       const v = registry.find(x => x.key === key);
       if (!v) return;
       if ((v.counts.total || 0) < 1) {
-        toast(`${v.zh} 没有样本可以评估`, "error");
+        toast(`${vName(v)} 没有样本可以评估`, "error");
         return;
       }
-      toast(`正在评估 ${v.zh} 的 ${v.counts.total} 张样本…`, "");
+      toast(`正在评估 ${vName(v)} 的 ${v.counts.total} 张样本…`, "");
       try {
         const res = await fetch(`/verticals/eval/${encodeURIComponent(key)}`,
                                   {method: "POST"});
@@ -1424,9 +1430,9 @@
         <div class="vcard" data-key="${esc(v.key)}">
           <div class="vhead">
             <span class="vicon">${esc(v.icon)}</span>
-            <span class="vname">${esc(v.zh)}</span>
+            <span class="vname">${esc(vName(v))}</span>
           </div>
-          <div class="vdesc">${esc(v.description)}</div>
+          <div class="vdesc">${esc(vDesc(v))}</div>
           <div class="progress-shell">
             <div class="progress-bar" style="width: ${(v.progress*100).toFixed(0)}%"></div>
           </div>
@@ -1445,7 +1451,7 @@
           </div>
           ${v.counts.total === 0 ? `
             <div class="empty-hint">
-              先点 <b>+ 好片</b> 上传几张你欣赏的 <b>${esc(v.zh)}</b> 样片 → 自动获得专属评分
+              先点 <b>+ 好片</b> 上传几张你欣赏的 <b>${esc(vName(v))}</b> 样片 → 自动获得专属评分
             </div>
           ` : ''}
           <div class="vactions">
