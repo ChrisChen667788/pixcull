@@ -11457,12 +11457,17 @@ class _Handler(BaseHTTPRequestHandler):
         # Read optional body for target mode
         clen = int(self.headers.get("Content-Length", "0") or "0")
         target_mode = "tmp"
+        naming = "lightroom"
         if clen > 0:
             try:
                 params = json.loads(self.rfile.read(clen).decode("utf-8") or "{}")
                 target_mode = params.get("target", "tmp")
+                naming = params.get("naming", "lightroom")
             except (UnicodeDecodeError, json.JSONDecodeError) as exc:
                 _dbg("export/parse_body", exc)
+        if naming not in ("lightroom", "darktable"):
+            self._reject_upload(400, "naming must be 'lightroom' or 'darktable'")
+            return
         # V29.1 — new "embedded" mode writes IPTC INTO the original
         # file via exiftool. Same scope rules as "alongside": only
         # works for scanned runs where we know the originals.
@@ -11539,7 +11544,8 @@ class _Handler(BaseHTTPRequestHandler):
                 write_xmp(src, stars, label,
                           keywords=iptc["keywords"],
                           description=iptc["description"],
-                          headline=iptc["headline"])
+                          headline=iptc["headline"],
+                          naming=naming)
             elif target_mode == "embedded":
                 # V29.1 — write IPTC into the original via exiftool.
                 # No sidecar; metadata travels with the file.
@@ -11572,6 +11578,7 @@ class _Handler(BaseHTTPRequestHandler):
             "skipped": skipped,
             "per_decision": dict(per_decision),
             "target": target_mode,
+            "naming": naming,
         }
         if target_mode == "tmp":
             response["zip_url"] = f"/xmp_zip/{run_id}"
