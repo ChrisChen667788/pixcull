@@ -5749,7 +5749,8 @@
     axesContainer.innerHTML = rubricMeta.map((ax, idx) => `
       <div class="axis-row" data-axis="${ax.name}" data-axis-idx="${idx}">
         <div class="axis-name">${_uiLangEn() ? ax.label_en : ax.label_zh}
-          <span class="axis-en">${_uiLangEn() ? ax.label_zh : ax.label_en}</span>
+          ${_uiLangEn() ? "" :
+            `<span class="axis-en">${ax.label_en}</span>`}
         </div>
         <div class="axis-desc">${_uiLangEn() ? (ax.description_en || ax.description_zh) : ax.description_zh}</div>
         <div class="stars" data-stars data-axis="${ax.name}" data-axis-idx="${idx}">
@@ -5768,8 +5769,13 @@
           setStars(axisName, v);
           // Show descriptor for the chosen level
           const ax = rubricMeta.find(a => a.name === axisName);
+          // Descriptors are canon copy, translated alongside the axis
+          // label; fall back to the Chinese ladder for a locale that has
+          // not translated them yet.
+          const ladders = (_uiLangEn() && ax.rubric_descriptors_en)
+            ? ax.rubric_descriptors_en : ax.rubric_descriptors;
           starsEl.parentElement.querySelector("[data-descriptor]").textContent =
-            v + "★: " + ax.rubric_descriptors[v - 1];
+            v + "★: " + ladders[v - 1];
         });
         starEl.addEventListener("mouseenter", () => {
           const v = parseInt(starEl.dataset.v);
