@@ -894,6 +894,13 @@
     <div class="zen-grp" role="group" aria-label="专注">
       <button class="zoom-btn" id="lbZenToggle" type="button"
               title="专注模式 — 隐藏右侧信息栏, 让照片占满视口 (快捷键 i)">⊟ 专注</button>
+      <!-- v3.97 — the lightbox serves a 1600px render, never the file.
+           This hands the filename to the server, which looks it up in
+           scores.csv and asks Finder / Explorer / xdg-open to show it.
+           PixCull does not copy originals, so an unmounted drive means
+           no file to open — the server says so. -->
+      <button class="zoom-btn" id="lbRevealBtn" type="button"
+              title="在 Finder 中显示这张原片">⤢ 原片</button>
     </div>
     <!-- v2.9-P0-1 — face Close-ups toggle (Narrative Select). Hidden until
          faces are detected on the open photo; click reveals the right-edge

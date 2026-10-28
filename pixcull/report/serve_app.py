@@ -6043,6 +6043,7 @@ class _Handler(BaseHTTPRequestHandler):
         ("/timeline/data/", "_serve_timeline_data", "tail", ()),
         ("/timeline/", "_serve_timeline_page", "tail", ()),
         ("/xmp_zip/", "_serve_xmp_zip", "tail", ()),
+        ("/reveal/", "_serve_reveal", "tail", ()),
         ("/share/", "_serve_share_page", "tail", ()),
         ("/style/distances/", "_serve_style_distances", "tail", ()),
         ("/tether/status/", "_serve_tether_status", "tail", ()),
@@ -11940,6 +11941,45 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
+
+    def _serve_reveal(self, rel: str) -> None:
+        """Reveal a frame's original file in the desktop file manager.
+
+        The page cannot open a local file: browsers have no such call,
+        and ``/full/`` is a 1600px render. PixCull also never copies the
+        originals, so the only address is the ``path`` column of
+        ``scores.csv``. This looks a filename up there and hands the
+        result to Finder / Explorer / xdg-open.
+
+        The filename has to be a row of this run. That is both the
+        feature and the guard: a crafted path resolves to nothing.
+        """
+        from urllib.parse import unquote
+        from pixcull.report.reveal import source_path_for, reveal_in_file_manager
+
+        parts = rel.split("/", 1)
+        if len(parts) != 2:
+            self._send_json(400, b'{"error": "need run_id/filename"}')
+            return
+        run_id, filename = unquote(parts[0]), unquote(parts[1])
+        output_dir = _run_output_dir(run_id)
+        if output_dir is None:
+            self._send_json(404, b'{"error": "no such run"}')
+            return
+        src = source_path_for(output_dir, filename, base=_repo_root())
+        if src is None:
+            self._send_json(404, b'{"error": "not a frame of this run"}')
+            return
+        if not src.exists():
+            payload = json.dumps({
+                "path": str(src),
+                "error": "the original is not reachable — is the drive mounted?",
+            }, ensure_ascii=False)
+            self._send_json(404, payload.encode("utf-8"))
+            return
+        reveal_in_file_manager(src)
+        self._send_json(200, json.dumps(
+            {"path": str(src)}, ensure_ascii=False).encode("utf-8"))
 
     def _serve_xmp_zip(self, run_id: str) -> None:
         """Stream all sidecars + a README into a single zip download."""

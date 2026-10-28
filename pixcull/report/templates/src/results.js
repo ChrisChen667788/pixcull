@@ -5001,6 +5001,26 @@
     e.stopPropagation(); _lbRotateReset();
   });
 
+  // v3.97 — reveal the original. The <img> is a 1600px render from
+  // /full/; the file the photographer will edit lives wherever it was
+  // shot, and PixCull never copies it. The server resolves the name
+  // against scores.csv and hands the path to the desktop.
+  const lbRevealBtn = document.getElementById("lbRevealBtn");
+  if (lbRevealBtn) lbRevealBtn.addEventListener("click", async e => {
+    e.stopPropagation();
+    if (!_lbCurrentFn) return;
+    try {
+      const res = await fetch(
+        `/reveal/${run_id}/${encodeURIComponent(_lbCurrentFn)}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
+      toast(_t("lightbox.reveal_ok", "已在 Finder 中显示") + ": " + data.path,
+            "success");
+    } catch (err) {
+      toast(_t("lightbox.reveal_failed", "找不到原片:") + err.message, "error");
+    }
+  });
+
   // P-UX-2 — zoom-toggle button + image click-to-zoom + drag-to-pan
   // + wheel-zoom. The image itself becomes interactive: clicks toggle
   // 1:1 around the click point, drags pan within bounds, wheel

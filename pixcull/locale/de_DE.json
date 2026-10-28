@@ -259,5 +259,7 @@
   "tip.title": "The AI you can see",
   "tip.row.organise": "Left rail, <b>Organise · Fold</b>: <b>≈ Near-duplicate fold</b> plus the similarity slider. Drag it and watch how the AI groups near-identical frames (adjustable, not a black box)",
   "tip.row.scenes": "<b>🎬 Scenes</b>: cuts the shoot into narrative stretches by capture time",
-  "tip.row.why": "Open any photo; <b>🔍 Why</b> at the top explains in one line why it is keep / maybe / cull"
+  "tip.row.why": "Open any photo; <b>🔍 Why</b> at the top explains in one line why it is keep / maybe / cull",
+  "lightbox.reveal_ok": "Shown in the file manager",
+  "lightbox.reveal_failed": "Original not found:"
 }

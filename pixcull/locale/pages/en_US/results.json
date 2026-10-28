@@ -328,5 +328,7 @@
   "每张照片 6 个轴 · 1-5★": "Each photo is scored on 6 axes · 1-5★",
   "技术 · 主体 · 构图 · 光线 · 时刻 · 美感": "Technical · Subject · Composition · Light · Moment · Aesthetics",
   "Tab 在轴间跳 · 1-5 直接给当前轴打星 · 一张全维度评分通常 &lt; 5 秒。": "Tab moves between axes · 1-5 stars the current axis · a full rating usually takes &lt; 5 seconds.",
-  "开始 →": "Start →"
+  "开始 →": "Start →",
+  "⤢ 原片": "⤢ Original",
+  "在 Finder 中显示这张原片": "Show this original in the file manager"
 }

@@ -5177,6 +5177,10 @@
       position: absolute; top: 18px; left: 282px;
       display: flex; gap: 6px; align-items: center; z-index: 11;
     }
+    /* ``display: flex`` beats the ``hidden`` attribute, so the group
+       stayed in the layout and swallowed clicks aimed at the zoom
+       cluster under it. */
+    .lightbox .faces-grp[hidden] { display: none; }
     .lightbox.lb-faces-open #lbFacesToggle {
       background: rgba(213,181,132,0.85);
       border-color: var(--accent); color: #161616;
@@ -7161,6 +7165,13 @@
     <div class="zen-grp" role="group" aria-label="专注">
       <button class="zoom-btn" id="lbZenToggle" type="button"
               title="专注模式 — 隐藏右侧信息栏, 让照片占满视口 (快捷键 i)">⊟ 专注</button>
+      <!-- v3.97 — the lightbox serves a 1600px render, never the file.
+           This hands the filename to the server, which looks it up in
+           scores.csv and asks Finder / Explorer / xdg-open to show it.
+           PixCull does not copy originals, so an unmounted drive means
+           no file to open — the server says so. -->
+      <button class="zoom-btn" id="lbRevealBtn" type="button"
+              title="在 Finder 中显示这张原片">⤢ 原片</button>
     </div>
     <!-- v2.9-P0-1 — face Close-ups toggle (Narrative Select). Hidden until
          faces are detected on the open photo; click reveals the right-edge
@@ -12821,6 +12832,26 @@
   });
   if (lbRotReset) lbRotReset.addEventListener("click", e => {
     e.stopPropagation(); _lbRotateReset();
+  });
+
+  // v3.97 — reveal the original. The <img> is a 1600px render from
+  // /full/; the file the photographer will edit lives wherever it was
+  // shot, and PixCull never copies it. The server resolves the name
+  // against scores.csv and hands the path to the desktop.
+  const lbRevealBtn = document.getElementById("lbRevealBtn");
+  if (lbRevealBtn) lbRevealBtn.addEventListener("click", async e => {
+    e.stopPropagation();
+    if (!_lbCurrentFn) return;
+    try {
+      const res = await fetch(
+        `/reveal/${run_id}/${encodeURIComponent(_lbCurrentFn)}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
+      toast(_t("lightbox.reveal_ok", "已在 Finder 中显示") + ": " + data.path,
+            "success");
+    } catch (err) {
+      toast(_t("lightbox.reveal_failed", "找不到原片:") + err.message, "error");
+    }
   });
 
   // P-UX-2 — zoom-toggle button + image click-to-zoom + drag-to-pan

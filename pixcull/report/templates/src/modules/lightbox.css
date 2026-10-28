@@ -395,6 +395,10 @@
       position: absolute; top: 18px; left: 282px;
       display: flex; gap: 6px; align-items: center; z-index: 11;
     }
+    /* ``display: flex`` beats the ``hidden`` attribute, so the group
+       stayed in the layout and swallowed clicks aimed at the zoom
+       cluster under it. */
+    .lightbox .faces-grp[hidden] { display: none; }
     .lightbox.lb-faces-open #lbFacesToggle {
       background: rgba(213,181,132,0.85);
       border-color: var(--accent); color: #161616;

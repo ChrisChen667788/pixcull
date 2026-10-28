@@ -259,5 +259,7 @@
   "tip.title": "看得见的 AI",
   "tip.row.organise": "左栏 <b>整理 · 折叠</b> 里 <b>≈ 近重复折叠</b> + 相似度滑块:拖一拖,看 AI 怎么把近似画面归组(可调,不是黑箱)",
   "tip.row.scenes": "<b>🎬 时序场景</b>:按拍摄时间把这次拍摄切成叙事段落",
-  "tip.row.why": "点开任意照片,顶部 <b>🔍 为什么</b> 一行讲清这张为何 keep / maybe / cull"
+  "tip.row.why": "点开任意照片,顶部 <b>🔍 为什么</b> 一行讲清这张为何 keep / maybe / cull",
+  "lightbox.reveal_ok": "已在 Finder 中显示",
+  "lightbox.reveal_failed": "找不到原片:"
 }
