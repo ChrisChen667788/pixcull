@@ -17,8 +17,7 @@
         const n = d.n_annotations | 0, min = d.min_annotations | 0;
         if (min > 0 && n >= 3 && n < min) {
           el.textContent = "🎯 个性化 " + n + "/" + min;
-          el.title = "每次 keep/cull 纠正都在教 PixCull 你的口味 — 再标 "
-            + (min - n) + " 张,新批次就会自动按你的标准校准阈值";
+          el.title = _tf("workspace.tuned_badge", "每次 keep/cull 纠正都在教 PixCull 你的口味 — 再标 {n} photos,新批次就会自动按你的标准校准阈值", {n: min - n});
           el.style.opacity = "0.62";
           el.style.display = "";
         }

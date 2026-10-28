@@ -6196,6 +6196,12 @@
     html.pc-client .stats .stat-fault {
       display: none !important;
     }
+    /* The decision filter chips are markup, not the stats bar, so the
+       :has() rules above never reached them. They spell out "保留 /
+       待定 / 剔除" right under the client's nose. */
+    html.pc-client .pill[data-d] {
+      display: none !important;
+    }
     /* A client must not be able to read the verdict off the card's
        colour either. */
     html.pc-client .card.cull,
@@ -7612,8 +7618,11 @@
   // unnecessary network round-trip on the common case.
   // ==================================================================
   const I18N_KEY = "pixcull_lang";
-  let I18N_STRINGS = {};        // key → translated string (current lang)
-  let I18N_CURRENT = "zh_CN";   // current language code
+  // The server ships the dictionary for the page language in the
+  // document, so the first render is already translated. /api/v1/locale
+  // still answers, and still wins, when the user switches language.
+  let I18N_STRINGS = (typeof window !== "undefined" && window.PIXCULL_I18N) || {};
+  let I18N_CURRENT = (typeof window !== "undefined" && window.PIXCULL_LANG) || "zh_CN";
 
   // v2.23-P1 — the full supported locale cycle (was 3 of 13: an
   // English or Japanese user could reach only zh→en→ja and the other
@@ -7650,13 +7659,28 @@
     return "zh_CN";
   }
   function _getStoredLang() {
-    // Explicit user choice wins and is sticky; otherwise fall back to
-    // the browser's language (v2.23-P1 — a non-Chinese photographer's
+    // Explicit user choice wins and is sticky; then the language the
+    // server rendered this document in (``?lang=``, the cookie, or the
+    // env var, which the browser's own language cannot see); otherwise
+    // fall back to the browser (v2.23-P1 — a non-Chinese photographer's
     // first run used to be forced to zh_CN regardless of navigator).
+    // An explicit ?lang= in the URL is the strongest signal there is:
+    // the server has already rendered the page in it, so the client
+    // dictionary has to follow, or the page comes back half Chinese.
+    try {
+      const asked = new URLSearchParams(window.location.search).get("lang");
+      if (asked && I18N_CYCLE.includes(_normalizeLang(asked))) {
+        return _normalizeLang(asked);
+      }
+    } catch (_e) { /* no URLSearchParams: fall through */ }
     try {
       const v = localStorage.getItem(I18N_KEY);
       if (I18N_CYCLE.includes(v)) return v;
     } catch (_e) { /* private mode — fall through to detection */ }
+    try {
+      const served = (typeof window !== "undefined") ? window.PIXCULL_LANG : "";
+      if (served) return served;
+    } catch (_e) { /* no window: keep detecting */ }
     try {
       const nav = (navigator.languages && navigator.languages[0])
         || navigator.language || "";
@@ -7802,6 +7826,19 @@
     const v = I18N_STRINGS[key];
     return (typeof v === "string" && v.length) ? v : (fallback || key);
   }
+  // Same lookup, with ``{name}`` placeholders filled in. Title strings
+  // carry counts and axis names, so a plain key→string map is not
+  // enough; the placeholder keeps the sentence order free for the
+  // translator.
+  function _tf(key, fallback, vars) {
+    let out = _t(key, fallback);
+    if (vars) {
+      for (const k of Object.keys(vars)) {
+        out = out.split("{" + k + "}").join(String(vars[k]));
+      }
+    }
+    return out;
+  }
 
   // Wire the switcher button + boot.
   document.addEventListener("DOMContentLoaded", () => {
@@ -7902,6 +7939,49 @@
   const I18N_DECISION = {
     keep: "保留", maybe: "待定", cull: "剔除",
   };
+  // English side of the same tables. Chinese is the source language, so
+  // these read the token the pipeline emits and never the Chinese label;
+  // a token with no entry falls through as itself, which is English
+  // already (``event``, ``high_key``) or close enough to read.
+  const I18N_GENRE_EN = {
+    portrait: "Portrait", wildlife: "Wildlife", landscape: "Landscape",
+    architecture: "Architecture", street: "Street", event: "Event",
+    documentary: "Documentary", fashion: "Fashion", macro: "Macro",
+    food: "Food", sports: "Sports", astro: "Astrophotography",
+    abstract: "Abstract", stilllife: "Still life",
+  };
+  const I18N_STYLE_EN = {
+    mono: "Monochrome", low_key: "Low key", high_key: "High key",
+    silhouette: "Silhouette", long_exposure: "Long exposure",
+    rear_curtain_sync: "Rear-curtain sync", night: "Night",
+  };
+  const I18N_FLAG_EN = {
+    severely_blurry:        "Severely blurred",
+    subject_blur:           "Subject blur",
+    global_blur:            "Overall soft",
+    blurred_subject:        "Blurred subject",
+    soft_subject:           "Slightly soft subject",
+    closed_eyes:            "Eyes closed",
+    blink:                  "Eyes closed",
+    motion_blur_on_face:    "Motion blur on the face",
+    face_occluded:          "Face occluded",
+    no_clear_subject:       "No clear subject",
+    highlights_clipped:     "Highlights clipped",
+    shadows_clipped:        "Shadows clipped",
+    severely_underexposed:  "Severely underexposed",
+    severely_overexposed:   "Severely overexposed",
+    highlight_clip:         "Highlights clipped",
+    horizon_tilt:           "Tilted horizon",
+    duplicate_in_cluster:   "Duplicate in burst",
+  };
+  const I18N_SOURCE_EN = {
+    auto: "Auto rule", AUTO: "Auto rule",
+    model: "Trained model", MODEL: "Trained model",
+    vlm: "Local VLM", VLM: "Local VLM",
+    meta: "DeepSeek", META: "DeepSeek",
+    human: "Human", HUMAN: "Human",
+  };
+  const I18N_DECISION_EN = { keep: "Keep", maybe: "Maybe", cull: "Cull" };
 
   // ================================================================
   // v0.7-P0-3 — large-batch (5k+) hardening helpers.
@@ -8062,10 +8142,10 @@
     if (token == null) return "";
     return (table && table[token]) || token;
   }
-  function trGenre(g)  { return tr(g, I18N_GENRE); }
-  function trStyle(s)  { return tr(s, I18N_STYLE); }
-  function trFlag(f)   { return tr(f, I18N_FLAG); }
-  function trSource(s) { return tr(s, I18N_SOURCE); }
+  function trGenre(g)  { return tr(g, _uiLangEn() ? I18N_GENRE_EN : I18N_GENRE); }
+  function trStyle(s)  { return tr(s, _uiLangEn() ? I18N_STYLE_EN : I18N_STYLE); }
+  function trFlag(f)   { return tr(f, _uiLangEn() ? I18N_FLAG_EN : I18N_FLAG); }
+  function trSource(s) { return tr(s, _uiLangEn() ? I18N_SOURCE_EN : I18N_SOURCE); }
 
   // Reasons + flags arrive as strings like "severely_blurry" or
   // "score=0.57 · severely_blurry · highlight_clip". Split on common
@@ -8078,8 +8158,41 @@
     ["rescorer_promoted(P=",  "模型上调(P="],
     ["rescorer_demoted(P=",   "模型下调(P="],
   ];
+  // English prefixes for the same reason fragments, so ``score=0.57``
+  // reads ``Overall=0.57`` and not ``score=0.57``.
+  const _REASON_PREFIX_MAP_EN = [
+    ["low_score=",            "Low score="],
+    ["score=",                "Overall="],
+    ["rescorer_promoted(P=",  "Model raised (P="],
+    ["rescorer_demoted(P=",   "Model lowered (P="],
+  ];
+  // A reason can arrive as a token (``severely_blurry``) or as the label
+  // the pipeline already printed in Chinese (``严重模糊``). The English
+  // path has to answer both, so it also looks the Chinese label up.
+  function _enLabel(t) {
+    if (I18N_FLAG_EN[t])    return I18N_FLAG_EN[t];
+    if (I18N_STYLE_EN[t])   return I18N_STYLE_EN[t];
+    if (I18N_GENRE_EN[t])   return I18N_GENRE_EN[t];
+    if (I18N_SOURCE_EN[t])  return I18N_SOURCE_EN[t];
+    if (I18N_DECISION_EN[t]) return I18N_DECISION_EN[t];
+    const tables = [[I18N_FLAG, I18N_FLAG_EN], [I18N_STYLE, I18N_STYLE_EN],
+                    [I18N_GENRE, I18N_GENRE_EN], [I18N_SOURCE, I18N_SOURCE_EN],
+                    [I18N_DECISION, I18N_DECISION_EN]];
+    for (const [zhTable, enTable] of tables) {
+      for (const k of Object.keys(zhTable)) {
+        if (zhTable[k] === t) return enTable[k] || t;
+      }
+    }
+    return "";
+  }
   function trToken(t) {
     if (!t) return "";
+    if (_uiLangEn()) {
+      for (const [prefix, en] of _REASON_PREFIX_MAP_EN) {
+        if (t.startsWith(prefix)) return en + t.slice(prefix.length);
+      }
+      return _enLabel(t) || t;
+    }
     for (const [prefix, zh] of _REASON_PREFIX_MAP) {
       if (t.startsWith(prefix)) return zh + t.slice(prefix.length);
     }
@@ -8259,24 +8372,24 @@
     // band sorted most-ambiguous-first (|P(keep)−0.5|, falls back to
     // |score_final−0.5|), so the end-of-session cleanup has an order.
     `<button class="resolve-maybes-btn" id="resolveMaybesBtn"`
-    + ` title="只看 maybe,按『模型最拿不准』排序 — 从最难的开始,1/2/3 直接判">`
+    + ` title="${_t("workspace.resolve_maybes_title", "只看 maybe,按『模型最拿不准』排序 — 从最难的开始,1/2/3 直接判")}">`
     + `${_t("workspace.resolve_maybes", "◐ 决议 maybe")}</button>`,
     // v2.23-P2 — disagreement review: only meaningful when the shadow
     // rescorer ran AND disagreed with the rule stack somewhere. Rendered
     // hidden by default; _updateReviewProgress() unhides it when there's
     // something to review (mirrors the resolve-maybes button lifecycle).
     `<button class="resolve-maybes-btn disagree-btn" id="disagreeReviewBtn" hidden`
-    + ` title="只看模型与规则判定不一致的照片,最有把握的分歧排最前 — 这些是最有价值的纠正标签">`
+    + ` title="${_t("workspace.disagree_review_title", "只看模型与规则判定不一致的照片,最有把握的分歧排最前 — 这些是最有价值的纠正标签")}">`
     + `${_t("workspace.disagree_review", "⚖ 异议复核")}`
     + ` <b data-stat="disagree">${summary.rescorer_n_disagrees || 0}</b></button>`,
     `<span class="stat-aux">耗时 <b>${ela}</b></span>`,
   ];
   if (summary.rescorer_active) {
-    stats.push(`<span class="stat-aux" title="V1.1 学习重打分器:在 ${summary.rescorer_n_scored} 张非 cull 图上给出 keep/maybe 预测">rescorer <b>${summary.rescorer_n_scored}</b> 评分 / <b>${summary.rescorer_n_disagrees}</b> 与规则不一致</span>`);
+    stats.push(`<span class="stat-aux" title="${_tf("workspace.rescorer_title", "V1.1 学习重打分器:在 {n} 张非 cull 图上给出 keep/maybe 预测", {n: summary.rescorer_n_scored})}">rescorer <b>${summary.rescorer_n_scored}</b> ${_t("workspace.stats.rescorer_scored", "评分")} / <b>${summary.rescorer_n_disagrees}</b> ${_t("workspace.stats.rescorer_disagrees", "与规则不一致")}</span>`);
   }
   // V2.0 rubric annotation progress
   if (summary.n_human_labeled != null) {
-    stats.push(`<span class="stat-aux" title="人工 rubric 标注进度,这些标注会喂入下一轮 rescorer 训练">人工标注 <b>${summary.n_human_labeled}</b>/${summary.n_total}</span>`);
+    stats.push(`<span class="stat-aux" title="${_t("workspace.human_labels_title", "人工 rubric 标注进度,这些标注会喂入下一轮 rescorer 训练")}">${_t("workspace.stats.human_labels", "人工标注")} <b>${summary.n_human_labeled}</b>/${summary.n_total}</span>`);
   }
   // V17.2 — vertical policy badge. Tells the user "you tagged this
   // batch as <vertical>; here's how the thresholds were shifted vs
@@ -8874,18 +8987,17 @@
       const totalBurstPhotos = _REAL_BURSTS.reduce((s, [_, n]) => s + n, 0);
       html +=
         `<span class="pill burst-peak-toggle${filterState.burstPeakOnly ? ' active' : ''}" ` +
-        `title="${_REAL_BURSTS.length} 个连拍组,共 ${totalBurstPhotos} 张 — ` +
-        `打开后只保留每组的最佳一张">` +
+        `title="${_tf("grid.burst_peak_title", "{bursts} 个连拍组,共 {photos} 张 — 打开后只保留每组的最佳一张", {bursts: _REAL_BURSTS.length, photos: totalBurstPhotos})}">` +
         `🎯 每连拍峰值 <span style="opacity:0.5">${_REAL_BURSTS.length}</span></span>` +
         // v2.4-P1-1 — collapse each burst into a single peak "hero" card
         // carrying a ⧉N stack badge (click it to expand → compare modal).
         `<span class="pill burst-collapse-toggle${filterState.collapseBursts ? ' active' : ''}" ` +
-        `title="把每个连拍组折叠成一张峰值代表 + ⧉计数;点卡片角的 ⧉N 展开并排比较">` +
+        `title="${_t("grid.burst_collapse_title", "把每个连拍组折叠成一张峰值代表 + ⧉计数;点卡片角的 ⧉N 展开并排比较")}">` +
         `⧉ 折叠成堆</span>` +
         // P0.3 — direct entry to the V9.2 compare modal without
         // having to switch to sort=cluster first.
         `<span class="pill burst-compare-jump" ` +
-        `title="打开并排比较 — 从第一个连拍组开始,←/→ 翻页">` +
+        `title="${_t("grid.burst_compare_title", "打开并排比较 — 从第一个连拍组开始,←/→ 翻页")}">` +
         `⊞ 并排比较</span>`;
     }
     // v2.11-P0-1 — the near-dup fold + Scenes toggles (general "organise the
@@ -8932,10 +9044,10 @@
     clearTimeout(_simTimer);   // cancel any in-flight slider re-group debounce
     let html =
       `<span class="pill neardup-toggle${filterState.nearDupFold ? ' active' : ''}" ` +
-      `title="按视觉相似度(CLIP)把近重复折成一张代表;点卡片角的 ≈N 并排比较 — 首次开启需建索引,稍慢">` +
+      `title="${_t("grid.neardup_title", "按视觉相似度(CLIP)把近重复折成一张代表;点卡片角的 ≈N 并排比较 — 首次开启需建索引,稍慢")}">` +
       `≈ 近重复折叠</span>` +
       `<span class="pill scenes-toggle${filterState.scenesView ? ' active' : ''}" ` +
-      `title="按拍摄时间把这次拍摄切成时序场景, 点场景跳到那一段 — 叙事流, 而非一格格扁平网格">` +
+      `title="${_t("grid.scenes_title", "按拍摄时间把这次拍摄切成时序场景, 点场景跳到那一段 — 叙事流, 而非一格格扁平网格")}">` +
       `🎬 时序场景</span>`;
     if (filterState.nearDupFold) {
       const thr = filterState.nearDupThreshold;
@@ -9267,8 +9379,7 @@
       : "";
     el.innerHTML =
       `<span class="pill active-learning-toggle${active ? ' active' : ''}" ` +
-      `title="主动学习排队: 列出最值得标注的 ${_ACTIVE_LEARNING_N} 张照片 — ` +
-      `优先暴露规则与 rescorer 不一致 / 概率临界 / 分数临界 / 还未标注的">` +
+      `title="${_tf("workspace.active_learning_title", "主动学习排队: 列出最值得标注的 {n} 张照片 — 优先暴露规则与 rescorer 不一致 / 概率临界 / 分数临界 / 还未标注的", {n: _ACTIVE_LEARNING_N})}">` +
       `🎯 主动学习${sizeNote}</span>`;
     el.querySelectorAll(".active-learning-toggle").forEach(b => {
       b.addEventListener("click", async () => {
@@ -9284,12 +9395,13 @@
         try {
           const r = await fetch(
             `/api/v1/runs/${run_id}/next_to_label?n=${_ACTIVE_LEARNING_N}`
+              + `&lang=${_uiLangEn() ? "en_US" : "zh_CN"}`
           );
           if (!r.ok) throw new Error("HTTP " + r.status);
           const data = await r.json();
           if (data.done) {
             // No unlabeled photos left — friendly message
-            toast(data.message || "已标完本批所有图片 ✓", "success");
+            toast(data.message || _t("annotation.queue_done", "已标完本批所有图片 ✓"), "success");
             b.classList.remove("active");
             buildActiveLearningFilter();
             return;
@@ -9638,12 +9750,11 @@
     const left  = Math.max(0, total - done);
     if (total > 0 && left === 0) {
       return `<span class="stat-aux review-progress done" id="reviewProgress"`
-        + ` title="每张照片都有人工确认的判定 — 点击下载 XMP zip,带着结果回 Lightroom">`
+        + ` title="${_t("workspace.all_done_title", "每张照片都有人工确认的判定 — 点击下载 XMP zip,带着结果回 Lightroom")}">`
         + `${_t("workspace.stats.all_done", "全部已审 ✓ · 导出 XMP")}</span>`;
     }
     return `<span class="stat-aux review-progress" id="reviewProgress"`
-      + ` title="还没有人工确认判定的照片数(键盘 1/2/3、lightbox 或批量框选都算确认)。`
-      + `清零后这里变成 XMP 导出入口">`
+      + ` title="${_t("workspace.unreviewed_title", "还没有人工确认判定的照片数(键盘 1/2/3、lightbox 或批量框选都算确认)。清零后这里变成 XMP 导出入口")}">`
       + `${_t("workspace.stats.unreviewed", "待审")} <b data-stat="unreviewed">${left}</b></span>`;
   }
 
@@ -10156,7 +10267,7 @@
       // V9.0 style chip — V16.0 localized to Chinese label, raw token
       // still in tooltip so users can map to the wire format.
       const styleChips = (r.style_modes || []).map(
-        s => `<span class="style-chip" title="检测到风格: ${esc(s)}">${esc(trStyle(s))}</span>`
+        s => `<span class="style-chip" title="${_tf("card.style_title", "检测到风格: {name}", {name: esc(s)})}">${esc(trStyle(s))}</span>`
       ).join("");
       // V14.0 — escape filename for every interpolation site. Filenames
       // can contain quotes/angle brackets on macOS+APFS, and an injected
@@ -10203,16 +10314,16 @@
                  Three discrete primary actions: zoom (open lightbox),
                  add-to-bucket (quick assign), compare (alt path to ⇆). -->
             <div class="card-actions" data-fn="${fnEsc}" role="group"
-                 aria-label="${esc(fnEsc)} 操作">
+                 aria-label="${esc(fnEsc)} ${_t("card.actions", "操作")}">
               <button class="card-action card-action-zoom" type="button"
-                      data-fn="${fnEsc}" title="打开放大窗 (或 Space)">
+                      data-fn="${fnEsc}" title="${_t("card.zoom_title", "打开放大窗 (或 Space)")}">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
                   <line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/>
                 </svg>
               </button>
               <button class="card-action card-action-bucket" type="button"
-                      data-fn="${fnEsc}" title="加入交付桶">
+                      data-fn="${fnEsc}" title="${_t("card.bucket_title", "加入交付桶")}">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M5 7h14l-1.5 12.5a2 2 0 0 1-2 1.5h-7a2 2 0 0 1-2-1.5L5 7z"/>
                   <path d="M9 7V5a3 3 0 0 1 6 0v2"/>
@@ -10228,9 +10339,9 @@
             </div>
           </div>
           <button class="annotate-btn" data-fn="${fnEsc}" title="人工标注 (rubric)">${r.rubric_human_labeled ? "✓ 已标" : "标注"}</button>
-          <button class="card-rot-btn" data-fn="${fnEsc}" type="button" title="顺时针旋转 90°(在放大窗中可继续微调)">↻</button>
+          <button class="card-rot-btn" data-fn="${fnEsc}" type="button" title="${_t("card.rotate_title", "顺时针旋转 90°(在放大窗中可继续微调)")}">↻</button>
           <button class="card-cmp-btn" data-fn="${fnEsc}" type="button"
-            title="选这张进入 A/B 比较(Shift+点击缩略图同效;c 键也可)"><svg class="icon icon--sm"><use href="#icon-swap"/></svg></button>
+            title="${_t("card.compare_title", "选这张进入 A/B 比较(Shift+点击缩略图同效;c 键也可)")}"><svg class="icon icon--sm"><use href="#icon-swap"/></svg></button>
           <div class="body">
             <div class="row1">
               <span class="badge ${r.decision}" title="${esc(r.decision)}">${esc(tr(r.decision, I18N_DECISION) || r.decision)}</span>
@@ -10254,7 +10365,7 @@
                           `<svg class="icon icon--sm"><use href="#icon-heart"/></svg>` +
                           `<span>${esc(mLabel)}</span></span>`;
                 })() : ""}
-              ${r.needs_review ? `<span class="review-me-chip" title="自动 / 训练模型 / VLM / DeepSeek 这 4 个评分源对此图分歧大 (累计 ${(r.inconsistency_total || 0).toFixed(1)} ★ stddev) — 值得人工复核">⚠ review me</span>` : ""}
+              ${r.needs_review ? `<span class="review-me-chip" title="${_tf("card.review_me_title", "自动 / 训练模型 / VLM / DeepSeek 这 4 个评分源对此图分歧大 (累计 {n} ★ stddev) — 值得人工复核", {n: (r.inconsistency_total || 0).toFixed(1)})}">⚠ review me</span>` : ""}
               ${r.exposure_outlier ? (() => {
                   const d = r.exposure_deviation || {};
                   const ld = d.luma_delta || 0;
@@ -10280,7 +10391,7 @@
               ${ax("light")}${ax("moment")}${ax("aesthetic")}
             </div>
             <div class="row4" title="${esc(r.reason || '')}">${esc(reasonShort || "")}</div>
-            ${(r.advice && r.advice.rationale) ? `<div class="row5 rationale-line" title="V14.3 — 为何 maybe">⊕ ${esc(r.advice.rationale)}</div>` : ''}
+            ${(r.advice && r.advice.rationale) ? `<div class="row5 rationale-line" title="${_t("annotation.rationale_title", "V14.3 — 为何 maybe")}">⊕ ${esc(r.advice.rationale)}</div>` : ''}
             ${(r.advice && r.advice.strengths && r.advice.strengths.length) ? `<div class="row5 strengths" title="V5.2 摄影正典优点">✓ ${r.advice.strengths.slice(0,2).map(esc).join(' · ')}</div>` : ''}
             ${(r.advice && r.advice.suggestions && r.advice.suggestions.length) ? `<div class="row5 fixes" title="V5.2 改进建议">→ ${esc(r.advice.suggestions[0])}</div>` : ''}
           </div>
@@ -12520,7 +12631,7 @@
         </div>
         ${_sec("ai-judge", "⌬ AI 判读", aiJudgeBody)}
         ${_sec("warnings",  "⚠ 矛盾警示", warningsBody)}
-        ${_sec("rationale", "⊕ 为何 maybe", rationaleBody)}
+        ${_sec("rationale", _t("annotation.section_rationale", "⊕ 为何 maybe"), rationaleBody)}
         ${_sec("reading", "◎ 读这张照片", readingBody, _voiceBadge)}
         ${_sec("strengths", "✓ 优点", strengthsBody, _voiceBadge)}
         ${_sec("weaknesses","✎ 改进建议", weaknessesBody, _voiceBadge)}
@@ -14250,7 +14361,7 @@
           ${[1,2,3,4,5].map(i => `<span class="star" data-v="${i}">★</span>`).join("")}
         </div>
         <div class="descriptor" data-descriptor></div>
-        <textarea data-rationale data-slashmenu rows="1" placeholder="为什么是这个分?(可选,但越多越有用 · 输入 / 触发命令)"></textarea>
+        <textarea data-rationale data-slashmenu rows="1" placeholder="${_t("annotation.rationale_placeholder", "为什么是这个分?(可选,但越多越有用 · 输入 / 触发命令)")}"></textarea>
       </div>
     `).join("");
     // Wire up star click handlers
@@ -14366,7 +14477,7 @@
       : "";
     if (why) {
       annWhy.style.display = "block";
-      annWhy.innerHTML = `<b>为什么挑这张?</b> ${why}`;
+      annWhy.innerHTML = `<b>${_t("annotation.why_this", "为什么挑这张?")}</b> ${why}`;
     }
     // Pre-fill from /annotation endpoint (auto or human)
     try {
@@ -14381,8 +14492,10 @@
           const meta = rubricMeta.find(a => a.name === axisName);
           const starsEl = axesContainer.querySelector(`.stars[data-axis="${axisName}"]`);
           if (starsEl && meta) {
+            const ladder = (_uiLangEn() && meta.rubric_descriptors_en)
+              ? meta.rubric_descriptors_en : meta.rubric_descriptors;
             starsEl.parentElement.querySelector("[data-descriptor]").textContent =
-              Math.round(ax.stars) + "★: " + meta.rubric_descriptors[Math.round(ax.stars) - 1];
+              Math.round(ax.stars) + "★: " + ladder[Math.round(ax.stars) - 1];
           }
         }
         if (ax.rationale) {
@@ -14492,7 +14605,8 @@
 
   async function openNextToLabel(opts = {}) {
     try {
-      const res = await fetch(`/next_to_label/${run_id}`);
+      const res = await fetch(
+        `/next_to_label/${run_id}?lang=${_uiLangEn() ? "en_US" : "zh_CN"}`);
       const data = await res.json();
       if (data.done) {
         annModal.classList.remove("show");
@@ -14502,7 +14616,7 @@
       openAnnotation(data.filename, data.why, opts);
     } catch (e) {
       annModal.classList.remove("show");
-      toast("active learning 队列失败:" + e, "error");
+      toast(_t("annotation.queue_failed", "active learning 队列失败:") + e, "error");
     }
   }
 
@@ -16901,7 +17015,7 @@
       <span class="sab-icon"><svg class="icon"><use href="#icon-chart"/></svg></span>
       <span class="sab-msg">${reason}</span>
       <button class="sab-toggle" type="button">查看分布详情</button>
-      <button class="sab-close" type="button" aria-label="关闭场景分布提示">✕</button>`;
+      <button class="sab-close" type="button" aria-label="${_t("scene.close_hint", "关闭场景分布提示")}">✕</button>`;
     document.body.appendChild(banner);
 
     // P-UX-28 — pie chart panel.  Lazy-built on first click.
@@ -17026,8 +17140,7 @@
         const n = d.n_annotations | 0, min = d.min_annotations | 0;
         if (min > 0 && n >= 3 && n < min) {
           el.textContent = "🎯 个性化 " + n + "/" + min;
-          el.title = "每次 keep/cull 纠正都在教 PixCull 你的口味 — 再标 "
-            + (min - n) + " 张,新批次就会自动按你的标准校准阈值";
+          el.title = _tf("workspace.tuned_badge", "每次 keep/cull 纠正都在教 PixCull 你的口味 — 再标 {n} photos,新批次就会自动按你的标准校准阈值", {n: min - n});
           el.style.opacity = "0.62";
           el.style.display = "";
         }
@@ -17165,6 +17278,7 @@
   // and only once ever (its own key). Pulses the new "整理 · 折叠" group +
   // shows a compact tip.
   (function _initTransparencyHint() {
+    const _T = (typeof _t === "function") ? _t : (k, f) => f;
     const KEY = "pixcull_seen_transparency_v1";
     try {
       if (localStorage.getItem(KEY) === "1") return;
@@ -17178,19 +17292,19 @@
       const tip = document.createElement("div");
       tip.className = "onboard-tip transparency-hint";
       tip.setAttribute("role", "complementary");
-      tip.setAttribute("aria-label", "透明度功能提示");
+      tip.setAttribute("aria-label", _T("tip.aria", "透明度功能提示"));
       tip.innerHTML = `
         <div class="onb-head">
           <span class="onb-icon"><svg class="icon"><use href="#icon-sparkles"/></svg></span>
-          <span class="onb-title">看得见的 AI</span>
-          <button class="onb-close" type="button" aria-label="关闭提示">✕</button>
+          <span class="onb-title">${_T("tip.title", "看得见的 AI")}</span>
+          <button class="onb-close" type="button" aria-label="${_T("onboard.close", "关闭提示")}">✕</button>
         </div>
         <ul class="onb-list">
-          <li>左栏 <b>整理 · 折叠</b> 里 <b>≈ 近重复折叠</b> + 相似度滑块:拖一拖,看 AI 怎么把近似画面归组(可调,不是黑箱)</li>
-          <li><b>🎬 时序场景</b>:按拍摄时间把这次拍摄切成叙事段落</li>
-          <li>点开任意照片,顶部 <b>🔍 为什么</b> 一行讲清这张为何 keep / maybe / cull</li>
+          <li>${_T("tip.row.organise", "左栏 <b>整理 · 折叠</b> 里 <b>≈ 近重复折叠</b> + 相似度滑块:拖一拖,看 AI 怎么把近似画面归组(可调,不是黑箱)")}</li>
+          <li>${_T("tip.row.scenes", "<b>🎬 时序场景</b>:按拍摄时间把这次拍摄切成叙事段落")}</li>
+          <li>${_T("tip.row.why", "点开任意照片,顶部 <b>🔍 为什么</b> 一行讲清这张为何 keep / maybe / cull")}</li>
         </ul>
-        <button class="onb-dismiss" type="button">知道了</button>`;
+        <button class="onb-dismiss" type="button">${_T("onboard.dismiss", "知道了")}</button>`;
       document.body.appendChild(tip);
       requestAnimationFrame(() => tip.classList.add("show"));
       let dismissed = false;
@@ -19384,12 +19498,10 @@
     if (!stats) return;
     const chip = document.createElement("span");
     chip.className = "adaptive-band-chip";
-    chip.title = (
-      "v0.13.8 自调:keep ≥ " + keep.toFixed(2) +
-      " · cull < " + cull.toFixed(2) +
-      "(基于 " + scores.length + " 张评分的 25/75 分位)\n" +
-      "本 run 的 score 分布与全局默认偏离 ≥ 0.03,因此适配阈值。"
-    );
+    chip.title = _tf("workspace.adaptive_band",
+      "v0.13.8 自调:keep ≥ {keep} · cull < {cull}(基于 {n} 张评分的 25/75 分位)\n"
+        + "本 run 的 score 分布与全局默认偏离 ≥ 0.03,因此适配阈值。",
+      {keep: keep.toFixed(2), cull: cull.toFixed(2), n: scores.length});
     chip.style.cssText = (
       "display:inline-flex;align-items:center;gap:6px;" +
       "padding:3px 9px;border-radius:999px;" +
@@ -20565,18 +20677,12 @@
       level: hasFaults ? "fault" : "degraded",
       headline: hasFaults
         ? _t("health.fault", "有一个环节该做的事一件没做")
-        : _t("health.degraded", "本次有降级")
-            + "(" + degraded + " 退回 / " + withheld + " 未做)",
+        : _tf("health.degraded",
+              "本次有降级({degraded} 退回 / {withheld} 未做)",
+              {degraded: degraded, withheld: withheld}),
       lines: lines,
       faults: (faults || []).slice(),
     };
-  }
-
-  function _t(key, fallback) {
-    try {
-      const v = (window.I18N || {})[key];
-      return (typeof v === "string" && v.length) ? v : fallback;
-    } catch (_e) { return fallback; }
   }
 
   function render(sum) {

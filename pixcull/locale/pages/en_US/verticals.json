@@ -119,5 +119,8 @@
   "每个垂类卡有 3 个工具:<br><br>\n          <b>🎯 调参</b> · 用你的好/坏样本网格搜索最优 keep/cull 阈值,\n            实时显示 F1 提升<br>\n          <b>✨ AI 话术</b> · DeepSeek 根据你的样本生成<b>专属点评</b>,\n            告别\"主体占画 30%+\"这种通用句<br>\n          <b>📊 报告</b> · 看当前 policy 在你样本上的混淆矩阵 + 误判清单": "Each vertical card has three tools:<br><br>\n          <b>🎯 Tune</b> · grid-search the best keep/cull thresholds on your\n            good and bad samples, with the F1 gain shown live<br>\n          <b>✨ AI phrases</b> · DeepSeek writes <b>dedicated notes</b> from\n            your samples instead of generic lines like \"subject covers 30%\"<br>\n          <b>📊 Report</b> · confusion matrix and misclassified samples for the\n            current policy on your samples",
   "<b>📥 批量导入</b> · 选一个文件夹(<code>~/摄影/某次拍摄</code>)\n            → PixCull 自动分类 → 你确认后一键灌入<br>\n          <b>+ 好片 / + 待剔除</b> · 手动拖拽单张<br>\n          <b>跑完批次自动 promote</b> · 在主页扫描时选了垂类 + 标注过\n            keep/cull,结果页有\"📥 灌入 sample bank\"按钮一键写入<br><br>\n          所有样本都<b>留在你本机</b> · 不上云。": "<b>📥 Bulk import</b> · pick a folder (<code>~/Pictures/some-shoot</code>),\n            let the pipeline classify it, then import in one click<br>\n          <b>+ Good / + Cull</b> · drag in single frames by hand<br>\n          <b>Auto-promote after a run</b> · tag a vertical when scanning on the\n            home page, label keep/cull, then use \"📥 Import into sample bank\"\n            on the results page<br><br>\n          Every sample stays <b>on your machine</b>. Nothing goes to the cloud.",
   "三个层次的\\\"定制\\\"": "Three levels of customisation",
-  "三种灌样本的方式": "Three ways to add samples"
+  "三种灌样本的方式": "Three ways to add samples",
+  "点击查看好片样本": "Open the good-sample sheet",
+  "点击查看待剔除样本": "Open the reject-sample sheet",
+  "已自动调参 · F1": "Auto-tuned · F1"
 }

@@ -249,3 +249,72 @@ def test_the_accessibility_toggle_reads_when_it_is_on(base_url, theme):
         browser.close()
     assert got["on"], "clicking the toggle did not turn it on"
     assert got["ratio"] >= 4.5, f"{theme}: {got['ratio']:.2f}:1 for an 11px label"
+
+
+# Chinese characters outside the 中文 language-switch label: any hit on an
+# English page is copy that never made it into the catalogue or the
+# dictionary. The static pass in test_page_i18n.py cannot see inside
+# <script>, so the grid, the card tooltips and the annotation panel are
+# only reachable here.
+_CJK_SCAN = r"""
+() => {
+  const cjk = /[\u3400-\u9FFF\uF900-\uFAFF]/;
+  const skip = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT']);
+  const out = new Set();
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  let node;
+  while ((node = walker.nextNode())) {
+    if (skip.has(node.parentElement && node.parentElement.tagName)) continue;
+    const text = node.textContent.trim();
+    if (text && cjk.test(text) && text !== '中文') out.add('TEXT ' + text.slice(0, 90));
+  }
+  for (const el of document.querySelectorAll('*')) {
+    if (skip.has(el.tagName)) continue;
+    for (const attr of el.attributes) {
+      if (attr.name === 'class' || attr.name === 'id' || attr.name === 'style') continue;
+      if (cjk.test(attr.value) && attr.value !== '中文') {
+        out.add('ATTR ' + attr.name + ' ' + attr.value.slice(0, 90));
+      }
+    }
+  }
+  return [...out];
+}
+"""
+
+
+def test_english_render_has_no_chinese(base_url):
+    """v3.97 — an English reader gets English in the strings JavaScript
+    builds, not just in the markup the server renders."""
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as pw:
+        try:
+            browser = pw.chromium.launch()
+        except Exception as exc:                      # browser not installed
+            pytest.skip(f"chromium unavailable: {exc}")
+        ctx = browser.new_context(viewport={"width": 1440, "height": 900})
+        ctx.add_init_script(
+            "try{localStorage.setItem('pixcull_onboarded_v1','1');"
+            "localStorage.setItem('pixcull_seen_rubric_intro_v1','1');}catch(e){}")
+        pg = ctx.new_page()
+        try:
+            pg.goto(f"{base_url}/results/{RUN}?lang=en",
+                    wait_until="domcontentloaded", timeout=30000)
+            pg.wait_for_function(
+                "document.querySelectorAll('#grid .card').length>3", timeout=30000)
+            pg.wait_for_timeout(900)
+            leaks = set(pg.evaluate(_CJK_SCAN))
+
+            pg.click("#annNextBtn")
+            pg.wait_for_selector("#annModal.show", timeout=10000)
+            pg.wait_for_timeout(1500)
+            leaks |= set(pg.evaluate(_CJK_SCAN))
+
+            star = pg.query_selector('.axis-row .star[data-v="4"]')
+            if star:
+                star.click(force=True)
+                pg.wait_for_timeout(500)
+                leaks |= set(pg.evaluate(_CJK_SCAN))
+
+            assert not leaks, f"Chinese on the English results page: {sorted(leaks)[:8]}"
+        finally:
+            browser.close()

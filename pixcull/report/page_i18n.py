@@ -74,9 +74,14 @@ def _load_catalogue_cached(path_str: str, _stamp: int) -> dict[str, str]:
             if isinstance(k, str) and isinstance(v, str) and k}
 
 
-@lru_cache(maxsize=16)
 def load_shared_catalogue(lang: str) -> dict[str, str]:
-    """Strings every page uses: Close, Retry, Working, and the like."""
+    """Strings every page uses: Close, Retry, Working, and the like.
+
+    No cache of its own: ``load_page_catalogue`` already keys on the file
+    mtime, so a translator editing ``_shared.json`` sees the change on the
+    next request. A plain ``lru_cache(lang)`` here pinned the first read
+    for the life of the process.
+    """
     return load_page_catalogue("_shared", lang)
 
 

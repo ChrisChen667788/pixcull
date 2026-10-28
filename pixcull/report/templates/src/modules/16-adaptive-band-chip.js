@@ -19,12 +19,10 @@
     if (!stats) return;
     const chip = document.createElement("span");
     chip.className = "adaptive-band-chip";
-    chip.title = (
-      "v0.13.8 自调:keep ≥ " + keep.toFixed(2) +
-      " · cull < " + cull.toFixed(2) +
-      "(基于 " + scores.length + " 张评分的 25/75 分位)\n" +
-      "本 run 的 score 分布与全局默认偏离 ≥ 0.03,因此适配阈值。"
-    );
+    chip.title = _tf("workspace.adaptive_band",
+      "v0.13.8 自调:keep ≥ {keep} · cull < {cull}(基于 {n} 张评分的 25/75 分位)\n"
+        + "本 run 的 score 分布与全局默认偏离 ≥ 0.03,因此适配阈值。",
+      {keep: keep.toFixed(2), cull: cull.toFixed(2), n: scores.length});
     chip.style.cssText = (
       "display:inline-flex;align-items:center;gap:6px;" +
       "padding:3px 9px;border-radius:999px;" +

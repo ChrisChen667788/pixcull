@@ -378,3 +378,13 @@ def test_compare_is_set_based_not_single_pin():
     assert "_openComparePicked" in js, "n-way open helper gone"
     assert "openCompareCustom(picks)" in js, "set no longer feeds the n-cell modal"
     assert "_compareA" not in js, "legacy single-pin _compareA resurfaced"
+
+
+def test_english_values_have_no_chinese():
+    """A key that exists but still holds Chinese is a half-done
+    translation, and the page ships it as if it were English."""
+    import re
+
+    cjk = re.compile(r"[\u4e00-\u9fff\u3400-\u4dbf]")
+    bad = {k: v for k, v in load_locale("en_US").items() if cjk.search(v)}
+    assert not bad, f"Chinese left in en_US: {sorted(bad)[:8]}"

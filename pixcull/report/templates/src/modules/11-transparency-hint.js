@@ -1,4 +1,5 @@
   (function _initTransparencyHint() {
+    const _T = (typeof _t === "function") ? _t : (k, f) => f;
     const KEY = "pixcull_seen_transparency_v1";
     try {
       if (localStorage.getItem(KEY) === "1") return;
@@ -12,19 +13,19 @@
       const tip = document.createElement("div");
       tip.className = "onboard-tip transparency-hint";
       tip.setAttribute("role", "complementary");
-      tip.setAttribute("aria-label", "透明度功能提示");
+      tip.setAttribute("aria-label", _T("tip.aria", "透明度功能提示"));
       tip.innerHTML = `
         <div class="onb-head">
           <span class="onb-icon"><svg class="icon"><use href="#icon-sparkles"/></svg></span>
-          <span class="onb-title">看得见的 AI</span>
-          <button class="onb-close" type="button" aria-label="关闭提示">✕</button>
+          <span class="onb-title">${_T("tip.title", "看得见的 AI")}</span>
+          <button class="onb-close" type="button" aria-label="${_T("onboard.close", "关闭提示")}">✕</button>
         </div>
         <ul class="onb-list">
-          <li>左栏 <b>整理 · 折叠</b> 里 <b>≈ 近重复折叠</b> + 相似度滑块:拖一拖,看 AI 怎么把近似画面归组(可调,不是黑箱)</li>
-          <li><b>🎬 时序场景</b>:按拍摄时间把这次拍摄切成叙事段落</li>
-          <li>点开任意照片,顶部 <b>🔍 为什么</b> 一行讲清这张为何 keep / maybe / cull</li>
+          <li>${_T("tip.row.organise", "左栏 <b>整理 · 折叠</b> 里 <b>≈ 近重复折叠</b> + 相似度滑块:拖一拖,看 AI 怎么把近似画面归组(可调,不是黑箱)")}</li>
+          <li>${_T("tip.row.scenes", "<b>🎬 时序场景</b>:按拍摄时间把这次拍摄切成叙事段落")}</li>
+          <li>${_T("tip.row.why", "点开任意照片,顶部 <b>🔍 为什么</b> 一行讲清这张为何 keep / maybe / cull")}</li>
         </ul>
-        <button class="onb-dismiss" type="button">知道了</button>`;
+        <button class="onb-dismiss" type="button">${_T("onboard.dismiss", "知道了")}</button>`;
       document.body.appendChild(tip);
       requestAnimationFrame(() => tip.classList.add("show"));
       let dismissed = false;

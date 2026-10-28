@@ -207,3 +207,48 @@ def test_localising_results_keeps_the_payload_placeholder():
     assert rendered.count("__PAYLOAD__") == source.count("__PAYLOAD__")
     assert rendered.count("<script") == source.count("<script")
     assert rendered.count("</script>") == source.count("</script>")
+
+
+def test_every_string_the_workspace_asks_for_exists(monkeypatch):
+    """The results page calls ``_t("key", "中文")`` for copy it builds in
+    JavaScript. A missing key is invisible: the Chinese fallback renders,
+    and the template-level scan never sees it because it lives inside
+    ``<script>``. Walk the built artifact and hold every key to the
+    English dictionary.
+    """
+    import json
+
+    template = _REPORT / "results.html"
+    js = template.read_text(encoding="utf-8")
+    # ``_t("scene." + g)`` builds its key at runtime; those tables are
+    # checked by test_i18n.py, so drop the bare prefixes here.
+    keys = {k for k in re.findall(r'_tf?\("([a-z0-9_.]+)"', js)
+            if not k.endswith(".")}
+    assert len(keys) > 50, "the key pattern stopped matching the template"
+
+    en = json.loads(
+        (Path(__file__).resolve().parents[1] / "pixcull" / "locale" / "en_US.json")
+        .read_text(encoding="utf-8"))
+    missing = sorted(k for k in keys if k not in en)
+    assert not missing, f"no English for {missing[:10]}"
+
+
+def test_shared_catalogue_follows_the_file(tmp_path, monkeypatch):
+    """``load_shared_catalogue`` used to be lru_cached by language only,
+    so editing ``_shared.json`` needed a server restart. It has to read
+    through the mtime-keyed page loader instead."""
+    from pixcull.report import page_i18n
+
+    shared = tmp_path / "en_US"
+    shared.mkdir()
+    (shared / "_shared.json").write_text('{"关闭": "Close"}', encoding="utf-8")
+    monkeypatch.setattr(page_i18n, "_CATALOGUE_DIR", tmp_path)
+
+    assert page_i18n.load_shared_catalogue("en_US") == {"关闭": "Close"}
+
+    import os
+    path = shared / "_shared.json"
+    path.write_text('{"关闭": "Dismiss"}', encoding="utf-8")
+    os.utime(path, (path.stat().st_atime, path.stat().st_mtime + 5))
+
+    assert page_i18n.load_shared_catalogue("en_US") == {"关闭": "Dismiss"}
