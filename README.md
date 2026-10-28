@@ -978,6 +978,7 @@ Sparkle-update pipeline.
 | API key (for LAN deploy) | `PIXCULL_API_KEY` env / `X-PixCull-API-Key` header | unset |
 | CORS allowlist | `PIXCULL_API_CORS_ORIGINS` env (comma-sep) | `*` if unset |
 | Active user | `PIXCULL_USER` env / `X-PixCull-User` header / cookie | none |
+| Page language | `?lang=` / `pixcull_lang` cookie / `PIXCULL_LANG` env / `Accept-Language` | browser |
 | App data dir | `~/Library/Application Support/PixCull` (macOS) | per-platform |
 | DeepSeek API key (optional) | `DEEPSEEK_API_KEY` env / `config.json` in app data | unset |
 | Sync target (optional) | `pixcull/sync.py` `configure_sync_for_user(path)` | none |

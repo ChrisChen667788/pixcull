@@ -76,6 +76,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import quote, unquote, urlparse
 
+from pixcull.report.page_i18n import localize_page, resolve_lang
+
 # v2.31 — packaged-install support. Until now every asset path was
 # `Path(__file__).parent.parent / …`, i.e. "this file lives in
 # <repo>/scripts/", which is true for a git clone and FALSE for a
@@ -1089,7 +1091,23 @@ _THEME_TOGGLE_HTML = """<style>
 """
 
 
-def _read_template(name: str) -> str:
+#: The pages outside the review workspace have no language switcher of
+#: their own. Two links, a cookie and a reload is enough: the server
+#: already reads ``pixcull_lang`` on the next request.
+_LANG_SWITCH_HTML = """
+<div id="pixcullLangSwitch" style="position:fixed;left:14px;bottom:12px;
+     z-index:2147483000;display:flex;gap:2px;font:11px/1.6 system-ui,sans-serif;
+     background:rgba(20,22,26,.82);border:1px solid rgba(255,255,255,.14);
+     border-radius:999px;padding:2px 4px;backdrop-filter:blur(8px)">
+  <button type="button" onclick="document.cookie='pixcull_lang=en_US;path=/;max-age=31536000';location.reload()"
+          style="border:0;background:none;color:#e8e8ea;padding:1px 6px;cursor:pointer">EN</button>
+  <button type="button" onclick="document.cookie='pixcull_lang=zh_CN;path=/;max-age=31536000';location.reload()"
+          style="border:0;background:none;color:#9a9aa2;padding:1px 6px;cursor:pointer">中文</button>
+</div>
+"""
+
+
+def _read_template(name: str, lang: str = "") -> str:
     """v2.5-P0-1 — load a sibling HTML page template (video_review /
     timeline) from the same dir as results.html, so large embedded page
     blobs live as files instead of bloating this module.
@@ -1115,7 +1133,9 @@ def _read_template(name: str) -> str:
         # can't shift a page's layout.
         if "</body>" in html:
             html = html.replace("</body>", _THEME_TOGGLE_HTML + "</body>", 1)
-    return html
+    if "</body>" in html and "pixcullLangSwitch" not in html:
+        html = html.replace("</body>", _LANG_SWITCH_HTML + "</body>", 1)
+    return localize_page(name, html, lang) if lang else html
 _RESULTS_HTML_CACHE: tuple[int, str] | None = None
 
 
@@ -6295,9 +6315,30 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_error(404, "not found")
 
     # --- handlers ----------------------------------------------------------
+    def _page_lang(self) -> str:
+        """Resolve this request's page language and persist an explicit
+        ``?lang=`` choice in a cookie for the next page."""
+        from urllib.parse import parse_qs
+        query = urlparse(self.path).query
+        lang = resolve_lang(
+            query=query,
+            cookie_header=self.headers.get("Cookie", ""),
+            accept_language=self.headers.get("Accept-Language", ""),
+            env=os.environ.get("PIXCULL_LANG", ""),
+        )
+        self._extra_headers = []
+        if (parse_qs(query).get("lang") or [""])[0].strip():
+            self._extra_headers.append(
+                ("Set-Cookie",
+                 f"pixcull_lang={lang}; Path=/; Max-Age=31536000; SameSite=Lax"))
+        return lang
+
+    def _serve_localized_page(self, html: str, template: str) -> None:
+        lang = self._page_lang()
+        self._send_html(200, localize_page(template, html, lang).encode("utf-8"))
+
     def _serve_upload_page(self) -> None:
-        body = _UPLOAD_HTML.encode("utf-8")
-        self._send_html(200, body)
+        self._serve_localized_page(_UPLOAD_HTML, "pages/upload.html")
 
     def _serve_bias_audit_page(self) -> None:
         """v0.13-P0-4 — render the bias audit dashboard.
@@ -6589,6 +6630,8 @@ class _Handler(BaseHTTPRequestHandler):
             .replace("<!--__DIS_ROWS__-->", rows_html)
             .replace("<!--__DIS_PER_RUN__-->", per_run_html)
         )
+        html_body = localize_page(
+            "pages/disagreement.html", html_body, self._page_lang())
         self._send_html(200, html_body.encode("utf-8"))
 
     # ── v2.32-P1 — cross-run library search ──────────────────────────
@@ -6596,6 +6639,7 @@ class _Handler(BaseHTTPRequestHandler):
         """GET /library — search across every indexed shoot at once."""
         html = _read_template("pages/library.html").replace(
             "/*__DESIGN_TOKENS_CSS__*/", _DESIGN_TOKENS_CSS)
+        html = localize_page("pages/library.html", html, self._page_lang())
         self._send_html(200, html.encode("utf-8"))
 
     def _serve_api_v1_library_status(self) -> None:
@@ -9413,7 +9457,9 @@ class _Handler(BaseHTTPRequestHandler):
                 "</body>"
             ).encode("utf-8")
             return self._send_html(404, body)
-        body = _render_video_review_html(rid).encode("utf-8")
+        body = localize_page(
+            "pages/video_review.html", _render_video_review_html(rid),
+            self._page_lang()).encode("utf-8")
         self._send_html(200, body)
 
     def _serve_timeline_data(self, tail: str) -> None:
@@ -9437,7 +9483,10 @@ class _Handler(BaseHTTPRequestHandler):
         rid = _safe_run_id(tail)
         if rid is None:
             return self.send_error(400, "bad run_id")
-        self._send_html(200, _render_timeline_html(rid).encode("utf-8"))
+        body = localize_page(
+            "pages/timeline.html", _render_timeline_html(rid),
+            self._page_lang())
+        self._send_html(200, body.encode("utf-8"))
 
     def _serve_healthz(self) -> None:
         """v0.13.10 — operational health probe.
@@ -10049,6 +10098,7 @@ class _Handler(BaseHTTPRequestHandler):
             .replace("<!--__HISTORY_COUNT__-->", f"{len(entries)} 个 run")
             .replace("<!--__HISTORY_CARDS__-->", cards_html)
         )
+        page = localize_page("pages/history.html", page, self._page_lang())
         body = page.encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -10102,8 +10152,12 @@ class _Handler(BaseHTTPRequestHandler):
         # shell; only the shared design-tokens CSS is spliced in, same as
         # the v2.16 page extractions). Byte-identical to the prior inline
         # r"""...""" + _DESIGN_TOKENS_CSS build (route-diff verified).
-        page = _read_template("pages/tether.html").replace(
-            "/*__DESIGN_TOKENS_CSS__*/", _DESIGN_TOKENS_CSS)
+        lang = self._page_lang()
+        page = localize_page(
+            "pages/tether.html",
+            _read_template("pages/tether.html").replace(
+                "/*__DESIGN_TOKENS_CSS__*/", _DESIGN_TOKENS_CSS),
+            lang)
         body = page.encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -12657,8 +12711,7 @@ class _Handler(BaseHTTPRequestHandler):
 
     # --- V14.6 first-run page + status ------------------------------------
     def _serve_first_run_page(self) -> None:
-        body = _FIRST_RUN_HTML.encode("utf-8")
-        self._send_html(200, body)
+        self._serve_localized_page(_FIRST_RUN_HTML, "pages/first_run.html")
 
     def _serve_first_run_status(self) -> None:
         body = _safe_dumps(first_run_snapshot()).encode("utf-8")
@@ -12666,8 +12719,7 @@ class _Handler(BaseHTTPRequestHandler):
 
     # --- V17.0 verticals --------------------------------------------------
     def _serve_verticals_page(self) -> None:
-        body = _VERTICALS_HTML.encode("utf-8")
-        self._send_html(200, body)
+        self._serve_localized_page(_VERTICALS_HTML, "pages/verticals.html")
 
     def _serve_verticals_json(self) -> None:
         from pixcull import verticals as vmod
@@ -13111,6 +13163,7 @@ class _Handler(BaseHTTPRequestHandler):
         ).replace(
             "__VZH__", v.zh
         )
+        html = localize_page("pages/vertical_bulk.html", html, self._page_lang())
         self._send_html(200, html.encode("utf-8"))
 
     def _serve_vertical_bulk_thumb(self) -> None:
@@ -13550,8 +13603,7 @@ class _Handler(BaseHTTPRequestHandler):
 
     # --- V14.7 opt-in error reporting -------------------------------------
     def _serve_privacy_page(self) -> None:
-        body = _PRIVACY_HTML.encode("utf-8")
-        self._send_html(200, body)
+        self._serve_localized_page(_PRIVACY_HTML, "pages/privacy.html")
 
     def _serve_error_reports_settings(self) -> None:
         """GET — read current opt-in state from config.json. Default OFF."""
@@ -13629,8 +13681,7 @@ class _Handler(BaseHTTPRequestHandler):
 
     # --- storage admin -----------------------------------------------------
     def _serve_admin_page(self) -> None:
-        body = _ADMIN_HTML.encode("utf-8")
-        self._send_html(200, body)
+        self._serve_localized_page(_ADMIN_HTML, "pages/admin.html")
 
     # v0.7-P0-3 — performance debug page.  Lightweight: same template
     # frame as /admin, but populated with process RSS, # active runs,
@@ -13638,8 +13689,7 @@ class _Handler(BaseHTTPRequestHandler):
     # 4 s via fetch() to /admin/perf.json so the operator can watch
     # how big-batch runs grow over time.
     def _serve_admin_perf_page(self) -> None:
-        body = _ADMIN_PERF_HTML.encode("utf-8")
-        self._send_html(200, body)
+        self._serve_localized_page(_ADMIN_PERF_HTML, "pages/admin_perf.html")
 
     def _serve_admin_perf_json(self) -> None:
         import resource
@@ -14271,7 +14321,7 @@ class _Handler(BaseHTTPRequestHandler):
                 headers.append(("Content-Encoding", "gzip"))
                 headers.append(("Vary", "Accept-Encoding"))
         self.send_response(status)
-        for k, v in headers:
+        for k, v in list(getattr(self, "_extra_headers", ())) + headers:
             self.send_header(k, v)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")

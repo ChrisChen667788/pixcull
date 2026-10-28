@@ -54,6 +54,7 @@ KNOWN: dict[str, str] = {
     "PIXCULL_INLINE_ROWS":          "how many rows the first paint inlines",
     "PIXCULL_KEYWORD_PREFIX":       "prefix for IPTC keywords written back",
     "PIXCULL_LIBRARY_DIR":          "cross-run library index location",
+    "PIXCULL_LANG":                 "page language for the server-rendered pages (en_US / zh_CN / a supported locale)",
     "PIXCULL_LICENSE_API":          "licence server base URL",
     "PIXCULL_LICENSE_KEY":          "licence key for issuing scripts",
     "PIXCULL_LLM_BUDGET_YUAN":      "daily cloud-judging spend ceiling",
