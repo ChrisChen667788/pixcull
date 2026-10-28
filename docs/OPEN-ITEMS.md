@@ -49,6 +49,24 @@ frames the eight measurements come to about 2,400 calls.
 `readiness()` reports `ready: True` and `corrections_to_unblock: 0`.
 Unblocks v2.83, v3.8 and v3.9.
 
+**v2.83 was measured in v3.98 (2026-10-28), and three decisions came out of
+it that are the owner's.** Across five blind-labelled shoots the profile does
+not predict a shoot it was not learned on (`evaluate()` −0.027, or −0.009
+with the two 2024 portrait blocks as one shoot; within portrait −0.178). Its threshold shift compares the keep rate with a fixed
+65%, so it tells this stricter-than-the-machine photographer to keep more,
+and the profile active on this machine (−0.08, from 70 annotations with a 97%
+keep rate) takes cull recall on 728 blind photographs from 12.4% to 1.7%.
+To decide: reset it (`pixcull personalize reset`); measure the shift against
+the machine's own keep rate instead; and require a cross-shoot measurement
+before a profile switches itself on. Numbers in the v3.98 entry of
+`docs/ROADMAP-v3.88-v3.104-charter.md`.
+
+**Found by that version's review, not changed: the live tether path ignores
+the profile.** `run_pipeline` (`pixcull run`, the web analysis) applies an
+active profile's shift; `tether._analyze_one_file` calls `decide()` without
+`personal_shift`. The same photograph can be judged differently live and in
+a run. Which one is right depends on the decisions above.
+
 Blind, and that is the point. Every previous label set this project
 produced was circular — the model's verdict was on screen while the
 person labelled, so `source: "auto"`, the label equalled the decision,

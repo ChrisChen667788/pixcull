@@ -91,6 +91,24 @@ https://github.com/user-attachments/assets/69eddc6b-24d3-406a-ace5-2ed3a5b44e67
 
 ## What's new
 
+**v3.98** — Does a taste profile learned from some shoots predict another?
+The owner's blind labels now cover five shoots, 728 photographs, so this
+learns on four and tests on the fifth. It does not generalise. In the
+profile's own test it lowers keep-F1 by 0.027 on average (0.009 if two
+portrait blocks three days apart count as one shoot) and by 0.178 across
+three portrait shoots. In the product's decision its learned threshold shift
+keeps more on every split, because it compares the photographer's keep rate
+with a fixed 65% rather than with what the machine already keeps; this
+photographer is stricter than the machine, so the profile is pushed the wrong
+way. keep-F1 rewards that, and the culls the tool exists to find slip
+through: cull recall falls from 7.7% to 3.6%. The profile active on the
+author's machine takes cull recall on all 728 photographs from 12.4% to 1.7%.
+Whether to reset it, change the formula, or stop a profile switching itself
+on are left to the owner. `pixcull personalize learn` now reports cull recall
+beside keep-F1 and says when a profile scores higher by keeping more, and
+`scripts/measure_generalisation.py` reruns the measurement. Item 15 below no
+longer says the profile improves silently as you label.
+
 **v3.97** — In three of four blocks of photographs the owner labelled blind,
 a frame with no near-duplicate was culled more often than one inside a
 burst; in the fourth it was not. The explanation left open in September was
@@ -170,34 +188,6 @@ test added for 5.19.0. That one release is now excluded
 (`transformers!=5.20.0`); the fix is upstream in
 [huggingface/transformers#49652](https://github.com/huggingface/transformers/pull/49652),
 and later releases are accepted as before.
-
-**v3.94.2** — Every report [@gxfc9867](https://github.com/gxfc9867) made
-(#2, #3 and PR #4) was re-checked against `main` by running it. Three fixes
-from PR #4 had not fully landed.
-
-The watermark that PR #4 taught to find a Chinese font still drew boxes for
-Korean on a Mac, whose first CJK font has no Hangul; for any Chinese, Japanese
-or Korean in the Docker image, which had no CJK font; and on the contact-sheet
-PDF, whose font list never had one. Each font was taken because it opened. A
-font is now used only if it draws every character of the text, measured by
-comparing each glyph with the font's missing-glyph box. When no installed font
-can, `pixcull proof-sheet` names the characters that will be boxes and the
-package that fixes it. The Docker image carries that font now
-(`fonts-wqy-microhei`, 5 MB, Chinese, Japanese and Korean), and CI installs
-it so the real-font tests run on Linux too.
-
-The draggable buckets toggle never showed the grab cursor: a later rule for
-the same button said `pointer` and won the cascade, which the test, reading
-the first rule it found, could not see. And in the light theme the
-accessibility toggle's "on" state, left alone by PR #4 to keep its accent,
-measured 4.0:1 for an 11px label; it is 9.1:1 now, checked in a real browser.
-
-The contact sheet had a worse fault of its own. Since v2.56.2 every cell said
-"(image unavailable)": `ImageOps` was imported inside another function, the
-NameError landed in the cell's `except`, and the only test of that path
-checked that a *missing* image was handled. A test now asks ruff for
-undefined names across the package. It found one more: `pixcull m3 eval
---review` crashed before reading a single verdict.
 
 Earlier releases are in [`CHANGELOG.md`](CHANGELOG.md).
 
@@ -317,8 +307,9 @@ PixCull is the alternative that flips all three:
     LLM-spend ledger follow you between studio &amp; laptop.
 15. **Active-learning queue.** The next photos most worth labeling,
     ranked by rescorer disagreement + uncertainty + threshold-
-    proximity. Your personalized model improves silently as you
-    label.
+    proximity. What you label feeds the personal profile; measured
+    on the author's five blind-labelled shoots (v3.98), that profile
+    has not yet improved the verdict on a shoot it had not seen.
 16. **Multi-user profiles.** Studio with two shooters? Each user has
     their own verticals + face library; shared team verticals for
     house style.
@@ -1246,8 +1237,9 @@ PixCull 把这三件事全部翻过来:
     NAS —— 人脸库 + 细分领域 + LLM 花费账本跟着你在工作室 ↔ 笔记本之间
     切换。
 15. **主动学习队列 (P2.4)。** 按 rescorer 分歧度 + 不确定度 + 阈值附
-    近度 排序的 "下一张最值得标的照片"。你的个性化模型在你标注的过程
-    中静默改进。
+    近度 排序的 "下一张最值得标的照片"。你标注的照片会进入个人口味档案;
+    但在作者自己五场盲标拍摄上实测(v3.98),这份档案还没有让没见过的
+    那一场判得更好。
 16. **多用户 profile (V28)。** 工作室里两个二摄?各有自己的 vertical +
     人脸库;共享 team vertical 用于工作室主基调。
 

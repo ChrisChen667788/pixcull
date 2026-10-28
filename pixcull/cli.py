@@ -2809,8 +2809,20 @@ def personalize_learn(
         if fd:
             table.add_row("Δ per held-out fold",
                           f"{min(fd):+.3f} … {max(fd):+.3f} ({len(fd)} folds)")
+        if ev.get("generic_cull_recall") is not None:
+            table.add_row("held-out cull recall · generic → personal",
+                          f"{ev['generic_cull_recall']:.0%} → {ev['personal_cull_recall']:.0%}")
         table.add_row("held out", scope)
     console.print(table)
+    # v3.98 — the case keep-F1 hides: a profile that lowers the bar looks
+    # better on a keep-heavy set while it stops finding the culls.
+    if (not ev.get("refused") and ev.get("generic_cull_recall") is not None
+            and ev["delta"] > 0
+            and ev["personal_cull_recall"] < ev["generic_cull_recall"]):
+        console.print(
+            "[yellow]The profile scores higher by keeping more: of the frames "
+            "you culled, it finds fewer than the generic decision. That is "
+            "not a better reading of your taste.[/yellow]")
     if not ev.get("refused") and not ev.get("grouped"):
         console.print(
             "[dim]Every correction came from one shoot, so the held-out "

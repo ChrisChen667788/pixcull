@@ -899,8 +899,14 @@ singletons, and under portrait thresholds none of 45 was culled.  Read
 clustering vectors with `duplicate.load_burst_vectors` (refuses the CLIP
 cache, which has the same keys) and check `recluster(...)[1]` before
 measuring anything on `cluster_id`.  The scene classifier is badly wrong on
-two of those four blocks; that is open.  v3.98–v3.99 (v2.83, v3.8) are next
-and are plain engineering, not owner asks.
+two of those four blocks; that is open.  **v3.98 answered v2.83 over five
+blind-labelled shoots:** the profile does not predict a shoot it was not
+learned on, and its threshold shift compares the keep rate with a fixed 65%,
+so it tells a photographer stricter than the machine to keep more — the
+profile active on this machine (−0.08) takes cull recall on 728 blind photos
+from 12.4% to 1.7%.  keep-F1 rewards that; read cull recall beside it.  A
+photograph is `filename@datetime` (the shutter counter wraps).  v3.99 (v3.8)
+is next.
 
 **Earlier block: `docs/ROADMAP-v3.1-v3.27-charter.md`** — twenty-seven versions read
 out of the same 46-entry competitive research at the level of PixCull's own core
@@ -928,7 +934,9 @@ close on someone having read the code and formed an opinion.
 
 **Five versions are OPEN and cannot close without a human** — v2.80
 (advice quality, needs raters who are photographers and not the author),
-v2.83 (personalisation, needs corrections across two shoots), v2.88
+v2.83 (personalisation across shoots — **measured in v3.98: it does not
+generalise, and the active profile here pushes the wrong way; the three
+decisions are the owner's**), v2.88
 (accuracy baseline), v2.89 (keep/maybe boundary), v2.91 (prompt A/B,
 needs an API budget).  Every harness and refusal guard is built.  Do not
 report any of them as done, and never synthesise the labels — that is

@@ -50,6 +50,9 @@ class Example:
     # corrections forgive soft technical for emotion, wildlife
     # corrections do the opposite, and the mean forgives neither.
     vertical: str = ""
+    # v3.98 — which photograph, as `filename@datetime`. The filename alone
+    # is not one: the shutter counter wraps, so two shoots reuse names.
+    key: str = ""
 
 
 def _f(v) -> float:
@@ -185,6 +188,15 @@ def _keep_f1(examples: list, decide_fn: Callable[[dict], str]) -> float:
     return 2 * p * r / (p + r) if (p + r) else 0.0
 
 
+def _cull_recall(examples: list, decide_fn: Callable[[dict], str]) -> Optional[float]:
+    """Of the photographer's culls, the share this decision also culls.
+    None when the examples hold no cull to find."""
+    culls = [e for e in examples if e.decision == "cull"]
+    if not culls:
+        return None
+    return sum(decide_fn(e.axes) == "cull" for e in culls) / len(culls)
+
+
 def evaluate(examples: Iterable[Example], *, folds: int = 4) -> dict:
     """k-fold: learn on the train split, predict the held-out user
     decisions, compare keep-F1 of generic vs personalised.  This is the
@@ -216,12 +228,12 @@ def evaluate(examples: Iterable[Example], *, folds: int = 4) -> dict:
     grouped = len(groups) >= 2 and "" not in groups
 
     if grouped:
-        splits = [(g, [e for k, v in groups.items() if k != key for e in v])
+        splits = [(g, [e for k, v in groups.items() if k != key for e in v], key)
                   for key, g in groups.items()]
-        splits = [(t, tr) for t, tr in splits if t and tr]
+        splits = [(t, tr, key) for t, tr, key in splits if t and tr]
     else:
         splits = [(exs[k::folds],
-                   [e for i, e in enumerate(exs) if i % folds != k])
+                   [e for i, e in enumerate(exs) if i % folds != k], None)
                   for k in range(folds)]
 
     if not splits:
@@ -229,13 +241,22 @@ def evaluate(examples: Iterable[Example], *, folds: int = 4) -> dict:
                 "refused": "every correction came from a single shoot, so "
                            "there is no unseen shoot to predict"}
 
-    gen, per = [], []
-    for test, train in splits:
+    gen, per, gcr, pcr = [], [], [], []
+    for test, train, _key in splits:
         prof = learn_profile(train)
         gen.append(_keep_f1(test, lambda a: decide(a, profile=None)))
         per.append(_keep_f1(test, lambda a, p=prof: decide(a, profile=p)))
+        gcr.append(_cull_recall(test, lambda a: decide(a, profile=None)))
+        pcr.append(_cull_recall(test, lambda a, p=prof: decide(a, profile=p)))
     g = sum(gen) / len(gen)
     pf = sum(per) / len(per)
+    # v3.98 — keep-F1 alone rewards keeping more. On keep-heavy shoots a
+    # profile that lowers the bar raises keep-F1 while the culls it was
+    # supposed to find slip through: measured across the owner's five
+    # shoots, the learned shift raised the product's keep-F1 from 0.743 to
+    # 0.777 and halved its cull recall, 7.7% to 3.6%. So the figure the
+    # acceptance test was built on is reported beside the one it hides.
+    cr = [(a, b) for a, b in zip(gcr, pcr) if a is not None]
     # v3.96 — the mean alone hides how much it moves. The published
     # +0.002 was a four-fold mean; a reader could not tell whether the
     # folds agreed on it or straddled zero, and that is the difference
@@ -245,6 +266,12 @@ def evaluate(examples: Iterable[Example], *, folds: int = 4) -> dict:
             "generic_f1": round(g, 3), "personal_f1": round(pf, 3),
             "delta": round(pf - g, 3),
             "fold_deltas": [round(b - a, 3) for a, b in zip(gen, per)],
+            "generic_cull_recall": round(sum(a for a, _ in cr) / len(cr), 3) if cr else None,
+            "personal_cull_recall": round(sum(b for _, b in cr) / len(cr), 3) if cr else None,
+            # v3.98 — which shoot each fold held out, so a cross-shoot
+            # mean can be read per shoot. None for stride folds.
+            "fold_groups": [k for _t, _tr, k in splits] if grouped else None,
+            "fold_n": [len(t) for t, _tr, _k in splits],
             "refused": None}
 
 
@@ -561,3 +588,36 @@ def load_corrections(path, *, excluded: Counter | None = None,
                     run_id=str(r.get("run_id") or ""),
                     vertical=str(r.get("vertical") or ""))
             for d, r in dec.values()]
+
+
+def examples_from_blind_sheet(sheet, scores, *, shoot: str = "") -> list:
+    """Examples from a blind sheet (`pixcull m3 label`'s saved verdicts)
+    joined to the `scores.csv` of the run that scored those frames.
+
+    v3.98 — the join is within one run on purpose. Filenames are the
+    camera's shutter counter, which wraps at 9999, so across shoots the
+    same name is often a different photograph: six names in the owner's
+    2023 portrait set recur in a 2024 portrait block, different frames a
+    year apart. Within one run a name appears once, which is checked.
+    Only records the sheet attests as human become examples.
+    """
+    from pixcull.scoring.ground_truth import label_provenance, load_blind_sheet
+    with open(scores, newline="", encoding="utf-8") as fh:
+        rows = list(csv.DictReader(fh))
+    names = [r.get("filename") for r in rows]
+    if len(set(names)) != len(names):
+        raise ValueError(f"{scores} names a file more than once; a blind "
+                         f"label cannot be joined to one row of it")
+    by_name = {r["filename"]: r for r in rows}
+    out = []
+    for rec in load_blind_sheet(sheet):
+        d = str(rec.get("overall_label") or "").lower()
+        row = by_name.get(rec["filename"])
+        if row is None or d not in DECISIONS or label_provenance(rec) != "human":
+            continue
+        out.append(Example(axes={a: _f(row.get(f"rubric_{a}_stars")) for a in AXES},
+                           decision=d, run_id=shoot,
+                           vertical=str(row.get("vertical") or row.get("scene") or ""),
+                           key=f"{rec['filename']}@{row.get('datetime') or ''}"))
+    return out
+

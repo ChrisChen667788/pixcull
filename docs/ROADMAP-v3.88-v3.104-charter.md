@@ -812,6 +812,97 @@ turn a test red.
 **Measure:** `evaluate()` across the two shoots in the correction set.
 One shoot is memorisation and is reported as such.
 
+**Shipped — it does not generalise, and the profile active on the owner's
+machine pushes the wrong way.** Measured 2026-10-28 with
+`scripts/measure_generalisation.py`, on more than the charter asked for: the
+owner's blind labels cover five shoots, not two.
+
+| shoot | genre | photographs | keep / cull |
+|---|---|---|---|
+| 2023-09-30 – 10-02 | portrait | 79 | 67 / 12 |
+| 2023-10-03, Zhangye | landscape | 200 | 158 / 42 |
+| 2024-10-01 | portrait | 149 | 132 / 17 |
+| 2024-10-04 | portrait | 150 | 135 / 15 |
+| 2025-02-01, iron-flower | event | 150 | 59 / 91 |
+
+A photograph is `filename@datetime`. The Canon shutter counter wraps at 9999,
+and six names in the 2023 portrait set recur in the 2024-10-04 block as
+different frames a year apart; joined on the filename they would have been
+counted as one photograph labelled twice. The 24 Zhangye frames that really
+were labelled in two blind passes agree 20 times (83%), which is how
+consistent this labeller is with themself; the four that disagree are left
+out. The 2024-10-01 and 10-04 blocks are three days apart and OPEN-ITEMS
+calls them one shoot; they are kept separate here, and the figures below are
+given both ways where the boundary matters.
+
+**In `evaluate()`'s own terms** (personal_learn's axis-mean decision, keep-F1,
+the acceptance test v2.4 defined): the charter's two shoots, which are also
+two genres, give +0.033 (+0.031 and +0.034). Over all five, learned on four
+and tested on the fifth, the profile lowers keep-F1 from 0.708 to 0.681
+(−0.027; per held-out shoot −0.027, −0.020, −0.001, −0.118, +0.030). Taking
+the two 2024 portrait blocks as one shoot, the mean is −0.009 (−0.027,
+−0.020, −0.018, +0.030): smaller, the same direction, and most of the
+five-shoot figure is the 10-04 block. Within portrait alone it lowers keep-F1
+by 0.178 over three shoots (−0.327, +0.007, −0.213), or 0.158 over two
+(−0.327, +0.010). Within a single shoot, which is memorisation, the
+mean over 200 redrawn folds is +0.038, −0.068, −0.134, −0.353 and +0.384:
+it does not reliably help even on the frames beside the ones it learned from.
+
+**In the product's decision** (`decision.decide` on `score_final`, the
+threshold shift alone; the axis weights also tilt `fuse_score` and are not
+re-applied), learned on four shoots and applied to the fifth:
+
+| | keep-F1 | cull recall |
+|---|---|---|
+| no shift | 0.743 | 7.7% |
+| the learned shift | 0.777 | 3.6% |
+| a shift measured against the machine's own keep rate (hypothetical) | 0.734 | 10.4% |
+
+With the two 2024 portrait blocks as one shoot: 0.695 / 9.7%, 0.735 / 4.4%,
+0.684 / 13.0%, and the learned shift is still negative on every split.
+
+The learned shift is negative on every split (−0.035 to −0.080): it keeps
+more. That is the formula, not the data. `profile_from_preferences` sets
+`shift = −(keep_rate − 0.65) × 0.5`, comparing the photographer's keep rate
+with a fixed 65% rather than with what the machine keeps on the same frames.
+This photographer keeps about 76% and is stricter than the machine on the
+frames that matter (v3.81: 27 the machine kept and the owner culled, none the
+other way), so the profile is told they are permissive and moves the bar the
+wrong way. keep-F1 rewards it, because on keep-heavy shoots keeping more
+raises keep-F1 while the culls slip through. A shift against the machine's
+own keep rate stays near zero and helps cull recall a little; no threshold
+can do more, because the rubric does not separate this owner's keeps from
+their culls (v3.81).
+
+**The profile active on this machine** (`~/.pixcull/personal_profile.json`,
+last written 2026-08-19 by its file time, since it records no date of its
+own; from 70 blind annotations with a 97% keep rate; shift
+−0.080, the cap; axis weights equal, so the shift is its whole effect) on all
+728 photographs: keep-F1 0.847 → 0.844, cull recall 12.4% → 1.7%, culls 32
+→ 3. `run_pipeline` — `pixcull run` and the web app's analysis — applies an
+active profile, so every run through it here since 2026-08-19 has had it.
+The live tether path does not: `tether._analyze_one_file` calls `decide()`
+with no `personal_shift`, so a tethered session is judged without the profile
+and the same photograph can get a different verdict there. Found by the
+review of this version; recorded in OPEN-ITEMS, not changed here.
+
+**Decisions left to the owner, not taken here:** whether to reset that
+profile (`pixcull personalize reset`); whether the shift should be measured
+against the machine's keep rate; and whether a profile should switch itself
+on without a cross-shoot measurement behind it. Each changes verdicts.
+
+What changed so the next figure cannot hide this: `evaluate()` names the
+shoot each fold held out (`fold_groups`, `fold_n`) and reports cull recall
+beside keep-F1; `pixcull personalize learn` prints cull recall and says when
+the profile scores higher by keeping more; `Example.key` and
+`examples_from_blind_sheet` join a blind sheet to the run that scored it and
+refuse a `scores.csv` that names a file twice. The script's leave-one-shoot-
+out section first crashed on a single shoot, which a test found; it now says
+there is no unseen shoot to predict. Eleven mutations each turn a test red.
+Public text corrected: README item 15 said the personalised model "improves
+silently as you label" (both languages), and README-PYPI said the profile
+tilts toward "what you demonstrably value".
+
 ### v3.99 — v3.8: one taste profile for two different jobs
 
 **Measure:** per-vertical k-fold F1 on 79 landscape and 79 portrait
