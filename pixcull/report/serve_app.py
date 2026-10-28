@@ -11968,21 +11968,13 @@ class _Handler(BaseHTTPRequestHandler):
         annotation form locally without re-requesting on every image.
         """
         from pixcull.scoring.rubric import RUBRIC_AXES
-        description_en = {
-            "technical": "Focus, exposure, sharpness and noise, judged against the Adams Zone System",
-            "subject": "How clearly the subject reads, and whether the decisive moment lands",
-            "composition": "Framing, balance, leading lines and negative space",
-            "light": "Quality, direction and contrast of the light, plus colour temperature",
-            "moment": "Whether the expression, gesture or peak action is captured",
-            "aesthetic": "Overall visual appeal and whether it fits a coherent body of work",
-        }
         meta = [
             {
                 "name": a.name,
                 "label_zh": a.label_zh,
                 "label_en": a.label_en,
                 "description_zh": a.description_zh,
-                "description_en": description_en.get(a.name, a.description_zh),
+                "description_en": a.description_en or a.description_zh,
                 "rubric_descriptors": list(a.rubric_descriptors),
                 "checklist": [{"key": k, "weight": w} for k, w in a.checklist],
             }
