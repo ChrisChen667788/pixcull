@@ -11976,6 +11976,7 @@ class _Handler(BaseHTTPRequestHandler):
                 "description_zh": a.description_zh,
                 "description_en": a.description_en or a.description_zh,
                 "rubric_descriptors": list(a.rubric_descriptors),
+                "rubric_descriptors_en": list(a.rubric_descriptors_en),
                 "checklist": [{"key": k, "weight": w} for k, w in a.checklist],
             }
             for a in RUBRIC_AXES

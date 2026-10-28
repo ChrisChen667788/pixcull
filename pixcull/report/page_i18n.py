@@ -37,18 +37,31 @@ def page_name(template: str) -> str:
     return Path(template).stem
 
 
-@lru_cache(maxsize=64)
 def load_page_catalogue(name: str, lang: str) -> dict[str, str]:
     """Return the source-to-translation map for one page and locale.
 
     Only translations that exist are returned. Chinese, and any locale
     without a catalogue, gets an empty map and therefore the original
     page.
+
+    The mtime is part of the cache key so a translator editing a JSON
+    file sees the change on the next request, without restarting the
+    server.
     """
     norm = _normalize_lang(lang)
     if norm == DEFAULT_LOCALE:
         return {}
     path = _CATALOGUE_DIR / norm / f"{page_name(name)}.json"
+    try:
+        stamp = path.stat().st_mtime_ns
+    except OSError:
+        stamp = 0
+    return _load_catalogue_cached(str(path), stamp)
+
+
+@lru_cache(maxsize=64)
+def _load_catalogue_cached(path_str: str, _stamp: int) -> dict[str, str]:
+    path = Path(path_str)
     if not path.exists():
         return {}
     try:

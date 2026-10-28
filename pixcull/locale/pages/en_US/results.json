@@ -323,5 +323,10 @@
   "✓ 人工已标": "✓ Human labelled",
   "已标 ${lbl}:${fn}": "Labelled ${lbl}: ${fn}",
   "已标完本批所有图片 ✓": "Every frame in this batch is labelled ✓",
-  "人工标注 (rubric)": "Human label (rubric)"
+  "人工标注 (rubric)": "Human label (rubric)",
+  "场景:<b>${esc(trGenre(r.scene) || \"?\")}</b> · 规则:<b>${esc(tr(r.decision, I18N_DECISION) || r.decision)}</b> · 综合分 ${r.score_final?.toFixed(2) || \"--\"}": "Scene: <b>${esc(trGenre(r.scene) || \"?\")}</b> · Rule: <b>${esc(tr(r.decision, I18N_DECISION) || r.decision)}</b> · Score ${r.score_final?.toFixed(2) || \"--\"}",
+  "每张照片 6 个轴 · 1-5★": "Each photo is scored on 6 axes · 1-5★",
+  "技术 · 主体 · 构图 · 光线 · 时刻 · 美感": "Technical · Subject · Composition · Light · Moment · Aesthetics",
+  "Tab 在轴间跳 · 1-5 直接给当前轴打星 · 一张全维度评分通常 &lt; 5 秒。": "Tab moves between axes · 1-5 stars the current axis · a full rating usually takes &lt; 5 seconds.",
+  "开始 →": "Start →"
 }

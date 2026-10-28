@@ -80,6 +80,7 @@ class AxisDef:
     # English copy for the annotator panel. Empty falls back to the
     # Chinese description, so a locale without a translation still reads.
     description_en: str = ""
+    rubric_descriptors_en: tuple[str, str, str, str, str] = ("", "", "", "", "")
 
 
 # Each rubric axis: descriptors written for *this domain* (curating
@@ -88,7 +89,10 @@ class AxisDef:
 # different from a "4★" to a working photographer. V5.0: descriptors
 # now sourced from photography_canon.CANON_DESCRIPTORS_ZH which
 # encodes the Cartier-Bresson + Adams + classic-composition canon.
-from pixcull.scoring.photography_canon import get_axis_descriptors as _canon_desc
+from pixcull.scoring.photography_canon import (
+    get_axis_descriptors as _canon_desc,
+    get_axis_descriptors_en as _canon_desc_en,
+)
 
 
 RUBRIC_AXES: tuple[AxisDef, ...] = (
@@ -110,6 +114,7 @@ RUBRIC_AXES: tuple[AxisDef, ...] = (
             ("canon_midgray_anchored", 0.4),   # zone V near 0.5 luma
         ),
         rubric_descriptors=_canon_desc("technical"),
+        rubric_descriptors_en=_canon_desc_en("technical"),
     ),
     AxisDef(
         name="subject",
@@ -124,6 +129,7 @@ RUBRIC_AXES: tuple[AxisDef, ...] = (
             ("not_random_passersby", 0.5),
         ),
         rubric_descriptors=_canon_desc("subject"),
+        rubric_descriptors_en=_canon_desc_en("subject"),
     ),
     AxisDef(
         name="composition",
@@ -143,6 +149,7 @@ RUBRIC_AXES: tuple[AxisDef, ...] = (
             ("canon_figure_ground_pop", 0.7),     # fig vs bg luma contrast
         ),
         rubric_descriptors=_canon_desc("composition"),
+        rubric_descriptors_en=_canon_desc_en("composition"),
     ),
     AxisDef(
         name="light",
@@ -156,6 +163,7 @@ RUBRIC_AXES: tuple[AxisDef, ...] = (
             ("color_temperature_clean", 0.5),
         ),
         rubric_descriptors=_canon_desc("light"),
+        rubric_descriptors_en=_canon_desc_en("light"),
     ),
     AxisDef(
         name="moment",
@@ -169,6 +177,7 @@ RUBRIC_AXES: tuple[AxisDef, ...] = (
             ("emotion_present", 0.8),
         ),
         rubric_descriptors=_canon_desc("moment"),
+        rubric_descriptors_en=_canon_desc_en("moment"),
     ),
     AxisDef(
         name="aesthetic",
@@ -182,6 +191,7 @@ RUBRIC_AXES: tuple[AxisDef, ...] = (
             ("no_subject_environment_conflict", 0.5),
         ),
         rubric_descriptors=_canon_desc("aesthetic"),
+        rubric_descriptors_en=_canon_desc_en("aesthetic"),
     ),
 )
 
