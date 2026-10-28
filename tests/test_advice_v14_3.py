@@ -407,3 +407,42 @@ def test_english_advice_with_a_vertical_has_no_chinese(vertical):
     ad = build_advice(row, final, "maybe", idx=0, vertical=vertical, lang="en")
     blob = " ".join(ad["strengths"] + ad["weaknesses"] + ad["suggestions"])
     assert not _CJK.search(blob), f"{vertical} leaked Chinese: {blob}"
+
+
+# ---------------------------------------------------------------------------
+# 6. English phrase coverage
+# ---------------------------------------------------------------------------
+
+def _walk_templates(kind):
+    from pixcull.scoring import photo_advice as pa
+
+    if kind == "vertical":
+        for _vertical, axes in pa.VERTICAL_STRENGTH_TEMPLATES.items():
+            for _axis, items in axes.items():
+                yield from items
+        for _vertical, axes in pa.VERTICAL_WEAKNESS_TEMPLATES.items():
+            for _axis, items in axes.items():
+                yield from items
+        return
+    source = (pa.STRENGTH_TEMPLATES if kind == "strength"
+              else pa.WEAKNESS_TEMPLATES)
+    for _axis, items in source.items():
+        yield from items
+
+
+def test_every_template_phrase_has_an_english_translation():
+    """A phrase missing from ``photo_advice_en`` silently renders in
+    Chinese on an English page. Walk every pool instead of testing one
+    row per axis."""
+    from pixcull.scoring import photo_advice as pa
+
+    missing = set()
+    for kind in ("strength", "weakness", "vertical"):
+        for template in _walk_templates(kind):
+            for phrase in template.get("phrases", []):
+                if phrase not in pa._EN_PHRASES:
+                    missing.add(phrase)
+            for fix in template.get("fixes") or []:
+                if fix not in pa._EN_FIXES:
+                    missing.add(fix)
+    assert not missing, f"{len(missing)} phrases have no English: {sorted(missing)[:5]}"
