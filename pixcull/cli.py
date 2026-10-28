@@ -207,6 +207,12 @@ def export(
              "(needs exiftool)"),
     out: Optional[Path] = typer.Option(
         None, "--out", "-o", help="CSV path (--format csv only)"),
+    naming: str = typer.Option(
+        "lightroom", "--naming",
+        help="Sidecar name: lightroom = <stem>.xmp (both editors read it) | "
+             "darktable = <name>.<ext>.xmp, the form darktable writes. With "
+             "darktable an existing sidecar is patched in place so its "
+             "develop history survives."),
 ) -> None:
     """Export ratings to XMP sidecars (Lightroom / C1) or CSV.
 
@@ -246,7 +252,12 @@ def export(
                       f"(alongside | collected | embedded)")
         raise typer.Exit(code=2)
 
-    written, skipped, per_decision = _export_xmp(run_dir, target)
+    if naming not in ("lightroom", "darktable"):
+        console.print(f"[red]unknown --naming {naming!r}[/] "
+                      f"(lightroom | darktable)")
+        raise typer.Exit(code=2)
+
+    written, skipped, per_decision = _export_xmp(run_dir, target, naming)
     if not written:
         console.print("[yellow]nothing written[/] — no source images were "
                       "resolvable (moved originals, or an external drive is "
@@ -400,7 +411,8 @@ def _export_ratings_csv(scores_csv: Path, dest: Path) -> int:
     return len(rows)
 
 
-def _export_xmp(run_dir: Path, target: str) -> tuple[int, int, dict]:
+def _export_xmp(run_dir: Path, target: str,
+                naming: str = "lightroom") -> tuple[int, int, dict]:
     """Write XMP/IPTC for every row, mirroring the server's exporter."""
     import csv as _csv
     from collections import Counter
@@ -433,10 +445,14 @@ def _export_xmp(run_dir: Path, target: str) -> tuple[int, int, dict]:
             iptc = build_iptc_fields_from_row(row, run_id=run_dir.parent.name)
 
             if target == "collected":
+                # Collected copies mirror the naming choice, so a
+                # darktable user can drop the folder's contents next to
+                # the originals without a rename step.
                 write_xmp(xmp_dir / Path(fn).name, stars, label,
                           keywords=iptc["keywords"],
                           description=iptc["description"],
-                          headline=iptc["headline"])
+                          headline=iptc["headline"],
+                          naming=naming)
             else:
                 src = path_map.get(fn)
                 if src is None:
@@ -455,7 +471,8 @@ def _export_xmp(run_dir: Path, target: str) -> tuple[int, int, dict]:
                     write_xmp(src, stars, label,
                               keywords=iptc["keywords"],
                               description=iptc["description"],
-                              headline=iptc["headline"])
+                              headline=iptc["headline"],
+                              naming=naming)
             written += 1
             per_decision[decision] += 1
     return written, skipped, dict(per_decision)
