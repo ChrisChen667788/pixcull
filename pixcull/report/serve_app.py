@@ -77,7 +77,10 @@ from pathlib import Path
 from urllib.parse import quote, unquote, urlparse
 
 from pixcull.i18n import _normalize_lang
-from pixcull.report.page_i18n import localize_page, resolve_lang
+from pixcull.report.page_i18n import (
+    localize_page, resolve_lang, translate_message,
+    translate_progress_message,
+)
 
 # v2.31 — packaged-install support. Until now every asset path was
 # `Path(__file__).parent.parent / …`, i.e. "this file lives in
@@ -10547,6 +10550,12 @@ class _Handler(BaseHTTPRequestHandler):
                 Path(run["output_dir"]))
         except Exception:  # noqa: BLE001
             pass
+        # Pipeline progress lines are written in Chinese by the
+        # orchestrator. The home page polls this endpoint, so translate
+        # them here rather than threading a language through the pipeline.
+        if isinstance(view.get("message"), str):
+            view["message"] = translate_progress_message(
+                view["message"], self._page_lang())
         body = json.dumps(view, ensure_ascii=False).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -14378,6 +14387,7 @@ class _Handler(BaseHTTPRequestHandler):
         JS surfaces ``data.error`` directly, so a clean string beats a
         BaseHTTPRequestHandler error page being scraped into a textbox.
         """
+        message = translate_message(message, self._page_lang())
         body = json.dumps({"error": message}, ensure_ascii=False).encode("utf-8")
         self._send_json(status, body)
 

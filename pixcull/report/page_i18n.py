@@ -108,6 +108,80 @@ def localize_page(name: str, html: str, lang: str) -> str:
     return html
 
 
+# Pipeline progress lines are built in pixcull/pipeline/orchestrator.py and
+# reach the browser through /status/<run>, so they are not part of any page
+# template. Translate the ones a photographer sees while a scan runs.
+_PROGRESS_EN: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"^找到 (\d+) 张图,开始分析…$"),
+     r"Found \1 photos, starting analysis..."),
+    (re.compile(r"^已收到 (\d+) 张图,正在排队…$"),
+     r"Received \1 photos, queued..."),
+    (re.compile(r"^已索引 (\d+) 张图,准备分析[（(]原图不复制[）)]…$"),
+     r"Indexed \1 photos, ready to analyse (originals are not copied)..."),
+    (re.compile(r"^跨照片人脸聚类…$"), "Clustering faces across photos..."),
+    (re.compile(r"^按 GPS 地点聚类…$"), "Clustering by GPS location..."),
+    (re.compile(r"^聚类与连拍检测…$"), "Clustering and burst detection..."),
+    (re.compile(r"^评分与决策…$"), "Scoring and deciding..."),
+    (re.compile(r"^连拍峰值排名…$"), "Ranking burst peaks..."),
+    (re.compile(r"^rubric 多维评分…$"), "Rubric scoring..."),
+    (re.compile(r"^VLM \((\w+)\) 评分中…$"), r"VLM (\1) scoring..."),
+    (re.compile(r"^Meta judge \((\w+)\) 并发综合中…$"),
+     r"Meta judge (\1) combining..."),
+    (re.compile(r"^完成$"), "Done"),
+    (re.compile(r"^分析失败: (.*)$"), r"Analysis failed: \1"),
+    (re.compile(r"^没有训练数据 — (.*)$"), r"No training data: \1"),
+    (re.compile(r"^过滤后无训练数据,(.*)$"), r"No training data after filtering, \1"),
+    (re.compile(r"^训练完成 (.*)$"), r"Training finished \1"),
+    (re.compile(r"^训练失败: (.*)$"), r"Training failed: \1"),
+)
+
+
+# Folder and upload errors are raised by the server and printed straight
+# into the page by its JavaScript, so they bypass the template catalogue.
+_RUNTIME_EN: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"^不是文件夹: (.*)$"), r"Not a folder: \1"),
+    (re.compile(r"^路径不存在: (.*)$"), r"Path does not exist: \1"),
+    (re.compile(r"^没有权限读取: (.*)$"), r"No permission to read: \1"),
+    (re.compile(r"^路径解析失败: (.*)$"), r"Could not resolve the path: \1"),
+    (re.compile(r"^参数错误: (.*)$"), r"Bad parameter: \1"),
+    (re.compile(r"^上传里没有可用图片。(.*)$"), r"No usable images in the upload. \1"),
+    (re.compile(r"^缺少 token 字段$"), "Missing token field"),
+    (re.compile(r"^需要 folder 字段:?(.*)$"), r"folder is required:\1"),
+    (re.compile(r"^已有训练任务在跑,等完成再来$"),
+     "A training job is already running; wait for it to finish"),
+    (re.compile(r"^license token 验证失败 — (.*)$"),
+     r"License token check failed: \1"),
+
+    (re.compile(r"^上传失败: (.*)$"), r"Upload failed: \1"),
+)
+
+
+def translate_message(message: str, lang: str) -> str:
+    """English for a server-generated runtime line, or the line unchanged.
+
+    Covers both pipeline progress (``orchestrator.py``) and the folder
+    and upload errors the pages print into the DOM.
+    """
+    if _normalize_lang(lang) != "en_US" or not message:
+        return message
+    found = re.match(
+        r"^在 (.*?) 下没找到可分析的图片"
+        r"(?:[（(]支持 (.*?)[）)])?$", message)
+    if found:
+        formats = found.group(2) or "jpg/png/cr3/cr2/nef/arw/dng/tif"
+        return (f"No analysable images under {found.group(1)}. "
+                f"Supported: {formats}")
+    for pattern, replacement in _PROGRESS_EN + _RUNTIME_EN:
+        if pattern.match(message):
+            return pattern.sub(replacement, message, count=1)
+    return message
+
+
+def translate_progress_message(message: str, lang: str) -> str:
+    """Kept for callers that only deal with pipeline progress."""
+    return translate_message(message, lang)
+
+
 def resolve_lang(
     *,
     query: str = "",
