@@ -89,18 +89,12 @@
       level: hasFaults ? "fault" : "degraded",
       headline: hasFaults
         ? _t("health.fault", "有一个环节该做的事一件没做")
-        : _t("health.degraded", "本次有降级")
-            + "(" + degraded + " 退回 / " + withheld + " 未做)",
+        : _tf("health.degraded",
+              "本次有降级({degraded} 退回 / {withheld} 未做)",
+              {degraded: degraded, withheld: withheld}),
       lines: lines,
       faults: (faults || []).slice(),
     };
-  }
-
-  function _t(key, fallback) {
-    try {
-      const v = (window.I18N || {})[key];
-      return (typeof v === "string" && v.length) ? v : fallback;
-    } catch (_e) { return fallback; }
   }
 
   function render(sum) {

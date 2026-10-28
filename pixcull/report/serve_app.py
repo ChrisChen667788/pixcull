@@ -10640,12 +10640,28 @@ class _Handler(BaseHTTPRequestHandler):
         # V19.4.1 — hot-reloadable template (loaded from disk per request,
         # mtime-cached). Editing pixcull/report/templates/results.html
         # picks up on the next /results hit; no server restart required.
+        page_lang = self._page_lang()
         html = localize_page(
-            "results.html", _results_html_template(), self._page_lang(),
+            "results.html", _results_html_template(), page_lang,
         ).replace(
             "__PAYLOAD__",
             _safe_dumps(payload).replace("</", "<\\/"),
         )
+        # The page's own ``_t()`` strings used to arrive only through
+        # /api/v1/locale, which is async: the grid rendered from the
+        # Chinese fallbacks first and never repainted them. Ship the
+        # dictionary with the document so the first paint is already in
+        # the page language, and so ``_uiLangEn()`` is true before any
+        # fetch resolves.
+        from pixcull.i18n import load_locale
+        boot = (
+            "<script>window.PIXCULL_LANG=%s;window.PIXCULL_I18N=%s;</script>"
+            % (
+                _safe_dumps(page_lang),
+                _safe_dumps(load_locale(page_lang)).replace("</", "<\\/"),
+            )
+        )
+        html = html.replace("<head>", "<head>" + boot, 1)
         # v2.1-P0-2 — discoverability: a video run gets a floating
         # "🎬 视频审片" button into the P0-4 review surface (and the
         # joint photo+video timeline).  Pure additive inject before
@@ -12402,10 +12418,18 @@ class _Handler(BaseHTTPRequestHandler):
         """
         # P2.4 — split rel into run_id + query string. Most callers
         # pass just the run_id; the new "?n=N" form supports batch.
+        # The prefix table hands this handler ``urlparse(...).path``, so
+        # a query string only arrives on the /api/v1 form. Read it from
+        # ``self.path`` either way: ``?n=`` and ``?lang=`` were silently
+        # dropped on /next_to_label/<run> before this.
         path_q = rel.split("?", 1)
         run_id = unquote(path_q[0])
         from urllib.parse import parse_qs
-        qparams = parse_qs(path_q[1]) if len(path_q) > 1 else {}
+        qparams = parse_qs(urlparse(self.path).query)
+        if len(path_q) > 1 and not qparams:
+            qparams = parse_qs(path_q[1])
+        lang = (qparams.get("lang", [""])[0] or "").strip().lower()
+        english = lang.startswith("en")
         try:
             n_requested = int(qparams.get("n", ["1"])[0])
         except (ValueError, TypeError):
@@ -12479,23 +12503,42 @@ class _Handler(BaseHTTPRequestHandler):
         # Returns a list of short reason fragments suitable for the UI
         # tooltip. Identical logic to the legacy single-item path, just
         # factored out so the batch path can reuse it.
-        def _reasons_for(c: dict) -> list[str]:
+        def _reasons_for(c: dict, english: bool = False) -> list[str]:
+            """Why this frame was queued. ``english`` swaps the Chinese
+            fragments for the English ones the page shows; the numbers and
+            the tokens are the same either way.
+            """
             reasons: list[str] = []
             if (c.get("rescorer_pred") is not None
                     and c["rescorer_pred"] != c["decision"]):
                 prob = c.get("rescorer_prob_keep")
                 prob_str = f" (P={prob:.2f})" if prob is not None else ""
-                reasons.append(
-                    f"规则=={c['decision']} 但 rescorer=={c['rescorer_pred']}{prob_str}"
-                )
+                if english:
+                    reasons.append(
+                        "rule says "
+                        f"{c['decision']} but the rescorer says "
+                        f"{c['rescorer_pred']}{prob_str}"
+                    )
+                else:
+                    reasons.append(
+                        f"规则=={c['decision']} 但 rescorer=={c['rescorer_pred']}{prob_str}"
+                    )
             if (c.get("rescorer_prob_keep") is not None
                     and 0.40 <= c["rescorer_prob_keep"] <= 0.70):
-                reasons.append(
-                    f"rescorer 不确定区 (P={c['rescorer_prob_keep']:.2f})"
-                )
+                if english:
+                    reasons.append(
+                        f"rescorer uncertain (P={c['rescorer_prob_keep']:.2f})"
+                    )
+                else:
+                    reasons.append(
+                        f"rescorer 不确定区 (P={c['rescorer_prob_keep']:.2f})"
+                    )
             score = c.get("score_final")
             if score is not None and 0.35 <= score <= 0.65:
-                reasons.append(f"score_final={score:.2f} 临界")
+                if english:
+                    reasons.append(f"score_final={score:.2f} is borderline")
+                else:
+                    reasons.append(f"score_final={score:.2f} 临界")
             # v0.11-P1-4 — hard-example surface
             if _hard_stats is not None:
                 he_boost = _hard_stats.boost_for(
@@ -12503,11 +12546,19 @@ class _Handler(BaseHTTPRequestHandler):
                     vertical=str(c.get("vertical", "") or c.get("scene", "")),
                 )
                 if he_boost >= 0.5:
-                    reasons.append(
-                        f"hard-example 场景 (历史反转 boost={he_boost:.2f})"
-                    )
+                    if english:
+                        reasons.append(
+                            f"hard-example scene (history flip boost={he_boost:.2f})"
+                        )
+                    else:
+                        reasons.append(
+                            f"hard-example 场景 (历史反转 boost={he_boost:.2f})"
+                        )
             if not reasons:
-                reasons.append("queue 中未标注的下一张")
+                reasons.append(
+                    "next unlabeled frame in the queue" if english
+                    else "queue 中未标注的下一张"
+                )
             return reasons
 
         # P2.4 — batch mode returns the top-N as a queue array. Used
@@ -12519,7 +12570,7 @@ class _Handler(BaseHTTPRequestHandler):
                 queue.append({
                     "filename":       c["filename"],
                     "priority_rank":  i + 1,
-                    "why":            "; ".join(_reasons_for(c)),
+                    "why":            "; ".join(_reasons_for(c, english)),
                     "decision":       c.get("decision"),
                     "score_final":    c.get("score_final"),
                     "rescorer_pred":  c.get("rescorer_pred"),
@@ -12542,7 +12593,7 @@ class _Handler(BaseHTTPRequestHandler):
             "n_total": len(rows),
             "n_labeled": len(labeled),
             "n_remaining": len(candidates),
-            "why": "; ".join(_reasons_for(chosen)),
+            "why": "; ".join(_reasons_for(chosen, english)),
             "row": chosen,
         }, ensure_ascii=False).encode("utf-8"))
 
