@@ -253,3 +253,213 @@ def test_the_script_scores_a_saved_profile(tmp_path, capsys):
     with_ = next(l for l in out.splitlines() if l.strip().startswith("with it"))
     # The shift lowers the keep bar, so the verdicts must actually move.
     assert without.split("verdicts")[1] != with_.split("verdicts")[1], (without, with_)
+
+
+# ------------------------------------------------- v3.99: one per kind of shoot
+
+
+def test_the_script_compares_one_profile_with_one_per_kind(tmp_path, capsys):
+    """Portrait shot twice can be tested on a shoot it did not learn from;
+    landscape shot once cannot, and is named rather than averaged in."""
+    specs = []
+    for name, genre, share, seed in (("a", "portrait", 0.9, 1), ("b", "portrait", 0.7, 2),
+                                     ("c", "landscape", 0.6, 3)):
+        sh, sc = _shoot_files(tmp_path, name, 40, share, seed)
+        specs += ["--shoot", name, genre, str(sh), str(sc)]
+    assert _script().main(specs + ["--redraws", "3"]) == 0
+    out = capsys.readouterr().out
+    assert "by genre: portrait 80, landscape 40" in out
+    assert "held-out shoots ×2" in out and "(weighted by frames: Δ" in out
+    assert "shot once, nothing to compare: landscape" in out
+    assert "stride, shoots ignored (memorisation)" in out
+    # The fixture's scene label is portrait on every frame: keyed by it,
+    # there is one vertical and nothing to compare.
+    assert "by scene label: portrait 120" in out
+    assert "80 frames," in out          # the confusion covers portrait only
+    for arm in ("no profile", "pooled", "per genre"):
+        assert f"    {arm:<11} agrees" in out
+    assert "fixed 65%   per genre" in out and "vs machine  per scene label" in out
+    assert "verdicts unlike pooled:" in out
+
+
+def test_the_confusion_is_built_like_evaluate_by_vertical(tmp_path):
+    """Same arms, same held-out shoots as evaluate_by_vertical: its keep-F1
+    and cull recall per held-out shoot, and the script's agreement line."""
+    from pixcull.scoring.personal_learn import (
+        _cull_recall, _keep_f1, decide, evaluate_by_vertical, learn_profile,
+    )
+    exs = (_ex("a", 40, 1) + _ex("b", 40, 2) + _ex("c", 40, 3))
+    for e in exs:
+        e.vertical = "landscape" if e.run_id == "c" else "portrait"
+    ev = evaluate_by_vertical(exs)
+    deltas, pooled_cr, per_cr, agree = [], [], [], []
+    for held in ("a", "b"):
+        test = [e for e in exs if e.run_id == held]
+        pooled = learn_profile([e for e in exs if e.run_id != held])
+        per = learn_profile([e for e in exs if e.vertical == "portrait" and e.run_id != held])
+        by = {k: (lambda a, p=p: decide(a, profile=p)) for k, p in (("pooled", pooled), ("per", per))}
+        deltas.append(round(_keep_f1(test, by["per"]) - _keep_f1(test, by["pooled"]), 3))
+        pooled_cr.append(_cull_recall(test, by["pooled"]))
+        per_cr.append(_cull_recall(test, by["per"]))
+        agree += [by["per"](e.axes) == e.decision for e in test]
+    assert ev["fold_deltas"] == deltas
+    assert ev["pooled_cull_recall"] == round(sum(pooled_cr) / 2, 3)
+    assert ev["per_vertical_cull_recall"] == round(sum(per_cr) / 2, 3)
+    lines = _script().vertical_confusion(exs)
+    assert "80 frames" in lines[0]
+    assert f"    per genre   agrees {sum(agree) / len(agree):.1%}" in "\n".join(lines)
+
+
+def test_a_fold_of_a_few_frames_counts_as_a_few_frames():
+    """Keyed by scene label, a fold can be one photograph, and the plain
+    mean weighs it like a whole shoot."""
+    ev = {"refused": None, "grouped": True, "folds": 2, "pooled_f1": 0.5,
+          "per_vertical_f1": 0.4, "delta": -0.1, "pooled_cull_recall": None,
+          "fold_deltas": [-1.0, 0.1], "fold_n": [1, 99],
+          "fold_groups": [("portrait", "a"), ("portrait", "b")], "verticals_unmeasured": []}
+    assert "(weighted by frames: Δ +0.089)" in _script()._vertical_lines(ev)[0]
+
+
+# ------------------------- v3.99: the whole profile, as run_pipeline applies it
+
+
+def _dims_row(fn, scene, dims, cfg, flags=""):
+    """A scores row whose score_final is what the fusion gives its dims."""
+    row = {"filename": fn, "scene": scene, "flags": flags,
+           **{f"score_{k}": str(v) for k, v in dims.items()}}
+    row["score_final"] = str(_script()._refuse(row, None, cfg))
+    return row
+
+
+def test_axis_weights_are_applied_only_where_score_final_comes_back():
+    """A run whose score_final cannot be recomputed from its per-dimension
+    scores says so, rather than reporting a tilt it did not measure."""
+    from pixcull.config import PixCullConfig
+    cfg = PixCullConfig.load()
+    mod = _script()
+    ok = {"a": _dims_row("a.JPG", "portrait",
+                         {"sharpness": 0.9, "composition": 0.3, "exposure": 0.7,
+                          "aesthetic": 0.4, "moment": 0.8}, cfg)}
+    assert mod.refuses(ok, cfg) is True
+    off = {"a": {**ok["a"], "score_final": str(float(ok["a"]["score_final"]) + 0.05)}}
+    assert mod.refuses(off, cfg) is False
+    assert mod.refuses({"a": {"filename": "a.JPG", "score_final": "0.7"}}, cfg) is False
+
+
+def test_the_whole_profile_tilts_the_fusion():
+    """Measured in v3.99: v3.98's product figures applied the threshold shift
+    alone; run_pipeline also tilts fuse_score with the axis weights."""
+    from pixcull.config import PixCullConfig
+    cfg = PixCullConfig.load()
+    mod = _script()
+    row = _dims_row("a.JPG", "portrait", {"sharpness": 0.95, "composition": 0.2,
+                                          "exposure": 0.9, "aesthetic": 0.3,
+                                          "moment": 0.95}, cfg)
+    tilt = {"technical": 0.5, "moment": 0.5, "subject": 0.0, "composition": 0.0,
+            "light": 0.0, "aesthetic": 0.0}
+    assert mod._refuse(row, tilt, cfg) > float(row["score_final"])
+    # Equal weights are a no-op, as fusion._personalize_weights promises.
+    eq = {a: 1 / 6 for a in tilt}
+    assert mod._refuse(row, eq, cfg) == pytest.approx(float(row["score_final"]))
+
+
+def test_the_script_says_when_it_cannot_measure_the_axis_weights(tmp_path, capsys):
+    """The fixture's runs record score_final alone."""
+    specs = []
+    for name, share, seed in (("a", 0.9, 1), ("b", 0.8, 2)):
+        sh, sc = _shoot_files(tmp_path, name, 40, share, seed)
+        specs += ["--shoot", name, "portrait", str(sh), str(sc)]
+    assert _script().main(specs + ["--redraws", "2"]) == 0
+    out = capsys.readouterr().out
+    assert "learned shift and axis weights   not measured" in out
+    assert "the whole profile: not measured" in out
+
+
+def test_the_script_measures_the_whole_profile_where_it_can(tmp_path, capsys):
+    import csv
+    import random
+
+    from pixcull.config import PixCullConfig
+    cfg = PixCullConfig.load()
+    specs = []
+    for name, share, seed in (("a", 0.9, 1), ("b", 0.7, 2)):
+        rnd = random.Random(seed)
+        rows, verdicts = [], {}
+        for i in range(40):
+            fn = f"{name}{i:03d}.JPG"
+            dims = {k: round(rnd.uniform(0.3, 1.0), 3) for k in
+                    ("sharpness", "composition", "exposure", "aesthetic", "moment")}
+            star = round(1 + 4 * sum(dims.values()) / 5, 2)
+            row = _dims_row(fn, "portrait", dims, cfg)
+            row.update({"datetime": f"2024-10-0{seed} 10:00:{i:02d}",
+                        **{f"rubric_{a}_stars": star for a in AXES}})
+            rows.append(row)
+            verdicts[fn] = "keep" if rnd.random() < share else "cull"
+        sc = tmp_path / f"{name}.csv"
+        with open(sc, "w", newline="", encoding="utf-8") as fh:
+            w = csv.DictWriter(fh, fieldnames=list(rows[0]))
+            w.writeheader()
+            w.writerows(rows)
+        specs += ["--shoot", name, "portrait", str(_sheet(tmp_path / f"{name}.json", verdicts)), str(sc)]
+    assert _script().main(specs + ["--redraws", "2"]) == 0
+    out = capsys.readouterr().out
+    assert "learned shift and axis weights   keep-F1" in out
+    assert "the whole profile, shift and axis weights, as run_pipeline applies it:" in out
+
+
+def test_every_whole_profile_path_decides_on_the_refused_score(tmp_path, capsys, monkeypatch):
+    """Pin the re-fused score to 0 and every path that applies axis weights
+    must cull everything; a path that quietly used score_final would not."""
+    from pixcull.config import PixCullConfig
+    from pixcull.scoring.personalized import PersonalProfile, save_profile
+    mod = _script()
+    cfg = PixCullConfig.load()
+    row = {"filename": "a.JPG", "scene": "portrait", "flags": "", "score_final": "0.99"}
+    tilt = {"technical": 0.5, "moment": 0.5}
+    assert mod._product_verdict(row, 0.0, cfg) == "keep"
+    monkeypatch.setattr(mod, "_refuse", lambda r, a, c: 0.0)
+    monkeypatch.setattr(mod, "refuses", lambda rows, c: True)
+    assert mod._product_verdict(row, 0.0, cfg, tilt) == "cull"
+
+    specs = []
+    for name, share, seed in (("a", 0.9, 1), ("b", 0.7, 2)):
+        sh, sc = _shoot_files(tmp_path, name, 40, share, seed)
+        specs += ["--shoot", name, "portrait", str(sh), str(sc)]
+    prof = tmp_path / "p.json"
+    save_profile(PersonalProfile(user_id="t", n_annotations=70, keep_rate=0.8, cull_rate=0.2,
+                                 keep_threshold_shift=-0.08,
+                                 axis_keep_means={"technical": 4.5, "moment": 4.5, "subject": 3,
+                                                  "composition": 3, "light": 3, "aesthetic": 3},
+                                 axis_cull_means={a: 2.0 for a in AXES}, most_cared_axis="moment",
+                                 label_provenance="blind"), prof)
+    assert mod.main(specs + ["--redraws", "2", "--profile", str(prof)]) == 0
+    out = capsys.readouterr().out
+    assert "learned shift and axis weights   keep-F1 0.000  cull recall 100.0%" in out
+    whole = out.split("as run_pipeline applies it:")[1]
+    assert "fixed 65%   pooled           keep-F1 0.000  cull recall 100.0%" in whole
+    with_ = next(l for l in out.splitlines() if l.strip().startswith("with it"))
+    assert "'cull': 80" in with_, with_
+
+
+@pytest.mark.parametrize("flags", ["", "closed_eyes", "smile,eye_contact", "closed_eyes,open_eyes"])
+@pytest.mark.parametrize("tilt", [None, {"technical": 0.5, "moment": 0.3, "aesthetic": 0.2,
+                                         "subject": 0.0, "composition": 0.0, "light": 0.0}])
+def test_the_refused_score_is_the_products_fusion(flags, tilt):
+    """Checked against fusion.fuse_score itself, penalties and bonuses
+    included, so the script cannot drift from what a run computes."""
+    from pixcull.config import PixCullConfig
+    from pixcull.scoring.fusion import fuse_score
+    cfg = PixCullConfig.load()
+    raw = {"laplacian_subject": 180, "laplacian_global": 90, "highlight_clip_pct": 0.5,
+           "shadow_clip_pct": 1.0, "mean_luma": 120, "laion_aes": 5.6, "clipiqa": 0.55,
+           "composition_score": 0.42, "moment_score": 0.77}
+    fl = [f for f in flags.split(",") if f]
+    dims = fuse_score(raw, fl, "portrait", cfg)
+    row = {"filename": "a.JPG", "scene": "portrait", "flags": "|".join(fl),
+           "score_final": str(dims["final"]),
+           **{f"score_{k}": str(dims[k]) for k in
+              ("sharpness", "composition", "exposure", "aesthetic", "moment")}}
+    from pixcull.scoring.vlm_eval import _flags_of
+    assert _flags_of(row) == fl, "the fixture's flags must parse as the run's do"
+    want = fuse_score(raw, fl, "portrait", cfg, axis_pref=tilt)["final"]
+    assert _script()._refuse(row, tilt, cfg) == pytest.approx(want)

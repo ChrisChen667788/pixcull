@@ -66,6 +66,20 @@ def test_unlabelled_corrections_are_counted_apart():
     assert "" not in got["verticals"]
 
 
+def test_ready_is_corrections_and_across_shoots_is_shoots():
+    """v3.99: September's 79 + 79 were `ready` with one shoot per vertical,
+    which only allows a fold beside the frames it learned from."""
+    one_each = ([Example({"technical": 4}, "keep", run_id="p1", vertical="portrait")] * 40
+                + [Example({"technical": 4}, "keep", run_id="l1", vertical="landscape")] * 40)
+    got = readiness(one_each)
+    assert got["ready"] is True and got["across_shoots"] is False
+    assert got["shoots"] == {"landscape": 1, "portrait": 1}
+    two = one_each + [Example({"technical": 4}, "keep", run_id="p2", vertical="portrait")] * 5
+    assert readiness(two)["across_shoots"] is True
+    # A correction with no shoot recorded stops it, as it stops the grouping.
+    assert readiness(two + [Example({}, "keep", vertical="portrait")])["across_shoots"] is False
+
+
 # -- v3.34 ------------------------------------------------------------
 
 def test_the_strip_measurement_is_local_and_opt_in(monkeypatch):

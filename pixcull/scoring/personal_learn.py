@@ -343,8 +343,18 @@ def readiness(examples: Iterable[Example]) -> dict:
     Answering that is most of what makes the ask cheap. Nobody labels for
     an afternoon against an unknown target.
     """
+    examples = list(examples)
     by_v = split_by_vertical(examples)
     eligible = sorted(v for v, r in by_v.items() if len(r) >= MIN_PER_VERTICAL)
+    # v3.99 — corrections are not shoots. The 2026-09 set was 79 and 79,
+    # `ready: True`, and one shoot per vertical, so the only comparison it
+    # allowed was a fold beside the frames the arm learned from. Same test
+    # evaluate_by_vertical uses to decide whether it can hold a shoot out.
+    shoots = {v: len({e.run_id for e in r if getattr(e, "run_id", "")})
+              for v, r in by_v.items()}
+    across = (len(eligible) >= 2
+              and all(getattr(e, "run_id", "") for e in examples)
+              and any(shoots[v] >= 2 for v in eligible))
     need = {}
     for v, rows in sorted(by_v.items()):
         short = MIN_PER_VERTICAL - len(rows)
@@ -360,6 +370,10 @@ def readiness(examples: Iterable[Example]) -> dict:
         "short_by": need,
         "corrections_to_unblock": sum(remaining),
         "ready": len(eligible) >= 2,
+        "shoots": shoots,
+        # `ready` says the comparison will run; this says whether it can
+        # test a shoot it did not learn from, rather than memory.
+        "across_shoots": across,
         # Unlabelled corrections are counted separately. They are not
         # short of anything — nobody recorded which shoot they came from,
         # and labelling more of the same will not help.
@@ -399,23 +413,49 @@ def evaluate_by_vertical(examples: Iterable[Example], *,
             ),
         }
 
-    pooled_f1, per_f1 = [], []
+    # v3.99 — whole shoots, as evaluate() has held out since v2.83. The
+    # stride below draws a fold from the same afternoon the per-vertical
+    # arm learned from, so it measured memory; on the 2026-09 correction
+    # set, one shoot per vertical, it could measure nothing else. Grouped
+    # when every correction names its shoot and some vertical has two:
+    # only those verticals are measured, and the rest are named.
+    shoots = {v: {} for v in eligible}
+    for v, rows in eligible.items():
+        for e in rows:
+            shoots[v].setdefault(getattr(e, "run_id", "") or "", []).append(e)
+    grouped = (all(e.run_id for e in exs)
+               and any(len(s) >= 2 for s in shoots.values()))
+    splits = []                              # (vertical, test, train_v, shoot)
     for vert, rows in eligible.items():
-        if len(rows) < folds * 2:
-            continue
-        for k in range(folds):
-            test = rows[k::folds]
-            train_v = [e for i, e in enumerate(rows) if i % folds != k]
-            if not test or not train_v:
-                continue
-            # The pooled arm trains on everything EXCEPT this fold —
-            # including the other verticals. That is the comparison that
-            # matters: is the other verticals' data helping or diluting.
-            train_all = [e for e in exs if e not in test]
-            pooled_f1.append(_keep_f1(
-                test, lambda a, p=learn_profile(train_all): decide(a, profile=p)))
-            per_f1.append(_keep_f1(
-                test, lambda a, p=learn_profile(train_v): decide(a, profile=p)))
+        if grouped:
+            for key, test in shoots[vert].items():
+                train_v = [e for k, g in shoots[vert].items() if k != key for e in g]
+                if train_v:
+                    splits.append((vert, test, train_v, key))
+        elif len(rows) >= folds * 2:
+            splits += [(vert, rows[k::folds],
+                        [e for i, e in enumerate(rows) if i % folds != k], None)
+                       for k in range(folds)]
+
+    pooled_f1, per_f1, pooled_cr, per_cr = [], [], [], []
+    for vert, test, train_v, key in splits:
+        # The pooled arm trains on everything EXCEPT this fold (the held-out
+        # shoot, when grouped) — including the other verticals. That is the
+        # comparison that matters: is the other verticals' data helping or
+        # diluting. By identity: two corrections with the same stars and
+        # verdict compare equal, and `not in` dropped both.
+        out_ids = {id(e) for e in test}
+        if key is not None:
+            out_ids |= {id(e) for e in exs if e.run_id == key}
+        pooled = learn_profile([e for e in exs if id(e) not in out_ids])
+        # A vertical learned from fewer than MIN_PER_VERTICAL corrections
+        # gets no profile of its own (learn_profiles), so it decides with
+        # the pooled one, and this arm says so by being identical.
+        per = learn_profile(train_v) if len(train_v) >= MIN_PER_VERTICAL else pooled
+        for arm, prof, f1s, crs in (("pooled", pooled, pooled_f1, pooled_cr),
+                                    ("per", per, per_f1, per_cr)):
+            f1s.append(_keep_f1(test, lambda a, p=prof: decide(a, profile=p)))
+            crs.append(_cull_recall(test, lambda a, p=prof: decide(a, profile=p)))
 
     if not pooled_f1:
         return {"n": len(exs),
@@ -423,13 +463,28 @@ def evaluate_by_vertical(examples: Iterable[Example], *,
                 "refused": "no vertical had enough corrections to fold"}
     pooled = sum(pooled_f1) / len(pooled_f1)
     per = sum(per_f1) / len(per_f1)
+    cr = [(a, b) for a, b in zip(pooled_cr, per_cr) if a is not None]
+    measured = sorted({v for v, *_ in splits})
     return {
         "n": len(exs),
         "verticals_eligible": sorted(eligible),
         "folds": len(pooled_f1),
+        "grouped": grouped,
         "pooled_f1": round(pooled, 3),
         "per_vertical_f1": round(per, 3),
         "delta": round(per - pooled, 3),
+        # v3.99 — what evaluate() has reported since v3.96 and v3.98: the
+        # spread, which shoot each fold held out, and cull recall, because
+        # keep-F1 alone rewards a profile that keeps more.
+        "fold_deltas": [round(b - a, 3) for a, b in zip(pooled_f1, per_f1)],
+        "fold_groups": [(v, k) for v, _t, _tr, k in splits] if grouped else None,
+        "fold_n": [len(t) for _v, t, _tr, _k in splits],
+        "pooled_cull_recall": round(sum(a for a, _ in cr) / len(cr), 3) if cr else None,
+        "per_vertical_cull_recall": round(sum(b for _, b in cr) / len(cr), 3) if cr else None,
+        "verticals_measured": measured,
+        # Grouped, a vertical shot once has no other shoot of its own kind
+        # to learn from, so there is nothing to compare for it.
+        "verticals_unmeasured": sorted(set(eligible) - set(measured)),
         "refused": None,
     }
 

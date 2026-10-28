@@ -56,6 +56,9 @@ with the two 2024 portrait blocks as one shoot; within portrait −0.178). Its t
 65%, so it tells this stricter-than-the-machine photographer to keep more,
 and the profile active on this machine (−0.08, from 70 annotations with a 97%
 keep rate) takes cull recall on 728 blind photographs from 12.4% to 1.7%.
+(v3.99 applied a learned profile whole, axis weights included, which v3.98
+had not: held out a shoot at a time it culls less still, 2.5% against 7.7%
+with none.)
 To decide: reset it (`pixcull personalize reset`); measure the shift against
 the machine's own keep rate instead; and require a cross-shoot measurement
 before a profile switches itself on. Numbers in the v3.98 entry of
@@ -66,6 +69,14 @@ the profile.** `run_pipeline` (`pixcull run`, the web analysis) applies an
 active profile's shift; `tether._analyze_one_file` calls `decide()` without
 `personal_shift`. The same photograph can be judged differently live and in
 a run. Which one is right depends on the decisions above.
+
+**v3.8 was measured in v3.99 (2026-10-29): a profile per kind of shoot does
+not help.** Only portrait was shot more than once. Held out a shoot at a time,
+a portrait-only profile agrees with the owner on 63.8% of 378 photographs,
+against 75.1% for one profile and 83.9% for none, and changes two verdicts of
+728 in the product's decision. The 158 September labels could not have answered it:
+one shoot per kind. The per-kind profile stays unwired. Numbers in the v3.99
+entry of the charter.
 
 Blind, and that is the point. Every previous label set this project
 produced was circular — the model's verdict was on screen while the

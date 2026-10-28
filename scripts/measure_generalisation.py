@@ -36,18 +36,36 @@ the product's decision the learned shift is negative on every split, because
 it compares the photographer's keep rate with a fixed 65% and not with what
 the machine already keeps; it raises keep-F1 0.743 to 0.777 and halves cull
 recall, 7.7% to 3.6%.
+
+v3.99 asks v3.8's question, one profile or one per kind of shoot:
+`evaluate_by_vertical` keyed by the genre given here and by each frame's scene
+label (what `gather_examples_from_runs` records), held out by shoot where a
+kind was shot twice and as the stride it shipped with; where each arm's
+verdicts go; and the per-kind threshold shift in the product's decision. On
+the same 728 only portrait was shot more than once. Held out a shoot at a
+time, the portrait profile agrees with the owner on 63.8% against 75.1% for
+one profile and 83.9% for none, culls at about the rate culls occur, and
+changes two verdicts in 728 in the product's decision.
+
+v3.99 also applies a profile whole, as `run_pipeline` does: the shift, and the
+axis weights tilting the fusion, by recomputing `score_final` from the
+per-dimension scores a run keeps — only where, untilted, they give it back.
+v3.98's figures were the shift alone; whole, the learned profile culls less
+still, 2.5% against 7.7% with none.
 """
 from __future__ import annotations
 
 import argparse
 import csv
+import dataclasses
 import random
 import statistics
 import sys
 from collections import Counter, defaultdict
 
 from pixcull.scoring.personal_learn import (
-    DECISIONS, Example, evaluate, examples_from_blind_sheet, learn_profile,
+    DECISIONS, MIN_PER_VERTICAL, Example, evaluate, evaluate_by_vertical,
+    examples_from_blind_sheet, learn_profile,
 )
 
 
@@ -101,36 +119,92 @@ def product_scores(pairs) -> tuple[float, float | None]:
             (sum(p == "cull" for p in culls) / len(culls)) if culls else None)
 
 
-def _product_verdict(row: dict, shift: float, cfg) -> str:
+_DIMS = ("sharpness", "composition", "exposure", "aesthetic", "moment")
+
+
+def _refuse(row: dict, axis_pref: dict | None, cfg) -> float:
+    """`score_final` again from the per-dimension scores the run kept, with a
+    profile's axis weights tilting the fusion as `run_pipeline` tilts it
+    (`fuse_score(..., axis_pref=...)`). Only trusted once `refuses()` has
+    shown that with no tilt it gives back the recorded `score_final`."""
+    from pixcull.scoring.fusion import _personalize_weights
+    from pixcull.scoring.vlm_eval import _flags_of
+    tpl = cfg.template_for(str(row.get("scene") or ""))
+    w = tpl.weights or cfg.defaults.get("weights", {})
+    if axis_pref:
+        w = _personalize_weights(w, axis_pref)
+    final = sum(float(row[f"score_{k}"]) * w.get(k, 0.0) for k in _DIMS)
+    flags = _flags_of(row)
+    for flag, delta in (tpl.bonuses or {}).items():
+        if flag in flags:
+            final += float(delta)
+    for flag, delta in (tpl.penalties or {}).items():
+        if flag in flags:
+            final -= abs(float(delta))
+    return max(0.0, min(1.0, final))
+
+
+def refuses(rows: dict, cfg) -> bool:
+    """Does every row's recorded `score_final` come back from its
+    per-dimension scores? If not, the axis weights cannot be measured from
+    this run and nothing is reported for them."""
+    try:
+        return all(abs(_refuse(r, None, cfg) - float(r["score_final"])) < 1e-6
+                   for r in rows.values())
+    except (KeyError, TypeError, ValueError):
+        return False
+
+
+def _product_verdict(row: dict, shift: float, cfg, axis_pref: dict | None = None) -> str:
     from pixcull.scoring.decision import decide
     from pixcull.scoring.vlm_eval import _flags_of
-    try:
-        score = float(row.get("score_final") or 0)
-    except (TypeError, ValueError):
-        score = 0.0
+    if axis_pref:
+        score = _refuse(row, axis_pref, cfg)
+    else:
+        try:
+            score = float(row.get("score_final") or 0)
+        except (TypeError, ValueError):
+            score = 0.0
     verdict, _ = decide(score, _flags_of(row), cfg, "standard",
                         scene=str(row.get("scene") or ""), personal_shift=shift)
     return verdict.value
+
+
+def _relative_shift(train, rows, cfg) -> float:
+    """The shift measured against the machine's own keep rate on the same
+    frames, rather than against a fixed 65%: −(owner − machine) × 0.5,
+    under the same cap."""
+    from pixcull.scoring.personalized import MAX_THRESHOLD_SHIFT
+    owner_keep = sum(e.decision == "keep" for e in train) / len(train)
+    machine_keep = sum(_product_verdict(rows[e.key], 0.0, cfg) == "keep"
+                       for e in train) / len(train)
+    x = -(owner_keep - machine_keep) * 0.5
+    return max(-MAX_THRESHOLD_SHIFT, min(MAX_THRESHOLD_SHIFT, x))
 
 
 def product_leave_one_shoot_out(exs, rows, cfg) -> list[str]:
     """The learned threshold shift, in the product's decision, on a shoot
     it was not learned from. Beside it, what a shift measured against the
     machine's own keep rate on the same frames would have done — reported,
-    not shipped. The threshold shift only: the learned axis weights also
-    tilt `fuse_score` in the product and are not re-applied here."""
-    from pixcull.scoring.personalized import MAX_THRESHOLD_SHIFT
-    clamp = lambda x: max(-MAX_THRESHOLD_SHIFT, min(MAX_THRESHOLD_SHIFT, x))
+    not shipped. Since v3.99 also the whole profile, the shift and the axis
+    weights that tilt `fuse_score` in a run, where this run's score_final
+    comes back from its per-dimension scores (`refuses`)."""
+    from pixcull.scoring.personal_learn import axis_weights
+    whole = refuses(rows, cfg)
     shoots = sorted({e.run_id for e in exs})
     out, acc = [], defaultdict(list)
     for held in shoots:
         train = [e for e in exs if e.run_id != held]
         test = [e for e in exs if e.run_id == held]
-        shift = learn_profile(train).keep_threshold_shift
-        owner_keep = sum(e.decision == "keep" for e in train) / len(train)
-        machine_keep = sum(_product_verdict(rows[e.key], 0.0, cfg) == "keep"
-                           for e in train) / len(train)
-        rel = clamp(-(owner_keep - machine_keep) * 0.5)
+        prof = learn_profile(train)
+        shift = prof.keep_threshold_shift
+        rel = _relative_shift(train, rows, cfg)
+        if whole:
+            # v3.99 — the profile as run_pipeline applies it: the shift
+            # and the axis weights, which tilt the fusion.
+            w = axis_weights(prof)
+            acc["whole"].append(product_scores(
+                [(e.decision, _product_verdict(rows[e.key], shift, cfg, w)) for e in test]))
         res = {k: product_scores([(e.decision, _product_verdict(rows[e.key], s, cfg))
                                   for e in test])
                for k, s in (("none", 0.0), ("learned", shift), ("relative", rel))}
@@ -142,7 +216,12 @@ def product_leave_one_shoot_out(exs, rows, cfg) -> list[str]:
                    f"vs-machine shift {rel:+.3f}: {fmt(res['relative'])}")
     head = []
     for k, label in (("none", "no shift"), ("learned", "learned shift"),
-                     ("relative", "shift vs machine (hypothetical)")):
+                     ("relative", "shift vs machine (hypothetical)"),
+                     ("whole", "learned shift and axis weights")):
+        if not acc[k]:
+            head.append(f"  mean, {label:<32} not measured: score_final does not "
+                        "come back from this run's per-dimension scores")
+            continue
         f1 = statistics.mean(v[0] for v in acc[k])
         crs = [v[1] for v in acc[k] if v[1] is not None]
         head.append(f"  mean, {label:<32} keep-F1 {f1:.3f}  cull recall "
@@ -150,11 +229,180 @@ def product_leave_one_shoot_out(exs, rows, cfg) -> list[str]:
     return head + ["  (keep-F1/cull recall per held-out shoot)"] + out
 
 
+def by_vertical(exs, rows, redraws) -> list[str]:
+    """v3.99 — `evaluate_by_vertical`, keyed two ways: by the genre of the
+    shoot as the owner gave it, and by the scene label on each frame, which
+    is what `gather_examples_from_runs` reads (`vertical` or else `scene`).
+    Grouped by shoot where a vertical has two; then the stride it shipped
+    with, which is memorisation, with its spread over redrawn orders."""
+    out = []
+    keyings = (("by genre", exs),
+               ("by scene label", [dataclasses.replace(
+                   e, vertical=str(rows[e.key].get("scene") or "")) for e in exs]))
+    for label, xs in keyings:
+        mix = Counter(e.vertical for e in xs)
+        out.append(f"  {label}: " + ", ".join(f"{v} {n}" for v, n in mix.most_common()))
+        ev = evaluate_by_vertical(xs)
+        out += _vertical_lines(ev)
+        flat = [dataclasses.replace(e, run_id="") for e in xs]
+        ds = []
+        for seed in range(redraws):
+            ys = flat[:]
+            random.Random(seed).shuffle(ys)
+            r = evaluate_by_vertical(ys)
+            if not r.get("refused"):
+                ds.append(r["delta"])
+        st = evaluate_by_vertical(flat)
+        if not st.get("refused"):
+            line = (f"    stride, shoots ignored (memorisation): pooled {st['pooled_f1']:.3f} "
+                    f"per-vertical {st['per_vertical_f1']:.3f} Δ {st['delta']:+.3f}")
+            if ds:
+                line += (f"  | redrawn ×{len(ds)}: Δ {min(ds):+.3f}…{max(ds):+.3f}, "
+                         f"mean {statistics.mean(ds):+.3f}")
+            out.append(line)
+    return out
+
+
+def _vertical_lines(ev: dict) -> list[str]:
+    if ev.get("refused"):
+        return [f"    not measured: {ev['refused']}"]
+    cr = ""
+    if ev.get("pooled_cull_recall") is not None:
+        cr = (f"  cull recall {ev['pooled_cull_recall']:.0%} → "
+              f"{ev['per_vertical_cull_recall']:.0%}")
+    out = [f"    {'held-out shoots' if ev['grouped'] else 'stride folds'} ×{ev['folds']}: "
+           f"pooled {ev['pooled_f1']:.3f}  per-vertical {ev['per_vertical_f1']:.3f}  "
+           f"Δ {ev['delta']:+.3f}{cr}"]
+    if ev["grouped"]:
+        # Folds here can be a handful of frames (a scene label one shoot
+        # barely used), and the plain mean weighs them like a whole shoot.
+        w = sum(d * n for d, n in zip(ev["fold_deltas"], ev["fold_n"])) / sum(ev["fold_n"])
+        out[0] += f"  (weighted by frames: Δ {w:+.3f})"
+        for (v, shoot), d, n in zip(ev["fold_groups"], ev["fold_deltas"], ev["fold_n"]):
+            out.append(f"      held out {shoot:<24} ({v}) n={n:<4} Δ {d:+.3f}")
+        if ev["verticals_unmeasured"]:
+            out.append(f"      shot once, nothing to compare: {', '.join(ev['verticals_unmeasured'])}")
+    return out
+
+
+def vertical_confusion(exs) -> list[str]:
+    """Where each arm's verdicts go on the held-out shoots of the genres shot
+    more than once, summed: no profile, pooled, per genre, built the way
+    `evaluate_by_vertical` builds them. "Of what it culls, the owner culled"
+    beside the share of culls in those shoots says whether a profile that
+    culls more is finding the culls or drawing them."""
+    from pixcull.scoring.personal_learn import decide
+    arms = ("no profile", "pooled", "per genre")
+    tot = {a: Counter() for a in arms}
+    for genre in sorted({e.vertical for e in exs}):
+        same = [e for e in exs if e.vertical == genre]
+        for held in sorted({e.run_id for e in same}):
+            tv = [e for e in same if e.run_id != held]
+            if not tv:
+                continue
+            test = [e for e in same if e.run_id == held]
+            pooled = learn_profile([e for e in exs if e.run_id != held])
+            per = learn_profile(tv) if len(tv) >= MIN_PER_VERTICAL else pooled
+            for arm, prof in zip(arms, (None, pooled, per)):
+                tot[arm].update((e.decision, decide(e.axes, profile=prof)) for e in test)
+    if not any(tot.values()):
+        return ["  not measured: no genre was shot more than once"]
+    c0 = tot[arms[0]]
+    n = sum(c0.values())
+    culls = sum(v for (t, _p), v in c0.items() if t == "cull")
+    out = [f"  held-out shoots of the genres shot more than once: {n} frames, "
+           f"{culls} culled by the owner ({culls / n:.1%})"]
+    for arm in arms:
+        c = tot[arm]
+        agree = sum(v for (t, p), v in c.items() if t == p) / n
+        culled = sum(v for (_t, p), v in c.items() if p == "cull")
+        hit = c[("cull", "cull")]
+        out.append(f"    {arm:<11} agrees {agree:.1%}  culls {culled:<3} of which the owner "
+                   f"culled {hit} ({hit / culled:.1%})" if culled else
+                   f"    {arm:<11} agrees {agree:.1%}  culls nothing")
+        out[-1] += f"  owner's culls kept {c[('cull', 'keep')]}/{culls}"
+    return out
+
+
+def product_by_vertical(exs, rows, cfg) -> list[str]:
+    """v3.99 — the threshold shift per kind of shoot, in the product's
+    decision, on a shoot it was not learned from. A kind with fewer than
+    MIN_PER_VERTICAL frames in the training shoots gets no shift of its own
+    and uses the pooled one, as `learn_profiles` would. Both formulas."""
+    from pixcull.scoring.personal_learn import axis_weights
+    keyings = {"pooled": lambda e: "",
+               "per genre": lambda e: e.vertical,
+               "per scene label": lambda e: str(rows[e.key].get("scene") or "")}
+    # The shift alone, and the whole profile as run_pipeline applies it
+    # (shift plus axis weights tilting the fusion), if this run's
+    # score_final comes back from its per-dimension scores.
+    variants = ("shift", "whole") if refuses(rows, cfg) else ("shift",)
+    acc = defaultdict(list)
+    changed = Counter()                  # verdicts unlike the pooled arm's
+    per_shoot = []
+
+    def learned(g):
+        prof = learn_profile(g)
+        return {"fixed 65%": prof.keep_threshold_shift,
+                "vs machine": _relative_shift(g, rows, cfg), "w": axis_weights(prof)}
+
+    for held in sorted({e.run_id for e in exs}):
+        train = [e for e in exs if e.run_id != held]
+        test = [e for e in exs if e.run_id == held]
+        pooled = learned(train)
+        cells = []
+        base = {}
+        for arm, key_of in keyings.items():
+            groups = defaultdict(list)
+            for e in train:
+                groups[key_of(e)].append(e)
+            own = {k: learned(g) for k, g in groups.items()
+                   if k and len(g) >= MIN_PER_VERTICAL}
+            for variant in variants:
+                for formula in ("fixed 65%", "vs machine"):
+                    pairs = []
+                    for e in test:
+                        prof = own.get(key_of(e), pooled)
+                        pairs.append((e.decision, _product_verdict(
+                            rows[e.key], prof[formula], cfg,
+                            prof["w"] if variant == "whole" else None)))
+                    verdicts = [p for _t, p in pairs]
+                    base.setdefault((variant, formula), verdicts)
+                    changed[(variant, arm, formula)] += sum(
+                        a != b for a, b in zip(base[(variant, formula)], verdicts))
+                    res = product_scores(pairs)
+                    acc[(variant, arm, formula)].append(res)
+                    if variant == "shift":
+                        cells.append(f"{res[0]:.3f}/{'—' if res[1] is None else format(res[1], '.0%')}")
+            used = sum(key_of(e) in own for e in test)
+            if arm != "pooled":
+                cells.append(f"{used}/{len(test)} own")
+        per_shoot.append(f"    held out {held:<24} " + "  ".join(cells))
+    out = []
+    for variant in variants:
+        if variant == "whole":
+            out.append("  the whole profile, shift and axis weights, as run_pipeline applies it:")
+        for formula in ("fixed 65%", "vs machine"):
+            for arm in keyings:
+                v = acc[(variant, arm, formula)]
+                crs = [x[1] for x in v if x[1] is not None]
+                out.append((f"  {formula:<11} {arm:<16} keep-F1 {statistics.mean(x[0] for x in v):.3f}"
+                            f"  cull recall {statistics.mean(crs):.1%}" if crs else "")
+                           + ("" if arm == "pooled" else
+                              f"  verdicts unlike pooled: {changed[(variant, arm, formula)]}"))
+    if len(variants) == 1:
+        out.append("  the whole profile: not measured, score_final does not come back "
+                   "from this run's per-dimension scores")
+    head = ("    (per held-out shoot: pooled 65%, pooled vs-machine, genre 65%, genre "
+            "vs-machine, frames with their own, scene 65%, scene vs-machine, frames with their own)")
+    return out + [head] + per_shoot
+
+
 def score_saved_profile(path, exs, rows, cfg) -> list[str]:
-    """A saved profile's threshold shift on every photograph. Its axis
-    weights are not re-applied: they tilt `fuse_score`, which would mean
-    re-fusing every frame, and an equal-weight profile is a no-op there by
-    construction (`fusion._personalize_weights`)."""
+    """A saved profile on every photograph, in the product's decision: its
+    threshold shift, and its axis weights tilting the fusion when this run's
+    score_final can be recomputed (v3.99). An equal-weight profile is a no-op
+    in the fusion by construction (`fusion._personalize_weights`)."""
     from pathlib import Path
 
     from pixcull.scoring.personal_learn import axis_weights
@@ -167,9 +415,14 @@ def score_saved_profile(path, exs, rows, cfg) -> list[str]:
     equal = len({round(v, 6) for v in w.values()}) <= 1
     out = [f"  {path.name}: shift {prof.keep_threshold_shift:+.3f} from "
            f"{prof.n_annotations} corrections, active={prof.is_active()}, "
-           f"axis weights {'equal (no effect on fusion)' if equal else 'not equal (not re-applied here)'}"]
-    for label, s in (("without it", 0.0), ("with it", prof.keep_threshold_shift)):
-        verdicts = [_product_verdict(rows[e.key], s, cfg) for e in exs]
+           f"axis weights {'equal (no effect on fusion)' if equal else 'not equal'}"]
+    tilt = None if equal else w
+    if tilt and not refuses(rows, cfg):
+        out.append("    its axis weights not applied: score_final does not come back "
+                   "from this run's per-dimension scores")
+        tilt = None
+    for label, s, aw in (("without it", 0.0, None), ("with it", prof.keep_threshold_shift, tilt)):
+        verdicts = [_product_verdict(rows[e.key], s, cfg, aw) for e in exs]
         f1, cr = product_scores(list(zip((e.decision for e in exs), verdicts)))
         out.append(f"    {label:<11} keep-F1 {f1:.3f}  cull recall "
                    f"{'—' if cr is None else format(cr, '.1%')}  "
@@ -249,6 +502,12 @@ def main(argv=None) -> int:
     if len(by_shoot) >= 2:
         print("\nthe product's decision, leave one shoot out:")
         print("\n".join(product_leave_one_shoot_out(exs, rows, cfg)))
+    print("\none profile, or one per kind of shoot (v3.99), evaluate()'s decision:")
+    print("\n".join(by_vertical(exs, rows, a.redraws)))
+    print("\n".join(vertical_confusion(exs)))
+    if len(by_shoot) >= 2:
+        print("\none profile, or one per kind of shoot, in the product's decision:")
+        print("\n".join(product_by_vertical(exs, rows, cfg)))
     if a.profile:
         print("\na saved profile, in the product's decision:")
         print("\n".join(score_saved_profile(a.profile, exs, rows, cfg)))

@@ -185,6 +185,9 @@ during gathering; it is simply not attached.
 existing corrections. **Wrong, not late:** splitting the corrections by vertical
 divides an already-small dataset. The version needs a minimum-count guard per
 vertical and must fall back to the pooled profile below it.
+*Measured 2026-10-29 (v3.99):* it does not help where it can be tested, and the
+k-fold here had to become whole held-out shoots to say so; see
+`docs/ROADMAP-v3.88-v3.104-charter.md`.
 
 ### v3.9 — the A/B compare modal throws its answer away
 The compare modal ships (`shortcuts.py:135-139`). Nothing records which side the

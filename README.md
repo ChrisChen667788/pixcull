@@ -91,6 +91,27 @@ https://github.com/user-attachments/assets/69eddc6b-24d3-406a-ace5-2ed3a5b44e67
 
 ## What's new
 
+**v3.99** — Should a photographer who shoots portraits and landscapes keep one
+taste profile, or one for each? September's 158 blind labels, 79 of each,
+cannot say: each kind is a single shoot, so every test frame sits beside frames
+the profile learned from, and redrawn 200 ways the answer runs from −0.156 to
++0.184. Of the 728 labels now on hand only portrait was shot more than once.
+Holding out one portrait shoot at a time, a portrait-only profile agrees with
+the owner on 63.8% of 378 photographs, against 75.1% for one profile learned
+from everything and 83.9% for none (78.0%, 79.9% and 83.9% if the two 2024
+shoots, three days apart, count as one). Against no profile it finds four more
+of the owner's culls and culls 34 photographs they kept, which is no better
+than picking at random. In the product's decision, applied the way a run
+applies a profile, it changes two verdicts in 728. Keyed by the scene label,
+which is how PixCull records a photograph's kind, it does worse, because the
+classifier filed 139 of the 378 portrait-shoot frames as landscape. So the
+per-kind profile stays unwired. Applied whole, with the axis weights v3.98 left
+out, the single profile does worse than v3.98 reported: cull recall 2.5%,
+against 7.7% with no profile. The function v3.8 shipped to answer this tested
+frames beside their own shoot and would have said yes (+0.072); it now holds
+out whole shoots and reports cull recall, and `readiness()` counts shoots as
+well as corrections.
+
 **v3.98** — Does a taste profile learned from some shoots predict another?
 The owner's blind labels now cover five shoots, 728 photographs, so this
 learns on four and tests on the fifth. It does not generalise. In the
@@ -176,18 +197,6 @@ writer takes nothing as nothing to preserve, so it could overwrite a rating the
 photographer had set. All of them name UTF-8 now. A test parses the package
 source and fails any text read or decoded without a named encoding, and two
 tests run the ffprobe and exiftool readers against stand-ins that write UTF-8.
-
-**v3.94.3** — transformers 5.20.0 (15 October) cannot import a model on
-torch 2.7, the oldest torch this package supports. It checks for `torch>=2.7`
-before importing a module that only exists from torch 2.8, so `from
-transformers import CLIPModel` fails, and with it every model PixCull loads
-through transformers. A fresh install is not affected, because it resolves the
-newest torch; an environment on torch 2.7.x that upgrades transformers is. The
-CI lane pinned to the torch floor caught it the day it shipped, through the
-test added for 5.19.0. That one release is now excluded
-(`transformers!=5.20.0`); the fix is upstream in
-[huggingface/transformers#49652](https://github.com/huggingface/transformers/pull/49652),
-and later releases are accepted as before.
 
 Earlier releases are in [`CHANGELOG.md`](CHANGELOG.md).
 

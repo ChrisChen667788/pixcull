@@ -406,7 +406,8 @@ v3.11 need API budget; v3.8 and v3.9 need corrections and **there is no
 `annotations.jsonl` anywhere on this machine** — the fitted profile at
 `~/.pixcull/personal_profile.json` records 70 blind annotations but the
 examples behind it are gone, and a profile cannot be re-fitted from its own
-output.  Do not report any of these as measured.
+output.  Do not report any of these as measured.  (v3.8 is measured since
+v3.99, on blind labels that came later: it does not help.)
 
 **New env switches, all default-off and all deliberately so:**
 `PIXCULL_AXIS_GROUPS` (3x VLM spend), `PIXCULL_CONSISTENCY_DRAWS` (N draws),
@@ -905,8 +906,19 @@ learned on, and its threshold shift compares the keep rate with a fixed 65%,
 so it tells a photographer stricter than the machine to keep more — the
 profile active on this machine (−0.08) takes cull recall on 728 blind photos
 from 12.4% to 1.7%.  keep-F1 rewards that; read cull recall beside it.  A
-photograph is `filename@datetime` (the shutter counter wraps).  v3.99 (v3.8)
-is next.
+photograph is `filename@datetime` (the shutter counter wraps).
+**v3.99 measured v3.8:** a profile per kind of shoot does not help where it
+can be tested (portrait, three shoots: agreement 63.8% against 75.1% pooled)
+and changes two verdicts of 728 in the product; keyed by the scene label, which is what
+gather records as the kind, it is worse, because the classifier files 139 of
+378 portrait-shoot frames as landscape.  `evaluate_by_vertical` holds out
+whole shoots now; its stride had said +0.072.  **A run's `score_final` comes
+back exactly from the per-dimension scores in its `scores.csv`**, so a
+profile's axis weights can be measured offline (`_refuse` in
+`scripts/measure_generalisation.py`, checked against `fuse_score`); v3.98
+applied the shift alone, and whole the profile culls less still (2.5%).
+Next is the threshold shift measured against the machine's keep rate
+(owner-approved 2026-10-29).
 
 **Earlier block: `docs/ROADMAP-v3.1-v3.27-charter.md`** — twenty-seven versions read
 out of the same 46-entry competitive research at the level of PixCull's own core

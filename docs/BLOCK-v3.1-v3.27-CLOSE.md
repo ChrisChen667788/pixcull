@@ -58,6 +58,12 @@ guards against), v3.18 (multi-image burst calls).
 the examples behind it are gone; a profile cannot be re-fitted from its own
 output.
 
+*2026-10-29:* v3.8 was measured in v3.99, on blind labels that arrived after
+this block closed. Held out a shoot at a time, a per-kind profile does not
+help and changes no verdict in the product; the comparison this block shipped
+drew its folds from the shoot it learned from. See the v3.99 entry of
+`docs/ROADMAP-v3.88-v3.104-charter.md`.
+
 **Needs a photographer** — v3.12 (does the burst face strip change the override
 rate?). That is a question about a person's behaviour and no amount of code
 answers it.

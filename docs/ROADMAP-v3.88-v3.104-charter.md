@@ -909,6 +909,109 @@ tilts toward "what you demonstrably value".
 corrections, against the single profile. Needs a loader for a
 corrections file, about fifteen lines.
 
+**Shipped — a profile per kind of shoot does not help where it can be
+tested, and the test v3.8 shipped for it measured memory.** Measured
+2026-10-29 with `scripts/measure_generalisation.py`, on the 728 blind
+photographs of v3.98. The per-kind profile (`learn_profiles`, `profile_for`)
+has no caller in the product, and keeps none. The loader the charter asked
+for was v3.96's `load_corrections`.
+
+The 158 the charter names cannot answer it. Each of their two kinds is one
+shoot, so every test fold sits beside the frames the per-kind profile learned
+from. `evaluate_by_vertical` gives −0.040 as the file lies and −0.156 to
++0.184 over 200 redrawn orders (mean +0.013): memory, and a coin toss
+besides. `readiness()` called that set ready in September; it counted
+corrections, not shoots.
+
+Of the five shoots now labelled, only portrait was shot more than once:
+three shoots, 378 photographs, 44 of them culled by the owner (11.6%).
+Holding one portrait shoot out at a time, a profile learned on the other two
+portrait shoots against one learned on all four other shoots, in
+`evaluate()`'s decision:
+
+| | agrees with the owner | photographs culled | of those, the owner culled |
+|---|---|---|---|
+| no profile | 83.9% | 2 | 1 |
+| one profile, every kind | 75.1% | 3 | 1 |
+| a portrait profile | 63.8% | 40 | 5 (12.5%) |
+
+keep-F1 0.855 pooled against 0.726 per kind (−0.129, or −0.097 weighted by
+frames; per held-out shoot −0.300, +0.008, −0.095), with no profile at 0.903
+(v3.98). Its cull recall rises from 3% to 13%, and what it adds is no better
+than a random draw: 12.5% of what it culls was culled by the owner, against
+11.6% of the frames. Against no profile it finds four more of the owner's
+culls and culls 34 photographs they kept.
+
+In the product's decision (`decision.decide` on `score_final`) its threshold
+shift alone changes nothing: the portrait shift is the cap, −0.080, against
+−0.035 to −0.048 pooled, and across all five held-out shoots no photograph
+gets a different verdict for it — one, with the shift measured against the
+machine's keep rate. keep-F1 0.777 and cull recall 3.6% either way.
+
+A run applies more than the shift: `run_pipeline` also tilts `fuse_score` with
+the profile's axis weights, and the portrait profile's are not equal. v3.98
+left that out. Each run here kept the per-dimension scores `score_final` is
+made from, and recomputed without a tilt they give it back exactly on all six
+runs, so the whole profile can be applied offline (`_refuse` in the script,
+which refuses where they do not). Applied whole, the per-kind profile changes
+two verdicts of 728 against the pooled one (keep-F1 0.769 → 0.770, cull recall
+2.5% → 4.2%). Under the shift measured against the machine's keep rate it
+changes 112 and costs 0.120 keep-F1 at the same cull recall, 19.2%.
+
+With the two 2024 portrait blocks as one shoot, portrait has two shoots and the
+gap narrows: agreement 78.0% per kind, 79.9% pooled, 83.9% with none; it culls
+21, of which the owner culled 3 (14.3%); keep-F1 0.865 → 0.729 (−0.136, −0.041
+weighted by frames; −0.300 and +0.028). In the product's decision the shift
+alone changes 3 verdicts and the whole profile 2 (keep-F1 0.728 → 0.730, cull
+recall 3.2% → 5.3%); under the machine-relative shift the whole per-kind
+profile changes 36 and costs 0.076 keep-F1.
+
+Keyed by the scene label, which is what `gather_examples_from_runs` records as
+a correction's kind and so what a wired-in per-kind profile would use, the
+kinds are not the shoots. Of the 378 portrait-shoot photographs, 128 are
+labelled portrait and 139 landscape; the 728 carry eleven labels. Per label it
+is worse: −0.012 weighted by frames over 23 held-out folds (−0.067 unweighted;
+some folds are one photograph), and −0.045 over stride folds, below zero in
+all 200 redraws. In the product's decision 9 verdicts change and keep-F1 goes
+0.777 → 0.774 (0.734 → 0.720 with the shift measured against the machine, 29
+verdicts).
+
+`evaluate_by_vertical` as v3.8 shipped it, stride folds within each kind and
+shoots ignored, gives the portrait-and-every-other-kind profile +0.072 on the
+728 (−0.033 to +0.110 over 200 redraws, mean +0.062), averaging in landscape
+and event, which it can only test inside their one shoot. It would have
+answered yes.
+
+What changed: `evaluate_by_vertical` holds out whole shoots when every
+correction names one and some kind has two, as `evaluate()` has since v2.83,
+and names the kinds it could not test; it reports cull recall and each fold.
+It takes the fold out of the pooled arm by identity. By value, two corrections
+with the same stars and verdict in one run compared equal and both left, and
+`gather_examples_from_runs` makes that possible because its examples carry no
+photograph key (the blind sheets do, so nothing measured here was affected). A
+kind with fewer than `MIN_PER_VERTICAL` corrections to learn from decides with
+the pooled profile, as `learn_profiles` would have it. `readiness()` reports
+shoots per kind and `across_shoots`. The test that held the pooled arm by
+grepping for the line that built it now asserts what the arm trained on. The
+script recomputes `score_final` with a profile's axis weights, checked against
+`fusion.fuse_score` itself, penalties and bonuses included: the first version
+of that check computed its expected score with the function under test, and a
+mutation that dropped the penalties went through it. Seventeen mutations each
+turn a test red.
+
+If a per-kind profile is ever wired in, it should key on the kind the
+photographer chose for the run, not the scene label on each frame.
+
+**v3.98's product figures, applied whole.** They were the threshold shift
+alone. With the axis weights as well, learned on four shoots and applied to
+the fifth: keep-F1 0.769 and cull recall 2.5%, against 0.777 / 3.6% for the
+shift alone and 0.743 / 7.7% with no profile (two portrait shoots: 0.728 /
+3.2%, 0.735 / 4.4%, 0.695 / 9.7%). The weights make that finding worse, not
+better. The same profile with its shift measured against the machine's keep
+rate, applied whole, reaches cull recall 19.2% at keep-F1 0.716 (23.9% at
+0.662 with two portrait shoots), which is where the next version, the shift
+the owner approved on 2026-10-29, starts.
+
 ---
 
 ## What the documents say that the code does not
