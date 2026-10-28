@@ -135,5 +135,7 @@
   "— 自动检测 —": "— Auto-detect —",
   "↻ 重试": "↻ Retry",
   "第一次跑某种照片时模型加载需 ~10 秒,后续每张约 2-10 秒。": "The first run of a given kind of photo spends about 10 seconds loading models; after that each photo takes roughly 2-10 seconds.",
-  "30 秒看完核心用法": "30-second guided tour"
+  "30 秒看完核心用法": "30-second guided tour",
+  "当前层级 <b>${data.n_images_here}</b> 张图": "<b>${data.n_images_here}</b> photos at this level",
+  " · 子文件夹 <b>${subN}</b> 个含图(扫描时会递归)": " · <b>${subN}</b> subfolders with photos (a scan recurses)"
 }

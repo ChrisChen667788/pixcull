@@ -19,7 +19,9 @@ from pathlib import Path
 import pytest
 
 from pixcull.i18n import SUPPORTED_LOCALES
-from pixcull.report.page_i18n import localize_page, resolve_lang
+from pixcull.report.page_i18n import (
+    localize_page, resolve_lang, translate_progress_message,
+)
 
 _REPORT = Path(__file__).resolve().parents[1] / "pixcull" / "report" / "templates"
 _PAGES = _REPORT / "pages"
@@ -129,6 +131,24 @@ def test_short_key_does_not_land_inside_a_longer_word():
     html = "<span>重判场景</span><span>场景</span>"
     rendered = localize_page("results.html", html, "en_US")
     assert rendered == "<span>重判场景</span><span>Scene</span>"
+
+
+@pytest.mark.parametrize("chinese,english", [
+    ("找到 91 张图,开始分析…", "Found 91 photos, starting analysis..."),
+    ("已索引 91 张图,准备分析(原图不复制)…",
+     "Indexed 91 photos, ready to analyse (originals are not copied)..."),
+    ("跨照片人脸聚类…", "Clustering faces across photos..."),
+    ("评分与决策…", "Scoring and deciding..."),
+    ("完成", "Done"),
+])
+def test_progress_messages_translate_to_english(chinese, english):
+    assert translate_progress_message(chinese, "en_US") == english
+    assert translate_progress_message(chinese, "zh_CN") == chinese
+
+
+def test_unknown_progress_message_is_left_alone():
+    """A new pipeline line should show up as written, not vanish."""
+    assert translate_progress_message("some new step…", "en_US") == "some new step…"
 
 
 def test_explicit_query_beats_cookie_and_browser():
