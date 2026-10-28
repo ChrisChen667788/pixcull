@@ -159,6 +159,11 @@ _RUNTIME_EN: tuple[tuple[re.Pattern[str], str], ...] = (
 def translate_message(message: str, lang: str) -> str:
     """English for a server-generated runtime line, or the line unchanged.
 
+    Provisional: the pipeline and the upload handlers still send prose,
+    so this is the only place that can translate it. The replacement is
+    for the server to send a message code plus parameters and for the
+    client to render it; this function then goes away.
+
     Covers both pipeline progress (``orchestrator.py``) and the folder
     and upload errors the pages print into the DOM.
     """

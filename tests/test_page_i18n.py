@@ -183,3 +183,27 @@ def test_english_render_sets_the_html_language():
     rendered = localize_page("upload.html", source, "en_US")
     assert '<html lang="en">' in rendered
     assert '<html lang="zh">' not in rendered
+
+
+def test_catalogue_cannot_break_the_page_script():
+    """Translations are spliced into inline JavaScript. A value that
+    closes the script tag, opens an HTML comment or carries a stray
+    backslash would break the page rather than translate it."""
+    import json
+
+    for path in sorted(_CATALOGUES.glob("*.json")):
+        catalogue = json.loads(path.read_text(encoding="utf-8"))
+        for key, value in catalogue.items():
+            lowered = value.lower()
+            assert "</script" not in lowered, f"{path.name}: {key!r} closes <script>"
+            assert "<!--" not in value, f"{path.name}: {key!r} opens a comment"
+
+
+def test_localising_results_keeps_the_payload_placeholder():
+    """The catalogue is applied before ``__PAYLOAD__`` is substituted,
+    so a translation must never swallow the placeholder."""
+    source = (_REPORT / "results.html").read_text(encoding="utf-8")
+    rendered = localize_page("results.html", source, "en_US")
+    assert rendered.count("__PAYLOAD__") == source.count("__PAYLOAD__")
+    assert rendered.count("<script") == source.count("<script")
+    assert rendered.count("</script>") == source.count("</script>")

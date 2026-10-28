@@ -4,6 +4,10 @@ The Chinese templates are the source of truth. This module holds the
 same phrases in English, keyed by the Chinese template, so the selector
 can pick the same template in either language. Placeholders are copied
 verbatim; ``_format_phrase`` fills them after the pick.
+
+Provisional: one parallel table works for one extra language. A second
+translation should not copy this shape; the phrases belong in the shared
+catalogue, where each language is one file.
 """
 
 from __future__ import annotations
