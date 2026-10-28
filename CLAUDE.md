@@ -892,8 +892,15 @@ give +0.041 as sorted and −0.048 on average over 200 redraws (−0.279 …
 the redrawn spread (`scripts/measure_label_provenance.py --reorder`) beside
 any stride figure.  `evaluate()` returns `fold_deltas` and
 `gather_examples_from_runs` counts what it leaves out.
-v3.97–v3.99 (singletons, v2.83, v3.8) are next and are plain engineering,
-not owner asks.
+**v3.97 eliminated the scene-misclassification explanation** for the one
+block where singletons were not culled more: the block was classified
+landscape on 119 of 150 portrait frames, but the wrong label made *more*
+singletons, and under portrait thresholds none of 45 was culled.  Read
+clustering vectors with `duplicate.load_burst_vectors` (refuses the CLIP
+cache, which has the same keys) and check `recluster(...)[1]` before
+measuring anything on `cluster_id`.  The scene classifier is badly wrong on
+two of those four blocks; that is open.  v3.98–v3.99 (v2.83, v3.8) are next
+and are plain engineering, not owner asks.
 
 **Earlier block: `docs/ROADMAP-v3.1-v3.27-charter.md`** — twenty-seven versions read
 out of the same 46-entry competitive research at the level of PixCull's own core

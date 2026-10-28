@@ -338,12 +338,33 @@ sampling noise. Two candidate explanations were tested and eliminated:
 opposite results).
 
 A third — that a scene misclassification widened the clustering window
-and diluted the singleton group — is **still open**. The test of it was
-invalid, because it fed CLIP vectors to a function that groups on
-DINOv2. It can be redone now that the right vectors are on disk.
+and diluted the singleton group — was **eliminated in v3.97 (2026-10-28)**,
+rerun on the DINOv2 vectors after checking each block's clusters reproduce
+from them. The premise held (the exception block was classified landscape
+on 119 of 150 frames) and the mechanism ran the other way: the wrong label
+made more singletons, and under portrait thresholds none of the block's 45
+singletons was culled. Numbers in the v3.97 entry of
+`docs/ROADMAP-v3.88-v3.104-charter.md`; `scripts/measure_singletons.py`
+reruns it.
+
+The table above was computed from the runs made before v3.84 made
+clustering deterministic, and its odds ratios add 0.5 to every cell. On the
+fixed runs the plain odds ratios are 5.35, 2.45, 1.00 and 5.29: the same
+three-of-four. With one label for the whole block, under any scene's
+thresholds or a grid of windows and similarity thresholds, the exception
+block's odds ratio never rises above 0.40.
 
 **Not shipped as a rule.** Three-of-four with an unexplained exception is
-a rule that fails when nobody is looking.
+a rule that fails when nobody is looking. The exception is now less
+explained than before, not more.
+
+**Found on the way, not acted on: the scene classifier is badly wrong on two
+of the four blocks.** Most of a portrait shoot was called landscape; an event
+shoot was called abstract (59), event (46), documentary (19) and unknown
+(17), changing label 75 times in 150 frames. The burst thresholds read that
+label, and so does every scene-specific default. How often this happens
+across a whole catalogue, and whether a block-level vote would be more
+honest than a per-frame label, is a question for its own version.
 
 ---
 

@@ -122,6 +122,82 @@ def cluster_bursts(
     return df
 
 
+#: What `orchestrator._write_burst_cache` stamps on the vectors that
+#: decided `cluster_id`. The CLIP cache beside it has the same keys and a
+#: different `model`, which is the whole hazard.
+BURST_VECTORS_MODEL = "dinov2-base"
+
+
+class WrongVectors(ValueError):
+    """A vector file that is not the one `cluster_id` was computed from."""
+
+
+def load_burst_vectors(path) -> dict[str, np.ndarray]:
+    """filename -> the vector `cluster_bursts` grouped that frame on.
+
+    v3.97 — `burst_embeddings.npz` had a writer and no reader, so every
+    analysis opened it by hand, and `embeddings.npz` beside it has the
+    same `filenames` / `vectors` keys holding 512-d CLIP vectors for
+    search. Cosine similarity does not object to the wrong model: the
+    scene-misclassification test of 2026-09-13 ran on those, found 44
+    singletons where the run had 74, and had to be withdrawn. This
+    refuses any file not stamped as the clustering vectors.
+    """
+    with np.load(path, allow_pickle=False) as z:
+        model = str(z["model"]) if "model" in z.files else ""
+        if model != BURST_VECTORS_MODEL or "emb_col" not in z.files:
+            raise WrongVectors(
+                f"{path} holds {model or 'unlabelled'} vectors; cluster_id "
+                f"was computed from {BURST_VECTORS_MODEL} vectors in "
+                f"burst_embeddings.npz (embeddings.npz is the CLIP search "
+                f"cache, with the same keys)")
+        names = z["filenames"].tolist()
+        # Filenames are basenames, so two folders can each hold a
+        # DSC_0001.JPG. Keyed by name, one of the two vectors would be
+        # dropped and the other handed to both rows, with no error.
+        repeated = sorted({n for n in names if names.count(n) > 1})
+        if repeated:
+            raise WrongVectors(
+                f"{path} names {len(repeated)} file(s) more than once "
+                f"(e.g. {repeated[0]}); a vector per filename cannot be "
+                f"recovered from it")
+        return dict(zip(names, z["vectors"]))
+
+
+def _partition(ids: pd.Series) -> set[frozenset]:
+    return {frozenset(g.index) for _, g in ids.groupby(ids)}
+
+
+def recluster(scores: pd.DataFrame, vectors: dict, *,
+              scene: Optional[str] = None) -> tuple[pd.DataFrame, bool]:
+    """Re-run `cluster_bursts` on a run's own rows and vectors.
+
+    Returns the re-clustered frame and whether it reproduces the
+    `cluster_id` the run recorded (compared as a partition, since the ids
+    themselves are only labels). ``scene`` puts every frame under one
+    scene's thresholds — what the grouping would have been had the scene
+    classifier said that — and the second value is then about the
+    as-run grouping only, computed before the override.
+    """
+    df = scores.copy()
+    if df["filename"].duplicated().any():
+        raise WrongVectors("scores.csv names a file more than once, so its "
+                           "rows cannot be matched to vectors by filename")
+    df["embedding"] = df["filename"].map(vectors)
+    missing = df["embedding"].isna()
+    if missing.any():
+        raise WrongVectors(f"{int(missing.sum())} frame(s) have no vector, "
+                           f"e.g. {df.loc[missing, 'filename'].iloc[0]}")
+    df["datetime"] = pd.to_datetime(df["datetime"], errors="coerce")
+    recorded = df.set_index("filename")["cluster_id"] if "cluster_id" in df else None
+    base = df.drop(columns=["cluster_id"], errors="ignore")
+    as_run = cluster_bursts(base)
+    same = (recorded is not None and
+            _partition(recorded) == _partition(as_run.set_index("filename")["cluster_id"]))
+    out = as_run if scene is None else cluster_bursts(base.assign(scene=scene))
+    return out, same
+
+
 def _time_bucket_groups(
     df: pd.DataFrame,
     scene_col: str,

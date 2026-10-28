@@ -91,6 +91,23 @@ https://github.com/user-attachments/assets/69eddc6b-24d3-406a-ace5-2ed3a5b44e67
 
 ## What's new
 
+**v3.97** — In three of four blocks of photographs the owner labelled blind,
+a frame with no near-duplicate was culled more often than one inside a
+burst; in the fourth it was not. The explanation left open in September was
+that the scene classifier had widened the clustering window there and
+diluted the singletons. Its first test was withdrawn because it read the
+CLIP search vectors instead of the DINOv2 vectors the clusters are built
+from, and the two files have the same layout. Rerun on the right vectors,
+after checking that each block's recorded clusters reproduce from them, the
+premise held and the mechanism did not. The exception block, from a portrait
+shoot, was classified landscape on 119 of 150 frames, but the wrong label
+made more singletons, not fewer, and correcting it sharpened the exception:
+under portrait thresholds none of its 45 singletons was culled, against 15 of
+105 frames in bursts. The explanation is ruled out, the exception stands,
+and no rule is built on three blocks of four. A vector file that is not the
+one the clusters came from is now refused when read, and
+`scripts/measure_singletons.py` reruns the measurement.
+
 **v3.96** — The personalisation figure this project published from real
 photographs, a held-out keep-F1 of 0.801 against 0.799 for the generic
 decision, was computed over 608 labels, and 408 of them were recorded while
@@ -181,42 +198,6 @@ NameError landed in the cell's `except`, and the only test of that path
 checked that a *missing* image was handled. A test now asks ruff for
 undefined names across the package. It found one more: `pixcull m3 eval
 --review` crashed before reading a single verdict.
-
-**v3.94.1** — On Windows, Python 3.13 could not install 3.94.0 without a C++
-compiler. A dependency nothing in the package used, `imagededup` (declared
-for duplicate detection, which has been CLIP and DINOv2 for a long time),
-ships wheels up to Python 3.12 only and has a mandatory C++ extension, so on
-3.13 every install compiled it, and so did every install on Linux ARM. Every
-CI runner has a compiler, so no lane saw it. Resolved for Windows and Python
-3.13 with binaries only, 3.94.0 stops at "No matching distribution found for
-imagededup". It is gone, and `scipy`, which the package imports and only
-imagededup's dependency tree had been guaranteeing, is now declared.
-
-Two checks hold it. A test fails a dependency nothing imports, and an import
-nothing declares. A new CI job resolves the whole dependency tree for Windows,
-Apple Silicon and Linux on Python 3.11, 3.12 and 3.13 with binaries only, and
-builds any dependency that ships only source to prove it is pure Python.
-Holding the README to that list found its platform badge claiming Intel Macs,
-for which torch has published nothing since 2.2; it says Apple Silicon now.
-
-The aesthetic axis had been missing from fresh installs. pyiqa builds both of
-its models on openai-clip, whose first lines import `pkg_resources`;
-setuptools 82 removed that module on 8 February, and since torch 2.13 (8 July)
-requires a recent setuptools, every fresh install has brought in 82 or newer,
-every install from PyPI among them, whichever earlier release. So `import
-clip` failed, the scorer caught the error, and runs went on with five axes and
-a warning telling you to install pyiqa, which was installed. An environment in
-which `python -c "import pkg_resources"` fails was affected; one with
-setuptools older than 82 was not. PixCull now
-supplies the one name openai-clip takes from `pkg_resources` while it imports,
-then removes it, and the warning names the import that failed. The new offline
-test for that axis caught it: in CI it failed on `import clip` before it
-reached for any weights.
-
-Also in this release: a Linux machine with no desktop needs `libgl1` and
-`libglib2.0-0` for OpenCV, and the README says so; and the test that loads
-cached models with every connection refused covers DINOv2 and the aesthetic
-axis's two pyiqa models, not only CLIP.
 
 Earlier releases are in [`CHANGELOG.md`](CHANGELOG.md).
 

@@ -742,6 +742,71 @@ it fed CLIP vectors to a function that groups on DINOv2.
 eliminated. Either result closes the entry; no rule ships on
 three-of-four.
 
+**Shipped — eliminated.** Rerun 2026-10-28 on `burst_embeddings.npz`
+(`dinov2-base`, 768-d), after re-clustering each block and checking the
+partition matches the `cluster_id` its run recorded; it does in all four.
+
+| block | classified as | label changes | as run: singletons, cull single / burst, OR | one label, that scene | one label, its genre |
+|---|---|---|---|---|---|
+| landscape, Zhangye | landscape 136/149 | 4 | 22, 50.0% / 15.7%, 5.35 (p<0.001) | 20, 55.0% / 15.5%, 6.66 | (same) |
+| event, iron-flower | abstract 59, event 46, … | 75 | 104, 67.3% / 45.7%, 2.45 (p=0.018) | abstract: 61, 67.2% / 56.2%, 1.60 | event: 71, 70.4% / 51.9%, 2.21 |
+| portrait, mid-shoot | **landscape 119/150** | 34 | 70, 10.0% / 10.0%, 1.00 (p=1) | landscape: 56, 5.4% / 12.8%, 0.39 | portrait: **45, 0.0% / 14.3%, 0.00 (p=0.006)** |
+| portrait, opening | portrait 119/150 | 23 | 27, 29.6% / 7.4%, 5.29 (p=0.003) | 15, 33.3% / 9.0%, 5.08 | (same) |
+
+The premise was right: the exception block, from the same portrait shoot as
+the opening block, was classified landscape on 119 of 150 frames. The
+mechanism was not. Landscape thresholds are wider in time (5 s against 2 s)
+but stricter in similarity (0.94 against 0.93), and a scene label that
+changes between neighbours splits a burst outright, which it did 34 times.
+Together they made **more** singletons, not fewer. Each correction toward
+the real genre lowers the odds ratio: 1.00 as run, 0.39 under one landscape
+label, 0.00 under portrait, where none of 45 singletons was culled against
+15 of 105 in bursts. The mechanism run the other way agrees: the opening
+block, which replicates, relabelled entirely landscape goes to an odds ratio
+of 12.5, not toward 1. So misclassification cannot have produced the
+exception, and correcting it makes the exception sharper. The exception
+stands, unexplained, and nothing ships on three blocks of four. Under each
+block's own genre the other three keep their direction (6.66, 2.21, 5.08).
+
+It is not a threshold artefact either. With every frame under one label, the
+exception block's odds ratio is at most 0.40 under each of the six scenes'
+thresholds and the defaults, and across a grid of time windows (1, 2, 5, 10,
+30 s) by similarity thresholds (0.90, 0.92, 0.93, 0.94, 0.96). Only the
+as-run clustering, with its label changing 34 times, lifts it to 1.00. No
+clustering of that block puts it beside the other three.
+
+Two corrections to the record. The table in OPEN-ITEMS was computed from
+the runs made before v3.84 made clustering deterministic (`contig_event`,
+`contig_portrait`, `contig_portrait2` reproduce its cull rates exactly; the
+landscape block clustered the same way before and after). Its odds ratios
+add 0.5 to every cell (5.24 = 11.5 × 107.5 / (11.5 × 20.5)); the plain odds
+ratios of the same tables are 5.35, 2.99, 0.89 and 4.44, and on the fixed
+runs 5.35, 2.45, 1.00 and 5.29, the same three-of-four. Every odds ratio in
+this entry is the plain one.
+And the scene classifier is badly wrong on two of the four blocks — most of
+a portrait shoot called landscape, an event shoot called abstract, event,
+documentary and unknown in turn — which matters beyond this question (the
+burst thresholds and every scene-specific default read it). Recorded in
+OPEN-ITEMS, not acted on here.
+
+What changed in the product, so the next analysis cannot repeat September's
+mistake: `burst_embeddings.npz` had a writer and no reader, and the CLIP
+cache beside it has the same `filenames` / `vectors` keys.
+`pixcull.detectors.duplicate.load_burst_vectors` refuses any file not
+stamped `dinov2-base` with an `emb_col`; `recluster` re-runs the clustering
+on a run's own rows and reports whether it reproduces the recorded
+partition, with an optional one-scene override. `scripts/measure_singletons.py`
+is the measurement, and refuses a block whose vectors do not reproduce its
+clusters (the pre-v3.84 runs, which wrote none, are refused). The pre-push
+review (three reviewers, one refuter) re-derived every number with its own
+code and confirmed three defects, fixed here: a vector file naming the same
+basename twice (two folders each holding a `DSC_0001.JPG`) lost one vector
+without a word, and a `scores.csv` doing the same could not be matched to
+vectors at all, so both are now refused; a block with nothing to compare
+printed an odds ratio of `nan`, and now says why there is none; and the
+September odds ratios were Haldane-corrected, as above. Ten mutations each
+turn a test red.
+
 ### v3.98 — v2.83: does the personal profile generalise
 
 **Measure:** `evaluate()` across the two shoots in the correction set.

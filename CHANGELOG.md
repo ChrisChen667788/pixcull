@@ -157,6 +157,8 @@ which is the thing that was actually false.
 
 One line each, exactly as the release was titled at the time.
 
+**v3.94.1** — on Windows, Python 3.13 needed a compiler to install it
+
 **v3.94** — Python 3.13 was refused for one module
 
 **v3.93.2** — PR #4 lands, with the brace it was missing

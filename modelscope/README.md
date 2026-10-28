@@ -72,6 +72,16 @@ tasks:
 **[github.com/ChrisChen667788/pixcull](https://github.com/ChrisChen667788/pixcull)**
 
 ## 最近更新
+- **v3.97**:作者盲标的四块连续照片里,有三块中「没有近似连拍的单张」比连拍里的帧更常
+  被删,第四块不是。9 月留下的解释是:场景分类在那一块上把聚类的时间窗放宽了,冲淡了
+  单张这一组。当时的验证被撤回,因为它读的是用于语义搜索的 CLIP 向量,而聚类用的是
+  DINOv2 向量,两个文件的结构一模一样。这次改用正确的向量重做,并先确认每一块记录下
+  的聚类能用这些向量原样复现:前提成立,机制不成立。那一块出自一场人像拍摄,150 帧里
+  有 119 帧被分成了风景,但错误的标签造出的单张更多而不是更少;把标签改对之后,例外
+  反而更明显 —— 按人像参数聚类,45 张单张一张都没被删,连拍里的 105 帧删了 15 张。这个
+  解释被排除,例外依然成立,也不会凭四块里的三块定规则。现在读取向量时,不是聚类所用
+  的那份文件会被直接拒绝;`scripts/measure_singletons.py` 可以重跑这次测量。
+
 - **v3.96**:这个项目用真实照片公布过的个性化数字 —— 留出集 keep-F1 0.801,通用判定
   0.799 —— 是在 608 条标签上算的,其中 408 条是对着屏幕上的系统判定记下的。v3.29 让
   口味档案排除两类纠正,并要求量一下保留它们对这个数字有多大影响。这两类在本机任何标签
@@ -140,35 +150,6 @@ tasks:
   这条路径唯一的测试只检查了「图片缺失」时的处理。现在有一条测试让 ruff 检查整个
   包里未定义的名字,它又找到一处:`pixcull m3 eval --review` 在读到任何一条
   判断之前就崩溃了。
-
-- **v3.94.1**:在 Windows 上,没有 C++ 编译器就装不上 Python 3.13 版的 3.94.0。
-  有一个包里根本没有代码用到的依赖 `imagededup`(当初声明是为了「去重」,而去重
-  早就改用 CLIP 和 DINOv2 了),它只发布到 Python 3.12 的预编译包,还带一个必须编译
-  的 C++ 扩展,所以在 3.13 上每次安装都要现场编译它,Linux ARM 上也一样。CI 的
-  每台机器都有编译器,所以没有一条 lane 看得到。只用预编译包为 Windows + Python
-  3.13 解析 3.94.0,会停在「No matching distribution found for imagededup」。它已经
-  删掉;包代码直接用到、却只靠 imagededup 的依赖树顺带装上的 `scipy`,现在正式声明。
-
-  有两道检查守住它。一条测试:声明了却没有任何代码 import 的依赖、以及 import 了却
-  没声明的依赖,都会失败。一个新的 CI 任务:只用预编译包,为 Windows、Apple Silicon、
-  Linux 在 Python 3.11、3.12、3.13 上把整棵依赖树解析一遍;只提供源码包的依赖会被
-  现场构建,证明它是纯 Python。拿 README 的说法去对这张清单,发现平台徽章写着支持
-  Intel Mac,而 torch 从 2.2 之后就不再给 Intel Mac 出包了;徽章现在只写 Apple Silicon。
-
-  美学评分轴在全新安装里一直是缺失的。pyiqa 的两个模型都建在 openai-clip 上,而
-  openai-clip 开头几行就 import `pkg_resources`;setuptools 82 在 2 月 8 日删掉了这个
-  模块,而 torch 从 2.13(7 月 8 日)起要求较新的 setuptools,所以那之后的每一次全新
-  安装都会装上 82 或更新的版本,从 PyPI 装的任何一个旧版本都在其中。于是
-  `import clip` 失败,评分器把错误吞掉,运行照常进行,只剩五个轴,外加一行让你去装
-  pyiqa 的警告 —— 而 pyiqa 明明已经装好了。在环境里运行
-  `python -c "import pkg_resources"` 报错,就说明它受影响;setuptools 低于 82 的环境不受影响。现在 PixCull 在导入时临时提供 openai-clip 从
-  `pkg_resources` 里拿的那一个名字,用完就撤掉;警告也会说出真正失败的是哪个导入。
-  是这次给美学轴新加的断网测试抓到的:它在 CI 里还没去拿任何权重,就先在
-  `import clip` 上失败了。
-
-  这一版还有:没有桌面环境的 Linux 需要给 OpenCV 装 `libgl1` 和 `libglib2.0-0`,
-  README 里写上了;在网络全部被拒的情况下加载已缓存模型的那条测试,现在除了 CLIP,
-  也覆盖 DINOv2 和美学评分轴用的两个 pyiqa 模型。
 
 更早的版本记录在 [`CHANGELOG.md`](https://github.com/ChrisChen667788/pixcull/blob/main/modelscope/CHANGELOG.md)。
 
