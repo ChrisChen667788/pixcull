@@ -76,7 +76,7 @@
   // The server ships the dictionary for the page language in the
   // document, so the first render is already translated. /api/v1/locale
   // still answers, and still wins, when the user switches language.
-  let I18N_STRINGS = (typeof window !== "undefined" && window.PIXCULL_I18N) || {};
+  let I18N_STRINGS = (typeof window !== "undefined" && window.__pixcullStrings) || {};
   let I18N_CURRENT = (typeof window !== "undefined" && window.PIXCULL_LANG) || "zh_CN";
 
   // v2.23-P1 — the full supported locale cycle (was 3 of 13: an
