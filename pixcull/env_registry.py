@@ -51,6 +51,7 @@ KNOWN: dict[str, str] = {
     "PIXCULL_ENV":                  "environment name reported in telemetry",
     "PIXCULL_INLINE_ROWS":          "how many rows the first paint inlines",
     "PIXCULL_LIBRARY_DIR":          "cross-run library index location",
+    "PIXCULL_LANG":                 "page language for the server-rendered pages (en_US / zh_CN / a supported locale)",
     "PIXCULL_LICENSE_API":          "licence server base URL",
     "PIXCULL_LLM_BUDGET_YUAN":      "daily cloud-judging spend ceiling",
     "PIXCULL_LUTS_DIR":             "folder of .cube LUTs for the video grade menu (default ~/.pixcull/luts)",

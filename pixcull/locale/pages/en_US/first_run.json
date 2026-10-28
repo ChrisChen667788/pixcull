@@ -1,0 +1,16 @@
+{
+  "PixCull — 首次设置": "PixCull · First-time setup",
+  "正在准备 PixCull": "Preparing PixCull",
+  "首次启动需要下载 CLIP / DINOv2 / U²-Net / pyiqa,大约 5–10 分钟。": "The first launch downloads CLIP / DINOv2 / U²-Net / pyiqa; this takes about 5-10 minutes.",
+  "下载 ~2 GB 预训练模型(完成后所有功能离线可用)…": "Downloading about 2 GB of pretrained models (everything works offline afterwards)...",
+  "下载使用 Hugging Face 的全球 CDN — 如果速度异常慢,可以": "Downloads use Hugging Face's global CDN. If it is unusually slow, you can",
+  "后用国内代理重启。完成后 PixCull 全离线运行。": "restart with a local mirror. PixCull then runs fully offline.",
+  "连接 Hugging Face…": "Connecting to Hugging Face...",
+  "部分模型下载失败,降级运行(影响有限)": "Some models failed to download; running in degraded mode (limited impact)",
+  "✓ 准备完成 — 跳转至主界面…": "✓ Ready. Opening the workspace...",
+  "全部就绪": "All set",
+  "重连中…": "Reconnecting...",
+  "完成 ": "Done ",
+  "第 ": "Item ",
+  " 个": ""
+}

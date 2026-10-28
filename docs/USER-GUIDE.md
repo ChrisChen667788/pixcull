@@ -341,6 +341,7 @@ PixCull 读取下面这些环境变量,**只有这些**。设了别的名字,程
 | `PIXCULL_ENV` | environment name reported in telemetry |
 | `PIXCULL_INLINE_ROWS` | how many rows the first paint inlines |
 | `PIXCULL_LIBRARY_DIR` | cross-run library index location |
+| `PIXCULL_LANG` | page language for the server-rendered pages (`en_US`, `zh_CN`, or another supported locale) |
 | `PIXCULL_LICENSE_API` | licence server base URL |
 | `PIXCULL_LLM_BUDGET_YUAN` | daily cloud-judging spend ceiling |
 | `PIXCULL_LUTS_DIR` | folder of .cube LUTs for the video grade menu (default ~/.pixcull/luts) |

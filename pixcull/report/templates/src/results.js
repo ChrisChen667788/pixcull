@@ -191,6 +191,20 @@
       I18N_CURRENT === "ar_SA" ? "rtl" : "ltr");
   }
 
+  function _cookieLang() {
+    try {
+      const m = document.cookie.match(/(?:^|;\s*)pixcull_lang=([^;]+)/);
+      return m ? decodeURIComponent(m[1]) : "";
+    } catch (_e) { return ""; }
+  }
+
+  function _rememberCookieLang(lang) {
+    try {
+      document.cookie = "pixcull_lang=" + encodeURIComponent(lang)
+        + "; path=/; max-age=31536000; SameSite=Lax";
+    } catch (_e) { /* cookies blocked: the server falls back to Accept-Language */ }
+  }
+
   async function _applyLang(lang) {
     const strings = await _fetchLocale(lang);
     if (!strings) {
@@ -278,9 +292,12 @@
     const btn = document.getElementById("langSwitcher");
     if (btn) {
       btn.addEventListener("click", async () => {
-        // Cycle zh → en → ja → zh
+        // Cycle zh -> en -> ja -> ...
         const idx = I18N_CYCLE.indexOf(I18N_CURRENT);
         const next = I18N_CYCLE[(idx + 1) % I18N_CYCLE.length];
+        // Keep the server-rendered pages in the same language on the
+        // next navigation. localStorage alone never reaches the server.
+        _rememberCookieLang(next);
         btn.disabled = true;
         const ok = await _applyLang(next);
         btn.disabled = false;
