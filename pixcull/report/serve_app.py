@@ -10660,7 +10660,7 @@ class _Handler(BaseHTTPRequestHandler):
         # fetch resolves.
         from pixcull.i18n import load_locale
         boot = (
-            "<script>window.PIXCULL_LANG=%s;window.PIXCULL_I18N=%s;</script>"
+            "<script>window.PIXCULL_LANG=%s;window.__pixcullStrings=%s;</script>"
             % (
                 _safe_dumps(page_lang),
                 _safe_dumps(load_locale(page_lang)).replace("</", "<\\/"),
