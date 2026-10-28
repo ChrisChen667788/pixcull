@@ -34,8 +34,9 @@ def _templates() -> list[Path]:
     """Every server-rendered page with a Chinese source, including the
     two that live beside results.html rather than under pages/."""
     found = list(_PAGES.glob("*.html"))
-    found += [_REPORT / "video_review.html", _REPORT / "timeline.html"]
-    return sorted(p for p in found if p.name != "results.html")
+    found += [_REPORT / "video_review.html", _REPORT / "timeline.html",
+              _REPORT / "results.html"]
+    return sorted(found)
 
 
 def _template_for(stem: str) -> Path:
@@ -121,6 +122,13 @@ def test_every_supported_locale_gets_a_catalogue():
             continue
         assert not (_CATALOGUES.parent / locale).exists(), (
             f"{locale}: page catalogue exists but no test covers it")
+
+
+def test_short_key_does_not_land_inside_a_longer_word():
+    """Chinese has no spaces, so a short key must not match mid-word."""
+    html = "<span>重判场景</span><span>场景</span>"
+    rendered = localize_page("results.html", html, "en_US")
+    assert rendered == "<span>重判场景</span><span>Scene</span>"
 
 
 def test_explicit_query_beats_cookie_and_browser():

@@ -16,6 +16,8 @@ the V14.3 patch fixed:
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from pixcull.scoring.photo_advice import (
@@ -353,3 +355,55 @@ def test_idx_rotation_still_works_with_vertical():
     # With 3 wedding subject phrases and 10 different idx values,
     # we expect at least 2 different phrases to appear.
     assert len(picks) >= 2, f"only saw {len(picks)} unique phrases: {picks}"
+
+
+# ---------------------------------------------------------------------------
+# 5. English advice
+# ---------------------------------------------------------------------------
+
+_CJK = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
+
+
+@pytest.mark.parametrize("decision", ["keep", "maybe", "cull"])
+def test_english_advice_has_no_chinese(decision):
+    """``lang="en"`` must produce English strengths, weaknesses, fixes
+    and verdict text — this is what an English results page renders in
+    the lightbox."""
+    row = {"filename": "en.jpg", "scene": "portrait", "face_count": 1,
+           "subject_fraction": 0.6, "flags": "closed_eyes",
+           "score_final": 0.42, "score_exposure": 0.3}
+    final = {"subject": 4.5, "technical": 2.0, "composition": 3.0,
+             "light": 2.0, "moment": 2.0, "aesthetic": 3.5}
+    ad = build_advice(row, final, decision, idx=3, lang="en")
+    blob = " ".join([
+        ad["verdict_short"],
+        " ".join(ad["strengths"]),
+        " ".join(ad["weaknesses"]),
+        " ".join(ad.get("suggestions") or []),
+        ad.get("maybe_rationale") or "",
+    ])
+    assert not _CJK.search(blob), f"Chinese leaked into English advice: {blob}"
+
+
+def test_default_advice_stays_chinese():
+    """Callers that do not pass ``lang`` keep the existing Chinese output."""
+    row = {"filename": "zh.jpg", "scene": "portrait", "face_count": 1,
+           "subject_fraction": 0.6}
+    final = {"subject": 5.0, "technical": 4.0, "composition": 4.0,
+             "light": 4.0, "moment": 4.0, "aesthetic": 4.0}
+    ad = build_advice(row, final, "keep", idx=0)
+    assert _CJK.search(" ".join(ad["strengths"]) + ad["verdict_short"])
+
+
+@pytest.mark.parametrize("vertical", ["wedding", "bird", "kids", "sports"])
+def test_english_advice_with_a_vertical_has_no_chinese(vertical):
+    """Per-vertical phrase pools are a separate catalogue from the
+    generic one, so they need the same English guard."""
+    row = {"filename": "v.jpg", "scene": "portrait", "face_count": 2,
+           "subject_fraction": 0.6, "score_exposure": 0.2,
+           "flags": "closed_eyes", "score_final": 0.4}
+    final = {"subject": 4.5, "technical": 2.0, "composition": 3.0,
+             "light": 1.0, "moment": 2.0, "aesthetic": 3.0}
+    ad = build_advice(row, final, "maybe", idx=0, vertical=vertical, lang="en")
+    blob = " ".join(ad["strengths"] + ad["weaknesses"] + ad["suggestions"])
+    assert not _CJK.search(blob), f"{vertical} leaked Chinese: {blob}"

@@ -65,9 +65,9 @@ def counting_build(mod, monkeypatch):
     calls = []
     original = mod._build_results_uncached
 
-    def counted(run_id):
+    def counted(run_id, lang="zh"):
         calls.append(run_id)
-        return original(run_id)
+        return original(run_id, lang)
 
     monkeypatch.setattr(mod, "_build_results_uncached", counted)
     # a shared dict across tests would leak hits; start clean
@@ -284,3 +284,18 @@ def test_near_dup_cache_is_bounded(mod, tmp_path, monkeypatch):
     for i in range(mod._NEARDUP_CACHE_MAX + 4):
         mod._cached_near_dup_groups(p, cache, 0.5 + i * 0.01)
     assert len(mod._NEARDUP_CACHE) <= mod._NEARDUP_CACHE_MAX
+
+
+def test_english_and_chinese_builds_are_cached_separately(
+        mod, monkeypatch, tmp_path, counting_build):
+    """The advice text is built per language, so a cached English row
+    list must never be served to a Chinese request (or the other way)."""
+    rid = _make_run(mod, monkeypatch, tmp_path)
+    # The first build may create annotations.jsonl, which moves the
+    # mtime part of the key; warm both languages once, then count.
+    mod._build_results(rid, "zh")
+    mod._build_results(rid, "en_US")
+    baseline = len(counting_build)
+    mod._build_results(rid, "zh")
+    mod._build_results(rid, "en_US")
+    assert len(counting_build) == baseline
