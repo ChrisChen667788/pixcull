@@ -37,6 +37,7 @@ KNOWN: dict[str, str] = {
     "PIXCULL_API_KEY":              "API key for the containerised server",
     "PIXCULL_APPCAST_URL":          "Sparkle appcast URL for the desktop app",
     "PIXCULL_ASPECT_GUARD":         "aspect-ratio guard in near-duplicate matching",
+    "PIXCULL_RAW_PREVIEW":          "read the camera's embedded JPEG preview instead of the RAW (0 = decode the RAW; needed for log picture profiles such as Sony PP9)",
     "PIXCULL_AUDIO_MODEL":          "path to an audio event model (.onnx) for `pixcull video`",
     "PIXCULL_AUDIO_SYNC":           "enable audio-to-moment sync",
     "PIXCULL_AXIS_GROUPS":          "axis grouping strategy",

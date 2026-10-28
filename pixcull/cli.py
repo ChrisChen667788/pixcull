@@ -72,6 +72,14 @@ def run(
              "target_count_* columns record every decision this changed. "
              "A target-count keep is not the same claim as a threshold keep.",
     ),
+    decode_raw: bool = typer.Option(
+        False, "--decode-raw",
+        help="Decode the RAW instead of the camera's embedded JPEG preview. "
+             "Use this when the camera shot a picture profile (Sony PP9 is "
+             "S-Log3): the preview is log-encoded, so thumbnails look flat "
+             "and exposure/sharpness are measured on the wrong pixels. "
+             "Costs ~0.5-2 s per frame instead of ~30 ms.",
+    ),
     rescorer_mode: Optional[str] = typer.Option(
         None, "--rescorer-mode",
         help="V1.2 learned-head mode: off | shadow | adjudicate. "
@@ -118,6 +126,9 @@ def run(
 ) -> None:
     """Run full culling + scoring pipeline on a folder."""
     from pixcull.pipeline.orchestrator import run_pipeline
+
+    if decode_raw:
+        os.environ["PIXCULL_RAW_PREVIEW"] = "0"
 
     # v3.69 — before anything is decided, say which PIXCULL_* names in
     # this environment PixCull does not read. A misspelt setting used to

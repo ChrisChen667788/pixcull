@@ -1,4 +1,5 @@
 import io
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -6,6 +7,26 @@ import rawpy
 from PIL import Image, ImageOps
 
 from pixcull.io.formats import ALL_EXTS, RAW_EXTS
+
+
+def raw_preview_enabled() -> bool:
+    """Whether a RAW is read through the camera's embedded JPEG preview.
+
+    On by default: extracting the preview costs ~30 ms where a full
+    demosaic costs 0.5-2 s, which is the difference between a 5k shoot
+    finishing and not.
+
+    It is the wrong pixels when the camera shot a picture profile. Sony
+    PP9 is S-Log3/S-Gamut3.Cine, so the embedded preview is log-encoded:
+    measured on one ARW from a real shoot, the preview had mean 74 and
+    p99 120 where the sensor data had mean 117 and p99 251. Thumbnails
+    look flat and grey, and exposure / sharpness / aesthetics are
+    scored on a tone curve the photographer never asked for. Set
+    ``PIXCULL_RAW_PREVIEW=0`` (or pass ``--decode-raw``) to decode the
+    RAW itself.
+    """
+    v = os.environ.get("PIXCULL_RAW_PREVIEW", "1").strip().lower()
+    return v not in {"0", "off", "false", "no"}
 
 
 def load_image(path: Path, max_side: int = 2048) -> Optional[Image.Image]:
@@ -29,13 +50,17 @@ def load_image(path: Path, max_side: int = 2048) -> Optional[Image.Image]:
     try:
         if ext in RAW_EXTS:
             with rawpy.imread(str(path)) as raw:
-                try:
-                    thumb = raw.extract_thumb()
-                    if thumb.format == rawpy.ThumbFormat.JPEG:
-                        img = Image.open(io.BytesIO(thumb.data))
-                    else:
-                        img = Image.fromarray(thumb.data)
-                except rawpy.LibRawNoThumbnailError:
+                img = None
+                if raw_preview_enabled():
+                    try:
+                        thumb = raw.extract_thumb()
+                        if thumb.format == rawpy.ThumbFormat.JPEG:
+                            img = Image.open(io.BytesIO(thumb.data))
+                        else:
+                            img = Image.fromarray(thumb.data)
+                    except rawpy.LibRawNoThumbnailError:
+                        img = None
+                if img is None:
                     img = Image.fromarray(
                         raw.postprocess(use_camera_wb=True, half_size=True)
                     )
