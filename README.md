@@ -91,6 +91,22 @@ https://github.com/user-attachments/assets/69eddc6b-24d3-406a-ace5-2ed3a5b44e67
 
 ## What's new
 
+**v3.99.1** — A taste profile's threshold shift is now measured against what
+the machine keeps of the same photographs, not against a fixed 65%. v3.98
+found that the 65% pushed a photographer stricter than the machine toward
+keeping more, and the owner chose to change it. On the owner's five
+blind-labelled shoots, learned on four and applied whole to the fifth, a
+profile now agrees with them on 74.3% of photographs, against 67.4% with no
+profile and 67.2% with the old formula, and finds 74 of their 177 culls where
+the old one found 5. Nearly all of that is one shoot, the event where they
+culled most frames (47 of the 50 photographs it now agrees on); on the other
+four the new shift is within 0.02 of zero and changes six verdicts. keep-F1
+falls, 0.743 to 0.716. Without the machine's
+verdicts on the same photographs a profile now gets no shift rather than the
+65% one. A profile written before this keeps applying as it was: the owner's
+own is unchanged, and `pixcull run` and `pixcull personalize show` say its
+shift was fitted against 65% and how to re-fit it.
+
 **v3.99** — Should a photographer who shoots portraits and landscapes keep one
 taste profile, or one for each? September's 158 blind labels, 79 of each,
 cannot say: each kind is a single shoot, so every test frame sits beside frames
@@ -180,23 +196,6 @@ human. A file that contributes nothing is listed with the reason. Nothing in
 the product calls the audit yet: the next four versions measure what those
 labels unblocked (what the excluded labels did to the personalisation numbers,
 whether the profile generalises across shoots), and they are what it is for.
-
-**v3.94.4** — On a Windows machine set to Traditional Chinese, `pixcull run`
-stopped with `UnicodeDecodeError` before analysing a single photograph (#5,
-reported by [@KennethLeePhotographer](https://github.com/KennethLeePhotographer)).
-The bundled scene templates are UTF-8 and were opened in the system's encoding,
-which is cp950 there. [@mayuriphad](https://github.com/mayuriphad)'s PR #6 fixed
-that read and the two `scores.csv` readers with the same shape.
-
-Twelve more places had the same cause in a form that search did not cover: the
-output of ffprobe, ffmpeg and exiftool was decoded in the system encoding too,
-although those tools write UTF-8 whatever the machine is set to. Under a Big5
-locale a video with Chinese in its name or metadata failed to probe. A
-photograph's own rating, label and keywords read back as nothing, and the IPTC
-writer takes nothing as nothing to preserve, so it could overwrite a rating the
-photographer had set. All of them name UTF-8 now. A test parses the package
-source and fails any text read or decoded without a named encoding, and two
-tests run the ffprobe and exiftool readers against stand-ins that write UTF-8.
 
 Earlier releases are in [`CHANGELOG.md`](CHANGELOG.md).
 
@@ -317,8 +316,10 @@ PixCull is the alternative that flips all three:
 15. **Active-learning queue.** The next photos most worth labeling,
     ranked by rescorer disagreement + uncertainty + threshold-
     proximity. What you label feeds the personal profile; measured
-    on the author's five blind-labelled shoots (v3.98), that profile
-    has not yet improved the verdict on a shoot it had not seen.
+    on the author's five blind-labelled shoots (v3.99.1), on a shoot
+    it had not seen it agrees with them more often, 67% to 74% of
+    photographs, nearly all of it on the one shoot where they culled
+    most, while keep-F1 falls from 0.743 to 0.716.
 16. **Multi-user profiles.** Studio with two shooters? Each user has
     their own verticals + face library; shared team verticals for
     house style.
@@ -1247,8 +1248,9 @@ PixCull 把这三件事全部翻过来:
     切换。
 15. **主动学习队列 (P2.4)。** 按 rescorer 分歧度 + 不确定度 + 阈值附
     近度 排序的 "下一张最值得标的照片"。你标注的照片会进入个人口味档案;
-    但在作者自己五场盲标拍摄上实测(v3.98),这份档案还没有让没见过的
-    那一场判得更好。
+    在作者自己五场盲标拍摄上实测(v3.99.1),拿它去判一场没见过的拍摄,
+    和作者判断一致的比例从 67% 升到 74%,提升几乎都来自作者删得最多的
+    那一场,keep-F1 则从 0.743 降到 0.716。
 16. **多用户 profile (V28)。** 工作室里两个二摄?各有自己的 vertical +
     人脸库;共享 team vertical 用于工作室主基调。
 

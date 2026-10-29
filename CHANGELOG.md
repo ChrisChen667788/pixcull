@@ -157,6 +157,8 @@ which is the thing that was actually false.
 
 One line each, exactly as the release was titled at the time.
 
+**v3.94.4** — issue #5's twelve siblings: tool output decoded in the locale
+
 **v3.94.3** — transformers 5.20.0 cannot import a model on our torch floor
 
 **v3.94.2** — three of PR #4's fixes had not landed, and the contact sheet had no photographs

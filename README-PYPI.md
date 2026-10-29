@@ -79,10 +79,12 @@ interactive review workspace: keyboard-first grid, ⌘K palette, per-axis
   plain-language "why", not just a number.
 - **Learns your taste** — corrections feed a personal profile that tilts
   the axis weights and the keep/cull boundary toward your own calls.
-  Measured on the author's own blind labels across five shoots, it has not
-  yet improved the verdict on a shoot it had not seen;
-  `pixcull personalize learn` reports that figure for your corrections,
-  with cull recall beside it.
+  Measured on the author's own blind labels across five shoots, on a shoot
+  it had not seen it agrees with them more often (67% to 74% of
+  photographs), nearly all of it on the one shoot where they culled most
+  frames, while keep-F1 falls from 0.743 to 0.716;
+  `pixcull personalize learn` reports the held-out figure for your
+  corrections, with cull recall beside it.
 - **Burst & near-dup folding** — stacks collapse to the peak frame with a
   one-key compare.
 - **Video too** — temporal scoring and reel-candidate detection with the

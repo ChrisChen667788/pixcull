@@ -123,11 +123,12 @@ def test_the_pooled_arm_trains_on_the_other_verticals_too(monkeypatch):
 # -- v3.99: the shipped comparison measured memory -----------------------
 
 
-def _shoots(vertical, shoots, n, decision="keep", stars=4.0):
+def _shoots(vertical, shoots, n, decision="keep", stars=4.0, machine=""):
     """`shoots` whole shoots of one vertical, n corrections each."""
     return [Example({a: stars for a in ("technical", "subject", "composition",
                                         "light", "moment", "aesthetic")},
-                    decision, run_id=f"{vertical}-{s}", vertical=vertical)
+                    decision, run_id=f"{vertical}-{s}", vertical=vertical,
+                    machine=machine)
             for s in range(shoots) for _ in range(n)]
 
 
@@ -176,13 +177,17 @@ def test_a_thin_vertical_decides_with_the_pooled_profile():
     """learn_profiles gives a vertical under MIN_PER_VERTICAL no profile of
     its own, so the per-vertical arm must not invent one. The two kinds
     differ here, so a profile of its own would decide differently."""
-    exs = _shoots("portrait", 3, 12, "keep", 3.3) + _shoots("landscape", 3, 12, "cull", 1.0)
-    out = evaluate_by_vertical(exs)
+    # The machine called every portrait maybe and every landscape keep, so
+    # a portrait profile of its own lowers the bar (-0.08) where the
+    # pooled one, keeping as much as the machine, does not move it.
+    def both(n):
+        return (_shoots("portrait", 3, n, "keep", 3.0, machine="maybe")
+                + _shoots("landscape", 3, n, "cull", 1.0, machine="keep"))
+    out = evaluate_by_vertical(both(12))
     # 24 to learn from per held-out shoot, under the bar: identical arms.
     assert out["fold_deltas"] == [0.0] * 6
     # ...and the same corrections over the bar do make a difference.
-    big = _shoots("portrait", 3, 20, "keep", 3.3) + _shoots("landscape", 3, 20, "cull", 1.0)
-    assert any(evaluate_by_vertical(big)["fold_deltas"])
+    assert any(evaluate_by_vertical(both(20))["fold_deltas"])
 
 
 def test_the_held_out_shoot_is_out_of_the_pooled_arm_whole(monkeypatch):

@@ -52,6 +52,11 @@ axis weights tilting the fusion, by recomputing `score_final` from the
 per-dimension scores a run keeps — only where, untilted, they give it back.
 v3.98's figures were the shift alone; whole, the learned profile culls less
 still, 2.5% against 7.7% with none.
+
+From v3.99.1 `learn_profile` measures the shift against the machine's keep
+rate, so the evaluate() sections report the new formula (−0.055 across five
+shoots; v3.98's −0.027 was the fixed-65% one). The product section reports
+both: the fixed-65% shift by `_fixed_shift`, and the learned one.
 """
 from __future__ import annotations
 
@@ -182,50 +187,89 @@ def _relative_shift(train, rows, cfg) -> float:
     return max(-MAX_THRESHOLD_SHIFT, min(MAX_THRESHOLD_SHIFT, x))
 
 
+def _fixed_shift(train) -> float:
+    """The shift as `profile_from_preferences` measured it until v3.99.1:
+    against a fixed 65% keep rate. Kept so the change can be reported."""
+    from pixcull.scoring.personalized import BASELINE_KEEP_RATE, MAX_THRESHOLD_SHIFT
+    owner_keep = sum(e.decision == "keep" for e in train) / len(train)
+    x = -(owner_keep - BASELINE_KEEP_RATE) * 0.5
+    return round(max(-MAX_THRESHOLD_SHIFT, min(MAX_THRESHOLD_SHIFT, x)), 4)
+
+
+def _confusion_line(label: str, pairs) -> str:
+    """Where one arm's verdicts went over every held-out photograph."""
+    n = len(pairs)
+    agree = sum(t == p for t, p in pairs) / n
+    culled = sum(p == "cull" for _t, p in pairs)
+    hit = sum(t == p == "cull" for t, p in pairs)
+    culls = sum(t == "cull" for t, _p in pairs)
+    kept = sum(t == "cull" and p == "keep" for t, p in pairs)
+    maybe = sum(t == "cull" and p == "maybe" for t, p in pairs)
+    return (f"    {label:<34} agrees {agree:.1%}  culls {culled:<3} of which the owner "
+            f"culled {hit}  owner's culls kept {kept}/{culls}, left at maybe {maybe}")
+
+
 def product_leave_one_shoot_out(exs, rows, cfg) -> list[str]:
-    """The learned threshold shift, in the product's decision, on a shoot
-    it was not learned from. Beside it, what a shift measured against the
-    machine's own keep rate on the same frames would have done — reported,
-    not shipped. Since v3.99 also the whole profile, the shift and the axis
-    weights that tilt `fuse_score` in a run, where this run's score_final
-    comes back from its per-dimension scores (`refuses`)."""
+    """A learned profile in the product's decision, on a shoot it was not
+    learned from: its threshold shift, and (since v3.99) the whole profile,
+    the shift and the axis weights that tilt `fuse_score` in a run, where
+    this run's score_final comes back from its per-dimension scores
+    (`refuses`). Two shifts: the fixed-65% one `profile_from_preferences`
+    used until v3.99.1 (the v3.98 finding), and the one it learns now,
+    measured against the machine's own keep rate on the same frames."""
     from pixcull.scoring.personal_learn import axis_weights
     whole = refuses(rows, cfg)
-    shoots = sorted({e.run_id for e in exs})
-    out, acc = [], defaultdict(list)
-    for held in shoots:
+    arms = [("none", "no shift"), ("fixed", "fixed 65% shift (before v3.99.1)"),
+            ("fixed_w", "fixed 65% shift and axis weights"),
+            ("learned", "learned shift (vs machine)"),
+            ("learned_w", "learned shift and axis weights")]
+    out, acc, pairs = [], defaultdict(list), defaultdict(list)
+    for held in sorted({e.run_id for e in exs}):
         train = [e for e in exs if e.run_id != held]
         test = [e for e in exs if e.run_id == held]
         prof = learn_profile(train)
-        shift = prof.keep_threshold_shift
-        rel = _relative_shift(train, rows, cfg)
-        if whole:
-            # v3.99 — the profile as run_pipeline applies it: the shift
-            # and the axis weights, which tilt the fusion.
-            w = axis_weights(prof)
-            acc["whole"].append(product_scores(
-                [(e.decision, _product_verdict(rows[e.key], shift, cfg, w)) for e in test]))
-        res = {k: product_scores([(e.decision, _product_verdict(rows[e.key], s, cfg))
-                                  for e in test])
-               for k, s in (("none", 0.0), ("learned", shift), ("relative", rel))}
-        for k, v in res.items():
-            acc[k].append(v)
+        w = axis_weights(prof) if whole else None
+        fixed, learned = _fixed_shift(train), prof.keep_threshold_shift
+        setting = {"none": (0.0, None), "fixed": (fixed, None), "fixed_w": (fixed, w),
+                   "learned": (learned, None), "learned_w": (learned, w)}
+        res, verdicts = {}, {}
+        for k, (shift, aw) in setting.items():
+            if k.endswith("_w") and not whole:
+                continue
+            ps = [(e.decision, _product_verdict(rows[e.key], shift, cfg, aw)) for e in test]
+            pairs[k] += ps
+            verdicts[k] = [p for _t, p in ps]
+            res[k] = product_scores(ps)
+            acc[k].append(res[k])
         fmt = lambda t: f"{t[0]:.3f}/{'—' if t[1] is None else format(t[1], '.0%')}"
-        out.append(f"    held out {held:<26} learned shift {shift:+.3f}: "
-                   f"{fmt(res['none'])} → {fmt(res['learned'])}   "
-                   f"vs-machine shift {rel:+.3f}: {fmt(res['relative'])}")
+        moved = "learned_w" if "learned_w" in verdicts else "learned"
+        changed = sum(a != b for a, b in zip(verdicts["none"], verdicts[moved]))
+        truth = [e.decision for e in test]
+
+        def found(k):       # the owner's culls it culls, and their keeps it culls
+            return (sum(t == p == "cull" for t, p in zip(truth, verdicts[k])),
+                    sum(t == "keep" and p == "cull" for t, p in zip(truth, verdicts[k])),
+                    sum(t == p for t, p in zip(truth, verdicts[k])) / len(test))
+        (h0, k0, a0), (h1, k1, a1) = found("none"), found(moved)
+        out.append(f"    held out {held:<26} none {fmt(res['none'])}   "
+                   f"fixed 65% {fixed:+.3f}: {fmt(res['fixed'])}   "
+                   f"learned {learned:+.3f}: {fmt(res['learned'])}")
+        out.append(f"      the learned profile{' applied whole' if moved == 'learned_w' else ''} "
+                   f"changes {changed}/{len(test)} verdicts; of the owner's "
+                   f"{truth.count('cull')} culls it finds {h1} (none {h0}), culls {k1} "
+                   f"frames they kept (none {k0}), agrees {a1:.1%} (none {a0:.1%})")
     head = []
-    for k, label in (("none", "no shift"), ("learned", "learned shift"),
-                     ("relative", "shift vs machine (hypothetical)"),
-                     ("whole", "learned shift and axis weights")):
+    for k, label in arms:
         if not acc[k]:
-            head.append(f"  mean, {label:<32} not measured: score_final does not "
+            head.append(f"  mean, {label:<34} not measured: score_final does not "
                         "come back from this run's per-dimension scores")
             continue
         f1 = statistics.mean(v[0] for v in acc[k])
         crs = [v[1] for v in acc[k] if v[1] is not None]
-        head.append(f"  mean, {label:<32} keep-F1 {f1:.3f}  cull recall "
+        head.append(f"  mean, {label:<34} keep-F1 {f1:.3f}  cull recall "
                     f"{statistics.mean(crs):.1%}" if crs else "")
+    head.append("  over every held-out photograph:")
+    head += [_confusion_line(label, pairs[k]) for k, label in arms if pairs[k]]
     return head + ["  (keep-F1/cull recall per held-out shoot)"] + out
 
 
@@ -343,7 +387,7 @@ def product_by_vertical(exs, rows, cfg) -> list[str]:
 
     def learned(g):
         prof = learn_profile(g)
-        return {"fixed 65%": prof.keep_threshold_shift,
+        return {"fixed 65%": _fixed_shift(g),
                 "vs machine": _relative_shift(g, rows, cfg), "w": axis_weights(prof)}
 
     for held in sorted({e.run_id for e in exs}):

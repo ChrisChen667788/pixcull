@@ -380,3 +380,46 @@ def test_input_validation_does_not_need_a_key():
         "the strata guard sits after the key check, so it is unreachable "
         "without a key — which is exactly how it passed locally and "
         "failed on CI")
+
+
+def test_the_shift_is_fitted_against_what_the_machine_keeps(tmp_path):
+    """v3.99.1. The rule keeps every frame here (score 0.9, no flags) and
+    the photographer keeps 70%: stricter than the machine, so the bar goes
+    UP. The fixed 65% would have lowered it."""
+    rows = [(f"{i}.jpg", "", 0.9) for i in range(60)]
+    s = _scores(tmp_path, rows)
+    lab = _labels(tmp_path, {f"{i}.jpg": "keep" if i < 42 else "cull" for i in range(60)})
+    dest = tmp_path / "profile.json"
+    res = CliRunner().invoke(app, ["calibrate", "--labels", str(lab), "--scores", str(s),
+                                   "--out", str(dest), "--write"], env={"COLUMNS": "200"})
+    assert res.exit_code == 0, res.output
+    assert "you keep 70% of these frames and the machine keeps 100%" in res.output
+    saved = json.loads(dest.read_text())
+    assert saved["shift_basis"] == "machine" and saved["machine_keep_rate"] == 1.0
+    assert saved["keep_threshold_shift"] == 0.08            # -(0.70 - 1.0) * 0.5, capped
+
+
+def test_show_says_what_the_shift_was_measured_against(tmp_path, monkeypatch):
+    from pixcull import cli
+    path = tmp_path / "personal_profile.json"
+    monkeypatch.setattr(cli, "_PROFILE_PATH", path)
+    path.write_text(json.dumps({
+        "schema": "pixcull.personal_profile.v1", "user_id": "local", "n_annotations": 70,
+        "keep_rate": 0.97, "cull_rate": 0.03, "keep_threshold_shift": -0.08,
+        "label_provenance": "blind"}), encoding="utf-8")
+    res = CliRunner().invoke(app, ["personalize", "show"], env={"COLUMNS": "300"})
+    assert res.exit_code == 0, res.output
+    assert "against a fixed 65%, written before v3.99.1" in res.output
+    assert "calibrate" in res.output
+
+
+def test_a_run_says_when_its_profile_predates_the_machine_basis():
+    """Owner's call: the profile is not reset, so the run has to say it.
+    Parsed, not grepped: the call must be in run_pipeline's code."""
+    import ast
+    import inspect
+    from pixcull.pipeline import orchestrator
+    tree = ast.parse(inspect.getsource(orchestrator.run_pipeline))
+    calls = {n.func.id for n in ast.walk(tree)
+             if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)}
+    assert "legacy_shift_note" in calls

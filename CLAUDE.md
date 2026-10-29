@@ -917,8 +917,15 @@ back exactly from the per-dimension scores in its `scores.csv`**, so a
 profile's axis weights can be measured offline (`_refuse` in
 `scripts/measure_generalisation.py`, checked against `fuse_score`); v3.98
 applied the shift alone, and whole the profile culls less still (2.5%).
-Next is the threshold shift measured against the machine's keep rate
-(owner-approved 2026-10-29).
+**v3.99.1 measures the shift against the machine's keep rate on the same
+photographs** (owner's decision, 2026-10-29), recomputed from `score_final`
+by `personal_learn.machine_verdict`, never read from the shifted `decision`
+column; no machine verdicts means no shift (`shift_basis: "none"`), not 65%.
+Held out a shoot at a time and applied whole it agrees with the owner on
+74.3% against 67.4% with none, and 47 of those 50 photographs are the one
+event shoot.  The
+owner kept their profile (−0.080, fitted against 65%); runs and
+`personalize show` say so.  v3.100 is next.
 
 **Earlier block: `docs/ROADMAP-v3.1-v3.27-charter.md`** — twenty-seven versions read
 out of the same 46-entry competitive research at the level of PixCull's own core

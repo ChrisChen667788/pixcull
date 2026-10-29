@@ -233,7 +233,9 @@ def test_the_script_measures_across_and_within_shoots(tmp_path, capsys):
         assert f"held out {name}" in out
     assert "within the shoot (memorisation)" in out
     assert "the product's decision, leave one shoot out" in out
-    assert "shift vs machine (hypothetical)" in out
+    assert "fixed 65% shift (before v3.99.1)" in out and "learned shift (vs machine)" in out
+    # Review of v3.99.1: "kept" alone hid the culls left at maybe.
+    assert "left at maybe" in out
 
 
 def test_the_script_scores_a_saved_profile(tmp_path, capsys):
@@ -371,7 +373,7 @@ def test_the_script_says_when_it_cannot_measure_the_axis_weights(tmp_path, capsy
         specs += ["--shoot", name, "portrait", str(sh), str(sc)]
     assert _script().main(specs + ["--redraws", "2"]) == 0
     out = capsys.readouterr().out
-    assert "learned shift and axis weights   not measured" in out
+    assert f"{'learned shift and axis weights':<34} not measured" in out
     assert "the whole profile: not measured" in out
 
 
@@ -403,7 +405,7 @@ def test_the_script_measures_the_whole_profile_where_it_can(tmp_path, capsys):
         specs += ["--shoot", name, "portrait", str(_sheet(tmp_path / f"{name}.json", verdicts)), str(sc)]
     assert _script().main(specs + ["--redraws", "2"]) == 0
     out = capsys.readouterr().out
-    assert "learned shift and axis weights   keep-F1" in out
+    assert f"{'learned shift and axis weights':<34} keep-F1" in out
     assert "the whole profile, shift and axis weights, as run_pipeline applies it:" in out
 
 
@@ -434,7 +436,8 @@ def test_every_whole_profile_path_decides_on_the_refused_score(tmp_path, capsys,
                                  label_provenance="blind"), prof)
     assert mod.main(specs + ["--redraws", "2", "--profile", str(prof)]) == 0
     out = capsys.readouterr().out
-    assert "learned shift and axis weights   keep-F1 0.000  cull recall 100.0%" in out
+    assert f"{'learned shift and axis weights':<34} keep-F1 0.000  cull recall 100.0%" in out
+    assert f"{'fixed 65% shift and axis weights':<34} keep-F1 0.000  cull recall 100.0%" in out
     whole = out.split("as run_pipeline applies it:")[1]
     assert "fixed 65%   pooled           keep-F1 0.000  cull recall 100.0%" in whole
     with_ = next(l for l in out.splitlines() if l.strip().startswith("with it"))
@@ -463,3 +466,33 @@ def test_the_refused_score_is_the_products_fusion(flags, tilt):
     assert _flags_of(row) == fl, "the fixture's flags must parse as the run's do"
     want = fuse_score(raw, fl, "portrait", cfg, axis_pref=tilt)["final"]
     assert _script()._refuse(row, tilt, cfg) == pytest.approx(want)
+
+
+# ------------------- v3.99.1: the shift is measured against the machine
+
+
+def test_the_old_formula_is_kept_only_to_report_it(tmp_path):
+    """The script's fixed-65% arm is exactly what profile_from_preferences
+    computed until v3.99.1: -(keep rate - 0.65) * 0.5, capped, to 4 places."""
+    mod = _script()
+    exs = [Example(axes={}, decision="keep")] * 76 + [Example(axes={}, decision="cull")] * 24
+    assert mod._fixed_shift(exs) == round(-(0.76 - 0.65) * 0.5, 4)
+    assert mod._fixed_shift([Example(axes={}, decision="keep")] * 10) == -0.08
+
+
+def test_the_learned_shift_is_the_one_measured_against_the_machine(tmp_path):
+    """learn_profile on blind-sheet examples gives the shift the script
+    reports as measured against the machine's keep rate."""
+    from pixcull.config import PixCullConfig
+    from pixcull.scoring.personal_learn import learn_profile
+    mod = _script()
+    cfg = PixCullConfig.load()
+    specs = []
+    for name, share, seed in (("a", 0.9, 1), ("b", 0.6, 2)):
+        sh, sc = _shoot_files(tmp_path, name, 40, share, seed)
+        specs.append((name, "portrait", sh, sc))
+    exs, _dup, rows = mod.assemble(specs)
+    assert all(e.machine for e in exs), "every example carries the machine's verdict"
+    prof = learn_profile(exs)
+    assert prof.shift_basis == "machine"
+    assert prof.keep_threshold_shift == pytest.approx(mod._relative_shift(exs, rows, cfg), abs=1e-4)

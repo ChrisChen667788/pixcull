@@ -16,8 +16,9 @@ The personalization is intentionally LIGHTWEIGHT:
   - no per-user fine-tuning of CLIP / rescorer weights
   - no continuous online learning
   - just a single linear shift on the global keep_min / maybe_min
-    thresholds, sized by how much the user's keep-rate diverges
-    from the global median
+    thresholds, sized by how much the user keeps beyond what the
+    machine keeps on the same photographs (v3.99.1; it used to be a
+    fixed 65%, see ``profile_from_preferences``)
 
 Trade-off: shifts a 0.6 keep-threshold to ~0.55 for a "permissive"
 labeler who keeps 50% of their batches, or to ~0.65 for a strict
@@ -41,9 +42,9 @@ logger = logging.getLogger(__name__)
 
 MIN_ANNS_FOR_PERSONALIZATION = 50
 # Global baseline keep_rate across all PixCull deployments — derived
-# from the golden set (130 rows, 84 keep ≈ 0.65). A user whose keep
-# rate matches the baseline gets zero shift; deviations move the
-# threshold proportionally.
+# from the golden set (130 rows, 84 keep ≈ 0.65). Until v3.99.1 the shift
+# was measured from it; now it is only the keep rate reported for a
+# profile with no annotations. See profile_from_preferences.
 BASELINE_KEEP_RATE = 0.65
 # Cap the absolute shift so a single user with weird first-batch
 # data can't tank precision. ±0.08 = ±8 pp on a 0-1 score scale.
@@ -78,6 +79,14 @@ class PersonalProfile:
     #: than shipped, because the evidence behind any one entry is one
     #: shoot's worth.
     scene_exemptions: dict = field(default_factory=dict)
+    #: v3.99.1 — the share of the same photographs the machine keeps with
+    #: no shift, which the shift is measured against. None when the
+    #: photographs' own verdicts were not available to the fit.
+    machine_keep_rate: Optional[float] = None
+    #: v3.99.1 — what the shift was measured against: "machine", "none"
+    #: (no machine keep rate, so no shift), or "" for a profile written
+    #: before v3.99.1, whose shift was measured against a fixed 65%.
+    shift_basis: str = ""
 
     #: Provenances that can move a threshold. `blind` is what
     #: `pixcull m3 label` writes — the photographer judged the frame with
@@ -124,12 +133,25 @@ def profile_from_preferences(prefs: dict) -> PersonalProfile:
     keep_rate = keeps / total if total else BASELINE_KEEP_RATE
     cull_rate = culls / total if total else 0.0
 
-    # Threshold shift: user keeps MORE than baseline → permissive →
-    # LOWER threshold (let more in). user keeps LESS → strict →
-    # RAISE threshold (require higher confidence). The factor 0.5
-    # turns "10pp keep-rate gap" into "5pp threshold shift" — a
-    # gentle calibration, not an aggressive override.
-    shift = -(keep_rate - BASELINE_KEEP_RATE) * 0.5
+    # Threshold shift: the user keeps MORE than the machine keeps of the
+    # same photographs → LOWER threshold (let more in); keeps LESS → RAISE
+    # it. The factor 0.5 turns "10pp keep-rate gap" into "5pp threshold
+    # shift" — a gentle calibration, not an aggressive override.
+    #
+    # v3.99.1 — measured against the machine, not a fixed 65%. The 65%
+    # told a photographer who keeps 76% and is stricter than the machine
+    # (v3.81: 27 frames the machine kept and they culled, none the other
+    # way) that they were permissive, and moved the bar the wrong way:
+    # over five blind-labelled shoots the learned shift was negative on
+    # every split and cull recall halved, 7.7% to 3.6% (v3.98). Without
+    # the machine's keep rate on the same photographs there is nothing to
+    # compare with, so there is no shift.
+    machine = prefs.get("machine_keep_rate")
+    if machine is not None and total:
+        shift = -(keep_rate - float(machine)) * 0.5
+        basis = "machine"
+    else:
+        shift, basis = 0.0, "none"
     shift = max(-MAX_THRESHOLD_SHIFT, min(MAX_THRESHOLD_SHIFT, shift))
 
     keep_means = (prefs.get("avg_rubric_when") or {}).get("keep") or {}
@@ -156,7 +178,22 @@ def profile_from_preferences(prefs: dict) -> PersonalProfile:
                           for k, v in cull_means.items() if v is not None},
         most_cared_axis=most_cared,
         label_provenance=str(prefs.get("label_provenance") or ""),
+        machine_keep_rate=(round(float(machine), 4) if machine is not None else None),
+        shift_basis=basis,
     )
+
+
+def legacy_shift_note(profile: PersonalProfile) -> str:
+    """v3.99.1 — what to say about a profile whose shift was measured
+    against the fixed 65%, or "" when there is nothing to say. Such a
+    profile keeps applying as it is: resetting it is the photographer's
+    call, and re-fitting it is one command."""
+    if profile.shift_basis or not profile.keep_threshold_shift:
+        return ""
+    return (f"this profile's shift ({profile.keep_threshold_shift:+.3f}) was "
+            f"measured against a fixed 65% keep rate, not against what the "
+            f"machine keeps of the same photographs; "
+            f"`pixcull calibrate --labels ... --scores ... --write` re-fits it")
 
 
 def apply_threshold_shift(
@@ -194,6 +231,8 @@ def save_profile(profile: PersonalProfile, path: Path) -> None:
         "most_cared_axis":   profile.most_cared_axis,
         "label_provenance":  profile.label_provenance,
         "scene_exemptions":  profile.scene_exemptions,
+        "machine_keep_rate": profile.machine_keep_rate,
+        "shift_basis":       profile.shift_basis,
     }
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2),
                      encoding="utf-8")
@@ -220,4 +259,8 @@ def load_profile(path: Path) -> Optional[PersonalProfile]:
         most_cared_axis=data.get("most_cared_axis"),
         label_provenance=str(data.get("label_provenance") or ""),
         scene_exemptions=data.get("scene_exemptions") or {},
+        machine_keep_rate=(float(data["machine_keep_rate"])
+                           if data.get("machine_keep_rate") is not None else None),
+        # A profile written before v3.99.1 has no basis: "" says so.
+        shift_basis=str(data.get("shift_basis") or ""),
     )

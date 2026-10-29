@@ -34,7 +34,8 @@ def test_below_min_annotations_no_shift():
 
 
 def test_permissive_user_lowers_threshold():
-    """A user who keeps 90% gets a NEGATIVE shift (lower threshold)."""
+    """A user who keeps more than the machine keeps of the same photographs
+    gets a NEGATIVE shift (lower threshold)."""
     prefs = {
         "total_human_annotations": 100,
         # 90 keep, 5 maybe, 5 cull = keep_rate 0.9
@@ -44,29 +45,73 @@ def test_permissive_user_lowers_threshold():
         # are about the SHIFT, so they declare a provenance that can carry
         # one; the gate itself is covered separately below.
         "label_provenance": "blind",
+        # v3.99.1 — and what the machine kept of the same photographs.
+        "machine_keep_rate": 0.70,
     }
     p = profile_from_preferences(prefs)
     assert p.is_active()
-    assert p.keep_rate > BASELINE_KEEP_RATE
-    assert p.keep_threshold_shift < 0
+    assert p.keep_threshold_shift == pytest.approx(-0.08)    # -(0.9-0.7)*0.5, capped
+    assert p.shift_basis == "machine" and p.machine_keep_rate == 0.7
     keep, maybe = apply_threshold_shift(0.60, 0.40, p)
     assert keep < 0.60   # lowered for permissive user
     assert maybe < 0.40
 
 
 def test_strict_user_raises_threshold():
-    """A user who keeps 20% gets a POSITIVE shift (raise threshold)."""
+    """A user who keeps less than the machine gets a POSITIVE shift."""
     prefs = {
         "total_human_annotations": 100,
         "scene_decision_counts": {"landscape": {"keep": 20, "maybe": 20, "cull": 60}},
         "avg_rubric_when": {"keep": {"technical": 4.8}, "cull": {"technical": 2.0}},
         "label_provenance": "blind",
+        "machine_keep_rate": 0.30,
     }
     p = profile_from_preferences(prefs)
-    assert p.keep_rate < BASELINE_KEEP_RATE
-    assert p.keep_threshold_shift > 0
+    assert p.keep_threshold_shift == pytest.approx(0.05)     # -(0.2-0.3)*0.5
     keep, _ = apply_threshold_shift(0.60, 0.40, p)
     assert keep > 0.60
+
+
+def test_the_shift_is_measured_against_the_machine_not_65():
+    """v3.99.1. The owner keeps 76% and is stricter than the machine, which
+    keeps more of the same frames: the fixed 65% called that permissive and
+    lowered the bar; measured against the machine it raises it."""
+    prefs = {"total_human_annotations": 100,
+             "scene_decision_counts": {"x": {"keep": 76, "maybe": 0, "cull": 24}},
+             "label_provenance": "blind", "machine_keep_rate": 0.84}
+    p = profile_from_preferences(prefs)
+    assert p.keep_rate > BASELINE_KEEP_RATE
+    assert p.keep_threshold_shift == pytest.approx(0.04)     # stricter, not looser
+
+
+def test_without_the_machines_verdicts_there_is_no_shift():
+    """Nothing to compare with is no shift, not a fixed 65% standing in."""
+    prefs = {"total_human_annotations": 100,
+             "scene_decision_counts": {"x": {"keep": 95, "maybe": 0, "cull": 5}},
+             "label_provenance": "blind"}
+    p = profile_from_preferences(prefs)
+    assert p.keep_threshold_shift == 0.0
+    assert p.shift_basis == "none" and p.machine_keep_rate is None
+
+
+def test_a_profile_from_before_says_what_its_shift_was_measured_against(tmp_path):
+    """Owner's call (2026-10-29): the active profile is not reset. It loads
+    as it was written, applies as it did, and says how to re-fit it."""
+    import json
+    from pixcull.scoring.personalized import legacy_shift_note
+    path = tmp_path / "personal_profile.json"
+    path.write_text(json.dumps({
+        "schema": "pixcull.personal_profile.v1", "user_id": "local",
+        "n_annotations": 70, "keep_rate": 0.97, "cull_rate": 0.03,
+        "keep_threshold_shift": -0.08, "label_provenance": "blind"}), encoding="utf-8")
+    old = load_profile(path)
+    assert old.keep_threshold_shift == -0.08 and old.is_active()
+    assert old.shift_basis == "" and old.machine_keep_rate is None
+    assert "fixed 65%" in legacy_shift_note(old) and "calibrate" in legacy_shift_note(old)
+    new = profile_from_preferences({"total_human_annotations": 100,
+                                    "scene_decision_counts": {"x": {"keep": 95, "cull": 5}},
+                                    "machine_keep_rate": 0.9})
+    assert legacy_shift_note(new) == ""
 
 
 def test_shift_capped_by_max():
@@ -106,6 +151,8 @@ def test_save_and_load_round_trip(tmp_path: Path):
         axis_cull_means={"technical": 2.0, "subject": 3.0},
         most_cared_axis="technical",
         label_provenance="blind",
+        machine_keep_rate=0.65,
+        shift_basis="machine",
     )
     path = tmp_path / "profile.json"
     save_profile(p, path)
@@ -117,6 +164,7 @@ def test_save_and_load_round_trip(tmp_path: Path):
     assert loaded.axis_keep_means == {"technical": 4.3, "subject": 4.5}
     assert loaded.most_cared_axis == "technical"
     assert loaded.is_active()  # 120 >= MIN_ANNS_FOR_PERSONALIZATION
+    assert (loaded.machine_keep_rate, loaded.shift_basis) == (0.65, "machine")
 
 
 def test_load_profile_missing_returns_none(tmp_path: Path):
@@ -197,3 +245,40 @@ def test_provenance_round_trips_through_disk(tmp_path):
     p.write_text(json.dumps(d))
     assert load_profile(p).label_provenance == ""
     assert not load_profile(p).is_active()
+
+
+def test_the_profile_api_says_its_shift_has_no_basis(tmp_path, monkeypatch):
+    """v3.99.1. The preferences the server aggregates carry no machine
+    verdicts, so the profile it derives has no shift and says why, rather
+    than a fixed 65% standing in for the comparison."""
+    import importlib.util
+    import json as _json
+    import sys
+    import threading
+    import urllib.request
+    from http.server import ThreadingHTTPServer
+    repo = Path(__file__).resolve().parent.parent
+    spec = importlib.util.spec_from_file_location(
+        "serve_app_profile_api_test", repo / "pixcull" / "report" / "serve_app.py")
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = mod
+    spec.loader.exec_module(mod)
+    out = tmp_path / "run1" / "output"
+    out.mkdir(parents=True)
+    (out / "scores.csv").write_text("filename,scene\n" + "".join(
+        f"f{i}.jpg,portrait\n" for i in range(60)), encoding="utf-8")
+    (out / "annotations.jsonl").write_text("".join(
+        _json.dumps({"filename": f"f{i}.jpg", "overall_label": "keep", "source": "human"}) + "\n"
+        for i in range(60)), encoding="utf-8")
+    monkeypatch.setattr(mod, "_DEMO_ROOT", tmp_path)
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), mod._Handler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        url = f"http://127.0.0.1:{srv.server_address[1]}/api/v1/users/profile"
+        with urllib.request.urlopen(url, timeout=30) as r:
+            got = _json.loads(r.read().decode("utf-8"))
+    finally:
+        srv.shutdown()
+    assert got["keep_rate"] == 1.0
+    assert got["shift_basis"] == "none" and got["machine_keep_rate"] is None
+    assert got["keep_threshold_shift"] == 0.0

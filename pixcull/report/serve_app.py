@@ -5306,6 +5306,11 @@ class _Handler(BaseHTTPRequestHandler):
             "keep_rate":          profile.keep_rate,
             "cull_rate":          profile.cull_rate,
             "keep_threshold_shift": profile.keep_threshold_shift,
+            # v3.99.1 — what the shift was measured against. These
+            # preferences carry no machine verdicts, so it is "none" and
+            # the shift is 0: a fixed 65% is no longer stood in for them.
+            "shift_basis":        profile.shift_basis,
+            "machine_keep_rate":  profile.machine_keep_rate,
             "axis_keep_means":    profile.axis_keep_means,
             "axis_cull_means":    profile.axis_cull_means,
             "most_cared_axis":    profile.most_cared_axis,

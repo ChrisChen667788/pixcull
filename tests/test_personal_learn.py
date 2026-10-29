@@ -1,4 +1,5 @@
 """v2.4-P0-2 — tests for learning a taste profile from local corrections."""
+import json
 import random
 
 from pixcull.scoring.personal_learn import (
@@ -106,3 +107,42 @@ def test_cli_personalize_show_and_reset(tmp_path, monkeypatch):
     assert r.exit_code == 1                      # no profile yet
     r = CliRunner().invoke(cli.app, ["personalize", "reset"])
     assert r.exit_code == 0                       # nothing to reset, but clean
+
+
+# ------------------- v3.99.1: what the machine kept of the same photographs
+
+
+def test_the_machine_keep_rate_is_every_example_or_none():
+    """A rate over the examples that happen to carry a verdict would be
+    over a different set of photographs."""
+    full = [Example({}, "keep", machine="keep"), Example({}, "cull", machine="keep"),
+            Example({}, "keep", machine="maybe"), Example({}, "cull", machine="cull")]
+    assert aggregate_prefs(full)["machine_keep_rate"] == 0.5
+    assert "machine_keep_rate" not in aggregate_prefs(full + [Example({}, "keep")])
+
+
+def test_the_machines_verdict_is_recomputed_not_read():
+    """The row's `decision` has an active profile's shift in it already;
+    the fit needs what the machine decides with no profile."""
+    from pixcull.scoring.personal_learn import machine_verdict
+    row = {"score_final": "0.95", "flags": "", "scene": "portrait", "decision": "cull"}
+    assert machine_verdict(row) == "keep"
+    assert machine_verdict({"score_final": "", "decision": "keep"}) == ""
+
+
+def test_gathered_corrections_carry_the_machines_verdict(tmp_path):
+    out = tmp_path / "shoot" / "output"
+    out.mkdir(parents=True)
+    stars = ",".join(f"rubric_{a}_stars" for a in AXES)
+    (out / "scores.csv").write_text(
+        f"filename,scene,flags,score_final,decision,{stars}\n"
+        + "".join(f"f{i}.jpg,portrait,,{0.95 if i % 2 else 0.05},keep,4,4,4,4,4,4\n"
+                  for i in range(60)), encoding="utf-8")
+    (out / "annotations.jsonl").write_text("".join(
+        json.dumps({"filename": f"f{i}.jpg", "overall_label": "keep", "source": "human"}) + "\n"
+        for i in range(60)), encoding="utf-8")
+    exs = gather_examples_from_runs(tmp_path)
+    assert {e.machine for e in exs} == {"keep", "cull"}, "recomputed, not the column"
+    prof = learn_profile(exs)
+    assert prof.shift_basis == "machine" and prof.machine_keep_rate == 0.5
+    assert prof.keep_threshold_shift == -0.08     # keeps all, machine half: capped

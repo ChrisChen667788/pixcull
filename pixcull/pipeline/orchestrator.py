@@ -692,7 +692,7 @@ def run_pipeline(
     _personal_exempt: dict = {}
     _axis_pref: dict[str, float] | None = None
     try:
-        from pixcull.scoring.personalized import load_profile
+        from pixcull.scoring.personalized import legacy_shift_note, load_profile
         _pp = load_profile(Path.home() / ".pixcull" / "personal_profile.json")
         if _pp is not None and _pp.is_active():
             from pixcull.scoring.personal_learn import axis_weights
@@ -705,6 +705,12 @@ def run_pipeline(
                 f"{_personal_shift:+.3f} + axis-weighted toward [b]{_top}[/] "
                 f"(from {_pp.n_annotations} of your corrections; cares most "
                 f"about {_pp.most_cared_axis or '—'})")
+            # v3.99.1 — a profile fitted against the fixed 65% still
+            # applies as it is (resetting it is the photographer's call);
+            # the run says so, and how to re-fit it.
+            _note = legacy_shift_note(_pp)
+            if _note:
+                console.print(f"[yellow]{_note}[/]")
     except Exception:
         _personal_shift = 0.0
         _axis_pref = None

@@ -64,6 +64,12 @@ the machine's own keep rate instead; and require a cross-shoot measurement
 before a profile switches itself on. Numbers in the v3.98 entry of
 `docs/ROADMAP-v3.88-v3.104-charter.md`.
 
+**Decided 2026-10-29:** the second was done in v3.99.1. Learned on four shoots
+and applied whole to the fifth, a profile now agrees with the owner on 74.3%
+of photographs against 67.4% with none, 47 of the 50 extra on the one event shoot. The
+first and third were answered "not now": the active profile still carries
+its −0.080 fitted against 65%, and each run says so.
+
 **Found by that version's review, not changed: the live tether path ignores
 the profile.** `run_pipeline` (`pixcull run`, the web analysis) applies an
 active profile's shift; `tether._analyze_one_file` calls `decide()` without

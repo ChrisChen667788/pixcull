@@ -1012,6 +1012,85 @@ rate, applied whole, reaches cull recall 19.2% at keep-F1 0.716 (23.9% at
 0.662 with two portrait shoots), which is where the next version, the shift
 the owner approved on 2026-10-29, starts.
 
+### v3.99.1 — the shift measured against the machine (owner's decision)
+
+**Decided by the owner on 2026-10-29**, one of the three v3.98 left open:
+measure the shift against what the machine keeps, not a fixed 65%. The other
+two were answered "not now": the active profile stays as it is, and nothing
+gates a profile switching itself on.
+
+**What changed.** `profile_from_preferences` sets the shift to
+−(the photographer's keep rate − the machine's keep rate on the same
+photographs) × 0.5, under the same ±0.08 cap. The machine's verdict is
+recomputed from each row's `score_final` with no profile applied
+(`personal_learn.machine_verdict`), not read from `decision`, which an active
+profile has already shifted. `pixcull calibrate` passes it from the frames it
+fits on, `gather_examples_from_runs` and `examples_from_blind_sheet` carry it
+on every example, and `aggregate_prefs` passes the rate on only when every
+example has one. Without it there is no shift, and the profile says so
+(`shift_basis: "none"`), where the 65% used to stand in; the server's profile
+preview is such a case, its preferences carry no machine verdicts. Profiles
+record `machine_keep_rate` and `shift_basis`. One written before this loads
+with an empty basis and applies as it did, and `pixcull run` and
+`pixcull personalize show` say its shift was fitted against 65% and that
+`pixcull calibrate ... --write` re-fits it.
+
+**Measured** with `scripts/measure_generalisation.py` on the five shoots of
+v3.98, learned on four and applied to the fifth, in the product's decision;
+"whole" is the profile as a run applies it, shift and axis weights:
+
+| | keep-F1 | cull recall | agrees with the owner | culls (the owner's) | of the owner's 177 culls: kept / left at maybe |
+|---|---|---|---|---|---|
+| no profile | 0.743 | 7.7% | 67.4% | 32 (22) | 87 / 68 |
+| fixed 65%, shift | 0.777 | 3.6% | 67.6% | 3 (3) | 120 / 54 |
+| fixed 65%, whole | 0.769 | 2.5% | 67.2% | 6 (5) | 106 / 66 |
+| against the machine, shift | 0.734 | 10.4% | 69.1% | 49 (34) | 84 / 59 |
+| against the machine, whole | 0.716 | 19.2% | 74.3% | 106 (74) | 82 / 21 |
+
+Taking the two 2024 portrait blocks as one shoot: agreement 67.4%, 67.2%,
+67.4%, 69.2%, 74.7% in the same order.
+
+Nearly all of the difference is one shoot: of the 50 more photographs the
+whole profile agrees on, 47 are the event shoot and 3 Zhangye. On the four
+keep-heavy shoots the new
+shift is +0.005, −0.010, −0.004 and −0.020 (the old one −0.035 to −0.048),
+and with the whole profile it changes six verdicts across those 578
+photographs. On the event shoot, where the owner culled 91 of 150, it is
++0.045 against the old −0.080: applied whole it finds 72 of the 91 culls
+where no profile finds 20, culls 31 frames the owner kept against 10, and
+agreement goes from 16.7% to 48.0%. One shoot of one kind is what this rests
+on, and the mean keep-F1 falls.
+
+`pixcull calibrate`, which fits on one sheet and reports before it writes,
+run report-only on each of the owner's blind sheets: the shift is +0.057 and
++0.074 on the two Zhangye sheets (they keep 77% and 79%, the machine 89% and
+94%), +0.057 and +0.033 on the 2024 portrait blocks (89% and 90% against
+100% and 97%), −0.006 on the 2023 portraits (85% against 84%), and −0.080 on
+the event sheet, where the machine keeps 8% and the owner 39%. On the five
+keep-heavy sheets it finds at most one more of the owner's culls, which
+v3.81 explains: those culls are not near the boundary.
+
+`evaluate()` moves as well, and the wrong way: −0.055 across five shoots
+(−0.027 before) and −0.381 within portrait (−0.178). It applies the shift to
+its own axis-mean decision, not to the product's, against whose keep rate it
+is now measured; the product's decision is the one a profile changes. Its
+figures are reported as they are.
+
+**Limits, as found by the review.** The machine's verdict is recomputed
+without the run's vertical, which `scores.csv` does not record, so a run
+made with `--vertical` is compared with the untuned machine. A row with no
+`score_final` gives no machine verdict, so the whole fit gets no shift, where
+`pixcull calibrate` scores such a row as 0. And a run made while a profile
+with unequal axis weights was active has those weights in its `score_final`;
+the keep rate is then the machine's with that tilt, which is also the score a
+re-fitted profile's shift will be applied to. None of the three applies to the
+owner's runs.
+
+Fourteen mutations each turn a test red, among them reading the machine's
+verdict from the shifted `decision` column, a rate over only the examples
+that carry one, falling back to 65% without one, and a run that stops saying
+its profile predates the change.
+
 ---
 
 ## What the documents say that the code does not

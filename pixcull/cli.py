@@ -1513,8 +1513,7 @@ def calibrate(
     from pixcull.config import PixCullConfig
     from pixcull.scoring.decision import decide
     from pixcull.scoring.personalized import (
-        BASELINE_KEEP_RATE, MIN_ANNS_FOR_PERSONALIZATION,
-        profile_from_preferences, save_profile,
+        MIN_ANNS_FOR_PERSONALIZATION, profile_from_preferences, save_profile,
     )
     from pixcull.scoring.vlm_eval import _flags_of, load_labels
 
@@ -1571,6 +1570,9 @@ def calibrate(
                         r.get(f"rubric_{a}_stars") or 0)
                 except (TypeError, ValueError):
                     pass
+    # v3.99.1 — what the machine keeps of these same frames, unshifted:
+    # the shift is measured against it, not against a fixed 65%.
+    before = {r["filename"]: _decide_with(r, 0.0) for r in rows}
     prefs = {
         "user_id": "local",
         "total_human_annotations": len(rows),
@@ -1579,12 +1581,12 @@ def calibrate(
             k: {a: v / max(axis_n[k], 1) for a, v in axis_sum[k].items()}
             for k in ("keep", "cull")},
         "label_provenance": "blind",
+        "machine_keep_rate": sum(v == "keep" for v in before.values()) / len(rows),
     }
     prof = profile_from_preferences(prefs)
     shift = prof.keep_threshold_shift
 
     # --- report -------------------------------------------------------
-    before = {r["filename"]: _decide_with(r, 0.0) for r in rows}
     after = {r["filename"]: _decide_with(r, shift) for r in rows}
     truth = {r["filename"]: _truth(r) for r in rows}
     changed = [f for f in before if before[f] != after[f]]
@@ -1610,8 +1612,9 @@ def calibrate(
     t.add_row("decisions changed", "—", str(len(changed)))
     console.print(t)
     console.print(f"[dim]you culled {sum(1 for v in truth.values() if v == 'cull')}"
-                  f" of {len(rows)}; the rule ships a threshold fitted to "
-                  f"{BASELINE_KEEP_RATE:.0%} keep[/dim]")
+                  f" of {len(rows)}; you keep {prof.keep_rate:.0%} of these frames "
+                  f"and the machine keeps {prof.machine_keep_rate:.0%}, which is "
+                  f"what the shift is measured against[/dim]")
 
     if len(rows) < MIN_ANNS_FOR_PERSONALIZATION:
         console.print(f"[yellow]{len(rows)} frames — a profile needs "
@@ -2786,7 +2789,7 @@ def personalize_learn(
     table.add_column("metric")
     table.add_column("value", justify="right")
     table.add_row("keep rate", f"{prof.keep_rate:.0%}")
-    table.add_row("threshold shift", f"{prof.keep_threshold_shift:+.3f}")
+    table.add_row("threshold shift", f"{prof.keep_threshold_shift:+.3f} ({_shift_basis(prof)})")
     table.add_row("most-cared axis", prof.most_cared_axis or "—")
     # v3.96 — the rule that leaves some corrections out used to do it
     # without a word, so nobody could say how many there were.
@@ -2838,7 +2841,7 @@ def personalize_learn(
 @personalize_app.command("show")
 def personalize_show() -> None:
     """Print the current saved taste profile."""
-    from pixcull.scoring.personalized import load_profile
+    from pixcull.scoring.personalized import legacy_shift_note, load_profile
     prof = load_profile(_PROFILE_PATH)
     if prof is None:
         console.print("[yellow]No profile yet.[/yellow] Run "
@@ -2846,8 +2849,21 @@ def personalize_show() -> None:
         raise typer.Exit(code=1)
     console.print(
         f"[bold]Taste profile[/bold] ({prof.n_annotations} corrections) · "
-        f"keep {prof.keep_rate:.0%} · shift {prof.keep_threshold_shift:+.3f} · "
+        f"keep {prof.keep_rate:.0%} · shift {prof.keep_threshold_shift:+.3f} "
+        f"({_shift_basis(prof)}) · "
         f"cares most about [cyan]{prof.most_cared_axis or '—'}[/cyan]")
+    note = legacy_shift_note(prof)
+    if note:
+        console.print(f"[yellow]{note}[/yellow]")
+
+
+def _shift_basis(prof) -> str:
+    """v3.99.1 — what a profile's shift was measured against, in words."""
+    if prof.shift_basis == "machine":
+        return f"against the machine's {prof.machine_keep_rate:.0%} keep on the same photos"
+    if prof.shift_basis == "none":
+        return "no shift: the machine's verdicts on these photos were not available"
+    return "against a fixed 65%, written before v3.99.1"
 
 
 @personalize_app.command("reset")

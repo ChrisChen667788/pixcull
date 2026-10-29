@@ -53,6 +53,10 @@ class Example:
     # v3.98 — which photograph, as `filename@datetime`. The filename alone
     # is not one: the shutter counter wraps, so two shoots reuse names.
     key: str = ""
+    # v3.99.1 — the machine's own verdict on this photograph, with no
+    # profile applied: what a threshold shift is measured against. "" when
+    # the run's scores did not allow it to be recomputed.
+    machine: str = ""
 
 
 def _f(v) -> float:
@@ -79,12 +83,41 @@ def aggregate_prefs(examples: Iterable[Example]) -> dict:
             sums[e.decision][a] += _f(e.axes.get(a))
     avg = {d: {a: (sums[d][a] / nd[d] if nd[d] else 0.0) for a in AXES}
            for d in DECISIONS}
-    return {
+    out = {
         "user_id": "local",
         "total_human_annotations": len(exs),
         "scene_decision_counts": {"all": counts},
         "avg_rubric_when": avg,
     }
+    # v3.99.1 — what the machine keeps of the same photographs, which the
+    # shift is measured against. Every example or none: a rate over the
+    # ones that happen to carry a verdict would be over a different set.
+    if exs and all(e.machine in DECISIONS for e in exs):
+        out["machine_keep_rate"] = sum(e.machine == "keep" for e in exs) / len(exs)
+    return out
+
+
+def machine_verdict(row: dict, config=None) -> str:
+    """v3.99.1 — the product's verdict on a scored row with no threshold
+    shift: `decision.decide` on `score_final`, as `pixcull calibrate` and
+    the measurements compute it. Recomputed rather than read from the
+    row's `decision`, which an active profile has already shifted. A run
+    made with a profile whose axis weights are unequal has them in
+    `score_final` already; that is also the score a re-fitted shift is
+    applied to. The run's vertical is not in `scores.csv`, so it is not
+    applied. "" when the row has no usable `score_final`."""
+    from pixcull.scoring.decision import decide as _product_decide
+    from pixcull.scoring.vlm_eval import _flags_of
+    try:
+        score = float(row.get("score_final"))
+    except (TypeError, ValueError):
+        return ""
+    if config is None:
+        from pixcull.config import PixCullConfig
+        config = PixCullConfig.load()
+    verdict, _ = _product_decide(score, _flags_of(row), config, "standard",
+                                 scene=str(row.get("scene") or ""))
+    return verdict.value
 
 
 def learn_profile(examples: Iterable[Example]) -> PersonalProfile:
@@ -573,12 +606,15 @@ def gather_examples_from_runs(runs_root, *, excluded: Counter | None = None,
     root = Path(runs_root)
     if not root.exists():
         return out
+    from pixcull.config import PixCullConfig
+    cfg = PixCullConfig.load()
     for ann in root.rglob("annotations.jsonl"):
         scores = ann.parent / "scores.csv"
         if not scores.exists():
             continue
         axmap: dict[str, dict] = {}
         vmap: dict[str, str] = {}
+        mmap: dict[str, str] = {}
         try:
             with open(scores, newline="", encoding="utf-8") as fh:
                 for row in csv.DictReader(fh):
@@ -590,6 +626,7 @@ def gather_examples_from_runs(runs_root, *, excluded: Counter | None = None,
                         # this row and was simply not carried across.
                         vmap[fnk] = str(row.get("vertical")
                                         or row.get("scene") or "").strip()
+                        mmap[fnk] = machine_verdict(row, cfg)
         except OSError:
             continue
         records = []
@@ -609,7 +646,8 @@ def gather_examples_from_runs(runs_root, *, excluded: Counter | None = None,
                 # shoots rather than a stride through one afternoon.
                 out.append(Example(axes=axmap[f], decision=d,
                                    run_id=str(ann.parent.parent.name),
-                                   vertical=vmap.get(f, "")))
+                                   vertical=vmap.get(f, ""),
+                                   machine=mmap.get(f, "")))
     return out
 
 
@@ -656,7 +694,9 @@ def examples_from_blind_sheet(sheet, scores, *, shoot: str = "") -> list:
     year apart. Within one run a name appears once, which is checked.
     Only records the sheet attests as human become examples.
     """
+    from pixcull.config import PixCullConfig
     from pixcull.scoring.ground_truth import label_provenance, load_blind_sheet
+    cfg = PixCullConfig.load()
     with open(scores, newline="", encoding="utf-8") as fh:
         rows = list(csv.DictReader(fh))
     names = [r.get("filename") for r in rows]
@@ -673,6 +713,7 @@ def examples_from_blind_sheet(sheet, scores, *, shoot: str = "") -> list:
         out.append(Example(axes={a: _f(row.get(f"rubric_{a}_stars")) for a in AXES},
                            decision=d, run_id=shoot,
                            vertical=str(row.get("vertical") or row.get("scene") or ""),
-                           key=f"{rec['filename']}@{row.get('datetime') or ''}"))
+                           key=f"{rec['filename']}@{row.get('datetime') or ''}",
+                           machine=machine_verdict(row, cfg)))
     return out
 
