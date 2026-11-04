@@ -87,8 +87,6 @@
   "export.csv.title": "完全な scores.csv をダウンロード (Excel/Numbers 対応)",
   "export.json": "JSON ダウンロード(全フィールド)",
   "export.json.title": "構造化 JSON エクスポート — 全フィールド + 注釈 + タグ",
-  "export.lrcat": "Lightroom カタログインポートテンプレート",
-  "export.lrcat.title": "Lightroom カタログにそのままドラッグできるテンプレートを出力",
   "export.gallery": "📔 ギャラリー出力",
   "export.gallery.title": "クライアントに渡せるスタンドアロン HTML ギャラリーを出力",
   "export.share_link": "🔗 クライアント共有リンク",

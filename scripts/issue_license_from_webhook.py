@@ -38,7 +38,6 @@ Usage
 =====
 
     # Verify + mint from a Stripe webhook payload on stdin
-    PIXCULL_LICENSE_KEY=<hex> \
     PIXCULL_STRIPE_WEBHOOK_SECRET=whsec_xxx \
     python scripts/issue_license_from_webhook.py \
         --provider stripe \

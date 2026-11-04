@@ -87,8 +87,6 @@
   "export.csv.title": "Scarica scores.csv completo (compatibile Excel/Numbers)",
   "export.json": "Scarica JSON (tutti i campi)",
   "export.json.title": "Esportazione JSON strutturata — tutti i campi + annotazioni + tag",
-  "export.lrcat": "Modello di importazione catalogo Lightroom",
-  "export.lrcat.title": "Esporta un modello di importazione catalogo Lr, da trascinare direttamente in Lightroom",
   "export.gallery": "📔 Esporta galleria",
   "export.gallery.title": "Esporta una galleria HTML standalone da condividere con il cliente",
   "export.share_link": "🔗 Link di condivisione cliente",

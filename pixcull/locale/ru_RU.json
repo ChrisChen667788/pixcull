@@ -87,8 +87,6 @@
   "export.csv.title": "Скачать полный scores.csv",
   "export.json": "Скачать JSON (все поля)",
   "export.json.title": "Структурированный JSON-экспорт",
-  "export.lrcat": "Шаблон импорта каталога Lightroom",
-  "export.lrcat.title": "Экспорт шаблона импорта каталога Lr",
   "export.gallery": "📔 Экспорт галереи",
   "export.gallery.title": "Экспорт автономной HTML-галереи",
   "export.share_link": "🔗 Ссылка для клиента",

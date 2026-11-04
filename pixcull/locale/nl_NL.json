@@ -87,8 +87,6 @@
   "export.csv.title": "Volledige scores.csv downloaden",
   "export.json": "JSON downloaden (alle velden)",
   "export.json.title": "Gestructureerde JSON-export",
-  "export.lrcat": "Lightroom-catalogusimport sjabloon",
-  "export.lrcat.title": "Lr-catalogusimportsjabloon exporteren",
   "export.gallery": "📔 Galerij exporteren",
   "export.gallery.title": "Standalone HTML-galerij exporteren",
   "export.share_link": "🔗 Klantdeel-link",

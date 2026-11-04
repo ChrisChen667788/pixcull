@@ -931,7 +931,16 @@ statement of it is now read against `decide()` in both languages, and no
 public document states a test count (`tests/test_documents_count_nothing_by_hand.py`,
 which also checks CONTRIBUTING's paths and "`NAME` in `path`" pointers,
 the verticals' count and names against `verticals.py`, and the palette's
-action count against `26-cmdk-palette.js`).  v3.101 is next.
+action count against `26-cmdk-palette.js`).  **v3.101:** the user guide
+taught the heatmap removed in v3.78 (key `A`, a section, screenshot 17) and
+showed retired screenshot 16; the retired-screenshot rule now reads every
+Markdown/HTML file that embeds a screenshot, not just the READMEs.  Every
+claim in the guide was then checked against the code and dozens were false
+(install routes, face/burst methods, `j`/`k`, collaboration — **WebRTC is never
+connected; sync is 5 s polling on one LAN and needs `--host 0.0.0.0`**).
+`test_env_registry.py` now parses reads instead of counting mentions, and
+fails on a value the tree sets that nothing reads.  v3.102
+is next.
 
 **Earlier block: `docs/ROADMAP-v3.1-v3.27-charter.md`** — twenty-seven versions read
 out of the same 46-entry competitive research at the level of PixCull's own core

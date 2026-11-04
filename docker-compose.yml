@@ -35,7 +35,6 @@ services:
       - ./pixcull-data:/root/.cache
       - ./pixcull-data/runs:/tmp/pixcull_demo
     environment:
-      - PIXCULL_DATA_DIR=/data
       # Optional — only needed if you want DeepSeek meta-judge
       # active. PixCull degrades gracefully without it.
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}

@@ -87,8 +87,6 @@
   "export.csv.title": "전체 scores.csv 다운로드 (Excel/Numbers 호환)",
   "export.json": "JSON 다운로드 (모든 필드)",
   "export.json.title": "구조화된 JSON 내보내기 — 모든 필드 + 주석 + 태그",
-  "export.lrcat": "Lightroom 카탈로그 가져오기 템플릿",
-  "export.lrcat.title": "Lr 카탈로그 가져오기 템플릿 — Lightroom으로 직접 끌기",
   "export.gallery": "📔 갤러리 내보내기",
   "export.gallery.title": "클라이언트와 공유할 독립 HTML 갤러리 내보내기",
   "export.share_link": "🔗 클라이언트 공유 링크",

@@ -87,8 +87,6 @@
   "export.csv.title": "Tam scores.csv'yi indir",
   "export.json": "JSON indir (tüm alanlar)",
   "export.json.title": "Yapılandırılmış JSON dışa aktarımı",
-  "export.lrcat": "Lightroom katalog içe aktarma şablonu",
-  "export.lrcat.title": "Lr katalog içe aktarma şablonu dışa aktar",
   "export.gallery": "📔 Galeri dışa aktar",
   "export.gallery.title": "Bağımsız HTML galeri dışa aktar",
   "export.share_link": "🔗 İstemci paylaşım bağlantısı",

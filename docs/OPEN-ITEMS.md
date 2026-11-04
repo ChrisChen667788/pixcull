@@ -436,6 +436,40 @@ longer on this machine.
 
 ---
 
+## Two things the user guide promised that the code does not do (v3.101)
+
+**Collaboration works on one LAN only.** The guide described WebRTC with
+100 ms sync and NAT traversal "~80%" of the time. `31-webrtc.js` defines
+`PixCullWebRTC`, and nothing calls `connect()`; the session polls
+`/api/v1/sync/event/<token>/changes` every five seconds, and the link is built
+from the page's own origin, so a guest reaches it only when the host serves
+with `--host 0.0.0.0` and opened the page by its LAN address. Either wire the
+module up and measure it, or delete it. Until then the guide says what the
+polling does.
+
+**The licence signing key cannot be rotated without editing the source.**
+`issue_license.py` and the webhook script promised a `PIXCULL_LICENSE_KEY`
+override that nothing read; they sign with `_VERIFY_KEY` in
+`pixcull/license/__init__.py`, the development value. The quota gate is off
+by default, so no paid token depends on it today. Before a paid tier ships,
+the key has to come from outside the repository, for the verifier and the
+issuer together. It is also an HMAC key, so the verifier that ships in every
+install can mint a token as easily as check one; signing has to become
+asymmetric before the key means anything.
+
+**The plugin SDK registers things and nothing reads them.** Found while
+answering issue #11. `pixcull/plugins/__init__.py` says a plugin can add a
+rubric axis "that the scoring pipeline calls", custom cull reasons, and
+observers on `after_pipeline_complete` and friends. `register_rubric_axis`
+takes a name, labels and a weight but no function, and the only reader of
+the registered axes and cull reasons is `pixcull plugins` counting them;
+nothing in the tree calls `fire_event`. The public READMEs do not advertise
+the SDK, so this is the module's own description. Either wire one extension
+point end to end with a test that a plugin changes an outcome, or say in the
+module that it registers and does not yet act.
+
+---
+
 ## Closed since the last count
 
 Six items that had been sitting as "NOT MEASURED" turned out to be perfectly

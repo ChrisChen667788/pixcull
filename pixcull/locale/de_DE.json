@@ -87,8 +87,6 @@
   "export.csv.title": "Vollständige scores.csv herunterladen (Excel/Numbers-kompatibel)",
   "export.json": "JSON herunterladen (alle Felder)",
   "export.json.title": "Strukturierter JSON-Export — alle Felder + Annotationen + Tags",
-  "export.lrcat": "Lightroom-Katalog-Importvorlage",
-  "export.lrcat.title": "Lr-Katalog-Importvorlage exportieren, direkt in Lightroom ziehen",
   "export.gallery": "📔 Galerie exportieren",
   "export.gallery.title": "Eigenständige HTML-Galerie für Kunden exportieren",
   "export.share_link": "🔗 Kunden-Freigabelink",

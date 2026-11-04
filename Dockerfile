@@ -70,8 +70,7 @@ COPY mobile/         ./mobile/
 COPY docs/           ./docs/
 COPY training.csv training_axis.csv ./
 
-# Default ports + data dir
-ENV PIXCULL_DATA_DIR=/data
+# Default port
 EXPOSE 8770
 
 # Bind to 0.0.0.0 so the host can reach us via the published port.

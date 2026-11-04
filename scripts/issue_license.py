@@ -16,12 +16,13 @@ the v0.11 charter's commercial first step:
   pro    → legacy single-seat alias kept for v0.10 compat
   lifetime → like pro but never expires
 
-The HMAC verify key is a build-time constant in the verifier — the
-script must use the SAME key.  Override via:
-    PIXCULL_LICENSE_KEY=<hex bytes>   # for production minting
-The default key is the development-mode value embedded in the
-verifier.  Real release builds must rotate it (see deployment
-note below) — never ship the dev key in the production binary.
+The HMAC key is a build-time constant, ``_VERIFY_KEY`` in
+``pixcull/license/__init__.py``, and this script signs with that same
+constant through ``encode_license``.  There is no environment override
+(this note used to offer ``PIXCULL_LICENSE_KEY``; nothing ever read it,
+so a token "minted for production" that way was signed with the dev
+key).  Rotating the key means changing the constant, for the verifier
+and this script together — never ship the dev key in a production build.
 
 Usage
 =====

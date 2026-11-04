@@ -87,8 +87,6 @@
   "export.csv.title": "下载完整 scores.csv (Excel/Numbers 友好)",
   "export.json": "下载 JSON(全字段)",
   "export.json.title": "结构化 JSON 导出 — 全部字段 + 标注 + 标签",
-  "export.lrcat": "Lr Catalog 导入模板",
-  "export.lrcat.title": "导出 Lightroom catalog import 模板,直接拖进 LR",
   "export.gallery": "📔 导出相册",
   "export.gallery.title": "导出可发客户的 standalone HTML 相册",
   "export.share_link": "🔗 客户分享链接",

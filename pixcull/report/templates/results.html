@@ -18839,9 +18839,9 @@
     }
 
     function _explainRow(row) {
-      // Two short lines.  Higher-fidelity reasons come from
-      // v0.13-P0-1 attribution + burst-neighbor lookup; for now
-      // we derive from data already on the row.
+      // Two short lines, from data already on the row. (v0.13-P0-1's
+      // per-axis attribution was meant to add more; it was removed in
+      // v3.78, having never explained the axis scores.)
       const reasons = [];
       const burst = row.burst_cluster;
       const score = row.score_final;

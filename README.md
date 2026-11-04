@@ -91,6 +91,18 @@ https://github.com/user-attachments/assets/69eddc6b-24d3-406a-ace5-2ed3a5b44e67
 
 ## What's new
 
+**v3.101** — The user guide taught features the code does not have. It
+started with the attribution heatmap removed in v3.78 and its screenshot,
+and checking every claim in the guide against the code found far more: all
+four install routes it gave were unavailable (it is `pip install pixcull`),
+the pipeline table named the wrong face detector and burst method, `j` and
+`k` were backwards, and collaboration was described as WebRTC across
+networks when it polls every five seconds on one LAN. The guide now says
+what the code does. Its table of environment variables listed four that
+nothing reads, which the registry test passed because it counted a mention
+as a read; it parses reads now, and fails on any value the repository sets
+that nothing reads.
+
 **v3.100** — The README contradicted itself about how much the vision judge
 may change. One paragraph said `vlm_authority` ships `primary`, which is what
 the code does; eighty lines on, another said `off`, a sentence from v2.58 that
@@ -179,28 +191,6 @@ under portrait thresholds none of its 45 singletons was culled, against 15 of
 and no rule is built on three blocks of four. A vector file that is not the
 one the clusters came from is now refused when read, and
 `scripts/measure_singletons.py` reruns the measurement.
-
-**v3.96** — The personalisation figure this project published from real
-photographs, a held-out keep-F1 of 0.801 against 0.799 for the generic
-decision, was computed over 608 labels, and 408 of them were recorded while
-the system's verdict was on screen. v3.29 had taught the taste profile to
-leave two kinds of correction out and asked what keeping them did to that
-figure. Neither kind occurs in any label set here, so that difference is
-zero. A split of the same 608 rows says more: the published result reproduces
-exactly, its four folds run from −0.018 to +0.018, and redrawing the folds
-moves it only between −0.005 and +0.005, so it showed no measurable effect
-rather than a small one. On the 408 endorsed rows personalisation scores
-below generic however the folds are drawn (−0.008 to −0.016). On the 200
-rows with real disagreements it scores above (+0.069 to +0.126). The
-owner's 158 blind labels give no stable answer: +0.041 as the file happens
-to be sorted, −0.048 on average over 200 redraws, anywhere from −0.279 to
-+0.065. A first draft reported that +0.041 as a result; review caught it.
-These are small samples and show a direction, not a size.
-`pixcull personalize learn` now says how many corrections it left out and
-why, and prints the spread across folds beside the mean;
-`scripts/measure_label_provenance.py` reruns all of it with the spread
-under redrawn folds. The two documents that quoted 0.801 now say what it
-was computed over.
 
 Earlier releases are in [`CHANGELOG.md`](CHANGELOG.md).
 
@@ -924,8 +914,8 @@ cd pixcull
 python3.12 -m venv .venv
 source .venv/bin/activate
 
-# 3. Install (this pulls torch CPU + InsightFace ONNX + MediaPipe)
-pip install -e ".[dev]"
+# 3. Install (torch CPU + InsightFace ONNX; `,face` adds MediaPipe for the face checks)
+pip install -e ".[dev,face]"
 
 # 4. Run the demo server
 python scripts/serve_demo.py
@@ -1528,8 +1518,8 @@ cd pixcull
 python3.12 -m venv .venv
 source .venv/bin/activate
 
-# 3. 安装 (会拉 torch CPU + InsightFace ONNX + MediaPipe)
-pip install -e ".[dev]"
+# 3. 安装 (torch CPU + InsightFace ONNX;`,face` 加装人脸检查用的 MediaPipe)
+pip install -e ".[dev,face]"
 
 # 4. 跑起来
 python scripts/serve_demo.py

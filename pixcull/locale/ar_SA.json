@@ -87,8 +87,6 @@
   "export.csv.title": "تنزيل scores.csv الكامل",
   "export.json": "تنزيل JSON (كل الحقول)",
   "export.json.title": "تصدير JSON منظم",
-  "export.lrcat": "قالب استيراد كتالوج Lightroom",
-  "export.lrcat.title": "تصدير قالب استيراد Lr",
   "export.gallery": "📔 تصدير المعرض",
   "export.gallery.title": "تصدير معرض HTML مستقل",
   "export.share_link": "🔗 رابط مشاركة العميل",

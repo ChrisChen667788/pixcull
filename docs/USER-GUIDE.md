@@ -6,21 +6,23 @@
 
 ---
 
-## 1. 安装(一次性,3 分钟)
+## 1. 安装(一次性)
 
-### macOS
+PixCull 从 PyPI 安装,Python 3.11–3.13,macOS(Apple 芯片)、Windows、Linux 都可以。
+Intel 芯片的 Mac 装不上:torch 在 2.2.2 之后不再出 x86_64 的 macOS 安装包。
 
 ```bash
-brew install --cask pixcull   # 当 v0.11-P0-2 发布后
-# 或者从 release 页面下载签名 .dmg:
-#   https://github.com/ChrisChen667788/pixcull/releases
+pip install pixcull
+pip install 'pixcull[face]'   # 可选:人脸、闭眼、脸部模糊检查(MediaPipe)
+pixcull serve                 # 打开浏览器,默认 http://127.0.0.1:8770
 ```
 
-### Windows / Linux
+没有桌面的 Linux(服务器、容器)还要装两个系统库,否则第一次运行会停在
+`libGL.so.1`:`sudo apt-get install libgl1 libglib2.0-0`。
 
-下载对应平台的签名安装包:
-- Windows: `PixCull-<version>.msi`(SmartScreen 直接放行)
-- Linux: `PixCull-<version>-x86_64.AppImage` + 验证 GPG 签名
+目前没有 Homebrew、`.dmg`、`.msi` 或 AppImage 安装包,
+[release 页面](https://github.com/ChrisChen667788/pixcull/releases) 上只有
+wheel 和源码包。
 
 ### 从源码运行(给开发者)
 
@@ -47,28 +49,29 @@ python scripts/serve_demo.py     # 默认在 http://127.0.0.1:8770
 2. **本地浏览** —— 点 **"📁 浏览本地文件夹"**,选择 SD 卡 / 移动硬盘上的目录
 3. **直接路径** —— 命令行 `pixcull run /path/to/photos`
 
-支持格式:JPEG / PNG / TIFF / DNG / RAW(CR2/CR3/NEF/ARW)。
+支持格式:JPEG / PNG / TIFF / HEIC / DNG / RAW(CR2/CR3/NEF/ARW/RAF/ORF/RW2)。
 
-**配额提示:** Free tier 每月 100 张;Studio/Lifetime 不限量。
-当前开发模式下闸门已关闭,可自由测试。
+**配额:** 默认不限张数,上传页状态栏会标出 `⚡ DEV`。代码里留着
+一道配额闸门(Free 每月 100 张,Pro / Studio / Lifetime 不限量),只有设
+`PIXCULL_DISABLE_QUOTA=0` 才会启用。
 
 ---
 
-## 3. 等 30 秒到 2 分钟(取决于照片数)
+## 3. 等分析跑完(时间取决于照片数和机器)
 
 后台依次跑:
 
 | 阶段 | 做什么 | 单图耗时 |
 |---|---|---:|
-| 1️⃣ EXIF + ICC | 读元数据 + 色彩空间审计 | ~10ms |
-| 2️⃣ 人脸 + 锐度 | InsightFace + Laplacian | ~80ms |
+| 1️⃣ EXIF | 读机型、拍摄时间、GPS | ~10ms |
+| 2️⃣ 人脸 + 锐度 | MediaPipe 人脸检测(需 `pixcull[face]`)+ Laplacian | ~80ms |
 | 3️⃣ 美学评分 | CLIP-IQA + LAION aesthetic | ~120ms |
 | 4️⃣ 规则栈 | 决策"keep / maybe / cull" | ~5ms |
-| 5️⃣ Rescorer | sklearn GBM 调整边缘案例 | ~3ms |
-| 6️⃣ Burst 聚类 | DBSCAN 找连拍组 | ~2ms |
-| 7️⃣ 视觉风格 | CLIP embedding(若打开 V2) | ~150ms |
+| 5️⃣ Rescorer(默认关闭) | sklearn HistGradientBoosting 复核边缘案例,`--rescorer-mode adjudicate` 才会改判决 | ~3ms |
+| 6️⃣ Burst 聚类 | DINOv2 向量的余弦相似度 + 拍摄时间间隔 | ~2ms |
 
-200 张照片 ≈ 5-8 分钟(取决于机器);自动 burst-key 选定连拍代表会显著加速大批量场景。
+200 张照片 ≈ 5-8 分钟(取决于机器)。每张照片都会完整分析一遍;连拍组里会按总分、清晰度、
+有没有闭眼、眼睛睁开的程度综合挑一张标成代表帧,结果页可以把连拍折叠成一堆,但这不会少分析任何一张。
 
 ---
 
@@ -103,15 +106,18 @@ burst / cull reason / Active Learning 过滤
 **核心控制:**
 | 键 | 动作 |
 |---|---|
-| `←` / `→` 或 `j` / `k` | 上一张 / 下一张 |
+| `←` 或 `k` | 上一张 |
+| `→` 或 `j` | 下一张 |
 | `1` `2` `3` | 标 keep / maybe / cull |
 | `z` | 切换 1:1 焦点检查(查锐度) |
 | `\` | 一键对比同 burst 组(v0.12-P1-2) |
 | `H` | 切换 EXIF + 直方图 overlay(v0.12-P1-3) |
-| `A` | 6 轴 attribution heatmap(v0.13-P0-1) |
 | `Esc` | 关闭 |
 
-**底部 1px 时间线:** 按住拖动可以在所有可见照片间无缝 scrub —— 婚礼连拍 200 张的快速预览利器(v0.11-P1-1)。
+注意:连拍对比视图(按 `\` 打开)里 `j`/`k` 方向相反,`j` 是上一张、`k` 是下一张;
+方向键在两处一致。
+
+**底部时间线(4px,鼠标移上去变粗):** 按住拖动可以在所有可见照片间无缝 scrub —— 婚礼连拍 200 张的快速预览利器(v0.11-P1-1)。
 
 **Inspector(右侧面板):** 6 轴评分 · DeepSeek 二审 · 视觉相似度 chip 点开查看 V1/V2/blend 细分(v0.13-P1-2)。
 
@@ -121,7 +127,8 @@ burst / cull reason / Active Learning 过滤
 
 ![lightbox ipad](screenshots/13-lightbox-ipad.png)
 
-支持双指捏合缩放、单指拖动平移、上下滑关闭 —— 配合 v0.12-P1-4 haptic 反馈,触屏体验贴近 Apple Photos。
+支持双指捏合缩放、单指拖动平移、上下滑关闭。震动反馈(v0.12-P1-4)只在 iOS Companion
+原生应用里有,网页版 lightbox 没有。
 
 ---
 
@@ -137,23 +144,15 @@ burst / cull reason / Active Learning 过滤
 
 ---
 
-## 7. AI 判断为什么 —— Confidence Modal + Attribution
+## 7. AI 判断为什么 —— Confidence Modal
 
 ### 鼠标悬停 maybe 边缘卡
 
-判决为 `maybe` 的卡(流水线没拿定主意的那些),悬停弹出小 popover:
+判决为 `maybe` 的卡(流水线没拿定主意的那些),悬停弹出小 popover,显示**置信度** + **top reasons**(同 burst 组对比、最弱轴等)—— 帮你 1 秒判断"信 model 还是自己再看"。可"不再显示"per-run 关闭(v0.13-P0-3)。
 
-![confidence modal](screenshots/16-confidence-modal.png)
+这里原有一张截图,拍的是 v3.76 之前的触发条件(总分落在 0.45–0.55),那个状态现在不会再出现,所以撤下了。
 
-显示**置信度** + **top reasons**(同 burst 组对比、最弱轴等)—— 帮你 1 秒判断"信 model 还是自己再看"。可"不再显示"per-run 关闭(v0.13-P0-3)。
-
-### Attribution Heatmap(轴)
-
-Lightbox 里按 `A`:
-
-![attribution heatmap](screenshots/17-attribution-heatmap.png)
-
-顶部切轴(技术 / 主体 / 构图 / 光线 / 时刻 / 美感),叠加在原图上的指纹图显示**像素级的"为什么"**。Integrated Gradients over timm backbone(v0.13-P0-1)。
+六轴星级和逐张读解在 lightbox 的信息栏里。v0.13 的六轴归因热力图(lightbox 里按 `A`)在 v3.78 删除:六张图一模一样,而且轴评分器读的是表格指标、不看像素,热力图解释的是另一个模型。
 
 ---
 
@@ -161,7 +160,7 @@ Lightbox 里按 `A`:
 
 ### 交付桶(Delivery Buckets)
 
-侧栏点 **🪣 Delivery buckets** 打开桶面板。每个桶可以:
+点右上角浮动的 **交付桶** 按钮(可拖动位置)打开桶面板。每个桶可以:
 - 拖 keep 卡进来分组(婚礼前 / 仪式 / 接待 / 出场)
 - 一键导出 ZIP
 - 复制文件名(给后期发指令)
@@ -171,7 +170,7 @@ Lightbox 里按 `A`:
 
 ### 客户分享链接
 
-点工具栏 **🔗 客户分享链接**,生成只读 URL + QR:
+在 **📥 导出** 菜单里点 **🔗 客户分享链接**,生成只读 URL + QR:
 
 ![share portfolio](screenshots/06-share-portfolio.png)
 
@@ -180,10 +179,11 @@ Lightbox 里按 `A`:
 ### 导出工程文件
 
 工具栏 **📥 导出** 下拉:
-- **XMP 写入原图旁**(Lightroom / Capture One 直接读)
-- **CSV / JSON**(全字段,做后续分析)
-- **Lightroom 目录导入模板**
-- **独立 HTML 画册**(嵌入式,无需 PixCull 运行)
+- **下载 XMP**(zip 包,解压到原图旁边,Lightroom / Capture One 直接读)
+- **写到原图旁边** / **内嵌到原图(单文件)**:只有直接分析本机文件夹、原图留在原地的
+  run 才有这两项(上传进来的只是副本,写不回原图);内嵌需要 exiftool,会修改原图
+- **下载 CSV** / **结构化 CSV** / **下载 JSON**(全字段 + 你的标注,做后续分析)
+- **📔 导出相册**(独立 HTML 相册,不需要 PixCull 运行;默认只含 keep,Shift-点含 keep + maybe)
 
 ---
 
@@ -199,11 +199,12 @@ Lightbox 里按 `A`:
 
 ### /admin/bias 偏差审计(v0.13-P0-4)
 
-如果你跑了 ≥ 3 个 run,`/admin/bias` 会聚合所有标注,按 scene / time-of-day / aperture 分桶,红色高亮 > 1.5σ 的异常:
+`/admin/bias` 聚合所有 run 的标注,按 scene / time-of-day / aperture 分桶,红色高亮 > 1.5σ 的异常
+(某个维度至少要有 3 个够数据的分桶,才会在这个维度上找异常):
 
 ![bias dashboard](screenshots/15-bias-dashboard.png)
 
-例如发现 "rescorer 在 *夜景人像* 上 cull rate 38% (全局 22%) — 模型可能过严"。可点 ↻ 强制重建缓存,也可 `/admin/bias.md` 导出 markdown 给客户看(v0.13-P2-2)。
+例如发现 "rescorer 在 *夜景人像* 上 cull rate 38% (全局 22%) — 模型可能过严"。可点 **↻ 刷新** 强制重建缓存,也可 `/admin/bias.md` 导出 markdown 给客户看(v0.13-P2-2)。
 
 ---
 
@@ -211,15 +212,20 @@ Lightbox 里按 `A`:
 
 ### LAN 协作会话
 
-右上角 **📡 协作会话** → 生成会话 URL + QR → 第二摄 / 编辑扫码加入。
+**📥 导出** 菜单里点 **📡 协作会话** → 生成会话 URL + QR → 第二摄 / 编辑扫码加入。
+
+链接用的是你此刻打开页面的地址。`pixcull serve` 默认只监听本机(127.0.0.1),别的设备连不上;
+要协作,主摄用 `pixcull serve --host 0.0.0.0` 启动(只在信得过的局域网里这么做,没有登录验证),
+再用本机的局域网 IP 打开结果页,然后生成链接。
 
 工作流:
 1. 主摄 PixCull 跑分(host 角色)
 2. 编辑师扫码或粘贴 URL → 浏览器自动 join(guest 角色)
-3. 两边任意一方改决策 → 100ms 内同步(v0.11-P0-3 WebRTC datachannel)
+3. 两边任意一方改决策 → 对方页面每 5 秒拉取一次改动
 4. 冲突时弹出解析 UI,可选 "保持我的" / "接受对方"
 
-跨 LAN(主摄在工作室、编辑在家)也 work —— STUN/ICE NAT 穿透 ~80% 成功率。
+只在同一个局域网里能用。代码里有一个 WebRTC 直连模块(v0.11-P0-3),但目前没有任何地方调用它,
+跨网络协作做不到。
 
 ### Tethered Live
 
@@ -231,7 +237,8 @@ Lightbox 里按 `A`:
 
 ![admin perf](screenshots/10-admin-perf.png)
 
-`/admin/perf` 显示 pipeline 每个阶段的实测耗时 + 命中缓存率 + GPU 利用率(若有)—— 给大批量(2000+ 张)排查瓶颈用(v0.9-P2-2)。
+`/admin/perf` 显示服务进程占用的内存、每个 run 占的磁盘和剩余磁盘空间(v0.9-P2-2),
+大批量跑完后看存储够不够用。各阶段耗时、缓存命中率、GPU 利用率这里没有。
 
 ---
 
@@ -239,22 +246,23 @@ Lightbox 里按 `A`:
 
 ### iOS Companion(`mobile/PixCullCompanion/`)
 
-iPhone / iPad 端独立 SwiftUI 应用,通过 mDNS 自动发现同 LAN 的 PixCull 主机:
+iPhone / iPad 端独立 SwiftUI 应用,在 App 的设置页手动填主机地址(例如 `http://192.168.1.42:8770`,
+主机同样要用 `--host 0.0.0.0` 启动):
 - 实时浏览主摄的当前 run
 - 滑动 / 点按 keep/cull(带 haptic 反馈)
 - 同步标注回主端
 
 ### 浅色主题
 
-`/results/<id>?theme=light` 或在 ⌘K 里搜 "light":
+右上角的主题按钮在 深色 → 浅色 → 跟随系统 之间循环切换(默认跟随系统),选择记在浏览器里:
 
 ![light theme](screenshots/12-light-theme.png)
 
-沙色 + 高对比度配色(v0.9-P2-1),适合 OLED 屏防烧屏 / 白天户外用。
+浅色主题是 v0.9-P2-1 加的。
 
 ### 手机网格
 
-任何 ≤ 640px 视口自动切换到密集 4 列布局:
+任何 ≤ 640px 视口自动切换到 2 列布局:
 
 ![mobile grid](screenshots/08-mobile-grid.png)
 
@@ -264,7 +272,8 @@ iPhone / iPad 端独立 SwiftUI 应用,通过 mDNS 自动发现同 LAN 的 PixCu
 
 ## 12. 13 种语言
 
-`?lang=de` / `?lang=fr` / `?lang=ar` 等(URL 参数)或浏览器 Accept-Language 自动检测:
+第一次打开按浏览器语言自动选;之后点页面顶部的语言按钮,在下面 13 种语言之间循环切换,
+选择记在浏览器里(没有 `?lang=` 这样的 URL 参数):
 
 ```
 zh_CN  en_US  ja_JP  ko_KR  es_ES        ← v0.10
@@ -280,27 +289,30 @@ pt_BR  nl_NL  tr_TR  ru_RU  ar_SA        ← v0.12
 
 | 症状 | 检查 | 修复 |
 |---|---|---|
-| `brew install` 报 SHA mismatch | 缓存未刷新 | `brew update && brew install --cask pixcull --force` |
 | 上传后页面卡在"正在分析…" | `ps aux \| grep pixcull` | kill 旧进程,重启服务 |
-| Lightbox 图模糊 | 没下高分辨率版本 | 鼠标移图上 +1 秒后会自动 swap 到 3600px |
-| 协作会话连不上 | 防火墙挡了 8770 端口 | macOS 系统偏好设置 → 隐私 → 防火墙 → 加入 PixCull |
-| 标注没保存 | 磁盘满或权限 | `df -h ~` + `ls -la ~/.pixcull/runs/` |
-| 模型加载慢 | 第一次启动下载 timm | 等 1-2 分钟,后续启动 < 5 秒 |
+| Lightbox 图模糊 | 还在看预览尺寸 | 点图片或按 `z` 进入 1:1,会换成 3600px 的版本(打开 lightbox 后已在后台预加载) |
+| 协作会话连不上 | 服务只监听本机,或链接里是 127.0.0.1 | 用 `pixcull serve --host 0.0.0.0` 启动,用局域网 IP 打开页面后重新生成链接;仍不通再查防火墙 |
+| 标注没保存 | 磁盘满或权限 | `df -h ~` + `ls -la ~/.pixcull/runs/`(源码运行时是 `/tmp/pixcull_demo/`) |
+| 模型加载慢 | 第一次运行要下载 CLIP、DINOv2、U²-Net、美学评分和 InsightFace 人脸模型 | 时间看网速;下载完以后直接读本机缓存 |
 
 ---
 
 ## 14. 下一步
 
-* **进阶**: 风格 V2 训练 —— 拿你过去 1 年的 keep 当参考,训练个性化模型(`🎨 训练风格模型`)。下次扫照片时,model 用你的偏好打分,而不是通用美学。
+* **进阶**: 风格 V2 训练 —— **📥 导出** 菜单里的 `🎨 训练风格模型` 把这次 run 里所有 keep 当参考,
+  给同一次 run 的每张照片算一个风格距离。它只作用于这次 run,下次扫照片不会用它打分;
+  想让你的修正影响以后的判决,用 `pixcull personalize learn`。
 * **批量回写**: 用 `pixcull export <run> --target alongside` 把决策写回原图 XMP sidecar,Lightroom / Capture One 直接读(`--format xmp` 本来就是默认值)。
-* **CI 集成**: `pixcull/.venv/bin/python scripts/ci_rescorer_regression.py` 接进任何 CI 流水线 —— 每次模型重训自动对照 baseline。
+* **CI 集成**: 先用 `scripts/eval_rescorer.py ... --json-out artifacts/rescorer_eval.json` 出评测结果,
+  再跑 `scripts/ci_rescorer_regression.py artifacts/rescorer_eval.json` —— 每次模型重训自动对照 baseline,
+  recall@5 掉超过 1% 就返回非零。
 
 ---
 
 ## 15. 环境变量
 
 PixCull 读取下面这些环境变量,**只有这些**。设了别的名字,程序不会用,
-从 v3.69 起启动时会提醒你,并给出最接近的真名。
+从 v3.69 起 `pixcull run` 会提醒你,并给出最接近的真名。
 
 标 ⚠ 的几条决定「照片会不会离开这台机器」。这一条是 v3.69 补的:
 `--vlm-mode off` 原本只是命令行参数,而 `PIXCULL_VLM_MODEL`、
@@ -321,19 +333,15 @@ PixCull 读取下面这些环境变量,**只有这些**。设了别的名字,程
 | `PIXCULL_BURST_MULTI_IMAGE` | send a whole burst to the judge in one call |
 | `PIXCULL_CONSISTENCY_DRAWS` | repeat draws for the consistency measurement |
 | `PIXCULL_CRITIQUE_EXEMPLARS` | exemplar bank for the critique pass |
-| `PIXCULL_DATA_DIR` | data directory for the containerised server |
 | `PIXCULL_DEBUG` | verbose server logging |
 | `PIXCULL_DEMO_ROOT` | root the demo server serves from |
 | `PIXCULL_DETECTOR_CACHE` | detector cache on/off |
 | `PIXCULL_DETECTOR_CACHE_DIR` | detector cache location |
 | `PIXCULL_DISABLE_QUOTA` | bypass the licence quota (development) |
 | `PIXCULL_ENV` | environment name reported in telemetry |
-| `PIXCULL_HOME` | PixCull home directory (models, caches) |
 | `PIXCULL_INLINE_ROWS` | how many rows the first paint inlines |
-| `PIXCULL_KEYWORD_PREFIX` | prefix for IPTC keywords written back |
 | `PIXCULL_LIBRARY_DIR` | cross-run library index location |
 | `PIXCULL_LICENSE_API` | licence server base URL |
-| `PIXCULL_LICENSE_KEY` | licence key for issuing scripts |
 | `PIXCULL_LLM_BUDGET_YUAN` | daily cloud-judging spend ceiling |
 | `PIXCULL_LUTS_DIR` | folder of .cube LUTs for the video grade menu (default ~/.pixcull/luts) |
 | `PIXCULL_LOG_LEVEL` | logging level |
@@ -347,7 +355,7 @@ PixCull 读取下面这些环境变量,**只有这些**。设了别的名字,程
 | `PIXCULL_PORT` | port for the screenshot capture server |
 | `PIXCULL_RAW_TRANSCODER` | RAW transcoder backend |
 | `PIXCULL_REEL_CAPTION` | reel captioning on/off |
-| `PIXCULL_REEL_VLM` | reel VLM backend (ModelScope Studio) |
+| `PIXCULL_REEL_VLM` | on/off (default off): caption a reel's best frame with a local BLIP model |
 | `PIXCULL_REQUIRE_MODELS` | tests: missing model weights fail instead of skipping (CI real-model lane) |
 | `PIXCULL_RESOLUTION_ROUTER` | resolution routing strategy |
 | `PIXCULL_SENTRY_DSN` ⚠ | Sentry DSN for error reporting |
@@ -382,7 +390,7 @@ PIXCULL_VLM_MODE=off pixcull run <folder>
 
 PixCull 不是"AI 替你选片",而是 "AI 把不重要的 60% 卡过滤掉,让你把人类时间花在剩下 40% 真正需要判断的临界案例上"。
 
-每张照片的 AI 分数都解释自己 —— 热力图 / 六轴星级 / 逐张读解 —— 你永远知道它为什么这么判。
+每张照片的 AI 分数都解释自己 —— 六轴星级 / 逐张读解 —— 你永远知道它为什么这么判。
 
 **云端判官是否开启,取决于你这台机器上有没有 MiniMax key,不是一个固定的默认值**:
 
@@ -392,7 +400,8 @@ PixCull 不是"AI 替你选片",而是 "AI 把不重要的 60% 卡过滤掉,让�
 | 有 key、从没授权过 | 先问一次;拒绝、或任何非交互式运行,都留在本机 |
 | 有 key **且**授权已记录 | **会上传** —— 运行时会打印出来 |
 
-`--vlm-mode off` 是完整的本地路径,一次网络连接都不会发起(v2.72 起由测试守住)。
+`--vlm-mode off` 不会把照片发出去。规则栈判决不联网(v2.72 起由测试守住);已经下载到本机的
+模型,加载时也不联网(v3.89 起由测试守住)。第一次运行要下载模型,这一步需要联网。
 标注永远归你。
 
 > **注意:清掉 `MINIMAX_API_KEY` 环境变量并不足以强制本地运行。**
@@ -409,7 +418,7 @@ PixCull 不是"AI 替你选片",而是 "AI 把不重要的 60% 卡过滤掉,让�
 
 
 > 这一行原来写的是"云端判官默认开启",少了 key 这个前提,是错的。
-> `cli.py:96` 写得很清楚:`vlm_mode = "minimax" if api_key_from_env() else "off"`。
+> `cli.py` 里写得很清楚:`vlm_mode = "minimax" if api_key_from_env() else "off"`。
 > 一个刚 `pip install` 的人没有 key,跑的是全本地。v3.55 更正。
 
 — *陈浩睿 · 2026-2027*

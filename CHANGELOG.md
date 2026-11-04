@@ -157,6 +157,8 @@ which is the thing that was actually false.
 
 One line each, exactly as the release was titled at the time.
 
+**v3.96** — the published personalisation figure was two sets pulling opposite ways
+
 **v3.95** — the provenance audit could not read the blind sheet
 
 **v3.94.4** — issue #5's twelve siblings: tool output decoded in the locale

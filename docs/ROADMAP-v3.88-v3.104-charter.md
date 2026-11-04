@@ -1186,6 +1186,71 @@ READMEs and not the guide.
 **Measure:** the section is gone and the gate reads every document that
 embeds a screenshot.
 
+**Shipped, 2026-11-05.** The guide's lightbox table listed `A` for the
+six-axis attribution heatmap, and section 7 explained the overlay ("Integrated
+Gradients over timm backbone") under `17-attribution-heatmap.png`. No handler
+for `A` exists in `results.js` or its modules; the other keys in that table
+(the arrows and `j`/`k`, `1`/`2`/`3`, `z`, `\`, `H` in `18-exif-overlay.js`,
+and `Esc`) each have one. The
+row, the subsection and the screenshot are gone, and the guide now says the
+heatmap was removed and why. The same section also embedded
+`16-confidence-modal.png`, retired in the ledger because it shows the popover
+firing on a score band v3.76 replaced with `decision == "maybe"`; the image
+is gone and the text, which already described the current trigger, stays.
+The guide's closing line no longer lists the heatmap among the ways a score
+explains itself, and a comment in `14-confidence-modal.js` that still
+expected v0.13's attribution to feed the popover says what became of it.
+
+`tests/test_screenshots_are_dispositioned.py` read README.md,
+modelscope/README.md and README-PYPI.md. It now also walks every Markdown
+and HTML file in the tree, reads the screenshots each one embeds (image
+syntax or an `<img>` tag; a name in prose, as the charters and changelogs
+have, is history), requires the scan to find the three documents that embed
+screenshots today, and fails on any retired one. Four mutations each turn it
+red: either retired screenshot put back in the guide, the heatmap as an
+`<img>` tag, and the scan narrowed back to the READMEs.
+
+**Then the rest of the guide.** The review of this version found the same
+defect seven more times in one pass, so every factual claim in the guide was
+checked against the code: seven readers by section, and each finding handed
+to a second agent told to prove the guide right. Install: all four routes it
+taught were unavailable. No Homebrew tap exists, and the release page carries
+a wheel and an sdist, no `.dmg`, `.msi` or AppImage; it says `pip install
+pixcull` now. The pipeline table named InsightFace for face detection
+(MediaPipe), DBSCAN for bursts (DINOv2 cosine plus time gaps), an ICC audit
+that is a separate tool, a style stage the pipeline never runs, and a
+rescorer that is off by default. The lightbox table had `j` and `k`
+backwards. The export menu listed a Lightroom catalogue template that does
+not exist, and all thirteen language packs still carried its label; the
+strings are gone. Collaboration was WebRTC with 100 ms sync and NAT traversal across
+networks; `PixCullWebRTC.connect()` is called nowhere, the page polls every
+five seconds, and the link reaches another device only when the server
+listens beyond 127.0.0.1, which the troubleshooting row blamed on a firewall.
+The iOS companion has no mDNS, nothing reads `?theme=` or `?lang=`, the
+palette has no theme entry, the phone grid is two columns and not four, and
+`/admin/perf` shows memory and disk, not stage timings. Each now says what the
+code does. The README's quick-start comment said `.[dev]` installs MediaPipe;
+only `.[face]` does, and both languages are corrected.
+
+**The guide's environment table listed four settings nothing reads.**
+`PIXCULL_HOME` and `PIXCULL_KEYWORD_PREFIX` are names of Python constants;
+`PIXCULL_DATA_DIR` was set by the Dockerfile and compose file and read by
+nothing; `PIXCULL_LICENSE_KEY` appeared in two licence scripts' docstrings
+promising an override that nothing read, so a token minted "for production"
+that way was signed with the development key. All four passed
+`test_env_registry.py` because it counted a name as read wherever it was
+mentioned. It parses reads now: in Python an `environ` lookup, `getenv`, an
+`in environ` test or a typer `envvar`, including through a module constant or
+a class attribute; in shell, `$NAME`. A second test fails on any value the
+tree sets that nothing reads. The four are gone from the registry, the guide
+and the Docker files, and the scripts say there is no override. The parser's
+first cut missed `self.SIDECAR_ENV` in `tether.py` and called a real setting
+dead; that shape is in its self-test.
+
+Two things the guide promised and the code does not do are now on
+`docs/OPEN-ITEMS.md` rather than in the guide: collaboration across networks,
+and a way to rotate the licence key.
+
 ### v3.102 — "the faces are frosted" after v3.87 found the guard cannot certify it
 
 **Measure:** the caption claims what v3.87 established and no more, in

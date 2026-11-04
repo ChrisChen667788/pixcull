@@ -115,3 +115,42 @@ def test_the_scripted_ones_are_not_also_in_the_ledger():
     assert not both, (
         f"{both} are produced by the capture script AND dispositioned as "
         "though they were not; drop the ledger row")
+
+
+#: Directories that hold no document a reader is pointed at.
+_NOT_DOCS = {".git", ".venv", "venv", "node_modules", ".pixcull-gate", "build", "dist",
+             ".build", "__pycache__", ".pytest_cache"}
+_EMBED = re.compile(r"""!\[[^\]]*\]\(([^)\s]+)\)|<img[^>]+src=["']([^"']+)["']""")
+
+
+def _documents_embedding_screenshots() -> dict:
+    """Every Markdown or HTML file in the tree that embeds a screenshot,
+    with the screenshots it embeds. An embed, not a mention: the charters
+    and the changelog name retired images in prose, as history."""
+    out = {}
+    for path in ROOT.rglob("*"):
+        if path.suffix not in (".md", ".html") or not path.is_file():
+            continue
+        if any(part in _NOT_DOCS for part in path.relative_to(ROOT).parts):
+            continue
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        names = {(m.group(1) or m.group(2)).rsplit("/", 1)[-1]
+                 for m in _EMBED.finditer(text)
+                 if "screenshots/" in (m.group(1) or m.group(2))}
+        if names:
+            out[path.relative_to(ROOT).as_posix()] = names
+    return out
+
+
+def test_a_retired_screenshot_is_embedded_nowhere():
+    """v3.101. The rule above read the three READMEs; `docs/USER-GUIDE.md`
+    embedded `17-attribution-heatmap.png` under a section teaching a
+    lightbox key that had done nothing since v3.78, and
+    `16-confidence-modal.png` showing a trigger v3.76 replaced."""
+    retired = {n for n, r in _ledger().items() if r["disposition"] == "retired"}
+    docs = _documents_embedding_screenshots()
+    assert {"README.md", "modelscope/README.md", "docs/USER-GUIDE.md"} <= set(docs), (
+        f"the scan found screenshots embedded in {sorted(docs)} only; it is broken")
+    offences = [f"{doc} embeds {name}" for doc, names in sorted(docs.items())
+                for name in sorted(names & retired)]
+    assert not offences, f"{offences}: a retired screenshot shows a UI that no longer exists"
