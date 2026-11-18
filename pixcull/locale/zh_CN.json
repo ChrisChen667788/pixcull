@@ -228,7 +228,7 @@
   "workspace.active_learning_title": "主动学习排队: 列出最值得标注的 {n} 张照片 — 优先暴露规则与 rescorer 不一致 / 概率临界 / 分数临界 / 还未标注的",
   "workspace.all_done_title": "每张照片都有人工确认的判定 — 点击下载 XMP zip,带着结果回 Lightroom",
   "workspace.unreviewed_title": "还没有人工确认判定的照片数(键盘 1/2/3、lightbox 或批量框选都算确认)。清零后这里变成 XMP 导出入口",
-  "workspace.tuned_badge": "每次 keep/cull 纠正都在教 PixCull 你的口味 — 再标 {n} photos,新批次就会自动按你的标准校准阈值",
+  "workspace.tuned_badge": "每次 keep/cull 纠正都在教 PixCull 你的口味 — 再标 {n} 张,新批次就会自动按你的标准校准阈值",
   "workspace.adaptive_band": "v0.13.8 自调:keep ≥ {keep} · cull < {cull}(基于 {n} 张评分的 25/75 分位)\n本 run 的 score 分布与全局默认偏离 ≥ 0.03,因此适配阈值。",
   "grid.burst_peak_title": "{bursts} 个连拍组,共 {photos} 张 — 打开后只保留每组的最佳一张",
   "grid.burst_collapse_title": "把每个连拍组折叠成一张峰值代表 + ⧉计数;点卡片角的 ⧉N 展开并排比较",

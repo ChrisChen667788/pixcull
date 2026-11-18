@@ -939,8 +939,12 @@ claim in the guide was then checked against the code and dozens were false
 (install routes, face/burst methods, `j`/`k`, collaboration — **WebRTC is never
 connected; sync is 5 s polling on one LAN and needs `--host 0.0.0.0`**).
 `test_env_registry.py` now parses reads instead of counting mentions, and
-fails on a value the tree sets that nothing reads.  v3.102
-is next.
+fails on a value the tree sets that nothing reads.  **v3.102:** PR #7's
+English pages landed (eight commits, author kept; `/reveal/` left out) with
+the five review fixes; pages translate their template, then insert the
+photographer's content; page scripts' string literals are checked for
+Chinese (results.html exempt); JS fallbacks must equal `zh_CN.json`.
+The block's last three moved to v3.103–v3.105.  v3.103 is next.
 
 **Earlier block: `docs/ROADMAP-v3.1-v3.27-charter.md`** — twenty-seven versions read
 out of the same 46-entry competitive research at the level of PixCull's own core

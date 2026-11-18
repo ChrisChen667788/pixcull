@@ -32,6 +32,13 @@ def _summarise(fallbacks, faults=None):
             classList: {{ add: function () {{}} }},
             addEventListener: function () {{}} }}; }},
         body: {{ appendChild: function () {{}} }} }};
+    // v3.102 — the module is spliced into results.js and reads its
+    // string lookups from that scope (PR #7); the page provides them,
+    // so the harness does too, returning the Chinese fallback.
+    global._t = function (key, fallback) {{ return fallback; }};
+    global._tf = function (key, fallback, vars) {{
+        return fallback.replace(/\\{{(\\w+)\\}}/g,
+            function (m, k) {{ return k in vars ? String(vars[k]) : m; }}); }};
     global.fetch = function () {{ return {{ then: function () {{
         return {{ then: function () {{ return {{ catch: function () {{}} }};
         }} }}; }} }}; }};

@@ -20,5 +20,6 @@
   "秒前": "s ago",
   "时前": "h ago",
   "启动中…": "Starting...",
-  "已停止": "stopped"
+  "已停止": "stopped",
+  "请输入或粘贴文件夹路径": "Enter or paste a folder path"
 }

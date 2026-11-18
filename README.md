@@ -91,6 +91,18 @@ https://github.com/user-attachments/assets/69eddc6b-24d3-406a-ace5-2ed3a5b44e67
 
 ## What's new
 
+**v3.102** — Every page outside the review workspace now speaks English: the
+contribution of @olitreadwell in PR #7, landed with their own commits. Choose
+it with `?lang=en_US`, which is remembered, or `PIXCULL_LANG`; otherwise the
+browser's language decides. The five changes review asked for are made here.
+The history and disagreement pages translated the photographer's folder names
+along with the page, so a run called `上传` linked to `/results/Upload` and
+404'd. Messages built in JavaScript, alerts and confirms among them, reached an
+English reader in Chinese, because the check skipped every script; it reads
+their string literals now. A Chinese string had picked up an English word, and
+a gate now compares each JavaScript fallback with the Chinese catalogue it
+copies.
+
 **v3.101** — The user guide taught features the code does not have. It
 started with the attribution heatmap removed in v3.78 and its screenshot,
 and checking every claim in the guide against the code found far more: all
@@ -174,23 +186,6 @@ on are left to the owner. `pixcull personalize learn` now reports cull recall
 beside keep-F1 and says when a profile scores higher by keeping more, and
 `scripts/measure_generalisation.py` reruns the measurement. Item 15 below no
 longer says the profile improves silently as you label.
-
-**v3.97** — In three of four blocks of photographs the owner labelled blind,
-a frame with no near-duplicate was culled more often than one inside a
-burst; in the fourth it was not. The explanation left open in September was
-that the scene classifier had widened the clustering window there and
-diluted the singletons. Its first test was withdrawn because it read the
-CLIP search vectors instead of the DINOv2 vectors the clusters are built
-from, and the two files have the same layout. Rerun on the right vectors,
-after checking that each block's recorded clusters reproduce from them, the
-premise held and the mechanism did not. The exception block, from a portrait
-shoot, was classified landscape on 119 of 150 frames, but the wrong label
-made more singletons, not fewer, and correcting it sharpened the exception:
-under portrait thresholds none of its 45 singletons was culled, against 15 of
-105 frames in bursts. The explanation is ruled out, the exception stands,
-and no rule is built on three blocks of four. A vector file that is not the
-one the clusters came from is now refused when read, and
-`scripts/measure_singletons.py` reruns the measurement.
 
 Earlier releases are in [`CHANGELOG.md`](CHANGELOG.md).
 
@@ -1560,6 +1555,7 @@ Developer ID)。`app/RELEASE.md` 里有完整的构建 / 公证 / Sparkle 更
 | API key (LAN 部署) | `PIXCULL_API_KEY` 环境变量 / `X-PixCull-API-Key` 头 | 未设置 |
 | CORS 白名单 | `PIXCULL_API_CORS_ORIGINS` (逗号分隔) | 未设置时 `*` |
 | 当前用户 | `PIXCULL_USER` env / `X-PixCull-User` 头 / cookie | 无 |
+| 页面语言 | `?lang=` / `pixcull_lang` cookie / `PIXCULL_LANG` env / `Accept-Language` | 浏览器语言 |
 | App 数据目录 | `~/Library/Application Support/PixCull` (macOS) | 因平台而异 |
 | DeepSeek API key (可选) | `DEEPSEEK_API_KEY` env / app-data 下 `config.json` | 未设置 |
 | 同步目标 (可选) | `pixcull/sync.py::configure_sync_for_user(path)` | 无 |

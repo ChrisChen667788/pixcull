@@ -67,6 +67,82 @@ def _visible_text(html: str) -> set[str]:
     return found - _CHROME
 
 
+def _without_js_comments(js: str) -> str:
+    """Drop // and /* */ comments, leaving string literals intact."""
+    out, i, n, quote = [], 0, len(js), None
+    while i < n:
+        c = js[i]
+        if quote:
+            out.append(c)
+            if c == "\\" and i + 1 < n:
+                out.append(js[i + 1])
+                i += 2
+                continue
+            if c == quote:
+                quote = None
+            i += 1
+            continue
+        if c in "\"'`":
+            quote = c
+        elif js.startswith("//", i):
+            j = js.find("\n", i)
+            i = n if j < 0 else j
+            continue
+        elif js.startswith("/*", i):
+            j = js.find("*/", i + 2)
+            i = n if j < 0 else j + 2
+            continue
+        out.append(c)
+        i += 1
+    return "".join(out)
+
+
+_JS_STRING = re.compile(
+    r'"((?:[^"\\\n]|\\.)*)"|\'((?:[^\'\\\n]|\\.)*)\'|`((?:[^`\\]|\\.)*)`', re.S)
+
+
+def _script_strings_with_chinese(html: str) -> list[str]:
+    """String literals inside <script> that still hold Chinese.
+
+    v3.102 (PR #7 review): `_visible_text` drops every script, so an
+    `alert("请输入或粘贴Folder path")` or a confirm() built in JavaScript
+    reached an English reader in Chinese and nothing looked. Comments are
+    not read; they are not shown to anyone."""
+    found = []
+    for block in re.finditer(r"<script[^>]*>(.*?)</script>", html, flags=re.S):
+        for m in _JS_STRING.finditer(_without_js_comments(block.group(1))):
+            value = next(g for g in m.groups() if g is not None)
+            if re.search(r"[一-鿿]", value):
+                found.append(value.strip()[:80])
+    return found
+
+
+#: results.html has its own string table (``window.__pixcullStrings`` and
+#: ``_t(key, fallback)``), so its script literals are mostly the Chinese
+#: fallbacks for keys the table carries, and data maps. Reading them the
+#: same way would report hundreds of strings an English reader never sees;
+#: the workspace's own test (`test_every_string_the_workspace_asks_for_exists`)
+#: holds that table instead.
+_SCRIPT_CHECK_EXEMPT = {"results.html"}
+
+
+@pytest.mark.parametrize(
+    "template", [t for t in _templates() if t.name not in _SCRIPT_CHECK_EXEMPT],
+    ids=lambda p: p.stem)
+def test_english_render_has_no_chinese_in_its_scripts(template: Path):
+    rendered = localize_page(template.name,
+                             template.read_text(encoding="utf-8"), "en_US")
+    left = _script_strings_with_chinese(rendered)
+    assert not left, f"{template.name}: Chinese in script strings {left[:6]}"
+
+
+def test_the_script_check_reads_what_the_page_check_cannot():
+    page = ('<p>Folder</p><script>// 注释不算\n'
+            'alert("请输入或粘贴Folder path"); const ok = "fine";</script>')
+    assert not _visible_text(page)
+    assert _script_strings_with_chinese(page) == ["请输入或粘贴Folder path"]
+
+
 @pytest.mark.parametrize("template", _templates(), ids=lambda p: p.stem)
 def test_english_render_has_no_visible_chinese(template: Path):
     source = template.read_text(encoding="utf-8")

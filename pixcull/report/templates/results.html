@@ -16652,7 +16652,7 @@
     cmpTitle.textContent = _t("compare.modal.title", "A/B 比较 ({n} 张)")
       .replace("{n}", String(members.length));
     cmpMeta.textContent = _t("compare.modal.meta",
-      `按 score_final 降序;左为系统推荐。点 "选这张" 把另一张标 cull。`);
+      `按 score_final 降序;左为系统推荐。点「选这张」把其余标 cull。`);
 
     const axisAbbr = {technical:"技", subject:"主", composition:"构",
                        light:"光", moment:"瞬", aesthetic:"美"};
@@ -17140,7 +17140,7 @@
         const n = d.n_annotations | 0, min = d.min_annotations | 0;
         if (min > 0 && n >= 3 && n < min) {
           el.textContent = "🎯 个性化 " + n + "/" + min;
-          el.title = _tf("workspace.tuned_badge", "每次 keep/cull 纠正都在教 PixCull 你的口味 — 再标 {n} photos,新批次就会自动按你的标准校准阈值", {n: min - n});
+          el.title = _tf("workspace.tuned_badge", "每次 keep/cull 纠正都在教 PixCull 你的口味 — 再标 {n} 张,新批次就会自动按你的标准校准阈值", {n: min - n});
           el.style.opacity = "0.62";
           el.style.display = "";
         }

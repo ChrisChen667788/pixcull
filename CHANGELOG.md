@@ -157,6 +157,8 @@ which is the thing that was actually false.
 
 One line each, exactly as the release was titled at the time.
 
+**v3.97** — the scene label did not hide the singletons; it made more of them
+
 **v3.96** — the published personalisation figure was two sets pulling opposite ways
 
 **v3.95** — the provenance audit could not read the blind sheet

@@ -7953,7 +7953,7 @@
     cmpTitle.textContent = _t("compare.modal.title", "A/B 比较 ({n} 张)")
       .replace("{n}", String(members.length));
     cmpMeta.textContent = _t("compare.modal.meta",
-      `按 score_final 降序;左为系统推荐。点 "选这张" 把另一张标 cull。`);
+      `按 score_final 降序;左为系统推荐。点「选这张」把其余标 cull。`);
 
     const axisAbbr = {technical:"技", subject:"主", composition:"构",
                        light:"光", moment:"瞬", aesthetic:"美"};

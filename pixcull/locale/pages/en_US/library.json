@@ -22,5 +22,6 @@
   "没有找到相关照片。": "No matching photos.",
   "张 · ": " photos · ",
   "张</span>": " photos</span>",
-  "张暂": " photos are "
+  "张暂": " photos are ",
+  "检索失败": "Search failed"
 }

@@ -117,5 +117,13 @@
   "重判 ${rid} 的场景? (face_count>0 的 stilllife → 改为次高概率类)": "Reclassify the scenes in ${rid}? Still life frames with face_count>0 move to the next most likely genre.",
   "重判 ${rid} 的场景?": "Reclassify the scenes in ${rid}?",
   " (face_count>0 的 stilllife → 改为次高概率类)": " (still life with face_count>0 moves to the next most likely genre)",
-  "P-PRO-7.1 · 完整交付审计(场景 + 人脸 + 婚礼 + ICC + EXIF)": "P-PRO-7.1 · Full delivery audit (scene + faces + wedding + ICC + EXIF)"
+  "P-PRO-7.1 · 完整交付审计(场景 + 人脸 + 婚礼 + ICC + EXIF)": "P-PRO-7.1 · Full delivery audit (scene + faces + wedding + ICC + EXIF)",
+  "删除 run ${id}?这会移除该次的上传图片、缩略图、scores.csv 和 XMP 输出。": "Delete run ${id}? This removes its uploaded photos, thumbnails, scores.csv and XMP output.",
+  "没有发现已知模型缓存": "No known model caches found",
+  "清理 1 小时前的全部 run": "Clear all runs older than 1 hour",
+  "尚未训练 · 点\"立即训练\"开始": "Not trained yet · click \"Train now\" to start",
+  "状态读取失败: ": "Could not read the status: ",
+  "状态:已开启 + 已配置": "Status: on, endpoint configured",
+  "状态:已开启(dry-run)": "Status: on (dry-run)",
+  "状态:加载失败": "Status: failed to load"
 }

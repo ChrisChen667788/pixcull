@@ -6603,6 +6603,13 @@ class _Handler(BaseHTTPRequestHandler):
         """
         from html import escape as _esc
         from pixcull.scoring.bias_audit import get_report
+        lang = self._page_lang()
+
+        def _ours(s: str) -> str:
+            # The page's own wording only; run names and bucket values
+            # are the photographer's and are never looked up (v3.102).
+            return localize_page("pages/disagreement.html", s, lang)
+
         report = get_report(Path.home() / ".pixcull" / "runs")
         # Sort buckets by reversal rate descending
         high_rev = [
@@ -6622,8 +6629,8 @@ class _Handler(BaseHTTPRequestHandler):
             for b in high_rev[:20]
         )
         if not rows_html:
-            rows_html = ("<tr><td colspan='5' style='color:#888;"
-                         "text-align:center'>无超过 10% 反转率的桶</td></tr>")
+            rows_html = _ours("<tr><td colspan='5' style='color:#888;"
+                              "text-align:center'>无超过 10% 反转率的桶</td></tr>")
         # ---- per-run reversal count ----
         per_run: dict[str, int] = {}
         from pixcull.scoring.bias_audit import _iter_annotation_rows
@@ -6642,19 +6649,19 @@ class _Handler(BaseHTTPRequestHandler):
             for rn, cnt in top_runs
         )
         if not per_run_html:
-            per_run_html = ("<tr><td colspan='2' style='color:#888;"
-                            "text-align:center'>无反转记录</td></tr>")
+            per_run_html = _ours("<tr><td colspan='2' style='color:#888;"
+                                 "text-align:center'>无反转记录</td></tr>")
         # v2.28 — static shell extracted to templates/pages/disagreement.html;
         # the row count + the two computed tables splice in at placeholders.
         # Byte-identical to the prior inline build (route-diff verified).
         html_body = (
-            _read_template("pages/disagreement.html")
-            .replace("<!--__DIS_NROWS_META__-->", f"{report.n_total_rows:,} 条记录 · ")
+            localize_page("pages/disagreement.html",
+                          _read_template("pages/disagreement.html"), lang)
+            .replace("<!--__DIS_NROWS_META__-->",
+                     f"{report.n_total_rows:,}" + _ours(" 条记录 · "))
             .replace("<!--__DIS_ROWS__-->", rows_html)
             .replace("<!--__DIS_PER_RUN__-->", per_run_html)
         )
-        html_body = localize_page(
-            "pages/disagreement.html", html_body, self._page_lang())
         self._send_html(200, html_body.encode("utf-8"))
 
     # ── v2.32-P1 — cross-run library search ──────────────────────────
@@ -10036,6 +10043,14 @@ class _Handler(BaseHTTPRequestHandler):
                 f'<span class="seg c" style="width:{cw}%"></span></div>'
             )
 
+        lang = self._page_lang()
+
+        def _ours(s: str) -> str:
+            # Only this page's own wording goes through the catalogue. A
+            # run folder is the photographer's name for it: one called
+            # `上传` used to become `Upload`, link and all, and 404.
+            return localize_page("pages/history.html", s, lang)
+
         cards = []
         for e in entries:
             thumb = ""
@@ -10068,7 +10083,7 @@ class _Handler(BaseHTTPRequestHandler):
                 + (f' · <span class="src">{_esc(str(e["source_label"]))}</span>' if e["source_label"] else "")
                 + f'</div>'
                 f'{_decision_bar(e)}'
-                f'<div class="counts">{e["n_total"]} 张 · '
+                f'<div class="counts">{e["n_total"]}' + _ours(' 张 · ') +
                 f'<span class="k">{e["n_keep"]}</span> · '
                 f'<span class="m">{e["n_maybe"]}</span> · '
                 f'<span class="c">{e["n_cull"]}</span></div>'
@@ -10089,15 +10104,15 @@ class _Handler(BaseHTTPRequestHandler):
             '0 0 0 1px rgba(213,181,132,0.18) inset;"'
             ' onerror="this.style.display=\'none\'">'
         )
-        cards_html = "\n".join(cards) if cards else (
+        cards_html = "\n".join(cards) if cards else _ours(
             '<div class="empty" style="text-align:center;padding:40px 24px;max-width:480px;margin:0 auto">'
             + empty_history_svg
             + '<div style="font-size:18px;font-weight:600;color:var(--fg);'
               'letter-spacing:-0.01em">还没有跑过任何 run</div>'
               '<div style="margin-top:8px;color:var(--muted);font-size:13px;line-height:1.6">'
-              '不需要先上传你自己的照片 — 用 6 张内置示例数据就能 '
+              '不需要先上传你自己的照片 — 用 32 张内置示例照片就能 '
               '<b>30 秒</b>看到完整 PixCull 选片流程,'
-              '包括 6 轴评分 · attribution heatmap · 客户分享链接。</div>'
+              '包括 6 轴评分 · 逐张读解 · 客户分享链接。</div>'
               # v0.13.4 — Primary "try a demo" CTA + secondary upload link.
               # Old empty state only linked back to upload, which forced new
               # users to either (a) wait minutes for first-run model download
@@ -10125,13 +10140,16 @@ class _Handler(BaseHTTPRequestHandler):
         # shell (+ shared design-tokens CSS) is a template; the two runtime
         # injections — the run count and the run cards — splice in at
         # placeholders. Byte-identical to the prior inline build (route-diff).
+        # v3.102 — the template is translated first and the runs go in
+        # after, as the results page does; see _ours above.
         page = (
-            _read_template("pages/history.html")
+            localize_page("pages/history.html",
+                          _read_template("pages/history.html"), lang)
             .replace("/*__DESIGN_TOKENS_CSS__*/", _DESIGN_TOKENS_CSS)
-            .replace("<!--__HISTORY_COUNT__-->", f"{len(entries)} 个 run")
+            .replace("<!--__HISTORY_COUNT__-->",
+                     f"{len(entries)}" + _ours(" 个 run"))
             .replace("<!--__HISTORY_CARDS__-->", cards_html)
         )
-        page = localize_page("pages/history.html", page, self._page_lang())
         body = page.encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -10662,7 +10680,7 @@ class _Handler(BaseHTTPRequestHandler):
         boot = (
             "<script>window.PIXCULL_LANG=%s;window.__pixcullStrings=%s;</script>"
             % (
-                _safe_dumps(page_lang),
+                _safe_dumps(page_lang).replace("</", "<\\/"),
                 _safe_dumps(load_locale(page_lang)).replace("</", "<\\/"),
             )
         )
@@ -13250,14 +13268,15 @@ class _Handler(BaseHTTPRequestHandler):
         if v is None:
             self.send_error(404, f"unknown vertical: {key}")
             return
-        html = _VERTICAL_BULK_HTML.replace(
-            "__VKEY__", key
-        ).replace(
-            "__VICON__", v.icon
-        ).replace(
-            "__VZH__", v.zh
-        )
-        html = localize_page("pages/vertical_bulk.html", html, self._page_lang())
+        # v3.102 — translate the template, then fill it in. Filling first
+        # turned `批量分类 · __VZH__` into `批量分类 · 风光摄影`, which no
+        # catalogue key matches, so the English page kept a Chinese title.
+        lang = self._page_lang()
+        name = v.en if (lang == "en_US" and v.en) else v.zh
+        html = localize_page(
+            "pages/vertical_bulk.html", _VERTICAL_BULK_HTML, lang,
+        ).replace("__VKEY__", key).replace("__VICON__", v.icon).replace(
+            "__VZH__", name)
         self._send_html(200, html.encode("utf-8"))
 
     def _serve_vertical_bulk_thumb(self) -> None:

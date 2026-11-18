@@ -1251,17 +1251,86 @@ Two things the guide promised and the code does not do are now on
 `docs/OPEN-ITEMS.md` rather than in the guide: collaboration across networks,
 and a way to rotate the licence key.
 
-### v3.102 — "the faces are frosted" after v3.87 found the guard cannot certify it
+### v3.102 — PR #7: the English pages, with the five changes review asked for
+
+Inserted ahead of the three below at the owner's request (2026-11-18): take
+the contribution over and land it rather than wait on it, then tell the
+author. The closing three move to v3.103–v3.105 and the block ends one later
+than its title says.
+
+Eight of the branch's nine commits are cherry-picked onto main with their
+author; they applied without a conflict. The ninth, 8b28f89 (`/reveal/` and
+`pixcull reveal`), is a separate feature with the problems the review named
+— a GET that starts a process, so any open page can fire it from an `<img>`;
+no `OSError` handling where `xdg-open` is absent, which is this repo's Docker
+image; and the file manager opening on the server when it serves `0.0.0.0` —
+and is left for its own pull request.
+
+**Shipped, 2026-11-19.** The five review points:
+
+1. The history and disagreement pages put the run cards into the template and
+   then translated the whole page, so a folder named after a catalogue key was
+   translated with it: a run called `上传` linked to `/results/Upload` and
+   404'd. Both pages now translate the template first and insert the runs
+   after, as the results page always did; their own fragments (counts, empty
+   states) go through the catalogue one at a time. The disagreement page's
+   empty states and its record count had no English entries at all, so an
+   English reader met Chinese there whatever the order; they have them now.
+   `tests/test_pages_translate_their_own_words.py` uses a run named after a
+   key in each page's own catalogue — the first draft named both runs `上传`,
+   which is not a key on the disagreement page, so reverting that page's fix
+   left the test green; review of the mutations caught it.
+2. Chinese reached an English reader from inside `<script>`, which the check
+   removed before it looked. It now reads every string literal in a page's
+   scripts, comments stripped, and fails on Chinese. That found 53 strings
+   across admin, library, tether, upload, verticals and the video review page,
+   not the four the review listed, and each has an English entry. results.html
+   is exempt and the test says why: its scripts carry the Chinese fallbacks
+   for its own string table, which a different test holds.
+3. `workspace.tuned_badge` in `zh_CN.json` read `再标 {n} photos`, and so did
+   the fallback in `12-tuned-badge.js`. Both say `张` again, and
+   `tests/test_chinese_copy_stays_chinese.py` fails on an English word in a
+   Chinese string that is not one of the product's own terms, and on a
+   JavaScript fallback that differs from the `zh_CN.json` string it copies.
+   Of 68 such pairs one really differed: the compare view's fallback still
+   said choosing a photo culls "the other one", from before comparison took
+   more than two.
+4. README's Chinese configuration table gained the `PIXCULL_LANG` row the
+   English one had.
+5. The upload page read "Drop photos here, orClick to choose".
+
+The history page's empty state still listed the attribution heatmap removed
+in v3.78 and promised six sample photos where there are 32; both corrected.
+The user guide's language section said, as of v3.101, that there is no
+`?lang=` parameter; with this change there is, and the section says how the
+language is chosen and that pages other than the workspace have Chinese and
+English only.
+
+Review of this version found the same order on a third page: the bulk
+classifier put the vertical's name into `批量分类 · __VZH__` before
+translating, so no catalogue key matched and the English title and heading
+stayed Chinese. It translates first now and fills in the English name of
+the vertical on an English page. The inline `window.PIXCULL_LANG` now gets
+the same `</` escaping as the string table beside it; the value is one of
+thirteen locale codes today, so nothing could reach it, but the two
+should not differ. Eight mutations each turn a gate red.
+
+The branch's CI never ran (a first-time contributor's runs wait for a
+maintainer), so one failure only the full suite here saw: the PR made
+`35-session-health.js` call the page's `_t`, which its node test had no
+copy of. The harness provides `_t` and `_tf` now, as the page does.
+
+### v3.103 — "the faces are frosted" after v3.87 found the guard cannot certify it
 
 **Measure:** the caption claims what v3.87 established and no more, in
 the README and the ModelScope card.
 
-### v3.103 — thirty-nine colours written as literals where a token exists
+### v3.104 — thirty-nine colours written as literals where a token exists
 
 Mechanical. Not ratcheted, blocks nothing, and has been "still open"
 since v3.71.
 
-### v3.104 — the ledger, and the competitive refresh that did not run
+### v3.105 — the ledger, and the competitive refresh that did not run
 
 Close the OPEN-ITEMS rows that are closed in the code (three skip-ledger
 gaps, the `import-catalog` traceback, the synthetic `24-transcript-edit`

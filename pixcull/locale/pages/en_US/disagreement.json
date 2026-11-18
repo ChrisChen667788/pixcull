@@ -7,5 +7,8 @@
   "反转最严重的桶": "Buckets with the most reversals",
   "反转最多的 run(前 15)": "Runs with the most reversals (top 15)",
   "反转条数": "Reversals",
-  "反转率": "Reversal rate"
+  "反转率": "Reversal rate",
+  "无超过 10% 反转率的桶": "No bucket reverses more than 10% of the time",
+  "无反转记录": "No reversals recorded",
+  " 条记录 · ": " records · "
 }

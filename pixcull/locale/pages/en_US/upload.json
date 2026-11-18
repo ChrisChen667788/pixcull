@@ -7,7 +7,7 @@
   "建议。评分由 MiniMax M3 完成,本机实测的清晰度 / 曝光 / 闭眼等指标会作为证据一并送入;不希望照片出网时,用 --vlm-mode off 走全本地。": "suggestions. Scoring runs through MiniMax M3; measured sharpness, exposure and closed-eye signals travel with each photo as evidence. Add --vlm-mode off to keep every byte local.",
   "本地服务,所有数据存在": "Local server. Everything stays in your",
   "本地缓存 ·": "local cache ·",
-  "拖拽照片到这里,或": "Drop photos here, or",
+  "拖拽照片到这里,或": "Drop photos here, or ",
   "浏览…": "Browse...",
   "批量打分": "Batch scoring",
   "扫描本地文件夹": "Scan a local folder",
@@ -31,7 +31,7 @@
   "用户配置": "User settings",
   "点击上面任一非当前用户的行 → 直接切换(本浏览器\n        会话内,通过 cookie 标记;不需要重启服务)。": "Click any row that is not the active user to switch. The choice is stored in a cookie for this browser; no server restart.",
   "点击切换": "Click to switch",
-  "点击选择": "Click to choose",
+  "点击选择": "click to choose",
   "当前位置": "Current location",
   "用这个位置(图片在当前层级)": "Use this location (photos are at this level)",
   "直接告诉服务器照片在哪个文件夹 —": "Tell the server where the photos live —",
@@ -138,5 +138,9 @@
   "30 秒看完核心用法": "30-second guided tour",
   "当前层级 <b>${data.n_images_here}</b> 张图": "<b>${data.n_images_here}</b> photos at this level",
   " · 子文件夹 <b>${subN}</b> 个含图(扫描时会递归)": " · <b>${subN}</b> subfolders with photos (a scan recurses)",
-  "← 当前": "← Current"
+  "← 当前": "← Current",
+  "模态顶部有 <code>~</code> /\n        <code>Pictures</code> / <code>Volumes</code> 等一键跳转,外置硬盘也能直接选。": "dialog has one-click jumps to <code>~</code> /\n        <code>Pictures</code> / <code>Volumes</code>, and external drives can be picked directly.",
+  "紫色 ⌬ 标的卡片是 meta 给出的判断;\n        悬浮可看完整 rationale 和\"VLM 给 5★ 但 detector 显示 subject_fraction=0.005\"这种校准。": "Cards marked with a purple ⌬ carry the meta judge's verdict;\n        hover for the full rationale and calibrations like \"VLM gives 5★ but the detector shows subject_fraction=0.005\".",
+  "较大,上传会慢": "large, the upload will be slow",
+  "预计 ${fmtEta(remain / rate)}": "about ${fmtEta(remain / rate)} left"
 }

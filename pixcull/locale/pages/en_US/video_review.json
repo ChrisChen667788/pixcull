@@ -55,5 +55,7 @@
   "删除失败:": "Delete failed:",
   " 人": " speakers",
   " 帧 · ": " frames · ",
-  " 置信 ": " confidence "
+  " 置信 ": " confidence ",
+  "出片中…": "Rendering…",
+  "出片失败:": "Render failed: "
 }
