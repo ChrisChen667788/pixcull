@@ -944,7 +944,11 @@ English pages landed (eight commits, author kept; `/reveal/` left out) with
 the five review fixes; pages translate their template, then insert the
 photographer's content; page scripts' string literals are checked for
 Chinese (results.html exempt); JS fallbacks must equal `zh_CN.json`.
-The block's last three moved to v3.103–v3.105.  v3.103 is next.
+The block's last three moved to v3.103–v3.105.  **v3.103:** the README
+caption under 24 no longer vouches for the frosting, and
+`capture_transcript_edit.py` gates on `docs/demo-clip-frames.tsv` like the
+video shots (it was the second, ungated way into the same footage).  v3.104
+is next.
 
 **Earlier block: `docs/ROADMAP-v3.1-v3.27-charter.md`** — twenty-seven versions read
 out of the same 46-entry competitive research at the level of PixCull's own core

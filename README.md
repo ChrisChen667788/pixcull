@@ -91,6 +91,15 @@ https://github.com/user-attachments/assets/69eddc6b-24d3-406a-ace5-2ed3a5b44e67
 
 ## What's new
 
+**v3.103** — The caption under the transcript screenshot said the faces in
+the demo footage are frosted. v3.87 had measured that frosting and found a
+frame where the detector's boxes landed on the subject's coat and her face
+stayed legible, so the caption now says what does hold: the frames in that
+picture were checked by eye at full size. It also told readers to re-take the
+shot with a script that wrote whatever was on screen. That script now refuses
+unless every frame on screen is in the list of frames a person has screened,
+the gate the video screenshots have gone through since v3.87.
+
 **v3.102** — Every page outside the review workspace now speaks English: the
 contribution of @olitreadwell in PR #7, landed with their own commits. Choose
 it with `?lang=en_US`, which is remembered, or `PIXCULL_LANG`; otherwise the
@@ -168,24 +177,6 @@ against 7.7% with no profile. The function v3.8 shipped to answer this tested
 frames beside their own shoot and would have said yes (+0.072); it now holds
 out whole shoots and reports cull recall, and `readiness()` counts shoots as
 well as corrections.
-
-**v3.98** — Does a taste profile learned from some shoots predict another?
-The owner's blind labels now cover five shoots, 728 photographs, so this
-learns on four and tests on the fifth. It does not generalise. In the
-profile's own test it lowers keep-F1 by 0.027 on average (0.009 if two
-portrait blocks three days apart count as one shoot) and by 0.178 across
-three portrait shoots. In the product's decision its learned threshold shift
-keeps more on every split, because it compares the photographer's keep rate
-with a fixed 65% rather than with what the machine already keeps; this
-photographer is stricter than the machine, so the profile is pushed the wrong
-way. keep-F1 rewards that, and the culls the tool exists to find slip
-through: cull recall falls from 7.7% to 3.6%. The profile active on the
-author's machine takes cull recall on all 728 photographs from 12.4% to 1.7%.
-Whether to reset it, change the formula, or stop a profile switching itself
-on are left to the owner. `pixcull personalize learn` now reports cull recall
-beside keep-F1 and says when a profile scores higher by keeping more, and
-`scripts/measure_generalisation.py` reruns the measurement. Item 15 below no
-longer says the profile improves silently as you label.
 
 Earlier releases are in [`CHANGELOG.md`](CHANGELOG.md).
 
@@ -706,10 +697,13 @@ frames. The panel says which mode it is in.
 
 > Shot from real footage with its own audio (v3.77). It used to be an ffmpeg
 > test pattern with synthesised speech, which read as a rendering fault on the
-> page. The faces are frosted, not avoided: speech runs across almost the whole
-> clip, so trimming past the moment the subject turns to camera would take the
-> audio with it. Rebuild the clip with `scripts/brand/make_demo_clip.py`, then
-> re-take the shot with `scripts/brand/capture_transcript_edit.py`.
+> page. The frames in this picture were checked by eye at full size and show no
+> legible face. The clip's automatic frosting is not what makes that true: v3.87
+> found a frame where both of the detector's boxes landed on the subject's coat
+> and her face stayed legible. So nothing new is taken from that clip on the
+> frosting's word. `scripts/brand/capture_transcript_edit.py` refuses to write
+> the shot unless every frame on screen is listed in `docs/demo-clip-frames.tsv`,
+> the record of frames a person has screened, and this clip's are not yet.
 
 ### Lightbox with V20 advice + sticky decision toolbar
 

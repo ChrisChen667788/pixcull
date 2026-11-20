@@ -1325,6 +1325,29 @@ copy of. The harness provides `_t` and `_tf` now, as the page does.
 **Measure:** the caption claims what v3.87 established and no more, in
 the README and the ModelScope card.
 
+**Shipped, 2026-11-21.** The claim was in one place, the English README's
+caption under `24-transcript-edit.png`; the Chinese half and the card never
+made it. It said the faces are frosted, not avoided. What v3.87 established is
+narrower: the frosting misses faces (frame 101), no detector here can certify
+the clip, and what clears a frame is a person looking at it at full size. The
+frames in this picture were looked at that way, so the caption says that.
+
+The caption's last sentence was the larger problem: it told a reader to
+rebuild the clip and re-take the shot with `capture_transcript_edit.py`,
+which wrote whatever was on screen. v3.87 gated `capture_video_shots.py` on
+`docs/demo-clip-frames.tsv` and left this second way into the same footage
+open. It now uses the same `gate_visible_frames` and `save_shot`, so it
+refuses unless every frame on screen is in the ledger, and this clip's frames
+are not; re-taking 24 means screening them first. Its docstring still called
+the clip an ffmpeg test pattern with TTS, true until v3.77; it says what the
+clip is now. `tests/test_capture_video_gate.py` holds the order (gate, then
+write), the single writer, and the caption. The order test first took the
+first call `ast.walk` met, which is breadth-first rather than line order; it
+takes the earliest line now, and moving the gate below the write turns it red.
+Review noted that `gate_visible_frames` itself had no end-to-end test, only
+its helpers; both scripts depend on it, so it has one. Five mutations each
+turn the file red.
+
 ### v3.104 — thirty-nine colours written as literals where a token exists
 
 Mechanical. Not ratcheted, blocks nothing, and has been "still open"

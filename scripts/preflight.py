@@ -90,6 +90,8 @@ GATES: list[tuple[str, str]] = [
      "the clip builder keeps its rules and claims no more than it checks"),
     ("tests/test_screenshots_are_dispositioned.py",
      "every screenshot is regenerated or written down as stale"),
+    ("tests/test_capture_video_gate.py",
+     "no shot of the demo footage is written before its frames are screened"),
     ("tests/test_readme_image_sources.py",
      "every README image resolves and renders on GitHub"),
     ("tests/test_sample_run_never_went_to_the_cloud.py",

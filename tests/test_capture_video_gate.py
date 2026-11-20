@@ -130,3 +130,79 @@ def test_the_grade_check_measures_pixels_not_means():
     fn = _fn("shot_19")
     names = {n.id for n in ast.walk(fn) if isinstance(n, ast.Name)}
     assert "_DIFF_JS" in names, "shot_19 no longer runs the pixel diff"
+
+
+# v3.103 — the transcript shot was the other way into the same footage.
+# README told readers to rebuild the clip and re-take 24 with
+# capture_transcript_edit.py, which wrote whatever was on screen; its
+# caption said "the faces are frosted", which is what v3.87 disproved.
+
+TX_SCRIPT = REPO / "scripts" / "brand" / "capture_transcript_edit.py"
+
+
+def _tx_main() -> ast.FunctionDef:
+    for node in ast.parse(TX_SCRIPT.read_text("utf-8")).body:
+        if isinstance(node, ast.FunctionDef) and node.name == "main":
+            return node
+    raise AssertionError(f"main() is gone from {TX_SCRIPT.name}")
+
+
+def test_the_transcript_shot_is_gated_before_it_is_written():
+    fn = _tx_main()
+    lines = {}
+    for call in ast.walk(fn):
+        if isinstance(call, ast.Call) and isinstance(call.func, ast.Name):
+            # ast.walk is breadth-first, not line order: keep the earliest.
+            lines[call.func.id] = min(call.lineno,
+                                      lines.get(call.func.id, call.lineno))
+    assert "gate_visible_frames" in lines, (
+        "capture_transcript_edit.py writes 24 without asking whether the "
+        "frames on screen have been screened")
+    assert "save_shot" in lines and lines["gate_visible_frames"] < lines["save_shot"], (
+        "the transcript shot is written before its frames are checked")
+
+
+def test_the_transcript_shot_writes_only_through_save_shot():
+    for call in ast.walk(_tx_main()):
+        if isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute) \
+                and call.func.attr == "screenshot":
+            raise AssertionError("capture_transcript_edit.py calls "
+                                 "page.screenshot directly; use save_shot")
+
+
+def test_the_readme_does_not_vouch_for_the_frosting():
+    """What v3.87 established: the frosting misses faces, and what clears
+    a frame is a person and the ledger. The caption says that now."""
+    text = (REPO / "README.md").read_text("utf-8")
+    assert "faces are frosted" not in text.lower()
+    caption = text[text.index("24-transcript-edit.png"):][:2500]
+    assert "demo-clip-frames.tsv" in caption, (
+        "the caption under 24 no longer names what clears a frame")
+
+
+def test_the_gate_itself_refuses_and_passes(mod, tmp_path, monkeypatch):
+    """End to end through gate_visible_frames, not its helpers: both
+    capture scripts now depend on this one function."""
+    import hashlib
+    clip = tmp_path / "run" / "video_frames" / "clip"
+    clip.mkdir(parents=True)
+    (clip / "frame_000001.jpg").write_bytes(b"screened")
+    (clip / "frame_000002.jpg").write_bytes(b"not screened")
+    ok = hashlib.sha256(b"screened").hexdigest()[:16]
+    monkeypatch.setattr(mod, "_screened", lambda: {ok: "looked at"})
+
+    class Page:
+        def __init__(self, ids):
+            self.ids = ids
+
+        def evaluate(self, _js):
+            return self.ids
+
+    run = tmp_path / "run"
+    assert mod.gate_visible_frames(Page(["frame_000001"]), run, "s") == ["frame_000001"]
+    with pytest.raises(AssertionError, match="frame_000002"):
+        mod.gate_visible_frames(Page(["frame_000001", "frame_000002"]), run, "s")
+    with pytest.raises(AssertionError, match="could not tell"):
+        mod.gate_visible_frames(Page([]), run, "s")
+    with pytest.raises(AssertionError, match="no file"):
+        mod.gate_visible_frames(Page(["frame_000009"]), run, "s")

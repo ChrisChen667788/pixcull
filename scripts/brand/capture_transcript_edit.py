@@ -6,9 +6,20 @@ word-level cut, the kept-duration readout), and a screenshot of state
 that nobody can reproduce is a screenshot nobody can refresh when the
 UI moves.
 
-The clip is synthetic throughout — an ffmpeg test pattern with macOS TTS
-speaking four on-set directions. No client footage, no real voices, no
-PII. That is a hard requirement for anything that ships in the README.
+The clip is not synthetic any more. It was an ffmpeg test pattern with
+macOS TTS until v3.77, when it became the owner's own footage with its own
+speech, built by `make_demo_clip.py`, which frosts the faces it can find.
+v3.87 measured that frosting and it does not cover every face: on one frame
+the detector put both of its boxes on the subject's coat and left her face
+legible. No detector on this machine can certify that footage.
+
+So, since v3.103, this script asks the same question
+`capture_video_shots.py` does before writing anything: has a person looked
+at every frame on screen, at full size, and listed it by content hash in
+`docs/demo-clip-frames.tsv`? If not, it refuses and names the frames. The
+committed `24-transcript-edit.png` was checked frame by frame by eye
+(`docs/screenshot-dispositions.tsv`); its clip's frames are not in that
+list, so re-taking the shot means screening them first.
 
 Usage::
 
@@ -17,15 +28,19 @@ Usage::
     pixcull serve --port 8770 --no-open &
     python scripts/brand/capture_transcript_edit.py --run txdemo
 """
-
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent.parent
 DEST = REPO / "docs" / "screenshots" / "24-transcript-edit.png"
+
+# One gate and one writer for every shot of the demo footage.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from capture_video_shots import gate_visible_frames, save_shot  # noqa: E402
 
 
 def main() -> int:
@@ -35,6 +50,9 @@ def main() -> int:
     ap.add_argument("--out", type=Path, default=DEST)
     ap.add_argument("--width", type=int, default=1600)
     ap.add_argument("--height", type=int, default=1000)
+    ap.add_argument("--demo-root", type=Path,
+                    default=Path(os.environ.get("PIXCULL_DEMO_ROOT",
+                                                "/tmp/pixcull_demo")))
     args = ap.parse_args()
 
     try:
@@ -91,13 +109,21 @@ def main() -> int:
             browser.close()
             return 1
 
+        try:
+            frames = gate_visible_frames(page, args.demo_root / args.run,
+                                         args.out.name)
+        except AssertionError as exc:
+            print(f"refusing to write {args.out.name}: {exc}", file=sys.stderr)
+            browser.close()
+            return 1
         args.out.parent.mkdir(parents=True, exist_ok=True)
-        page.screenshot(path=str(args.out))
+        save_shot(page, args.out)
         browser.close()
 
     kb = args.out.stat().st_size / 1024
     print(f"✓ {args.out.relative_to(REPO)}  {kb:.0f} KB")
     print(f"  panel state: {stat.strip()}")
+    print(f"  frames on screen, all screened: {', '.join(frames)}")
     return 0
 
 

@@ -1,6 +1,7 @@
 # v3.87 — the frames a person has looked at, at full size, and cleared
-# for publication.  `scripts/brand/capture_video_shots.py` refuses to
-# write a screenshot containing a frame that is not on this list.
+# for publication.  `scripts/brand/capture_video_shots.py` and, since
+# v3.103, `capture_transcript_edit.py` refuse to write a screenshot
+# containing a frame that is not on this list.
 #
 # It exists because no face detector on this machine can certify the
 # demo footage.  `make_demo_clip.py`'s containment check was read as
