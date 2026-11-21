@@ -63,11 +63,32 @@ def read_xmp_keywords(image_path: Path) -> list[str]:
             if x.strip()]
 
 
+def _set_xmp_field(text: str, name: str, value: str) -> str:
+    """Set one field in an existing packet, leaving the rest alone.
+
+    Handles both shapes in the wild: darktable writes attributes
+    (``xmp:Rating="5"``), Lightroom and our own writer use elements.
+    A field that is absent goes into the rdf:Description start tag.
+    """
+    elem = re.compile(rf"<{re.escape(name)}>[^<]*</{re.escape(name)}>")
+    if elem.search(text):
+        return elem.sub(f"<{name}>{escape(value)}</{name}>", text, count=1)
+    attr = re.compile(rf'{re.escape(name)}="[^"]*"')
+    if attr.search(text):
+        return attr.sub(f'{name}="{escape(value)}"', text, count=1)
+    head = re.search(r"<rdf:Description\b[^>]*", text)
+    if not head:
+        return text
+    tag = head.group(0)
+    return text.replace(tag, f'{tag} {name}="{escape(value)}"', 1)
+
+
 def write_xmp(image_path: Path, rating: int, color_label: str = "",
                  keywords: list[str] | None = None,
                  description: str = "",
                  headline: str = "",
-                 preserve_existing: bool = True) -> Path:
+                 preserve_existing: bool = True,
+                 naming: str = "lightroom") -> Path:
     """Write Lightroom-compatible XMP sidecar next to ``image_path``.
 
     Args:
@@ -87,6 +108,13 @@ def write_xmp(image_path: Path, rating: int, color_label: str = "",
         headline: V29 — IPTC ``photoshop:Headline`` (LR's "Headline").
             Short single-line; typically PixCull's top strength phrase.
             Empty = no headline block.
+        naming: ``lightroom`` writes ``<stem>.xmp``; ``darktable`` writes
+            ``<name>.<ext>.xmp``, which is what darktable creates on
+            import. darktable reads both, but it writes its own next to
+            Lightroom's, so a shoot ends up with two sidecars that drift.
+            With ``darktable`` an existing sidecar is patched in place:
+            rewriting the packet would destroy the develop history it
+            carries.
 
     Returns:
         Path to the written .xmp file.
@@ -196,6 +224,25 @@ def write_xmp(image_path: Path, rating: int, color_label: str = "",
         '</x:xmpmeta>\n'
         '<?xpacket end="w"?>\n'
     )
+
+    if naming == "darktable":
+        sidecar = image_path.parent / (image_path.name + ".xmp")
+        if sidecar.exists():
+            try:
+                text = sidecar.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                text = ""
+            if text.strip():
+                text = _set_xmp_field(text, "xmp:Rating", str(rating))
+                if color_label:
+                    text = _set_xmp_field(text, "xmp:Label", color_label)
+                sidecar.write_text(text, encoding="utf-8")
+                return sidecar
+        sidecar.write_text(body, encoding="utf-8")
+        return sidecar
+    elif naming != "lightroom":
+        raise ValueError(f"naming must be 'lightroom' or 'darktable', "
+                         f"got {naming!r}")
 
     sidecar = image_path.with_suffix(".xmp")
     sidecar.write_text(body, encoding="utf-8")
